@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  gateway:
+    build: .
+    container_name: orova_gateway
+    ports:
+      - "18789:18789"
+      - "10000:10000"
+    environment:
+      - ROLE=GATEWAY
+      - OLLAMA_AUTH_TOKEN=${OLLAMA_AUTH_TOKEN:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+    restart: always
+    networks:
+      - orova_network
+
+  agent_core:
+    build: .
+    container_name: orova_core
+    depends_on:
+      - gateway
+      - redis_cache
+    environment:
+      - ROLE=AGENT
+      - DATABASE_URL=sqlite+aiosqlite:///app/app/data/orova_v5.db
+      - REDIS_URL=redis://redis_cache:6379
+    volumes:
+      - ./app/data:/app/app/data
+    restart: always
+    networks:
+      - orova_network
+
+  redis_cache:
+    image: redis:alpine
+    container_name: orova_redis
+    command: redis-server --maxmemory 100mb --maxmemory-policy allkeys-lru
+    networks:
+      - orova_network
+
+networks:
+  orova_network:
+    driver: bridge

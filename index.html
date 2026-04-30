@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OROVA Mission Control</title>
+    <meta name="description"
+        content="OROVA AI Agency Mission Control Dashboard — Task Board, Content Pipeline, Calendar, Memory Bank, Analytics, Team Structure, Digital Office">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+    <!-- ═══ MOBILE HAMBURGER ═══ -->
+    <button id="hamburger" class="hamburger" aria-label="Toggle menu">
+        <span></span><span></span><span></span>
+    </button>
+
+    <!-- ═══ SIDEBAR ═══ -->
+    <nav id="sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-icon">◆</div>
+            <span class="brand-text">OROVA</span>
+            <span class="brand-sub">Mission Control</span>
+        </div>
+        
+        <!-- PHASE 10: Multi-Tenant Workspace Selector -->
+        <div class="workspace-container">
+            <select id="workspace-switcher" class="workspace-dropdown" aria-label="Select Client Workspace">
+                <option value="0">OROVA Internal (Lead Gen)</option>
+            </select>
+            <button id="add-client-btn" class="workspace-add" title="Add New Client">+</button>
+        </div>
+        <ul class="nav-links">
+            <li class="nav-item active" data-screen="taskboard">
+                <span class="nav-icon">☰</span><span class="nav-label">Task Board</span>
+            </li>
+            <li class="nav-item" data-screen="analytics">
+                <span class="nav-icon">◈</span><span class="nav-label">Analytics</span>
+            </li>
+            <li class="nav-item" data-screen="pipeline">
+                <span class="nav-icon">▶</span><span class="nav-label">Content Pipeline</span>
+            </li>
+            <li class="nav-item" data-screen="calendar">
+                <span class="nav-icon">▦</span><span class="nav-label">Calendar</span>
+            </li>
+            <li class="nav-item" data-screen="leads">
+                <span class="nav-icon">⊕</span><span class="nav-label">Lead Pipeline</span>
+            </li>
+            <li class="nav-item" data-screen="memory">
+                <span class="nav-icon">◉</span><span class="nav-label">Memory Bank</span>
+            </li>
+            <li class="nav-item" data-screen="team">
+                <span class="nav-icon">⬡</span><span class="nav-label">Team Structure</span>
+            </li>
+            <li class="nav-item" data-screen="skills">
+                <span class="nav-icon">⚡</span><span class="nav-label">Skills Hub</span>
+            </li>
+            <li class="nav-item" data-screen="workflows">
+                <span class="nav-icon">⚙️</span><span class="nav-label">Pipeline Runner</span>
+            </li>
+            <li class="nav-item" data-screen="office">
+                <span class="nav-icon">⬢</span><span class="nav-label">Digital Office</span>
+            </li>
+        </ul>
+        <!-- AI-NATIVE: Nova Pulse -->
+        <div class="nova-pulse">
+            <div class="pulse-icon"><div class="pulse-ring"></div></div>
+            <div class="pulse-info">
+                <span class="pulse-label">Nova Intelligence</span>
+                <span id="nova-status" class="pulse-status">Analyzing Lead Quality...</span>
+            </div>
+        </div>
+
+        <div class="sidebar-footer">
+            <div class="status-dot online"></div>
+            <span>Nova Online</span>
+            <button id="theme-toggle" class="theme-toggle-btn" title="Toggle theme">◐</button>
+        </div>
+    </nav>
+
+    <!-- ═══ SIDEBAR OVERLAY (mobile) ═══ -->
+    <div id="sidebar-overlay" class="sidebar-overlay"></div>
+
+    <!-- ═══ MAIN CONTENT ═══ -->
+    <main id="main-content">
+
+        <!-- ─── TOP BAR: Notifications + Quick Actions ─── -->
+        <div class="top-bar">
+            <div class="workspace-info">
+                <span class="workspace-label">Agency Workspace:</span>
+                <span id="active-workspace-name" class="workspace-name">OROVA Internal</span>
+            </div>
+            <div class="quick-actions">
+                <button class="action-btn hunt" id="btn-hunt-leads" title="Hunt Leads">
+                    <span class="action-icon">🎯</span><span class="action-label">Hunt Leads</span>
+                </button>
+                <button class="action-btn email" id="btn-send-emails" title="Send Emails">
+                    <span class="action-icon">📧</span><span class="action-label">Send Emails</span>
+                </button>
+                <button class="action-btn report" id="btn-ceo-report" title="CEO Report">
+                    <span class="action-icon">📊</span><span class="action-label">CEO Report</span>
+                </button>
+            </div>
+            <div class="notif-area">
+                <button class="notif-bell" id="notif-bell" title="Notifications">
+                    🔔 <span class="notif-badge" id="notif-badge" style="display:none">0</span>
+                </button>
+                <div class="notif-dropdown" id="notif-dropdown">
+                    <div class="notif-dropdown-header">
+                        <span>Notifications</span>
+                        <button id="notif-read-all" class="notif-read-all">Mark all read</button>
+                    </div>
+                    <div class="notif-list" id="notif-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ──── SCREEN 1: TASK BOARD ──── -->
+        <section id="screen-taskboard" class="screen active">
+            <div class="screen-header">
+                <div>
+                    <h1>Task Board</h1>
+                    <p class="screen-subtitle">Track every task across your agency</p>
+                </div>
+                <div class="header-actions">
+                    <div class="filter-group">
+                        <button class="filter-btn active" data-filter="all">All</button>
+                        <button class="filter-btn" data-filter="Mark">Mark</button>
+                        <button class="filter-btn" data-filter="Nova">Nova</button>
+                    </div>
+                    <button class="btn-primary" id="btn-add-task">+ New Task</button>
+                </div>
+            </div>
+            <div class="kanban-board">
+                <div class="kanban-column" data-status="backlog">
+                    <div class="column-header"><span class="col-dot backlog"></span>Backlog <span
+                            class="col-count">0</span></div>
+                    <div class="column-cards" id="col-backlog"></div>
+                </div>
+                <div class="kanban-column" data-status="in-progress">
+                    <div class="column-header"><span class="col-dot progress"></span>In Progress <span
+                            class="col-count">0</span></div>
+                    <div class="column-cards" id="col-in-progress"></div>
+                </div>
+                <div class="kanban-column" data-status="review">
+                    <div class="column-header"><span class="col-dot review"></span>Review <span
+                            class="col-count">0</span></div>
+                    <div class="column-cards" id="col-review"></div>
+                </div>
+                <div class="kanban-column" data-status="done">
+                    <div class="column-header"><span class="col-dot done"></span>Done <span class="col-count">0</span>
+                    </div>
+                    <div class="column-cards" id="col-done"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ──── SCREEN 2: ANALYTICS ──── -->
+        <section id="screen-analytics" class="screen">
+            <div class="screen-header">
+                <div>
+                    <h1>Analytics</h1>
+                    <p class="screen-subtitle">CEO Pulse — your agency's vital signs</p>
+                </div>
+            </div>
+            <div class="stats-grid" id="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon">🎯</div>
+                    <div class="stat-value" id="stat-leads">0</div>
+                    <div class="stat-label">Leads Found</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">📧</div>
+                    <div class="stat-value" id="stat-emails">0</div>
+                    <div class="stat-label">Emails Sent</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">💬</div>
+                    <div class="stat-value" id="stat-replies">0</div>
+                    <div class="stat-label">Replies</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">📅</div>
+                    <div class="stat-value" id="stat-meetings">0</div>
+                    <div class="stat-label">Meetings</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">📞</div>
+                    <div class="stat-value" id="stat-calls">0</div>
+                    <div class="stat-label">Calls Made</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">📝</div>
+                    <div class="stat-value" id="stat-proposals">0</div>
+                    <div class="stat-label">Proposals</div>
+                </div>
+            </div>
+            <div class="analytics-panel">
+                <h3>📈 Metrics Trend (Last 30 Days)</h3>
+                <div id="metrics-chart" style="height:180px;position:relative;overflow:hidden">
+                    <canvas id="sparkline-canvas" style="width:100%;height:100%"></canvas>
+                </div>
+                <div id="chart-legend"
+                    style="display:flex;gap:1rem;margin-top:0.5rem;font-size:0.75rem;color:var(--text-dim)"></div>
+            </div>
+            </div>
+            <div class="analytics-panels">
+                <div class="analytics-panel">
+                    <h3>Conversion Funnel</h3>
+                    <div class="funnel" id="funnel-chart">
+                        <div class="funnel-bar">
+                            <div class="funnel-fill" id="funnel-leads" style="width:100%"></div><span>Leads</span><span
+                                class="funnel-val" id="fv-leads">0</span>
+                        </div>
+                        <div class="funnel-bar">
+                            <div class="funnel-fill contacted" id="funnel-contacted" style="width:60%"></div>
+                            <span>Contacted</span><span class="funnel-val" id="fv-contacted">0</span>
+                        </div>
+                        <div class="funnel-bar">
+                            <div class="funnel-fill replied" id="funnel-replied" style="width:30%"></div>
+                            <span>Replied</span><span class="funnel-val" id="fv-replied">0</span>
+                        </div>
+                        <div class="funnel-bar">
+                            <div class="funnel-fill booked" id="funnel-booked" style="width:10%"></div>
+                            <span>Booked</span><span class="funnel-val" id="fv-booked">0</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="analytics-panel">
+                    <h3>Live Activity Feed</h3>
+                    <div class="live-feed" id="live-feed">
+                        <div class="feed-empty">Waiting for activity...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Email Drafts + System Health Row -->
+            <div class="analytics-panels" style="margin-top:1.5rem">
+                <div class="analytics-panel">
+                    <h3>✉️ Pending Email Drafts <span id="draft-count" class="draft-badge" style="display:none">0</span>
+                    </h3>
+                    <div id="pending-drafts-list" class="pending-drafts-list">
+                        <div class="feed-empty">No drafts awaiting approval</div>
+                    </div>
+                </div>
+                <div class="analytics-panel">
+                    <h3>🏥 System Health</h3>
+                    <div class="health-grid" id="health-grid">
+                        <div class="health-item">
+                            <span class="health-label">Uptime</span>
+                            <span class="health-value" id="health-uptime">—</span>
+                        </div>
+                        <div class="health-item">
+                            <span class="health-label">Errors</span>
+                            <span class="health-value" id="health-errors">0</span>
+                        </div>
+                        <div class="health-item">
+                            <span class="health-label">Agents Online</span>
+                            <span class="health-value" id="health-agents">—</span>
+                        </div>
+                        <div class="health-item">
+                            <span class="health-label">Pending Emails</span>
+                            <span class="health-value" id="health-pending">0</span>
+                        </div>
+                        <div class="health-item">
+                            <span class="health-label">Fast Lane</span>
+                            <span class="health-value health-ok" id="health-fast">—</span>
+                        </div>
+                        <div class="health-item">
+                            <span class="health-label">Slow Lane</span>
+                            <span class="health-value health-ok" id="health-slow">—</span>
+                        </div>
+                        <div class="health-item">
+                            <span class="health-label">Email Drafter</span>
+                            <span class="health-value health-ok" id="health-email">—</span>
+                        </div>
+                        <div class="health-item">
+                            <span class="health-label">Reply Monitor</span>
+                            <span class="health-value health-ok" id="health-reply">—</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ──── SCREEN 3: CONTENT PIPELINE ──── -->
+        <section id="screen-pipeline" class="screen">
+            <div class="screen-header">
+                <div>
+                    <h1>Content Pipeline</h1>
+                    <p class="screen-subtitle">From idea to published — every stage tracked</p>
+                </div>
+                <div class="header-actions">
+                    <button class="btn-primary" id="btn-add-content">+ New Content</button>
+                </div>
+            </div>
+            <div class="pipeline-stages">
+                <div class="pipeline-stage" data-stage="ideation">
+                    <div class="stage-header"><span class="stage-icon">💡</span> Ideation</div>
+                    <div class="stage-items" id="stage-ideation"></div>
+                </div>
+                <div class="pipeline-stage" data-stage="research">
+                    <div class="stage-header"><span class="stage-icon">🔍</span> Research</div>
+                    <div class="stage-items" id="stage-research"></div>
+                </div>
+                <div class="pipeline-stage" data-stage="script">
+                    <div class="stage-header"><span class="stage-icon">✍️</span> Script</div>
+                    <div class="stage-items" id="stage-script"></div>
+                </div>
+                <div class="pipeline-stage" data-stage="design">
+                    <div class="stage-header"><span class="stage-icon">🎨</span> Design</div>
+                    <div class="stage-items" id="stage-design"></div>
+                </div>
+                <div class="pipeline-stage" data-stage="review">
+                    <div class="stage-header"><span class="stage-icon">👁️</span> Review</div>
+                    <div class="stage-items" id="stage-review"></div>
+                </div>
+                <div class="pipeline-stage" data-stage="published">
+                    <div class="stage-header"><span class="stage-icon">🚀</span> Published</div>
+                    <div class="stage-items" id="stage-published"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ──── SCREEN 4: CALENDAR ──── -->
+        <section id="screen-calendar" class="screen">
+            <div class="screen-header">
+                <div>
+                    <h1>Calendar</h1>
+                    <p class="screen-subtitle">Nova's scheduled tasks & cron jobs — all times in PT</p>
+                </div>
+                <div class="header-actions">
+                    <button class="cal-nav" id="cal-prev">◀</button>
+                    <span id="cal-month-label" class="cal-month-label">February 2026</span>
+                    <button class="cal-nav" id="cal-next">▶</button>
+                </div>
+            </div>
+            <div class="calendar-grid" id="calendar-grid"></div>
+            <div class="cal-legend">
+                <span class="legend-item"><span class="legend-dot cron"></span>Cron Job</span>
+                <span class="legend-item"><span class="legend-dot task"></span>Scheduled Task</span>
+                <span class="legend-item"><span class="legend-dot meeting"></span>Meeting</span>
+            </div>
+        </section>
+
+        <!-- ──── SCREEN 5: LEAD PIPELINE ──── -->
+        <section id="screen-leads" class="screen">
+            <div class="screen-header">
+                <div>
+                    <h1>Lead Pipeline</h1>
+                    <p class="screen-subtitle">Live leads from Google Sheets</p>
+                </div>
+                <div class="header-actions">
+                    <button class="btn-primary" id="btn-refresh-leads">↻ Refresh</button>
+                </div>
+            </div>
+            <div class="leads-table-wrap">
+                <table class="leads-table" id="leads-table">
+                    <thead>
+                        <tr>
+                            <th>Business</th>
+                            <th>Contact</th>
+                            <th>Phone</th>
+                            <th>Niche</th>
+                            <th>Score</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leads-tbody">
+                        <tr>
+                            <td colspan="6" class="leads-empty">Click Refresh to load leads...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- ──── SCREEN 6: MEMORY BANK ──── -->
+        <section id="screen-memory" class="screen">
+            <div class="screen-header">
+                <div>
+                    <h1>Memory Bank</h1>
+                    <p class="screen-subtitle">Nova's operational knowledge base</p>
+                </div>
+                <div class="header-actions">
+                    <div class="search-box">
+                        <span class="search-icon">⌕</span>
+                        <input type="text" id="memory-search" placeholder="Search memories..." autocomplete="off">
+                    </div>
+                </div>
+            </div>
+            <div class="memory-grid" id="memory-grid"></div>
+        </section>
+
+        <!-- ──── SCREEN 7: TEAM STRUCTURE ──── -->
+        <section id="screen-team" class="screen">
+            <div class="screen-header">
+                <div>
+                    <h1>Team Structure</h1>
+                    <p class="screen-subtitle">The OROVA AI Agency — 8 specialized agents</p>
+                </div>
+            </div>
+            <div class="org-chart" id="org-chart"></div>
+        </section>
+
+        <!-- ──── SCREEN 8: DIGITAL OFFICE ──── -->
+        <section id="screen-office" class="screen">
+            <div class="screen-header">
+                <div>
+                    <h1>Digital Office</h1>
+                    <p class="screen-subtitle">Live view of your AI team at work</p>
+                </div>
+            </div>
+            <div class="office-floor" id="office-floor"></div>
+        </section>
+
+        <!-- ──── SCREEN 9: SKILLS HUB ──── -->
+        <section id="screen-skills" class="screen">
+            <div class="screen-header">
+                <div>
+                    <h1>Skills Hub</h1>
+                    <p class="screen-subtitle">Available tools and capabilities across the agency</p>
+                </div>
+            </div>
+            <div class="skills-grid" id="skills-grid"></div>
+        </section>
+
+        <!-- ──── SCREEN 10: PIPELINE RUNNER ──── -->
+        <section id="screen-workflows" class="screen">
+            <div class="screen-header">
+                <div>
+                    <h1>Pipeline Runner</h1>
+                    <p class="screen-subtitle">Trigger multi-step autonomous workflows</p>
+                </div>
+            </div>
+            <div class="pipeline-list" id="pipeline-list"></div>
+        </section>
+    </main>
+
+    <!-- ═══ MODALS ═══ -->
+    <div class="modal-overlay" id="modal-overlay">
+        <!-- Task Modal -->
+        <div class="modal" id="modal-task">
+            <div class="modal-header">
+                <h2 id="modal-task-title">New Task</h2>
+                <button class="modal-close" data-close>&times;</button>
+            </div>
+            <div class="modal-body">
+                <label>Title</label>
+                <input type="text" id="task-title" placeholder="e.g. Find 10 leads in Beverly Hills">
+                <label>Description</label>
+                <textarea id="task-desc" rows="3" placeholder="Task details..."></textarea>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Assignee</label>
+                        <select id="task-assignee">
+                            <option value="Nova">Nova</option>
+                            <option value="Mark">Mark</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Priority</label>
+                        <select id="task-priority">
+                            <option value="low">Low</option>
+                            <option value="medium" selected>Medium</option>
+                            <option value="high">High</option>
+                            <option value="urgent">Urgent</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Status</label>
+                        <select id="task-status">
+                            <option value="backlog">Backlog</option>
+                            <option value="in-progress">In Progress</option>
+                            <option value="review">Review</option>
+                            <option value="done">Done</option>
+                        </select>
+                    </div>
+                </div>
+                <label>Due Date</label>
+                <input type="date" id="task-due">
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" data-close>Cancel</button>
+                <button class="btn-primary" id="btn-save-task">Save Task</button>
+            </div>
+        </div>
+
+        <!-- Content Modal -->
+        <div class="modal modal-lg" id="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-content-title">New Content</h2>
+                <button class="modal-close" data-close>&times;</button>
+            </div>
+            <div class="modal-body">
+                <label>Title</label>
+                <input type="text" id="content-title" placeholder="e.g. Instagram Reel — Luxury Home Tour">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Type</label>
+                        <select id="content-type">
+                            <option value="instagram">Instagram</option>
+                            <option value="email">Email Campaign</option>
+                            <option value="blog">Blog Post</option>
+                            <option value="video">Video Script</option>
+                            <option value="ad">Ad Copy</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Stage</label>
+                        <select id="content-stage">
+                            <option value="ideation">Ideation</option>
+                            <option value="research">Research</option>
+                            <option value="script">Script</option>
+                            <option value="design">Design</option>
+                            <option value="review">Review</option>
+                            <option value="published">Published</option>
+                        </select>
+                    </div>
+                </div>
+                <label>Idea / Notes</label>
+                <textarea id="content-idea" rows="3" placeholder="Describe your idea..."></textarea>
+                <label>Full Script</label>
+                <textarea id="content-script" rows="8" placeholder="Write or paste the full script here..."></textarea>
+                <label>Image Attachment</label>
+                <div class="file-upload-area" id="file-upload-area">
+                    <input type="file" id="content-image" accept="image/*" hidden>
+                    <p>Click to upload or drag an image here</p>
+                    <img id="content-image-preview" class="image-preview" style="display:none">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" data-close>Cancel</button>
+                <button class="btn-primary" id="btn-save-content">Save Content</button>
+            </div>
+        </div>
+
+        <!-- Add Client Modal (PHASE 10) -->
+        <div class="modal" id="modal-add-client">
+            <div class="modal-header">
+                <h2 id="modal-add-client-title">Add New Client</h2>
+                <button class="modal-close" data-close>&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom: 1.5rem; color: var(--text-dim); font-size: 0.9rem;">Onboard a new client to the OROVA Agency Hub.</p>
+                <div class="form-group">
+                    <label>Business Name</label>
+                    <input type="text" id="client-name" placeholder="e.g. Elite Luxury Estates">
+                </div>
+                <div class="form-group">
+                    <label>Niche / Target Audience</label>
+                    <input type="text" id="client-niche" placeholder="e.g. luxury home remodeling">
+                </div>
+                <div class="form-group">
+                    <label>Target Location</label>
+                    <input type="text" id="client-location" placeholder="e.g. Los Angeles, CA">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" data-close>Cancel</button>
+                <button class="btn-primary" id="save-client-btn">Create Workspace</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ CHAT WIDGET ═══ -->
+    <div class="chat-widget">
+        <button class="chat-bubble" id="chat-bubble" title="Chat with Nova">💬</button>
+        <div class="chat-window" id="chat-window">
+            <div class="chat-header">
+                <div class="chat-header-info">
+                    <span class="chat-avatar">N</span>
+                    <div><strong>Nova</strong><br><small>AI CEO</small></div>
+                </div>
+                <button class="chat-close" id="chat-close">✕</button>
+            </div>
+            <div class="chat-messages" id="chat-messages">
+                <div class="chat-msg nova">Hey Mark! I'm here if you need anything. Ask me to hunt leads, draft emails,
+                    or check the pipeline. 🚀</div>
+            </div>
+            <div class="chat-input-area">
+                <input type="text" id="chat-input" placeholder="Message Nova..." autocomplete="off">
+                <button class="chat-send" id="chat-send">➤</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ TOAST CONTAINER ═══ -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="js/app.js"></script>
+</body>
+
+</html>

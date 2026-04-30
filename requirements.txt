@@ -1,0 +1,43 @@
+# Nova / OpenClaw — Python dependencies
+# Optimized for Render Free Tier (512MB RAM)
+
+# ── Web framework ────────────────────────────
+fastapi==0.110.0
+uvicorn==0.29.0
+python-dotenv>=1.0.0
+
+# ── AI / LLM ────────────────────────────────
+google-genai>=0.7.0
+sentence-transformers==2.5.1
+faiss-cpu==1.8.0
+
+# ── Voice calling ───────────────────────────
+retell-sdk>=4.0.0
+
+# ── Email ────────────────────────────────────
+yagmail>=0.15.293
+
+# ── Web scraping & OpenClaw Ecosystem ────────
+scrapling>=0.2.8
+scrapling-fetch-mcp>=0.1.0
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+duckduckgo-search>=5.3.0
+playwright>=1.41.0
+
+# ── Database ────────────────────────────────
+aiosqlite==0.20.0
+redis==5.0.3
+
+# ── Google Sheets CRM sync ──────────────────
+gspread>=6.0.0
+google-auth>=2.27.0
+google-auth-oauthlib>=1.2.0
+
+# ── Telegram bot ────────────────────────────
+pytelegrambotapi>=4.18.0
+
+# ── Reliability & Utilities ─────────────────
+tenacity>=8.2.0
+numpy>=1.24.0
+httpx>=0.27.0

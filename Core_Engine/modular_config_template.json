@@ -1,0 +1,47 @@
+{
+    "vertical_name": "REPLACE_WITH_NICHE_NAME",
+    "meta_description": "Target Niche Description (e.g. High-End Kitchen Remodeling)",
+    "search_settings": {
+        "queries": [
+            "luxury kitchen remodeling near me",
+            "custom cabinetry contractors",
+            "high end home renovation firms"
+        ],
+        "regions": [
+            "Major Metro Area 1",
+            "Major Metro Area 2"
+        ],
+        "max_results_per_query": 10
+    },
+    "scoring_logic": {
+        "industry": "Home Improvement",
+        "clv_range": "$20,000 - $80,000+",
+        "ideal_traits": [
+            "Portfolio showcases marble/quartz finishes",
+            "Website mentions 'custom' or 'bespoke'",
+            "Has professional project photography"
+        ],
+        "disqualifiers": [
+            "Mentions 'affordable' or 'budget' prominently",
+            "Focuses on handyman repairs",
+            "Bad reviews (< 3.5 stars)"
+        ]
+    },
+    "outreach_settings": {
+        "email_sender_persona": "Mark from OROVA",
+        "email_templates": {
+            "initial_cold": {
+                "subject": "Quick question about your {service} projects",
+                "body": "Hi {Name},\n\nI was looking at your recent work in {City} and noticed..."
+            }
+        },
+        "retell_ai_config": {
+            "agent_id": "REPLACE_WITH_RETELL_AGENT_ID",
+            "from_number": "+15550000000"
+        }
+    },
+    "reporting": {
+        "client_data_folder": "/Client_Data/{vertical_name}",
+        "google_sheet_id": "REPLACE_WITH_SHEET_ID"
+    }
+}

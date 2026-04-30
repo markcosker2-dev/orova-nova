@@ -1,0 +1,19 @@
+{
+    "instagram": {
+        "style_guide": "High-contrast Black and White, minimalist, premium luxury aesthetic.",
+        "font_preference": "Serif, elegant",
+        "color_palette": [
+            "#000000",
+            "#FFFFFF"
+        ],
+        "banned_elements": [
+            "vibrant colors",
+            "generic stock photos",
+            "cluttered backgrounds"
+        ]
+    },
+    "outreach": {
+        "tone": "Ultra-minimalist, high-status, direct.",
+        "signature": "Nova | OROVA"
+    }
+}

@@ -1,0 +1,12 @@
+{
+    "sender_name": "Mark",
+    "agency_name": "OROVA",
+    "value_proposition": "filling your training calendar with high-ticket clients who actually commit",
+    "tone": "conversational, direct, fitness-community style",
+    "subject_patterns": [
+        "question about {business}",
+        "your gym's growth",
+        "thought about your studio",
+        "quick idea"
+    ]
+}

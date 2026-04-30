@@ -1,0 +1,12 @@
+{
+    "sender_name": "Mark",
+    "agency_name": "OROVA",
+    "value_proposition": "filling your calendar with high-ticket ceramic, PPF, and custom jobs automatically",
+    "tone": "conversational, 5th-grade reading level, like a quick text message",
+    "subject_patterns": [
+        "question about {business}",
+        "idea for {business}",
+        "your instagram",
+        "quick thought"
+    ]
+}

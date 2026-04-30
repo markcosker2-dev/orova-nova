@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: orova-nova
+    runtime: docker
+    plan: free
+    region: ohio
+    envVars:
+      - key: PORT
+        value: 18789
+      - key: DATABASE_URL
+        value: sqlite+aiosqlite:///app/app/data/orova_v5.db
+      - fromContext: OLLAMA_AUTH_TOKEN
+      - fromContext: TELEGRAM_BOT_TOKEN
+      - fromContext: TAVILY_API_KEY
+      - fromContext: RETELL_API_KEY
+    disk:
+      name: orova-data
+      mountPath: /app/app/data
+      sizeGB: 1
+    healthCheckPath: /health
