@@ -39,26 +39,12 @@ def _append_log(msg: str):
     LOG_BUFFER.append({"ts": datetime.now().strftime("%H:%M:%S"), "msg": msg})
     if len(LOG_BUFFER) > 100: LOG_BUFFER.pop(0)
 
-# --- Health Server (Port 10000) ---
-class HealthHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"OpenClaw Health: ONLINE")
-    def log_message(self, format, *args): pass # Suppress
-
-def run_health_server():
-    server = HTTPServer(('0.0.0.0', 10000), HealthHandler)
-    logger.info("💓 Health Check Server running on port 10000")
-    server.serve_forever()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Initialize DB and Soul
     await DatabaseManager.init_db()
     await AgentSoul.initialize()
-    # Start separate thread for health checks on port 10000
-    threading.Thread(target=run_health_server, daemon=True).start()
     logger.info("🚀 NOVA Gateway Online on port 18789")
     yield
     logger.info("🛑 NOVA Gateway Shutting Down")
@@ -72,6 +58,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# --- Health Check ---
+@app.get("/health")
+@app.head("/")
+async def health_check():
+    return {"status": "OpenClaw Online", "timestamp": datetime.now().isoformat()}
 
 # --- API Routes ---
 @app.get("/api/clients")
