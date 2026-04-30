@@ -193,11 +193,13 @@ async def process_telegram_message(update_data: dict):
         history_list = [{"role": row["role"], "content": row["content"]} for row in history]
         
         logger.info(f"🧠 Routing message for {chat_id}...")
-        response = await router.route(text, chat_id, history_list)
+        response_raw = await router.route(text, chat_id, history_list)
         
-        # Ensure response is a string
-        if not isinstance(response, str):
-            response = str(response)
+        # Robust unpacking: Take first element if it's a list or tuple
+        if isinstance(response_raw, (tuple, list)):
+            response = str(response_raw[0])
+        else:
+            response = str(response_raw)
 
         logger.info(f"📤 Sending reply to {chat_id}: {response[:50]}...")
         

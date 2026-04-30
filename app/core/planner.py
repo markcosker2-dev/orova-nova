@@ -267,7 +267,7 @@ OBJECTIVE: Build the OROVA empire. Find {current_niche} leads in {current_loc} w
                     "create", "inbox", "outreach", "research", "analyze"
                 ])
                 if not is_command:
-                    return (content if content.strip() else "Ready, Mark."), history
+                    return (content if content.strip() else "Ready, Mark.")
 
             # Append Assistant Reply to LOCAL history loop
             msg_dict = {"role": "assistant", "content": content}
@@ -302,7 +302,7 @@ OBJECTIVE: Build the OROVA empire. Find {current_niche} leads in {current_loc} w
             if "DONE:" in content.upper():
                 # Strip the 'DONE:' tag (case-insensitive) and return the rest
                 clean_content = re.sub(r'DONE:', '', content, flags=re.IGNORECASE).strip()
-                return (clean_content if clean_content else "Task complete, Mark."), history
+                return (clean_content if clean_content else "Task complete, Mark.")
 
             # Execute Tool Calls
             if tool_calls:
@@ -353,7 +353,7 @@ OBJECTIVE: Build the OROVA empire. Find {current_niche} leads in {current_loc} w
                     })
 
             elif not content:
-                return "⚠️ AI returned an empty response.", history
+                return "⚠️ AI returned an empty response."
 
         msg = f"⚠️ Max steps reached ({max_steps}/{max_steps}). I've reached my processing limit for this sequence. Here's my last status: " + (history[-1].get("content", "") or "I'm still processing the data.")
-        return msg, history
+        return msg
