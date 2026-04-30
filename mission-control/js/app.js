@@ -81,16 +81,7 @@ const CRON_EVENTS = [
 // [REMOVED] seedTasks is now handled by backend SQLite migrations.
 
 // ═══════════════════ API HELPER ═══════════════════
-const NOVA_API_KEY = localStorage.getItem('NOVA_API_KEY');
-if (!NOVA_API_KEY) {
-    const newKey = prompt("NOVA_API_KEY is missing. Please enter your API key to continue:");
-    if (newKey) {
-        localStorage.setItem('NOVA_API_KEY', newKey);
-        window.location.reload();
-    } else {
-        alert("Mission Control requires an API key. Reload the page to try again.");
-    }
-}
+const NOVA_API_KEY = "nova-unsecured";
 
 async function apiFetch(path, opts) {
     try {

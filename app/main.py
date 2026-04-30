@@ -59,15 +59,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Security ---
-async def validate_api_key(x_api_key: str = Header(None)):
-    expected_key = os.getenv("NOVA_API_KEY", "nova-ultra-stable-2026").strip()
-    received_key = x_api_key.strip() if x_api_key else None
-    
-    if not received_key or received_key != expected_key:
-        logger.warning(f"🔐 Unauthorized access attempt. Expected: {expected_key[:4]}..., Got: {received_key[:4] if received_key else 'None'}...")
-        raise HTTPException(status_code=401, detail="Invalid API Key")
-    return received_key
+# --- Security (REMOVED) ---
+async def validate_api_key():
+    return True
 
 # --- Health Check ---
 @app.get("/health")
@@ -76,7 +70,7 @@ async def health_check():
     return {"status": "OpenClaw Online", "timestamp": datetime.now().isoformat()}
 
 # --- API Routes ---
-@app.get("/api/clients", dependencies=[Depends(validate_api_key)])
+@app.get("/api/clients")
 async def api_clients():
     try:
         clients = await DatabaseManager.get_clients()
@@ -85,7 +79,7 @@ async def api_clients():
         logger.error(f"Error fetching clients: {e}")
         return {"clients": []}
 
-@app.get("/api/metrics", dependencies=[Depends(validate_api_key)])
+@app.get("/api/metrics")
 async def api_metrics(client_id: int = 0):
     try:
         metrics = await DatabaseManager.get_metrics(client_id)
@@ -93,7 +87,7 @@ async def api_metrics(client_id: int = 0):
     except Exception:
         return {}
 
-@app.get("/api/leads", dependencies=[Depends(validate_api_key)])
+@app.get("/api/leads")
 async def api_leads(client_id: int = 0):
     try:
         leads = await DatabaseManager.get_leads(client_id)
@@ -101,11 +95,11 @@ async def api_leads(client_id: int = 0):
     except Exception:
         return {"leads": [], "total": 0}
 
-@app.get("/api/logs", dependencies=[Depends(validate_api_key)])
+@app.get("/api/logs")
 async def api_logs():
     return {"logs": LOG_BUFFER[-50:]}
 
-@app.get("/api/dashboard", dependencies=[Depends(validate_api_key)])
+@app.get("/api/dashboard")
 async def api_dashboard(client_id: int = 0):
     try:
         return {
@@ -119,11 +113,11 @@ async def api_dashboard(client_id: int = 0):
         logger.error(f"Dashboard error: {e}")
         return {"error": str(e)}
 
-@app.get("/api/tasks", dependencies=[Depends(validate_api_key)])
+@app.get("/api/tasks")
 async def get_tasks(client_id: int = 0):
     return {"tasks": await DatabaseManager.get_tasks(client_id)}
 
-@app.post("/api/tasks", dependencies=[Depends(validate_api_key)])
+@app.post("/api/tasks")
 async def set_tasks(request: Request, client_id: int = 0):
     tasks = await request.json()
     # Simplified: Wipe and replace for the client
@@ -135,11 +129,11 @@ async def set_tasks(request: Request, client_id: int = 0):
         )
     return {"status": "ok"}
 
-@app.get("/api/content", dependencies=[Depends(validate_api_key)])
+@app.get("/api/content")
 async def get_content(client_id: int = 0):
     return {"content": await DatabaseManager.get_content(client_id)}
 
-@app.post("/api/content", dependencies=[Depends(validate_api_key)])
+@app.post("/api/content")
 async def set_content(request: Request, client_id: int = 0):
     content = await request.json()
     await DatabaseManager.query("DELETE FROM content WHERE client_id = ?", (client_id,))
@@ -150,11 +144,11 @@ async def set_content(request: Request, client_id: int = 0):
         )
     return {"status": "ok"}
 
-@app.get("/api/memory", dependencies=[Depends(validate_api_key)])
+@app.get("/api/memory")
 async def get_memory(client_id: int = 0):
     return {"memories": await DatabaseManager.get_memories(client_id)}
 
-@app.post("/api/memory", dependencies=[Depends(validate_api_key)])
+@app.post("/api/memory")
 async def set_memory(request: Request, client_id: int = 0):
     memories = await request.json()
     await DatabaseManager.query("DELETE FROM memories WHERE client_id = ?", (client_id,))
@@ -165,11 +159,11 @@ async def set_memory(request: Request, client_id: int = 0):
         )
     return {"status": "ok"}
 
-@app.get("/api/chat/history", dependencies=[Depends(validate_api_key)])
+@app.get("/api/chat/history")
 async def get_chat_history(client_id: int = 0):
     return {"history": await DatabaseManager.get_chat_history(client_id)}
 
-@app.post("/api/chat/history", dependencies=[Depends(validate_api_key)])
+@app.post("/api/chat/history")
 async def set_chat_history(request: Request, client_id: int = 0):
     data = await request.json()
     history = data.get("history", [])
@@ -189,20 +183,23 @@ async def process_telegram_message(update_data: dict):
         chat_id = chat.get("id")
         text = message.get("text", "")
         
-        # Support for Threaded Topics
-        is_topic_message = message.get("is_topic_message", False)
-        message_thread_id = message.get("message_thread_id")
-        
-        if not text or not chat_id:
-            return
+        if not chat_id: return
 
+        logger.info(f"📥 Received Telegram message from {chat_id}: {text[:50]}...")
         _append_log(f"Message from {chat_id}: {text}")
         
         # Router with async db
         history = await DatabaseManager.get_chat_history(client_id=0)
         history_list = [{"role": row["role"], "content": row["content"]} for row in history]
         
+        logger.info(f"🧠 Routing message for {chat_id}...")
         response = await router.route(text, chat_id, history_list)
+        
+        # Ensure response is a string
+        if not isinstance(response, str):
+            response = str(response)
+
+        logger.info(f"📤 Sending reply to {chat_id}: {response[:50]}...")
         
         # Save interaction
         await DatabaseManager.query(
@@ -212,18 +209,30 @@ async def process_telegram_message(update_data: dict):
         
         # Send back to Telegram
         token = os.getenv("TELEGRAM_BOT_TOKEN")
-        if token:
-            url = f"https://api.telegram.org/bot{token}/sendMessage"
-            payload = {"chat_id": chat_id, "text": response}
-            if is_topic_message and message_thread_id:
-                payload["message_thread_id"] = message_thread_id
-                
-            import httpx
-            async with httpx.AsyncClient() as client:
-                await client.post(url, json=payload)
+        if not token:
+            logger.error("❌ TELEGRAM_BOT_TOKEN is missing from environment!")
+            return
+
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        payload = {
+            "chat_id": chat_id, 
+            "text": response,
+            "parse_mode": "Markdown" # Enable markdown for better formatting
+        }
+        
+        if message.get("is_topic_message") and message.get("message_thread_id"):
+            payload["message_thread_id"] = message.get("message_thread_id")
+            
+        import httpx
+        async with httpx.AsyncClient() as client:
+            tg_res = await client.post(url, json=payload)
+            if tg_res.status_code != 200:
+                logger.error(f"❌ Telegram API Error: {tg_res.text}")
+            else:
+                logger.info(f"✅ Reply delivered to {chat_id}")
                 
     except Exception as e:
-        logger.error(f"Webhook processing error: {e}")
+        logger.error(f"💥 Webhook processing error: {e}", exc_info=True)
 
 @app.post("/webhook/telegram")
 async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
