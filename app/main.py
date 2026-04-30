@@ -207,11 +207,15 @@ async def process_telegram_message(update_data: dict):
             logger.info(f"🧵 Message from Topic ID: {message_thread_id}")
             agent_id = TOPIC_AGENT_MAP.get(str(message_thread_id), "nova")
         
-        # Router with async db
+        # Router with async db - Implementing Rolling Memory (Last 10 messages)
         history = await DatabaseManager.get_chat_history(client_id=0)
         history_list = [{"role": row["role"], "content": row["content"]} for row in history]
         
-        logger.info(f"🧠 Routing message to {agent_id.upper()} for {chat_id}...")
+        # Keep only the last 10 interactions to prevent context/token bloat
+        if len(history_list) > 10:
+            history_list = history_list[-10:]
+        
+        logger.info(f"🧠 Routing message to {agent_id.upper()} for {chat_id} (Memory: {len(history_list)} messages)...")
         response_raw = await router.route(text, chat_id, history_list, agent_id=agent_id)
         
         # Robust unpacking: Take first element if it's a list or tuple
