@@ -243,8 +243,8 @@ async def process_telegram_message(update_data: dict):
             # parse_mode removed for resilience against AI markdown errors
         }
         
-        if message.get("is_topic_message") and message.get("message_thread_id"):
-            payload["message_thread_id"] = message.get("message_thread_id")
+        if message_thread_id:
+            payload["message_thread_id"] = message_thread_id
             
         import httpx
         async with httpx.AsyncClient() as client:
