@@ -26,22 +26,22 @@ class UnifiedAIClient:
     # ── Model Map (Synced with 100% FREE Tier strategy) ───────────
     ROLE_MODELS = {
         # Core Roles
-        "reasoner":  "deepseek/deepseek-r1:free",
+        "reasoner":  "google/gemini-2.0-flash-lite-preview-02-05:free",
         "writer":    "google/gemini-2.0-flash-lite-preview-02-05:free",
         "extractor": "google/gemini-2.0-flash-lite-preview-02-05:free",
         "fast":      "google/gemini-2.0-flash-lite-preview-02-05:free",
         "default":   "google/gemini-2.0-flash-lite-preview-02-05:free",
 
         # Agent-Specific Brains
-        "nova":      "deepseek/deepseek-r1:free",                 # CEO (Logic)
-        "atlas":     "qwen/qwen-2.5-coder-32b:free",              # Dev (Coding)
-        "pixel":     "mistralai/mistral-small:free",              # Creative (Design)
+        "nova":      "google/gemini-2.0-flash-lite-preview-02-05:free",                 # CEO (Logic)
+        "atlas":     "google/gemini-2.0-flash-lite-preview-02-05:free",              # Dev (Coding)
+        "pixel":     "google/gemini-2.0-flash-lite-preview-02-05:free",              # Creative (Design)
         "quill":     "google/gemini-2.0-flash-lite-preview-02-05:free", # Writer (Content)
         "hawk":      "meta-llama/llama-3.1-70b-instruct:free",    # Hunter (Research)
         "closer":    "meta-llama/llama-3.1-8b-instruct:free",     # Sales (Logic)
         "sentinel":  "google/gemini-2.0-flash-lite-preview-02-05:free", # Ops (Monitoring)
-        "echo":      "deepseek/deepseek-chat:free",               # Success (Conversational)
-        "oracle":    "deepseek/deepseek-r1:free",                 # Analytics (Math/Data)
+        "echo":      "google/gemini-2.0-flash-lite-preview-02-05:free",               # Success (Conversational)
+        "oracle":    "google/gemini-2.0-flash-lite-preview-02-05:free",                 # Analytics (Math/Data)
         "viper":     "google/gemini-2.0-flash-lite-preview-02-05:free", # Stealth (Speed)
     }
 
