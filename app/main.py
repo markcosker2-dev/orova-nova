@@ -6,7 +6,7 @@ import asyncio
 import threading
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from fastapi import FastAPI, Request, BackgroundTasks
+from fastapi import FastAPI, Request, BackgroundTasks, HTTPException, Header, Depends
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -59,6 +59,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- Security ---
+async def validate_api_key(x_api_key: str = Header(None)):
+    expected_key = os.getenv("NOVA_API_KEY", "nova-ultra-stable-2026")
+    if not x_api_key or x_api_key != expected_key:
+        raise HTTPException(status_code=401, detail="Invalid API Key")
+    return x_api_key
+
 # --- Health Check ---
 @app.get("/health")
 @app.head("/")
@@ -66,7 +73,7 @@ async def health_check():
     return {"status": "OpenClaw Online", "timestamp": datetime.now().isoformat()}
 
 # --- API Routes ---
-@app.get("/api/clients")
+@app.get("/api/clients", dependencies=[Depends(validate_api_key)])
 async def api_clients():
     try:
         clients = await DatabaseManager.get_clients()
@@ -75,7 +82,7 @@ async def api_clients():
         logger.error(f"Error fetching clients: {e}")
         return {"clients": []}
 
-@app.get("/api/metrics")
+@app.get("/api/metrics", dependencies=[Depends(validate_api_key)])
 async def api_metrics(client_id: int = 0):
     try:
         metrics = await DatabaseManager.get_metrics(client_id)
@@ -83,7 +90,7 @@ async def api_metrics(client_id: int = 0):
     except Exception:
         return {}
 
-@app.get("/api/leads")
+@app.get("/api/leads", dependencies=[Depends(validate_api_key)])
 async def api_leads(client_id: int = 0):
     try:
         leads = await DatabaseManager.get_leads(client_id)
@@ -91,11 +98,11 @@ async def api_leads(client_id: int = 0):
     except Exception:
         return {"leads": [], "total": 0}
 
-@app.get("/api/logs")
+@app.get("/api/logs", dependencies=[Depends(validate_api_key)])
 async def api_logs():
     return {"logs": LOG_BUFFER[-50:]}
 
-@app.get("/api/dashboard")
+@app.get("/api/dashboard", dependencies=[Depends(validate_api_key)])
 async def api_dashboard(client_id: int = 0):
     try:
         return {
@@ -108,6 +115,68 @@ async def api_dashboard(client_id: int = 0):
     except Exception as e:
         logger.error(f"Dashboard error: {e}")
         return {"error": str(e)}
+
+@app.get("/api/tasks", dependencies=[Depends(validate_api_key)])
+async def get_tasks(client_id: int = 0):
+    return {"tasks": await DatabaseManager.get_tasks(client_id)}
+
+@app.post("/api/tasks", dependencies=[Depends(validate_api_key)])
+async def set_tasks(request: Request, client_id: int = 0):
+    tasks = await request.json()
+    # Simplified: Wipe and replace for the client
+    await DatabaseManager.query("DELETE FROM tasks WHERE client_id = ?", (client_id,))
+    for t in tasks:
+        await DatabaseManager.query(
+            "INSERT INTO tasks (id, title, description, assignee, priority, status, client_id, due) VALUES (?,?,?,?,?,?,?,?)",
+            (t.get("id"), t.get("title"), t.get("description"), t.get("assignee"), t.get("priority"), t.get("status"), client_id, t.get("due"))
+        )
+    return {"status": "ok"}
+
+@app.get("/api/content", dependencies=[Depends(validate_api_key)])
+async def get_content(client_id: int = 0):
+    return {"content": await DatabaseManager.get_content(client_id)}
+
+@app.post("/api/content", dependencies=[Depends(validate_api_key)])
+async def set_content(request: Request, client_id: int = 0):
+    content = await request.json()
+    await DatabaseManager.query("DELETE FROM content WHERE client_id = ?", (client_id,))
+    for c in content:
+        await DatabaseManager.query(
+            "INSERT INTO content (id, title, body, type, status, client_id) VALUES (?,?,?,?,?,?)",
+            (c.get("id"), c.get("title"), c.get("body"), c.get("type"), c.get("status"), client_id)
+        )
+    return {"status": "ok"}
+
+@app.get("/api/memory", dependencies=[Depends(validate_api_key)])
+async def get_memory(client_id: int = 0):
+    return {"memories": await DatabaseManager.get_memories(client_id)}
+
+@app.post("/api/memory", dependencies=[Depends(validate_api_key)])
+async def set_memory(request: Request, client_id: int = 0):
+    memories = await request.json()
+    await DatabaseManager.query("DELETE FROM memories WHERE client_id = ?", (client_id,))
+    for m in memories:
+        await DatabaseManager.query(
+            "INSERT INTO memories (id, category, content, client_id) VALUES (?,?,?,?)",
+            (m.get("id"), m.get("tag") or m.get("category"), m.get("body") or m.get("content"), client_id)
+        )
+    return {"status": "ok"}
+
+@app.get("/api/chat/history", dependencies=[Depends(validate_api_key)])
+async def get_chat_history(client_id: int = 0):
+    return {"history": await DatabaseManager.get_chat_history(client_id)}
+
+@app.post("/api/chat/history", dependencies=[Depends(validate_api_key)])
+async def set_chat_history(request: Request, client_id: int = 0):
+    data = await request.json()
+    history = data.get("history", [])
+    await DatabaseManager.query("DELETE FROM chat_history WHERE client_id = ?", (client_id,))
+    for h in history:
+        await DatabaseManager.query(
+            "INSERT INTO chat_history (role, content, client_id) VALUES (?,?,?)",
+            (h.get("role"), h.get("content"), client_id)
+        )
+    return {"status": "ok"}
 
 # --- Telegram Webhook Logic (Operator 2.0) ---
 async def process_telegram_message(update_data: dict):

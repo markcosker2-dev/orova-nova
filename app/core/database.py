@@ -92,6 +92,28 @@ class DatabaseManager:
                     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
+            # Chat History
+            await db.execute('''
+                CREATE TABLE IF NOT EXISTS chat_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    role TEXT,
+                    content TEXT,
+                    client_id INTEGER DEFAULT 0,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            # Content
+            await db.execute('''
+                CREATE TABLE IF NOT EXISTS content (
+                    id TEXT PRIMARY KEY,
+                    title TEXT,
+                    body TEXT,
+                    type TEXT,
+                    status TEXT,
+                    client_id INTEGER DEFAULT 0,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
             await db.commit()
             logger.info("[DB] Async SQLite initialized successfully.")
 
@@ -142,6 +164,40 @@ class DatabaseManager:
             int(client_id)
         )
         await DatabaseManager.query(sql, params)
+
+    @staticmethod
+    async def get_clients():
+        return await DatabaseManager.query("SELECT * FROM clients", fetchall=True)
+
+    @staticmethod
+    async def get_metrics(client_id=0):
+        row = await DatabaseManager.query("SELECT * FROM metrics WHERE client_id = ?", (int(client_id),), fetchone=True)
+        return dict(row) if row else {}
+
+    @staticmethod
+    async def get_leads(client_id=0):
+        rows = await DatabaseManager.query("SELECT * FROM leads WHERE client_id = ? ORDER BY created_at DESC", (int(client_id),), fetchall=True)
+        return [dict(r) for r in rows] if rows else []
+
+    @staticmethod
+    async def get_tasks(client_id=0):
+        rows = await DatabaseManager.query("SELECT * FROM tasks WHERE client_id = ? ORDER BY created_at DESC", (int(client_id),), fetchall=True)
+        return [dict(r) for r in rows] if rows else []
+
+    @staticmethod
+    async def get_content(client_id=0):
+        rows = await DatabaseManager.query("SELECT * FROM content WHERE client_id = ? ORDER BY created_at DESC", (int(client_id),), fetchall=True)
+        return [dict(r) for r in rows] if rows else []
+
+    @staticmethod
+    async def get_memories(client_id=0):
+        rows = await DatabaseManager.query("SELECT * FROM memories WHERE client_id = ? ORDER BY created_at DESC", (int(client_id),), fetchall=True)
+        return [dict(r) for r in rows] if rows else []
+
+    @staticmethod
+    async def get_chat_history(client_id=0):
+        rows = await DatabaseManager.query("SELECT * FROM chat_history WHERE client_id = ? ORDER BY created_at ASC", (int(client_id),), fetchall=True)
+        return [dict(r) for r in rows] if rows else []
 
     @staticmethod
     async def get_state(key: str, default=None):
