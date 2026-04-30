@@ -205,7 +205,7 @@ class DatabaseManager:
         row = await DatabaseManager.query("SELECT * FROM clients WHERE id = ?", (int(client_id),), fetchone=True)
         if row:
             return dict(row)
-        return {"business_name": "OROVA Internal", "niche": os.getenv("VERTICAL_NAME", "Automotive"), "location": "California"}
+        return {"business_name": "OROVA Internal", "niche": os.getenv("VERTICAL_NAME", "Automotive, Luxury Remodeling, Private Aviation, Real Estate"), "location": "California"}
 
     @staticmethod
     async def get_state(key: str, default=None):
