@@ -52,8 +52,8 @@ AGENTS = {
         "name": "Hawk",
         "role": "Lead Hunter",
         "dept": "Sales",
-        "skills": ["lead_finder", "deep_research", "seo_audit", "competitive_intel"],
-        "keywords": ["lead", "find", "search", "hunt", "research", "seo", "competitor", "prospect", "audit"],
+        "skills": ["lead_finder", "deep_research", "meta_ads_audit", "competitive_intel"],
+        "keywords": ["lead", "find", "search", "hunt", "research", "meta", "facebook", "instagram", "ads", "advertising", "competitor", "prospect"],
         "model": "meta-llama/llama-3.1-70b-instruct:free",
     },
     "closer": {
