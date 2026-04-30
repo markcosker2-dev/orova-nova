@@ -17,7 +17,7 @@ class Router:
             r'/reset': self._reset_instruction
         }
 
-    async def route(self, message: str, chat_id: int, history: list = None):
+    async def route(self, message: str, chat_id: int, history: list = None, agent_id: str = "nova"):
         """
         Route the message to the correct handler.
         """
@@ -31,8 +31,8 @@ class Router:
                 return await handler()
 
         # 2. AI Planner (The Brain) - EVERYTHING else goes here
-        logger.info(f"Router: Routing to AI Planner (Nova) for Client {chat_id}") # chat_id here is client_id
-        return await self.planner.execute(message, client_id=chat_id, conversation_history=history)
+        logger.info(f"Router: Routing to {agent_id.upper()} for Client {chat_id}")
+        return await self.planner.execute(message, agent_id=agent_id, client_id=chat_id, conversation_history=history)
 
     async def _greet(self):
         return "👋 NOVA (CLOUD V2.2 - 18:32). Ready, Mark."

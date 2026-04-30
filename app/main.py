@@ -34,6 +34,12 @@ ai_client = UnifiedAIClient()
 planner = TaskPlanner(ai_client)
 router = Router(planner, lead_hunter=find_leads)
 LOG_BUFFER = []
+# Map Telegram Thread IDs (Topic IDs) to Agent Personas
+# User needs to fill these in once they see the IDs in the logs
+TOPIC_AGENT_MAP = {
+    "default": "nova",
+    # Example: 1234: "hawk"
+}
 
 def _append_log(msg: str):
     LOG_BUFFER.append({"ts": datetime.now().strftime("%H:%M:%S"), "msg": msg})
@@ -188,12 +194,21 @@ async def process_telegram_message(update_data: dict):
         logger.info(f"📥 Received Telegram message from {chat_id}: {text[:50]}...")
         _append_log(f"Message from {chat_id}: {text}")
         
+        # Support for Threaded Topics (Operator 2.0)
+        message_thread_id = message.get("message_thread_id")
+        
+        # Determine Agent based on Topic
+        agent_id = "nova"
+        if message_thread_id:
+            logger.info(f"🧵 Message from Topic ID: {message_thread_id}")
+            agent_id = TOPIC_AGENT_MAP.get(str(message_thread_id), "nova")
+        
         # Router with async db
         history = await DatabaseManager.get_chat_history(client_id=0)
         history_list = [{"role": row["role"], "content": row["content"]} for row in history]
         
-        logger.info(f"🧠 Routing message for {chat_id}...")
-        response_raw = await router.route(text, chat_id, history_list)
+        logger.info(f"🧠 Routing message to {agent_id.upper()} for {chat_id}...")
+        response_raw = await router.route(text, chat_id, history_list, agent_id=agent_id)
         
         # Robust unpacking: Take first element if it's a list or tuple
         if isinstance(response_raw, (tuple, list)):
