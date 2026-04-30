@@ -61,10 +61,13 @@ app.add_middleware(
 
 # --- Security ---
 async def validate_api_key(x_api_key: str = Header(None)):
-    expected_key = os.getenv("NOVA_API_KEY", "nova-ultra-stable-2026")
-    if not x_api_key or x_api_key != expected_key:
+    expected_key = os.getenv("NOVA_API_KEY", "nova-ultra-stable-2026").strip()
+    received_key = x_api_key.strip() if x_api_key else None
+    
+    if not received_key or received_key != expected_key:
+        logger.warning(f"🔐 Unauthorized access attempt. Expected: {expected_key[:4]}..., Got: {received_key[:4] if received_key else 'None'}...")
         raise HTTPException(status_code=401, detail="Invalid API Key")
-    return x_api_key
+    return received_key
 
 # --- Health Check ---
 @app.get("/health")
