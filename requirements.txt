@@ -8,8 +8,7 @@ python-dotenv>=1.0.0
 
 # ── AI / LLM ────────────────────────────────
 google-genai>=0.7.0
-sentence-transformers==2.5.1
-faiss-cpu==1.8.0
+# faiss/sentence-transformers removed for Free Tier RAM optimization
 
 # ── Voice calling ───────────────────────────
 retell-sdk>=4.0.0

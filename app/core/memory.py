@@ -20,15 +20,10 @@ class MemoryDistiller:
         self._initialize_faiss()
 
     def _initialize_faiss(self):
-        try:
-            import faiss
-            from sentence_transformers import SentenceTransformer
-            self.index = faiss.IndexFlatL2(self.dimension)
-            # Use lightweight BGE model for fast local embeddings
-            self.encoder = SentenceTransformer('BAAI/bge-small-en-v1.5')
-            logger.info("[MEMORY] Semantic RAG Bridge initialized via FAISS.")
-        except Exception as e:
-            logger.error(f"[MEMORY] FAISS initialization failed. Falling back to keyword search: {e}")
+        # Disabled for Render Free Tier to save 512MB RAM
+        self.index = None
+        self.encoder = None
+        logger.info("[MEMORY] Using lightweight SQLite Wiki (Semantic RAG disabled).")
 
     async def distill(self, history: list, client_id: int = 0) -> list:
         """

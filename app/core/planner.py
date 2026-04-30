@@ -159,6 +159,7 @@ class TaskPlanner:
         persona_instructions = self._get_persona_prompt(active_agent)
         
         # Build Config-Driven System Prompt
+        logger.info(f"🤖 Nova is generating plan for goal: {goal[:50]}...")
         vertical_name = self.config.get("vertical_name", "General Business")
         industry = self.config.get("scoring_logic", {}).get("industry", "Business")
         clv_goal = self.config.get("scoring_logic", {}).get("clv_range", "$5,000+")
