@@ -174,4 +174,6 @@ if os.path.exists(MC_PATH):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=18789)
+    # Use $PORT from environment, default to 18789
+    port = int(os.environ.get("PORT", 18789))
+    uvicorn.run("app.main:app", host="0.0.0.0", port=port)
