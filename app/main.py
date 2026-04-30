@@ -212,6 +212,8 @@ async def process_telegram_message(update_data: dict):
         if not token:
             logger.error("❌ TELEGRAM_BOT_TOKEN is missing from environment!")
             return
+        
+        logger.info(f"🔑 Using Bot Token: {token[:4]}...{token[-4:]}")
 
         url = f"https://api.telegram.org/bot{token}/sendMessage"
         payload = {
