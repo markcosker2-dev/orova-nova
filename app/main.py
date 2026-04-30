@@ -37,8 +37,12 @@ LOG_BUFFER = []
 # Map Telegram Thread IDs (Topic IDs) to Agent Personas
 # User needs to fill these in once they see the IDs in the logs
 TOPIC_AGENT_MAP = {
-    "default": "nova",
-    # Example: 1234: "hawk"
+    "1": "nova",    # General
+    "2": "hawk",    # Lead hunt
+    "3": "closer",  # Sales and Objections
+    "5": "pixel",   # Creative Audits
+    "6": "oracle",  # Financials
+    "7": "atlas"    # Dev & Fixes
 }
 
 def _append_log(msg: str):
