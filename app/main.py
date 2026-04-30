@@ -218,8 +218,8 @@ async def process_telegram_message(update_data: dict):
         url = f"https://api.telegram.org/bot{token}/sendMessage"
         payload = {
             "chat_id": chat_id, 
-            "text": response,
-            "parse_mode": "Markdown" # Enable markdown for better formatting
+            "text": response
+            # parse_mode removed for resilience against AI markdown errors
         }
         
         if message.get("is_topic_message") and message.get("message_thread_id"):
