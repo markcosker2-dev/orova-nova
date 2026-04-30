@@ -1,5 +1,5 @@
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 import os
 import logging
 from typing import List, Dict, Any
@@ -16,13 +16,13 @@ def get_sheets_client():
     try:
         if creds_b64:
             creds_dict = json.loads(base64.b64decode(creds_b64).decode("utf-8"))
-            creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+            creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
         else:
             creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "credentials.json")
             if not os.path.exists(creds_path):
                 logger.error(f"Google Sheets: Credentials not found at {creds_path}")
                 return None
-            creds = ServiceAccountCredentials.from_json_keyfile_name(creds_path, scope)
+            creds = Credentials.from_service_account_file(creds_path, scopes=scope)
             
         return gspread.authorize(creds)
     except Exception as e:
