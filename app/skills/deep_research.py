@@ -1,6 +1,7 @@
 import logging
 import asyncio
-from app.skills.lead_finder import find_leads, read_webpage
+from app.skills.lead_finder import find_leads
+from app.skills.browser_ops import browse_and_extract
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,7 @@ async def deep_research(topic: str, depth: str = "standard") -> str:
 
     for url in urls_to_read[:5]:
         try:
-            page_content = await read_webpage(url=url)
+            page_content = await browse_and_extract(url=url)
             if page_content:
                 # Truncate to avoid token overflow
                 results["findings"].append(page_content[:2000])

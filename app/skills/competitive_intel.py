@@ -1,5 +1,6 @@
 import logging
-from app.skills.lead_finder import find_leads, read_webpage
+from app.skills.lead_finder import find_leads
+from app.skills.browser_ops import browse_and_extract
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ async def analyze_competitor(company_name: str) -> str:
             urls = re.findall(r'https?://[^\s\)\"\']+', str(site_result))
             for url in urls[:2]:
                 try:
-                    page = await read_webpage(url=url)
+                    page = await browse_and_extract(url=url)
                     if page:
                         sections.append(f"### Website Content: {url}\n{page[:1500]}\n")
                 except Exception:
