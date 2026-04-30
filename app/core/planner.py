@@ -333,7 +333,14 @@ OBJECTIVE: Build the OROVA empire. Find {current_niche} leads in {current_loc} f
                             result = f"Error: Tool '{tool_name}' not registered."
 
                     except Exception as e:
-                        result = f"Error executing tool {tool_name}: {e}"
+                        logger.error(f"💥 Planner: Tool execution failed: {e}", exc_info=True)
+                        history.append({
+                            "role": "tool",
+                            "tool_call_id": tc.id,
+                            "name": tool_name,
+                            "content": f"ERROR: Tool failed with: {str(e)}"
+                        })
+                        continue
                     
                     # Feed result back to Brain
                     if isinstance(result, dict) and ("text" in result or "result" in result):
