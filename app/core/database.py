@@ -200,6 +200,14 @@ class DatabaseManager:
         return [dict(r) for r in rows] if rows else []
 
     @staticmethod
+    async def get_client_config(client_id=0):
+        # Simplified: Fetch from clients table or return default
+        row = await DatabaseManager.query("SELECT * FROM clients WHERE id = ?", (int(client_id),), fetchone=True)
+        if row:
+            return dict(row)
+        return {"business_name": "OROVA Internal", "niche": os.getenv("VERTICAL_NAME", "Automotive"), "location": "California"}
+
+    @staticmethod
     async def get_state(key: str, default=None):
         row = await DatabaseManager.query("SELECT value FROM system_state WHERE key = ?", (key,), fetchone=True)
         return row["value"] if row else default

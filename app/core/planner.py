@@ -149,7 +149,7 @@ class TaskPlanner:
         
         # [Tenant Intelligence] Fetch client config for context
         from app.core.database import DatabaseManager
-        config = DatabaseManager.get_client_config(client_id)
+        config = await DatabaseManager.get_client_config(client_id)
         current_niche = config.get("niche", "General Business")
         current_loc = config.get("location", "California")
         
