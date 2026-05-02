@@ -22,7 +22,7 @@ scrapling-fetch-mcp>=0.1.0
 requests>=2.31.0
 beautifulsoup4>=4.12.0
 duckduckgo-search>=5.3.0
-playwright>=1.41.0
+# playwright>=1.41.0 removed for RAM optimization
 
 # ── Database ────────────────────────────────
 aiosqlite==0.20.0

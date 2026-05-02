@@ -1,20 +1,24 @@
-# Use official Playwright image for Lead Hunter compatibility
-FROM mcr.microsoft.com/playwright/python:v1.41.0-jammy
+# Lightweight Python image for Render Free Tier
+FROM python:3.11-slim
 
 WORKDIR /app
 
+# Install system dependencies for Scrapling
+RUN apt-get update && apt-get install -y \
+    curl \
+    gcc \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt && \
-    playwright install --with-deps chromium && \
-    rm -rf /root/.cache/pip
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
 
-# Expose Gateway and Health ports
-# Note: Render only supports one exposed port per service, usually $PORT
-EXPOSE 18789 10000
+# Expose Gateway port
+EXPOSE 18789
 
 # Default command
 CMD ["python", "app/main.py"]
