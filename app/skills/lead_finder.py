@@ -122,19 +122,17 @@ async def find_leads(count: int = 10, query: str = "business leads"):
 
 
 async def _duckduckgo_search(query: str, count: int) -> list:
-    """DuckDuckGo search using the 'ddgs' package."""
+    """DuckDuckGo search using the 'duckduckgo_search' package (100% Free)."""
     count = int(count)
     leads = []
 
     try:
-        from ddgs import DDGS
-        loop = asyncio.get_running_loop()
-        # ddgs package doesn't accept max_results — slice instead
-        results = await loop.run_in_executor(
-            None,
-            lambda: DDGS().text(query)
-        )
-        for res in results[:count]:
+        from duckduckgo_search import DDGS
+        # Correct usage for duckduckgo-search >= 5.x
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=count))
+            
+        for res in results:
             leads.append({
                 "title": res.get("title", "Untitled"),
                 "url": res.get("href", res.get("link", "")),
@@ -142,7 +140,7 @@ async def _duckduckgo_search(query: str, count: int) -> list:
             })
         return leads
     except ImportError:
-        logger.error("ddgs package not installed. Run: pip install ddgs")
+        logger.error("duckduckgo-search package not installed.")
     except Exception as e:
         logger.error(f"DDG search error: {e}")
 
