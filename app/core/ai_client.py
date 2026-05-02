@@ -86,7 +86,7 @@ class UnifiedAIClient:
         "default":   "openai/gpt-oss-120b:free",
 
         # Agent-Specific Specialists
-        "nova":      "moonshotai/kimi-k2.6",                      # CEO (Kimi 2.6)
+        "nova":      "openai/gpt-oss-120b:free",                  # CEO (Free Smart)
         "hawk":      "qwen/qwen3-coder-480b-instruct:free",       # Research (480B)
         "closer":    "meta-llama/llama-3.3-70b-instruct:free",    # Sales (Llama 3.3)
         "pixel":     "google/gemini-2.0-flash-lite-preview-02-05:free", # Creative (Vision)
