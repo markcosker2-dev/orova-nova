@@ -23,33 +23,84 @@ class UnifiedAIClient:
         default   → Claude Sonnet 4   (general purpose)
     """
 
-    # ── Model Map (Synced with 100% FREE Tier strategy) ───────────
+    # ── Model Flavors (Dynamic Brain Selection) ───────────────────
+    FLAVORS = {
+        "fast":   "google/gemini-2.0-flash-lite-preview-02-05:free",
+        "smart":  "meta-llama/llama-3.3-70b-instruct:free",
+        "genius": "deepseek/deepseek-r1:free"
+    }
+
+    FLAVOR_FILE = "app/data/model_flavor.json"
+
+    def _get_flavor(self) -> str:
+        """Read the current brain flavor from disk."""
+        try:
+            if os.path.exists(self.FLAVOR_FILE):
+                with open(self.FLAVOR_FILE, 'r') as f:
+                    return json.load(f).get("flavor", "fast")
+        except: pass
+        return "fast"
+
+    def _set_flavor(self, flavor: str):
+        """Save the current brain flavor to disk."""
+        try:
+            os.makedirs(os.path.dirname(self.FLAVOR_FILE), exist_ok=True)
+            with open(self.FLAVOR_FILE, 'w') as f:
+                json.dump({"flavor": flavor}, f)
+        except: pass
+
+    # ── Model Flavors (May 2026 Imperial Strategy) ──────────────
+    FLAVORS = {
+        "fast":   "google/gemini-2.0-flash-lite-preview-02-05:free", # Speed
+        "smart":  "openai/gpt-oss-120b:free",                       # CEO Failsafe
+        "genius": "qwen/qwen3-coder-480b-instruct:free",           # Logic Beast
+        "kimi":   "moonshotai/kimi-k2.6"                            # CEO Primary (1T Param)
+    }
+
+    FLAVOR_FILE = "app/data/model_flavor.json"
+
+    def _get_flavor(self) -> str:
+        """Read the current brain flavor from disk."""
+        try:
+            if os.path.exists(self.FLAVOR_FILE):
+                with open(self.FLAVOR_FILE, 'r') as f:
+                    return json.load(f).get("flavor", "fast")
+        except: pass
+        return "fast"
+
+    def _set_flavor(self, flavor: str):
+        """Save the current brain flavor to disk."""
+        try:
+            os.makedirs(os.path.dirname(self.FLAVOR_FILE), exist_ok=True)
+            with open(self.FLAVOR_FILE, 'w') as f:
+                json.dump({"flavor": flavor}, f)
+        except: pass
+
+    # ── Imperial Agent Grid (Specialized Brains) ──────────────────
     ROLE_MODELS = {
         # Core Roles
-        "reasoner":  "google/gemini-2.0-flash-lite-preview-02-05:free",
-        "writer":    "google/gemini-2.0-flash-lite-preview-02-05:free",
+        "reasoner":  "openai/gpt-oss-120b:free",
+        "writer":    "meta-llama/llama-3.3-70b-instruct:free",
         "extractor": "google/gemini-2.0-flash-lite-preview-02-05:free",
         "fast":      "google/gemini-2.0-flash-lite-preview-02-05:free",
-        "default":   "google/gemini-2.0-flash-lite-preview-02-05:free",
+        "default":   "openai/gpt-oss-120b:free",
 
-        # Agent-Specific Brains
-        "nova":      "google/gemini-2.0-flash-lite-preview-02-05:free",                 # CEO (Logic)
-        "atlas":     "google/gemini-2.0-flash-lite-preview-02-05:free",              # Dev (Coding)
-        "pixel":     "google/gemini-2.0-flash-lite-preview-02-05:free",              # Creative (Design)
-        "quill":     "google/gemini-2.0-flash-lite-preview-02-05:free", # Writer (Content)
-        "hawk":      "meta-llama/llama-3.1-70b-instruct:free",    # Hunter (Research)
-        "closer":    "meta-llama/llama-3.1-8b-instruct:free",     # Sales (Logic)
-        "sentinel":  "google/gemini-2.0-flash-lite-preview-02-05:free", # Ops (Monitoring)
-        "echo":      "google/gemini-2.0-flash-lite-preview-02-05:free",               # Success (Conversational)
-        "oracle":    "google/gemini-2.0-flash-lite-preview-02-05:free",                 # Analytics (Math/Data)
-        "viper":     "google/gemini-2.0-flash-lite-preview-02-05:free", # Stealth (Speed)
+        # Agent-Specific Specialists
+        "nova":      "moonshotai/kimi-k2.6",                      # CEO (Kimi 2.6)
+        "hawk":      "qwen/qwen3-coder-480b-instruct:free",       # Research (480B)
+        "closer":    "meta-llama/llama-3.3-70b-instruct:free",    # Sales (Llama 3.3)
+        "pixel":     "google/gemini-2.0-flash-lite-preview-02-05:free", # Creative (Vision)
+        "atlas":     "qwen/qwen3-coder-480b-instruct:free",       # Dev (Coding)
+        "oracle":    "openai/gpt-oss-120b:free",                  # Finance (Logic)
+        "sentinel":  "google/gemini-2.0-flash-lite-preview-02-05:free", # Ops
+        "echo":      "google/gemini-2.0-flash-lite-preview-02-05:free",
+        "viper":     "google/gemini-2.0-flash-lite-preview-02-05:free"
     }
 
     FALLBACK_CHAIN = [
+        "openai/gpt-oss-120b:free",
+        "qwen/qwen3-coder-480b-instruct:free",
         "google/gemini-2.0-flash-lite-preview-02-05:free",
-        "deepseek/deepseek-r1:free",
-        "deepseek/deepseek-chat:free",
-        "mistralai/mistral-7b-instruct:free",
     ]
 
     # Groq uses different model names
@@ -121,8 +172,12 @@ class UnifiedAIClient:
                 tool_calls=None
             )
 
-        # ── Select primary model based on role ────────────────────
-        primary_model = self.ROLE_MODELS.get(role, self.ROLE_MODELS["default"])
+        # ── Select primary model based on flavor override ──────────
+        flavor = self._get_flavor()
+        if flavor in self.FLAVORS:
+            primary_model = self.FLAVORS[flavor]
+        else:
+            primary_model = self.ROLE_MODELS.get(role, self.ROLE_MODELS["default"])
 
         # Build fallback chain: primary first, then others (deduplicated)
         chain = [primary_model]

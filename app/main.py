@@ -195,19 +195,33 @@ async def process_telegram_message(update_data: dict):
         
         if not chat_id: return
 
-        logger.info(f"📥 Received Telegram message from {chat_id}: {text[:50]}...")
-        _append_log(f"Message from {chat_id}: {text}")
-        
-        # Support for Threaded Topics (Operator 2.0)
-        message_thread_id = message.get("message_thread_id")
-        
-        # Determine Agent based on Topic
-        agent_id = "nova"
-        if message_thread_id:
-            logger.info(f"🧵 Message from Topic ID: {message_thread_id}")
-            agent_id = TOPIC_AGENT_MAP.get(str(message_thread_id), "nova")
-        
-        # Router with async db - Implementing Rolling Memory (Last 10 messages)
+        # --- COMMAND HANDLING (/mode, /status) ---
+        if text.startswith("/"):
+            cmd_parts = text.lower().split()
+            cmd = cmd_parts[0]
+            
+            if cmd == "/mode":
+                if len(cmd_parts) > 1:
+                    new_flavor = cmd_parts[1]
+                    if new_flavor in ai_client.FLAVORS:
+                        ai_client._set_flavor(new_flavor)
+                        response = f"🧠 **BRAIN SWAP SUCCESSFUL**\n\nNova is now using: `{new_flavor.upper()}` mode ({ai_client.FLAVORS[new_flavor]})\n\n_Note: Genius and Smart modes may take longer to respond._"
+                    else:
+                        response = f"❌ **INVALID MODE**\nAvailable: `fast`, `smart`, `genius`, `kimi`"
+                else:
+                    response = f"📊 **CURRENT BRAIN**: `{ai_client._get_flavor().upper()}`\nUse `/mode [type]` to switch."
+                
+                # Send immediate reply and skip routing
+                await _send_telegram_reply(chat_id, response, message_thread_id)
+                return
+
+            if cmd == "/status":
+                flavor = ai_client._get_flavor()
+                response = f"✅ **OROVA SYSTEM STATUS**\n\n🤖 **Active Brain**: `{flavor.upper()}`\n🧵 **Agent Persona**: `{agent_id.upper()}`\n🔋 **Memory**: `{len(history_list)}` messages\n📡 **Gateway**: Online (Render v5.2)"
+                await _send_telegram_reply(chat_id, response, message_thread_id)
+                return
+
+        # --- ROUTING ---
         history = await DatabaseManager.get_chat_history(client_id=0)
         history_list = [{"role": row["role"], "content": row["content"]} for row in history]
         
