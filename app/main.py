@@ -268,7 +268,8 @@ async def process_telegram_message(update_data: dict):
         async with httpx.AsyncClient() as client:
             tg_res = await client.post(url, json=payload)
             if tg_res.status_code != 200:
-                logger.error(f"❌ Telegram API Error: {tg_res.text}")
+                logger.error(f"❌ Telegram API Error: Status {tg_res.status_code} - Body: {tg_res.text}")
+                _append_log(f"Telegram Error: {tg_res.status_code} - {tg_res.text}")
             else:
                 logger.info(f"✅ Reply delivered to {chat_id}")
                 
