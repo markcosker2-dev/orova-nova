@@ -282,9 +282,6 @@ async def process_telegram_message(update_data: dict):
     except Exception as e:
         logger.error(f"💥 Webhook processing error: {e}", exc_info=True)
         _append_log(f"Processing Error: {e}")
-                
-    except Exception as e:
-        logger.error(f"💥 Webhook processing error: {e}", exc_info=True)
 
 @app.post("/webhook/telegram")
 async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):

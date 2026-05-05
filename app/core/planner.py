@@ -154,8 +154,9 @@ class TaskPlanner:
         current_niche = config.get("niche", "General Business")
         current_loc = config.get("location", "California")
         
-        from app.core.agent_router import classify_agent
-        active_agent = agent_id if agent_id != "nova" else classify_agent(goal)
+        # Nova stays as Nova for direct user messages.
+        # Sub-agents are only used when explicitly dispatched.
+        active_agent = agent_id
         persona_instructions = self._get_persona_prompt(active_agent)
         
         # Scope tools to reduce context pressure
