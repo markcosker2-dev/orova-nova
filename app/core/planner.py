@@ -173,6 +173,42 @@ RULES:
 4. Be concise. No essays. Results only.
 {long_term_facts}"""
 
+        # ── DIRECT ACTION SHORTCUT ──────────────────────────────────
+        # For hunting tasks, skip the unreliable AI tool-calling and
+        # call find_leads directly. Then ask AI to format results.
+        goal_lower = goal.lower()
+        is_hunt = any(k in goal_lower for k in ["find", "search", "look", "client", "lead", "hunt", "prospect"])
+        
+        if is_hunt:
+            logger.info("🎯 DIRECT ACTION: Hunting task detected. Calling find_leads directly.")
+            # Extract a search query from the goal
+            search_query = goal  # Use the full goal as the search query
+            try:
+                from app.skills.lead_finder import find_leads
+                raw_results = await find_leads(query=search_query, count=5)
+                
+                if isinstance(raw_results, dict):
+                    lead_text = raw_results.get("text", str(raw_results))
+                else:
+                    lead_text = str(raw_results)
+                
+                if lead_text and "non-actionable" not in lead_text.lower():
+                    # Ask AI to present results nicely
+                    format_messages = [
+                        {"role": "system", "content": "You are Nova, Mark's AI partner at OROVA. Present these search results clearly and concisely. Add a brief recommendation for each lead."},
+                        {"role": "user", "content": f"Here are the raw search results for '{goal}':\n\n{lead_text[:2500]}\n\nPresent these to Mark with your recommendations."}
+                    ]
+                    ai_response = await self.ai.chat(messages=format_messages, role=active_agent)
+                    formatted = ai_response.content or lead_text
+                    return formatted
+                else:
+                    # Results were empty or filtered, return raw
+                    return lead_text or "No actionable leads found. Try a more specific query like 'luxury remodeling contractors Beverly Hills'."
+            except Exception as e:
+                logger.error(f"💥 Direct hunt failed: {e}")
+                return f"⚠️ Search tool error: {str(e)}. Try again in a moment."
+
+        # ── STANDARD AI LOOP (for non-hunting tasks) ───────────────
         for i in range(max_steps):
             logger.info(f"Planner Step {i+1}/{max_steps}")
             current_messages = [{"role": "system", "content": system_prompt}] + history
