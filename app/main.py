@@ -4,6 +4,7 @@ import json
 import logging
 import asyncio
 import threading
+from typing import Optional
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from fastapi import FastAPI, Request, BackgroundTasks, HTTPException, Header, Depends
