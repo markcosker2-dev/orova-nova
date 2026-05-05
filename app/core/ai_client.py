@@ -86,7 +86,7 @@ class UnifiedAIClient:
         "default":   "openai/gpt-oss-120b:free",
 
         # Agent-Specific Specialists
-        "nova":      "openai/gpt-oss-120b:free",                  # CEO (Free Smart)
+        "nova":      "google/gemini-2.0-flash-lite-preview-02-05:free", # CEO (Stable Tool Caller)
         "hawk":      "qwen/qwen3-coder-480b-instruct:free",       # Research (480B)
         "closer":    "meta-llama/llama-3.3-70b-instruct:free",    # Sales (Llama 3.3)
         "pixel":     "google/gemini-2.0-flash-lite-preview-02-05:free", # Creative (Vision)
