@@ -186,14 +186,45 @@ async def set_chat_history(request: Request, client_id: int = 0):
     return {"status": "ok"}
 
 # --- Telegram Webhook Logic (Operator 2.0) ---
+async def _send_telegram_reply(chat_id: int, text: str, thread_id: Optional[int] = None):
+    """Helper to send messages back to Telegram."""
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not token:
+        logger.error("❌ TELEGRAM_BOT_TOKEN missing")
+        return
+    
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {"chat_id": chat_id, "text": text}
+    if thread_id:
+        payload["message_thread_id"] = thread_id
+        
+    import httpx
+    try:
+        async with httpx.AsyncClient() as client:
+            res = await client.post(url, json=payload, timeout=10.0)
+            if res.status_code != 200:
+                logger.error(f"❌ TG Send Error: {res.text}")
+                _append_log(f"TG Error: {res.text}")
+    except Exception as e:
+        logger.error(f"💥 Failed to send TG reply: {e}")
+
 async def process_telegram_message(update_data: dict):
     try:
         message = update_data.get("message", {})
         chat = message.get("chat", {})
         chat_id = chat.get("id")
         text = message.get("text", "")
+        message_thread_id = message.get("message_thread_id")
         
         if not chat_id: return
+
+        logger.info(f"📥 Received Telegram message from {chat_id} (Topic: {message_thread_id}): {text[:50]}...")
+        _append_log(f"Message from {chat_id}: {text}")
+
+        # Determine Agent based on Topic
+        agent_id = "nova"
+        if message_thread_id:
+            agent_id = TOPIC_AGENT_MAP.get(str(message_thread_id), "nova")
 
         # --- COMMAND HANDLING (/mode, /status) ---
         if text.startswith("/"):
@@ -205,19 +236,19 @@ async def process_telegram_message(update_data: dict):
                     new_flavor = cmd_parts[1]
                     if new_flavor in ai_client.FLAVORS:
                         ai_client._set_flavor(new_flavor)
-                        response = f"🧠 **BRAIN SWAP SUCCESSFUL**\n\nNova is now using: `{new_flavor.upper()}` mode ({ai_client.FLAVORS[new_flavor]})\n\n_Note: Genius and Smart modes may take longer to respond._"
+                        response = f"🧠 **BRAIN SWAP SUCCESSFUL**\n\nNova is now using: `{new_flavor.upper()}` mode\n\n_Note: Genius and Smart modes may take longer to respond._"
                     else:
                         response = f"❌ **INVALID MODE**\nAvailable: `fast`, `smart`, `genius`, `kimi`"
                 else:
                     response = f"📊 **CURRENT BRAIN**: `{ai_client._get_flavor().upper()}`\nUse `/mode [type]` to switch."
                 
-                # Send immediate reply and skip routing
                 await _send_telegram_reply(chat_id, response, message_thread_id)
                 return
 
             if cmd == "/status":
                 flavor = ai_client._get_flavor()
-                response = f"✅ **OROVA SYSTEM STATUS**\n\n🤖 **Active Brain**: `{flavor.upper()}`\n🧵 **Agent Persona**: `{agent_id.upper()}`\n🔋 **Memory**: `{len(history_list)}` messages\n📡 **Gateway**: Online (Render v5.2)"
+                history = await DatabaseManager.get_chat_history(client_id=0)
+                response = f"✅ **OROVA SYSTEM STATUS**\n\n🤖 **Active Brain**: `{flavor.upper()}`\n🧵 **Agent Persona**: `{agent_id.upper()}`\n🔋 **Memory**: `{len(history)}` messages\n📡 **Gateway**: Online (Render v5.3)"
                 await _send_telegram_reply(chat_id, response, message_thread_id)
                 return
 
@@ -225,20 +256,18 @@ async def process_telegram_message(update_data: dict):
         history = await DatabaseManager.get_chat_history(client_id=0)
         history_list = [{"role": row["role"], "content": row["content"]} for row in history]
         
-        # Keep only the last 10 interactions to prevent context/token bloat
         if len(history_list) > 10:
             history_list = history_list[-10:]
         
-        logger.info(f"🧠 Routing message to {agent_id.upper()} for {chat_id} (Memory: {len(history_list)} messages)...")
+        logger.info(f"🧠 Routing message to {agent_id.upper()} for {chat_id}...")
         response_raw = await router.route(text, chat_id, history_list, agent_id=agent_id)
         
-        # Robust unpacking: Take first element if it's a list or tuple
         if isinstance(response_raw, (tuple, list)):
             response = str(response_raw[0])
         else:
             response = str(response_raw)
 
-        logger.info(f"📤 Sending reply to {chat_id}: {response[:50]}...")
+        logger.info(f"📤 Sending reply to {chat_id}...")
         
         # Save interaction
         await DatabaseManager.query(
@@ -247,31 +276,11 @@ async def process_telegram_message(update_data: dict):
         )
         
         # Send back to Telegram
-        token = os.getenv("TELEGRAM_BOT_TOKEN")
-        if not token:
-            logger.error("❌ TELEGRAM_BOT_TOKEN is missing from environment!")
-            return
-        
-        logger.info(f"🔑 Using Bot Token: {token[:4]}...{token[-4:]}")
-
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        payload = {
-            "chat_id": chat_id, 
-            "text": response
-            # parse_mode removed for resilience against AI markdown errors
-        }
-        
-        if message_thread_id:
-            payload["message_thread_id"] = message_thread_id
-            
-        import httpx
-        async with httpx.AsyncClient() as client:
-            tg_res = await client.post(url, json=payload)
-            if tg_res.status_code != 200:
-                logger.error(f"❌ Telegram API Error: Status {tg_res.status_code} - Body: {tg_res.text}")
-                _append_log(f"Telegram Error: {tg_res.status_code} - {tg_res.text}")
-            else:
-                logger.info(f"✅ Reply delivered to {chat_id}")
+        await _send_telegram_reply(chat_id, response, message_thread_id)
+                
+    except Exception as e:
+        logger.error(f"💥 Webhook processing error: {e}", exc_info=True)
+        _append_log(f"Processing Error: {e}")
                 
     except Exception as e:
         logger.error(f"💥 Webhook processing error: {e}", exc_info=True)
