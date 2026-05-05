@@ -35,15 +35,15 @@ ai_client = UnifiedAIClient()
 planner = TaskPlanner(ai_client)
 router = Router(planner, lead_hunter=find_leads)
 LOG_BUFFER = []
-# Map Telegram Thread IDs (Topic IDs) to Agent Personas
-# User needs to fill these in once they see the IDs in the logs
+# All topics route through Nova — she's the CEO and calls tools herself.
+# Sub-agent models were causing 429 rate limits.
 TOPIC_AGENT_MAP = {
     "1": "nova",    # General
-    "2": "hawk",    # Lead hunt
-    "3": "closer",  # Sales and Objections
-    "5": "pixel",   # Creative Audits
-    "6": "oracle",  # Financials
-    "7": "atlas"    # Dev & Fixes
+    "2": "nova",    # Lead hunt
+    "3": "nova",    # Sales
+    "5": "nova",    # Creative
+    "6": "nova",    # Financials
+    "7": "nova"     # Dev
 }
 
 def _append_log(msg: str):
