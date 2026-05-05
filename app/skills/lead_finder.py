@@ -21,6 +21,19 @@ async def find_leads(count: int = 5, query: str = "business leads"):
     Returns real URLs with titles and snippets.
     """
     count = int(count)
+    
+    # ─── X-RAY SOURCING (Apollo & LinkedIn Free Tier) ───────────
+    # If looking for owners or specific platforms, force X-Ray search
+    query_lower = query.lower()
+    is_owner_search = any(k in query_lower for k in ["owner", "ceo", "founder", "email", "phone", "linkedin", "apollo"])
+    
+    if is_owner_search and "site:" not in query_lower:
+        # Clean the query to be more search-friendly
+        clean_query = query_lower.replace("find", "").replace("owners of", "").replace("that could use our service", "").strip()
+        # Append the X-Ray operators
+        query = f'{clean_query} (site:linkedin.com/in OR site:apollo.io)'
+        logger.info(f"[X-RAY] Upgraded to Apollo/LinkedIn X-Ray search: {query}")
+        
     logger.info(f"[LEAD FINDER] Searching for {count} leads: '{query}'")
     leads = []
 
