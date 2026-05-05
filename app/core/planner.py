@@ -26,6 +26,7 @@ from app.core.agent_router import dispatch_task, get_all_statuses
 from app.skills.definitions import TOOLS
 from app.core.guardrails import Guardrails
 # ── OpenClaw Ecosystem Upgrades ──
+from app.skills.smart_scraper import sgai_search_and_extract, sgai_deep_extract
 from app.skills.scrapling_scraper import stealth_search, stealth_extract, bulk_scrape
 from app.skills.email_sequence_skill import create_drip_campaign
 from app.skills.copywriting_skill import write_cold_email, write_ad_copy
@@ -45,6 +46,8 @@ class TaskPlanner:
         
         # 1. Dynamic Tool Registry
         self.available_functions = {
+            "sgai_search_and_extract": sgai_search_and_extract,
+            "sgai_deep_extract": sgai_deep_extract,
             "find_leads": find_leads,
             "browse_agent": browse_and_extract,
             "google_search": google_search_scrape,
@@ -113,7 +116,7 @@ class TaskPlanner:
         goal_lower = goal.lower()
 
         # Tool name sets by category
-        HUNTING_TOOLS = ["find_leads", "google_search", "research_lead", "stealth_search", "stealth_extract"]
+        HUNTING_TOOLS = ["sgai_search_and_extract", "sgai_deep_extract", "find_leads", "google_search", "research_lead", "stealth_search", "stealth_extract"]
         OUTREACH_TOOLS = ["send_outreach", "write_cold_email", "create_drip_campaign", "generate_sequence", "check_replies"]
         CONTENT_TOOLS = ["write_content", "optimize_post", "create_instagram_post", "generate_ai_image", "write_ad_copy"]
         ANALYTICS_TOOLS = ["pipeline_report", "conversion_analysis", "roi_calculator", "weekly_report", "track_metric"]
@@ -180,10 +183,31 @@ RULES:
         is_hunt = any(k in goal_lower for k in ["find", "search", "look", "client", "lead", "hunt", "prospect"])
         
         if is_hunt:
-            logger.info("🎯 DIRECT ACTION: Hunting task detected. Calling find_leads directly.")
-            # Extract a search query from the goal
-            search_query = goal  # Use the full goal as the search query
+            logger.info("🎯 DIRECT ACTION: Hunting task detected.")
+            search_query = goal
+            
             try:
+                import os
+                # Use ScrapeGraphAI if available
+                if os.getenv("SGAI_API_KEY"):
+                    logger.info("🎯 Using ScrapeGraphAI for Direct Action...")
+                    from app.skills.smart_scraper import sgai_search_and_extract
+                    res = await sgai_search_and_extract(query=search_query, count=3)
+                    
+                    if res.get("status") == "success":
+                        data = res.get("data", {})
+                        # Ask AI to present the JSON cleanly
+                        format_messages = [
+                            {"role": "system", "content": "You are Nova, Mark's AI partner. Present this structured lead data cleanly to Mark. Emphasize the 'Verified_Mobile' and 'owner_name' if found."},
+                            {"role": "user", "content": f"Here is the ScrapeGraphAI structured extraction for '{goal}':\n\n{str(data)[:3000]}\n\nPresent these to Mark as a professional brief."}
+                        ]
+                        ai_response = await self.ai.chat(messages=format_messages, role=active_agent)
+                        return ai_response.content or "Successfully extracted leads with ScrapeGraphAI."
+                    else:
+                        logger.warning(f"SGAI failed: {res.get('error')}. Falling back to DDG.")
+                
+                # Fallback to free DDG lead finder
+                logger.info("🎯 Falling back to standard find_leads...")
                 from app.skills.lead_finder import find_leads
                 raw_results = await find_leads(query=search_query, count=5)
                 
@@ -199,11 +223,9 @@ RULES:
                         {"role": "user", "content": f"Here are the raw search results for '{goal}':\n\n{lead_text[:2500]}\n\nPresent these to Mark with your recommendations."}
                     ]
                     ai_response = await self.ai.chat(messages=format_messages, role=active_agent)
-                    formatted = ai_response.content or lead_text
-                    return formatted
+                    return ai_response.content or lead_text
                 else:
-                    # Results were empty or filtered, return raw
-                    return lead_text or "No actionable leads found. Try a more specific query like 'luxury remodeling contractors Beverly Hills'."
+                    return lead_text or "No actionable leads found. Try a more specific query."
             except Exception as e:
                 logger.error(f"💥 Direct hunt failed: {e}")
                 return f"⚠️ Search tool error: {str(e)}. Try again in a moment."

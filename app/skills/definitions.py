@@ -2,6 +2,36 @@
 # Claude Opus 4.6 | Gemini 3 Pro | Gemini 3 Flash
 
 TOOLS = [
+    # ─── SCRAPEGRAPH AI TOOLS ─────────────────────────────────────
+    {
+        "type": "function",
+        "function": {
+            "name": "sgai_search_and_extract",
+            "description": "Uses ScrapeGraphAI to search the web and extract structured JSON data about high-ticket leads and owners.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Search query (e.g., 'luxury remodeling contractors in LA')"},
+                    "count": {"type": "integer", "description": "Number of results to extract (default 3)"}
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "sgai_deep_extract",
+            "description": "Uses ScrapeGraphAI to perform deep JSON extraction on a specific URL to find owner, email, and phone.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "The specific URL to extract data from"}
+                },
+                "required": ["url"]
+            }
+        }
+    },
     # ─── SEARCH & BROWSE ─────────────────────────────────────────────
     {
         "type": "function",
