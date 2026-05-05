@@ -107,9 +107,41 @@ class TaskPlanner:
                 logger.warning(f"Failed to load persona for {agent_id}: {e}")
         return ""
 
+    def _scope_tools(self, goal: str) -> list:
+        """Only pass RELEVANT tools to the AI based on the task category.
+        This prevents context window overload on lightweight models."""
+        goal_lower = goal.lower()
+
+        # Tool name sets by category
+        HUNTING_TOOLS = ["find_leads", "google_search", "research_lead", "stealth_search", "stealth_extract"]
+        OUTREACH_TOOLS = ["send_outreach", "write_cold_email", "create_drip_campaign", "generate_sequence", "check_replies"]
+        CONTENT_TOOLS = ["write_content", "optimize_post", "create_instagram_post", "generate_ai_image", "write_ad_copy"]
+        ANALYTICS_TOOLS = ["pipeline_report", "conversion_analysis", "roi_calculator", "weekly_report", "track_metric"]
+        CALENDAR_TOOLS = ["get_today", "get_week", "create_event"]
+
+        # Classify intent
+        if any(k in goal_lower for k in ["find", "search", "lead", "hunt", "client", "prospect", "scrape", "look"]):
+            scope = HUNTING_TOOLS
+        elif any(k in goal_lower for k in ["email", "outreach", "send", "cold", "drip", "sequence", "reply"]):
+            scope = OUTREACH_TOOLS
+        elif any(k in goal_lower for k in ["content", "post", "instagram", "image", "creative", "ad copy", "write"]):
+            scope = CONTENT_TOOLS
+        elif any(k in goal_lower for k in ["report", "analytics", "roi", "metric", "performance", "dashboard"]):
+            scope = ANALYTICS_TOOLS
+        elif any(k in goal_lower for k in ["calendar", "schedule", "meeting", "event"]):
+            scope = CALENDAR_TOOLS
+        else:
+            # General mode: give a small general set
+            scope = HUNTING_TOOLS + ["dispatch_task", "weekly_report"]
+
+        # Filter TOOLS to only include scoped ones
+        scoped = [t for t in TOOLS if t["function"]["name"] in scope]
+        logger.info(f"🎯 Tool Scope: {len(scoped)} tools for intent: {scope[:3]}...")
+        return scoped if scoped else TOOLS[:8]  # Safety fallback
+
     async def execute(self, goal: str, client_id: int = 0, conversation_history: list = None, agent_id: str = "nova"):
         history = conversation_history if conversation_history else []
-        max_steps = 20
+        max_steps = 10
         
         from app.core.memory import MemoryDistiller
         if not hasattr(self, 'distiller'):
@@ -126,19 +158,19 @@ class TaskPlanner:
         active_agent = agent_id if agent_id != "nova" else classify_agent(goal)
         persona_instructions = self._get_persona_prompt(active_agent)
         
-        system_prompt = f"""
-YOU ARE NOVA. Autonomous CEO of OROVA. Mark's AI Partner.
+        # Scope tools to reduce context pressure
+        scoped_tools = self._scope_tools(goal)
+
+        system_prompt = f"""YOU ARE NOVA. Mark's AI Partner at OROVA.
 {persona_instructions}
+TARGET: {current_niche} in {current_loc}.
 
-=== HORMOZI CEO PROTOCOLS ===
-1. TOOL FIRST: You are strictly FORBIDDEN from presenting leads or data unless you have CALLED a tool in the CURRENT turn.
-2. NO FAKING: If you say "TOOL CALL: [name]" in text but don't call the function, the system will REJECT you.
-3. DATA INTEGRITY: NEVER hallucinate business names. Use 'google_search' or 'find_leads'.
-4. OBJECTIVE: Find {current_niche} leads in {current_loc} for Meta Lead Gen ($4k-$5k/mo).
-"""
-
-        BANNED_PHRASES = ["tools are dead", "apis are down", "system failure", "will retry later"]
-        ban_retries = 0
+RULES:
+1. You MUST call a tool function to get data. Do NOT make up business names.
+2. Use 'find_leads' or 'google_search' to search. Use 'research_lead' to deep-dive a URL.
+3. After getting tool results, present them clearly with DONE: prefix when finished.
+4. Be concise. No essays. Results only.
+{long_term_facts}"""
 
         for i in range(max_steps):
             logger.info(f"Planner Step {i+1}/{max_steps}")
@@ -146,31 +178,33 @@ YOU ARE NOVA. Autonomous CEO of OROVA. Mark's AI Partner.
             if i == 0:
                 current_messages.append({"role": "user", "content": goal})
             
-            ai_message = await self.ai.chat(messages=current_messages, tools=TOOLS, role=active_agent)
+            ai_message = await self.ai.chat(messages=current_messages, tools=scoped_tools, role=active_agent)
             
             # --- ANTI-SILENCE PROTOCOL ---
             if not ai_message.content and not ai_message.tool_calls:
-                logger.warning("⚠️ AI returned empty. Nudging...")
-                history.append({"role": "user", "content": "I didn't receive your response. Please call a tool or provide a status update NOW."})
-                continue
+                if i < 3:
+                    logger.warning(f"⚠️ Empty response on step {i+1}. Nudging...")
+                    history.append({"role": "user", "content": "You returned empty. Call 'find_leads' with a search query NOW."})
+                    continue
+                else:
+                    return "⚠️ Nova is having trouble processing. Try a simpler request like: 'find leads remodeling Los Angeles'"
 
             content = ai_message.content or ""
             tool_calls = ai_message.tool_calls
 
             # --- TRUTH GUARDRAIL ---
-            if not tool_calls and "DONE:" not in content.upper():
-                fake_leads = any(k in content.lower() for k in ["1.", "2.", "3.", "lead:", "company:"])
-                if fake_leads:
-                    logger.warning("🚨 HALLUCINATION DETECTED. Rejecting.")
+            if not tool_calls and "DONE:" not in content.upper() and i == 0:
+                has_list = any(k in content for k in ["1.", "2.", "3."])
+                is_hunt = any(k in goal.lower() for k in ["find", "search", "look", "client", "lead", "hunt"])
+                if has_list and is_hunt:
+                    logger.warning("🚨 HALLUCINATION: Leads without tool call. Rejecting.")
                     history.append({"role": "assistant", "content": content})
-                    history.append({"role": "user", "content": "REJECTED. You provided leads without a tool call. Call 'google_search' NOW."})
+                    history.append({"role": "user", "content": "REJECTED. Call 'find_leads' tool NOW. Do not type lead names."})
                     continue
+                if not is_hunt:
+                    return content if content.strip() else "Ready, Mark."
 
-            if not tool_calls and i == 0:
-                is_cmd = any(k in goal.lower() for k in ["find", "search", "scrape", "look"])
-                if not is_cmd: return (content if content.strip() else "Ready.")
-
-            # Append Assistant Reply
+            # Append to history
             msg_dict = {"role": "assistant", "content": content}
             if tool_calls:
                 msg_dict["tool_calls"] = [
@@ -180,7 +214,7 @@ YOU ARE NOVA. Autonomous CEO of OROVA. Mark's AI Partner.
             history.append(msg_dict)
 
             if "DONE:" in content.upper():
-                return re.sub(r'DONE:', '', content, flags=re.IGNORECASE).strip()
+                return re.sub(r'DONE:', '', content, flags=re.IGNORECASE).strip() or "Task complete, Mark."
 
             # Execute Tool Calls
             if tool_calls:
@@ -188,18 +222,19 @@ YOU ARE NOVA. Autonomous CEO of OROVA. Mark's AI Partner.
                     tool_name = tc.function.name
                     try:
                         args = json.loads(tc.function.arguments)
-                        logger.info(f"Executing {tool_name} with {args}")
+                        logger.info(f"🔧 Executing: {tool_name}({args})")
                         if tool_name in self.available_functions:
-                            func = self.available_functions[tool_name]
-                            result = await func(**args)
+                            result = await self.available_functions[tool_name](**args)
                         else:
                             result = f"Error: Tool '{tool_name}' not registered."
                     except Exception as e:
                         logger.error(f"💥 Tool failed: {e}")
                         result = f"ERROR: {str(e)}"
                     
-                    history.append({"role": "tool", "tool_call_id": tc.id, "name": tool_name, "content": str(result)})
+                    result_str = str(result)[:3000]  # Cap tool output to prevent token overflow
+                    history.append({"role": "tool", "tool_call_id": tc.id, "name": tool_name, "content": result_str})
             elif not content:
-                return "⚠️ AI returned an empty response."
+                return "⚠️ AI returned an empty response. Try: 'find leads remodeling LA'"
 
-        return f"⚠️ Max steps reached. Last status: {content[:100]}"
+        return f"⚠️ Max steps reached. Last: {content[:200]}"
+
