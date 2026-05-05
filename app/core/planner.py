@@ -196,10 +196,15 @@ RULES:
                     
                     if res.get("status") == "success":
                         data = res.get("data", {})
+                        
+                        # ANTI-HALLUCINATION: Don't format empty data
+                        if not data or str(data) == "{}" or "[]" in str(data):
+                            return "⚠️ ScrapeGraphAI search completed, but returned zero results for this query."
+                            
                         # Ask AI to present the JSON cleanly
                         format_messages = [
-                            {"role": "system", "content": "You are Nova, Mark's AI partner. Present this structured lead data cleanly to Mark. Emphasize the 'Verified_Mobile' and 'owner_name' if found."},
-                            {"role": "user", "content": f"Here is the ScrapeGraphAI structured extraction for '{goal}':\n\n{str(data)[:3000]}\n\nPresent these to Mark as a professional brief."}
+                            {"role": "system", "content": "You are Nova. ONLY present the exact data provided below. Do NOT invent, hallucinate, or guess business names. If the data is empty, say so."},
+                            {"role": "user", "content": f"RAW DATA:\n{str(data)[:3000]}\n\nPresent this to Mark professionally."}
                         ]
                         ai_response = await self.ai.chat(messages=format_messages, role=active_agent)
                         return ai_response.content or "Successfully extracted leads with ScrapeGraphAI."
@@ -216,11 +221,11 @@ RULES:
                 else:
                     lead_text = str(raw_results)
                 
-                if lead_text and "non-actionable" not in lead_text.lower():
+                if lead_text and "non-actionable" not in lead_text.lower() and len(lead_text) > 50:
                     # Ask AI to present results nicely
                     format_messages = [
-                        {"role": "system", "content": "You are Nova, Mark's AI partner at OROVA. Present these search results clearly and concisely. Add a brief recommendation for each lead."},
-                        {"role": "user", "content": f"Here are the raw search results for '{goal}':\n\n{lead_text[:2500]}\n\nPresent these to Mark with your recommendations."}
+                        {"role": "system", "content": "You are Nova. ONLY summarize the text provided below. NEVER invent or hallucinate companies that are not in the text."},
+                        {"role": "user", "content": f"RAW TEXT:\n{lead_text[:2500]}\n\nPresent these to Mark."}
                     ]
                     ai_response = await self.ai.chat(messages=format_messages, role=active_agent)
                     return ai_response.content or lead_text
