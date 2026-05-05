@@ -147,6 +147,13 @@ YOU ARE NOVA. Autonomous CEO of OROVA. Mark's AI Partner.
                 current_messages.append({"role": "user", "content": goal})
             
             ai_message = await self.ai.chat(messages=current_messages, tools=TOOLS, role=active_agent)
+            
+            # --- ANTI-SILENCE PROTOCOL ---
+            if not ai_message.content and not ai_message.tool_calls:
+                logger.warning("⚠️ AI returned empty. Nudging...")
+                history.append({"role": "user", "content": "I didn't receive your response. Please call a tool or provide a status update NOW."})
+                continue
+
             content = ai_message.content or ""
             tool_calls = ai_message.tool_calls
 
