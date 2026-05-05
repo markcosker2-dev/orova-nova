@@ -184,7 +184,14 @@ RULES:
         
         if is_hunt:
             logger.info("🎯 DIRECT ACTION: Hunting task detected.")
-            search_query = goal
+            
+            # --- QUERY SANITIZER ---
+            # Remove "Nova,", "using ScrapeGraph", etc. so the search engine doesn't get confused
+            # and search for Chevy Novas.
+            import re
+            clean_goal = re.sub(r'(?i)^(nova|hey nova|hi nova)[,\s]*', '', goal)
+            clean_goal = re.sub(r'(?i)\s+using\s+scrapegraph[a-z]*\s*', '', clean_goal)
+            search_query = clean_goal.strip()
             
             try:
                 import os
