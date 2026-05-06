@@ -176,12 +176,12 @@ class TaskPlanner:
                 
                 try:
                     from app.skills.agentmail_skill import send_outreach
-                    res = await send_outreach(to=recipient, subject="Nova | Message from OROVA", body=body)
+                    res = send_outreach(to=recipient, subject="Nova | Message from OROVA", body=body)
                     if res.get("status") == "success":
                         return f"✅ Done, Boss. I've sent that email to {recipient} via AgentMail."
                     else:
                         from app.skills.gmail_skill import send_email
-                        res = await send_email(to_email=recipient, subject="Message from OROVA", body=body)
+                        res = send_email(to_email=recipient, subject="Message from OROVA", body=body)
                         if res.get("success"):
                             return f"✅ Done, Boss. I've sent that email to {recipient} via Gmail."
                         return f"⚠️ Failed to send: {res.get('error') or res.get('message')}"
@@ -271,11 +271,14 @@ RULES:
             current_messages = [{"role": "system", "content": system_prompt}] + history
             if i == 0:
                 current_messages.append({"role": "user", "content": goal})
-            
-            ai_message = await self.ai.chat(messages=current_messages, tools=scoped_tools, role=active_agent)
+            try:
+                ai_message = await self.ai.chat(messages=current_messages, tools=scoped_tools, role=active_agent)
+            except Exception as e:
+                logger.error(f"💥 AI Chat failed: {e}")
+                return f"⚠️ I'm experiencing a neural link interruption (API Error: {str(e)}). Please try again in a moment."
             
             # --- ANTI-SILENCE PROTOCOL ---
-            if not ai_message.content and not ai_message.tool_calls:
+            if not getattr(ai_message, 'content', None) and not getattr(ai_message, 'tool_calls', None):
                 if i < 3:
                     logger.warning(f"⚠️ Empty response on step {i+1}. Nudging...")
                     history.append({"role": "user", "content": "You returned empty. Call 'find_leads' with a search query NOW."})
@@ -283,8 +286,8 @@ RULES:
                 else:
                     return "⚠️ Nova is having trouble processing. Try a simpler request like: 'find leads remodeling Los Angeles'"
 
-            content = ai_message.content or ""
-            tool_calls = ai_message.tool_calls
+            content = getattr(ai_message, 'content', '') or ""
+            tool_calls = getattr(ai_message, 'tool_calls', None)
 
             # --- TRUTH GUARDRAIL ---
             if not tool_calls and "DONE:" not in content.upper() and i == 0:
