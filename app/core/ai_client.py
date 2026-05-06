@@ -99,6 +99,7 @@ class UnifiedAIClient:
             logger.info(f"    [{role}] → {model}")
 
     async def chat(self, messages, tools: Optional[List[Dict]] = None,
+                   tool_choice: Optional[str] = None,
                    temperature=0.7, max_tokens=2000, role: str = "default") -> Any:
         if isinstance(messages, str):
             messages = [{"role": "user", "content": messages}]
@@ -125,14 +126,18 @@ class UnifiedAIClient:
             for model_name in chain:
                 try:
                     logger.info(f"[*] AI ({role}): Trying {model_name}")
-                    response = await self.primary_client.chat.completions.create(
-                        model=model_name,
-                        messages=messages,
-                        tools=tools,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                        timeout=60.0
-                    )
+                    kwargs = {
+                        "model": model_name,
+                        "messages": messages,
+                        "tools": tools,
+                        "temperature": temperature,
+                        "max_tokens": max_tokens,
+                        "timeout": 60.0
+                    }
+                    if tool_choice:
+                        kwargs["tool_choice"] = tool_choice
+
+                    response = await self.primary_client.chat.completions.create(**kwargs)
                     if response.choices:
                         logger.info(f"[+] AI ({role}): {model_name} OK")
                         return response.choices[0].message
