@@ -36,7 +36,7 @@ class Router:
             email_match = re.search(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', message)
             if email_match:
                 recipient = email_match.group(1)
-                body_match = re.search(r'(?:saying|content|message|body)\s+(.*)', message, re.IGNORECASE)
+                body_match = re.search(r'(?:saying|content|message|body|say|tell|write|intro|introducing)\s+(.*)', message, re.IGNORECASE)
                 body = body_match.group(1) if body_match else message
                 try:
                     from app.skills.agentmail_skill import send_outreach
