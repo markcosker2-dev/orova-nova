@@ -32,6 +32,11 @@ from app.skills.email_sequence_skill import create_drip_campaign
 from app.skills.copywriting_skill import write_cold_email, write_ad_copy
 from app.skills.analytics_skill import pipeline_report, conversion_analysis, roi_calculator
 from app.core.pipeline import run_pipeline, list_pipelines
+# ── Mega-Claw / Hermes Evolution ──
+from app.skills.mem0_skill import mega_memory
+from app.skills.crawl_skill import elite_scrape
+from app.skills.browser_use_skill import vision_browse
+from app.skills.composio_skill import execute_composio_action as composio_action
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +103,9 @@ class TaskPlanner:
             "roi_calculator": roi_calculator,
             "run_pipeline": run_pipeline,
             "list_pipelines": list_pipelines,
+            "elite_scrape": elite_scrape,
+            "vision_browse": vision_browse,
+            "composio_action": composio_action,
         }
 
     def _get_persona_prompt(self, agent_id: str) -> str:
@@ -146,11 +154,13 @@ class TaskPlanner:
         history = conversation_history if conversation_history else []
         max_steps = 10
         
-        from app.core.memory import MemoryDistiller
         if not hasattr(self, 'distiller'):
+            from app.core.memory import MemoryDistiller
             self.distiller = MemoryDistiller(self.ai)
         history = await self.distiller.distill(history, client_id)
-        long_term_facts = await self.distiller.retrieve_context(goal, client_id)
+        
+        # --- MEGA-CLAW: Context Retrieval via Mem0 ---
+        long_term_facts = await mega_memory.retrieve(goal, user_id=f"client_{client_id}")
         
         from app.core.database import DatabaseManager
         config = await DatabaseManager.get_client_config(client_id)
@@ -165,15 +175,20 @@ class TaskPlanner:
         # Scope tools to reduce context pressure
         scoped_tools = self._scope_tools(goal)
 
+        # --- HERMES EVOLUTION: Retrieve Winning Approach ---
+        winning_approach = await DatabaseManager.get_winning_approach(goal[:50])
+        learned_context = f"\n[PROVEN SUCCESS PATTERN]:\n{winning_approach}\n" if winning_approach else ""
+
         system_prompt = f"""YOU ARE NOVA. Mark's AI Partner at OROVA.
 {persona_instructions}
 TARGET: {current_niche} in {current_loc}.
-
+{learned_context}
 RULES:
 1. You MUST call a tool function to get data. Do NOT make up business names.
 2. Use 'find_leads' or 'google_search' to search. Use 'research_lead' to deep-dive a URL.
 3. After getting tool results, present them clearly with DONE: prefix when finished.
 4. Be concise. No essays. Results only.
+5. SELF-CRITIQUE: Before every tool call, analyze your current plan. If it's flawed, change it.
 {long_term_facts}"""
 
         # ── DIRECT ACTION SHORTCUT ──────────────────────────────────
@@ -285,6 +300,10 @@ RULES:
             history.append(msg_dict)
 
             if "DONE:" in content.upper():
+                # --- HERMES EVOLUTION: Save Winning Pattern ---
+                await DatabaseManager.evolve_skill(goal[:50], content)
+                # --- MEGA-CLAW: Save to Long-Term Memory ---
+                await mega_memory.add(content, user_id=f"client_{client_id}", metadata={"goal": goal})
                 return re.sub(r'DONE:', '', content, flags=re.IGNORECASE).strip() or "Task complete, Mark."
 
             # Execute Tool Calls

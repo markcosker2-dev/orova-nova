@@ -102,6 +102,16 @@ class DatabaseManager:
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
+            # Learned Patterns (Hermes Evolution)
+            await db.execute('''
+                CREATE TABLE IF NOT EXISTS learned_patterns (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    task_type TEXT,
+                    winning_approach TEXT,
+                    success_metric INTEGER DEFAULT 1,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
             # Content
             await db.execute('''
                 CREATE TABLE IF NOT EXISTS content (
@@ -218,3 +228,21 @@ class DatabaseManager:
             "INSERT INTO system_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP",
             (key, value)
         )
+
+    @staticmethod
+    async def evolve_skill(task_type: str, winning_approach: str):
+        """Save a successful approach to the learned_patterns table."""
+        await DatabaseManager.query(
+            "INSERT INTO learned_patterns (task_type, winning_approach) VALUES (?, ?)",
+            (task_type, winning_approach)
+        )
+
+    @staticmethod
+    async def get_winning_approach(task_type: str) -> str:
+        """Retrieve the most successful approach for a task type."""
+        row = await DatabaseManager.query(
+            "SELECT winning_approach FROM learned_patterns WHERE task_type = ? ORDER BY success_metric DESC LIMIT 1",
+            (task_type,),
+            fetchone=True
+        )
+        return row["winning_approach"] if row else ""

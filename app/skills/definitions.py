@@ -2,6 +2,52 @@
 # Claude Opus 4.6 | Gemini 3 Pro | Gemini 3 Flash
 
 TOOLS = [
+    # ─── MEGA-CLAW / HERMES EVOLUTION TOOLS ──────────────────────────
+    {
+        "type": "function",
+        "function": {
+            "name": "elite_scrape",
+            "description": "High-fidelity scraping via Crawl4AI. Bypasses anti-bots and returns clean Markdown.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "The URL to scrape"},
+                    "objective": {"type": "string", "description": "What to extract from the page"}
+                },
+                "required": ["url"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "vision_browse",
+            "description": "Autonomous vision browsing via Browser-use. Nova 'sees' the site and interacts with it.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "objective": {"type": "string", "description": "What to achieve on the site"},
+                    "url": {"type": "string", "description": "Target URL to start from"}
+                },
+                "required": ["objective"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "composio_action",
+            "description": "Execute an action in a third-party app (Slack, Salesforce, HubSpot) via Composio.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action_name": {"type": "string", "description": "The name of the action (e.g., 'slack_send_message')"},
+                    "params": {"type": "object", "description": "JSON parameters for the action"}
+                },
+                "required": ["action_name", "params"]
+            }
+        }
+    },
     # ─── SCRAPEGRAPH AI TOOLS ─────────────────────────────────────
     {
         "type": "function",
