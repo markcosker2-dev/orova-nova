@@ -17,21 +17,19 @@ _nova_inbox_id = None  # Cached inbox address
 
 
 def _get_client():
-    """Lazy-init the AgentMail client."""
+    """Lazy-init the AgentMail client. Returns (client, error_msg)."""
     global _client
     if _client is None:
         try:
             from agentmail import AgentMail
             api_key = os.getenv("AGENTMAIL_API_KEY")
             if not api_key:
-                logger.error("AGENTMAIL_API_KEY not set")
-                return None
+                return None, "AGENTMAIL_API_KEY not set in Render environment variables!"
             _client = AgentMail(api_key=api_key)
             logger.info("[+] AgentMail client initialized")
         except Exception as e:
-            logger.error(f"AgentMail init failed: {e}")
-            return None
-    return _client
+            return None, f"Import/Init failed: {str(e)}. Check if 'agentmail' is the correct pip package name."
+    return _client, None
 
 
 def _get_nova_inbox():
@@ -40,7 +38,7 @@ def _get_nova_inbox():
     if _nova_inbox_id:
         return _nova_inbox_id
 
-    client = _get_client()
+    client, error = _get_client()
     if not client:
         return None
 
@@ -79,9 +77,9 @@ def _get_nova_inbox():
 
 def create_inbox(username: str = "nova-orova", display_name: str = "Nova | OROVA") -> Dict[str, Any]:
     """Create a new AgentMail inbox for Nova."""
-    client = _get_client()
+    client, error = _get_client()
     if not client:
-        return {"status": "error", "message": "AgentMail client not initialized. Check AGENTMAIL_API_KEY."}
+        return {"status": "error", "message": f"AgentMail client not initialized: {error}"}
 
     try:
         from agentmail.inboxes.types.create_inbox_request import CreateInboxRequest
@@ -105,9 +103,9 @@ def create_inbox(username: str = "nova-orova", display_name: str = "Nova | OROVA
 
 def send_outreach(to: str, subject: str, body: str, inbox_id: str = None) -> Dict[str, Any]:
     """Send an email from Nova's inbox."""
-    client = _get_client()
+    client, error = _get_client()
     if not client:
-        return {"status": "error", "message": "AgentMail client not initialized."}
+        return {"status": "error", "message": f"AgentMail client not initialized: {error}"}
 
     # Use provided inbox or get Nova's default
     sender = inbox_id or _get_nova_inbox()
@@ -135,9 +133,9 @@ def send_outreach(to: str, subject: str, body: str, inbox_id: str = None) -> Dic
 
 def check_replies(inbox_id: str = None, limit: int = 10) -> Dict[str, Any]:
     """Check Nova's inbox for new messages/replies."""
-    client = _get_client()
+    client, error = _get_client()
     if not client:
-        return {"status": "error", "message": "AgentMail client not initialized."}
+        return {"status": "error", "message": f"AgentMail client not initialized: {error}"}
 
     inbox = inbox_id or _get_nova_inbox()
     if not inbox:
@@ -168,9 +166,9 @@ def check_replies(inbox_id: str = None, limit: int = 10) -> Dict[str, Any]:
 
 def reply_to_email(message_id: str, body: str, inbox_id: str = None) -> Dict[str, Any]:
     """Reply to a specific email in Nova's inbox."""
-    client = _get_client()
+    client, error = _get_client()
     if not client:
-        return {"status": "error", "message": "AgentMail client not initialized."}
+        return {"status": "error", "message": f"AgentMail client not initialized: {error}"}
 
     inbox = inbox_id or _get_nova_inbox()
     if not inbox:
