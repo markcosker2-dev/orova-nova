@@ -1,11 +1,11 @@
 import os
 import logging
-from composio_openai import ComposioToolSet, App
+from composio import Composio, App
 
 logger = logging.getLogger(__name__)
 
-# Initialize Composio Toolset
-toolset = ComposioToolSet(api_key=os.getenv("COMPOSIO_API_KEY"))
+# Initialize Composio Client
+composio_client = Composio(api_key=os.getenv("COMPOSIO_API_KEY"))
 
 async def get_composio_tools(apps: list = None):
     """
@@ -16,8 +16,10 @@ async def get_composio_tools(apps: list = None):
         apps = [App.GMAIL, App.GOOGLESHEETS, App.SLACK]
     
     try:
-        tools = toolset.get_tools(apps=apps)
-        return tools
+        # In new composio, it might be composio_client.tools.get() but we don't strictly need to return tools here 
+        # since we just execute actions directly via Nova's planner mapping.
+        # But for completion:
+        return composio_client.get_tools(apps=apps)
     except Exception as e:
         logger.error(f"💥 Composio Tool Fetch failed: {e}")
         return []
@@ -25,7 +27,8 @@ async def get_composio_tools(apps: list = None):
 async def execute_composio_action(action_name: str, params: dict):
     """Executes a specific action via Composio."""
     try:
-        result = toolset.execute_action(action=action_name, params=params)
+        # Using the new client execution method
+        result = composio_client.execute_action(action=action_name, params=params)
         return result
     except Exception as e:
         logger.error(f"💥 Composio Execution failed: {e}")
