@@ -102,16 +102,26 @@ def create_inbox(username: str = "nova-orova", display_name: str = "Nova | OROVA
         return {"status": "error", "message": str(e)}
 
 
-def send_outreach(to: str, subject: str, body: str, inbox_id: str = None) -> Dict[str, Any]:
-    """Send an email from Nova's inbox."""
+def send_outreach(to: str, subject: str, body: str) -> dict:
+    """
+    Synchronous — safe to call via _call_tool() which wraps it
+    in run_in_executor automatically.
+    """
+    api_key = os.getenv("AGENTMAIL_API_KEY")
+    if not api_key:
+        raise EnvironmentError(
+            "AGENTMAIL_API_KEY is not set. "
+            "Add it to your .env file or environment variables."
+        )
+
     client, error = _get_client()
     if not client:
-        return {"status": "error", "message": f"AgentMail client not initialized: {error}"}
+         raise EnvironmentError(f"AgentMail client failed to initialize: {error}")
 
-    # Use provided inbox or get Nova's default
-    sender = inbox_id or _get_nova_inbox()
+    # Use Nova's default inbox
+    sender = _get_nova_inbox()
     if not sender:
-        return {"status": "error", "message": "No inbox available. Create one first with create_inbox."}
+        raise ValueError("No Nova inbox available. Create one first with create_inbox.")
 
     try:
         result = client.inboxes.messages.send(
@@ -120,16 +130,11 @@ def send_outreach(to: str, subject: str, body: str, inbox_id: str = None) -> Dic
             subject=subject,
             text=body
         )
-        logger.info(f"[+] Email sent to {to} from {sender}")
-        return {
-            "status": "success",
-            "from": sender,
-            "to": to,
-            "subject": subject,
-            "message": f"Email sent to {to}"
-        }
+        logger.info(f"[AgentMail] Sent to {to} | subject='{subject}'")
+        return {"status": "success", "to": to, "message_id": getattr(result, "message_id", None)}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        logger.error(f"[AgentMail] Send failed to {to}: {e}", exc_info=True)
+        raise
 
 
 def check_replies(inbox_id: str = None, limit: int = 10) -> Dict[str, Any]:

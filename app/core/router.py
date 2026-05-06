@@ -3,6 +3,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+_EMAIL_RE = re.compile(r"[\w.+\-]+@[\w\-]+\.[a-zA-Z]{2,}", re.IGNORECASE)
+
 class Router:
     """
     Smart Router for OpenClaw.
@@ -30,34 +32,30 @@ class Router:
                 logger.info(f"Router: Shortcut matched '{pattern}'")
                 return await handler()
 
-        # 1.5 DIRECT EMAIL INTERCEPT (Bypass AI for speed)
-        if "email" in lower_msg and "@" in lower_msg:
-            logger.info("🎯 ROUTER: Direct Email Intercept triggered.")
-            email_match = re.search(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', message)
-            if email_match:
-                recipient = email_match.group(1)
-                # If the message is complex (e.g. 'introduce yourself'), delegate to the Planner
-                # instead of doing a literal regex extract.
-                is_complex = any(k in lower_msg for k in ["intro", "introduce", "write", "draft", "explain", "pitch"])
-                
-                if not is_complex:
-                    body_match = re.search(r'(?:saying|content|message|body|say|tell|write)\s+(.*)', message, re.IGNORECASE)
-                    body = body_match.group(1) if body_match else message
-                    try:
-                        from app.skills.agentmail_skill import send_outreach
-                        res = send_outreach(to=recipient, subject="Nova | Message from OROVA", body=body)
-                        if res.get("status") == "success":
-                            return f"✅ Done, Boss. I've sent that email to {recipient} via AgentMail."
-                        else:
-                            agentmail_error = res.get('error') or res.get('message')
-                            return f"⚠️ AgentMail Failed: {agentmail_error}"
-                    except Exception as e:
-                        logger.error(f"💥 Router Email failed: {e}")
-                        return f"⚠️ Email tool error: {str(e)}."
+        # ── DIRECT EMAIL INTERCEPT ─────────────────────────────────────────
+        # If the message contains an @-address AND a send/write/email intent,
+        # bypass the planner entirely. One hop, zero hallucinated research steps.
+        email_match = _EMAIL_RE.search(message)
+        send_intent = any(k in lower_msg for k in ["send", "write", "email", "reach out", "follow up"])
 
-        # 2. AI Planner (The Brain) - EVERYTHING else goes here
-        logger.info(f"Router: Routing to {agent_id.upper()} for Client {chat_id}")
-        return await self.planner.execute(message, agent_id=agent_id, client_id=chat_id, conversation_history=history)
+        if email_match and send_intent:
+            # Hand off to planner's Action-First gate (Gate 1 in execute())
+            # — NOT a raw send_outreach call here, so the planner still handles
+            # subject/body extraction via its single AI parse call.
+            logger.info(f"[Router] Direct-send intercept for {email_match.group(0)}")
+            return await self.planner.execute(
+                message,
+                client_id=chat_id,
+                conversation_history=history,
+                agent_id="nova",
+            )
+
+        # ── Everything else → full planner ────────────────────────────────
+        return await self.planner.execute(
+            message,
+            client_id=chat_id,
+            conversation_history=history,
+        )
 
     async def _greet(self):
         return "👋 NOVA (CLOUD V2.2 - 18:32). Ready, Mark."

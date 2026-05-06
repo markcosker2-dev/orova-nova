@@ -1,3 +1,5 @@
+import asyncio
+import inspect
 import logging
 import json
 import re
@@ -40,6 +42,7 @@ try:
     from app.skills.composio_skill import execute_composio_action as composio_action
     MEGA_CLAW_ONLINE = True
 except Exception as e:
+    logger = logging.getLogger(__name__)
     logger.warning(f"⚠️ Mega-Claw components offline: {e}")
     MEGA_CLAW_ONLINE = False
     mega_memory = None
@@ -48,6 +51,24 @@ except Exception as e:
     composio_action = None
 
 logger = logging.getLogger(__name__)
+
+# ── Regex: matches any RFC-5321-style email address in a string ──────────────
+_EMAIL_RE = re.compile(r"[\w.+\-]+@[\w\-]+\.[a-zA-Z]{2,}", re.IGNORECASE)
+
+
+async def _call_tool(fn, args: dict):
+    """
+    Unified dispatcher: handles both sync and async tool functions.
+    Sync functions are offloaded to a thread-pool executor so they never
+    block the event loop and never raise 'object is not awaitable'.
+    """
+    if fn is None:
+        raise ValueError("Tool function is None — was it imported correctly?")
+    if inspect.iscoroutinefunction(fn):
+        return await fn(**args)
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: fn(**args))
+
 
 class TaskPlanner:
     """
@@ -117,227 +138,247 @@ class TaskPlanner:
             "composio_action": composio_action,
         }
 
-    def _get_persona_prompt(self, agent_id: str) -> str:
-        persona_path = Path(__file__).parent.parent / "personas" / f"{agent_id}.md"
-        if persona_path.exists():
-            try:
-                content = persona_path.read_text(encoding='utf-8')
-                return f"\n=== ELITE AGENT IDENTITY: {agent_id.upper()} ===\n{content}\n"
-            except Exception as e:
-                logger.warning(f"Failed to load persona for {agent_id}: {e}")
-        return ""
+    # ──────────────────────────────────────────────────────────────────────────
+    # _scope_tools  — FIXED
+    # Priority order:
+    #   1. Direct email address present  → outreach-only (no hunting)
+    #   2. Explicit hunt keywords        → hunting-only
+    #   3. Explicit outreach keywords    → outreach-only
+    #   4. Default                       → outreach + light research only
+    # ──────────────────────────────────────────────────────────────────────────
+    HUNTING_TOOLS = [
+        "sgai_search_and_extract", "sgai_deep_extract", "find_leads",
+        "google_search", "research_lead", "stealth_search", "stealth_extract",
+        "elite_scrape", "vision_browse", "composio_action",
+    ]
+    OUTREACH_TOOLS = [
+        "send_outreach", "send_email", "write_cold_email",
+        "create_drip_campaign", "generate_sequence",
+        "check_replies", "reply_to_email", "get_inbox",
+    ]
+    LIGHT_RESEARCH_TOOLS = ["deep_research", "browse_agent"]
 
     def _scope_tools(self, goal: str) -> list:
-        """Only pass RELEVANT tools to the AI based on the task category.
-        This prevents context window overload on lightweight models."""
+        from app.skills.definitions import TOOLS  # local import avoids circular refs
+
         goal_lower = goal.lower()
 
-        # Tool name sets by category
-        HUNTING_TOOLS = ["sgai_search_and_extract", "sgai_deep_extract", "find_leads", "google_search", "research_lead", "stealth_search", "stealth_extract", "elite_scrape", "vision_browse", "composio_action"]
-        OUTREACH_TOOLS = ["send_outreach", "send_email", "write_cold_email", "create_drip_campaign", "generate_sequence", "check_replies", "get_inbox"]
-        CONTENT_TOOLS = ["write_content", "optimize_post", "create_instagram_post", "generate_ai_image", "write_ad_copy"]
-        ANALYTICS_TOOLS = ["pipeline_report", "conversion_analysis", "roi_calculator", "weekly_report", "track_metric"]
-        CALENDAR_TOOLS = ["get_today", "get_week", "create_event"]
+        # ── Priority 1: Direct email address → outreach only, no hunting ──────
+        if _EMAIL_RE.search(goal):
+            scope = self.OUTREACH_TOOLS
+            logger.debug("[scope] Direct email detected → OUTREACH scope")
 
-        # Classify intent
-        if any(k in goal_lower for k in ["find", "search", "lead", "hunt", "client", "prospect", "scrape", "look"]):
-            scope = HUNTING_TOOLS
-        elif any(k in goal_lower for k in ["email", "outreach", "send", "cold", "drip", "sequence", "reply"]):
-            scope = OUTREACH_TOOLS
-        elif any(k in goal_lower for k in ["content", "post", "instagram", "image", "creative", "ad copy", "write"]):
-            scope = CONTENT_TOOLS
-        elif any(k in goal_lower for k in ["report", "analytics", "roi", "metric", "performance", "dashboard"]):
-            scope = ANALYTICS_TOOLS
-        elif any(k in goal_lower for k in ["calendar", "schedule", "meeting", "event"]):
-            scope = CALENDAR_TOOLS
+        # ── Priority 2: Explicit hunt intent ──────────────────────────────────
+        elif any(k in goal_lower for k in ["find leads", "search for", "hunt", "prospect"]):
+            scope = self.HUNTING_TOOLS
+            logger.debug("[scope] Hunt intent detected → HUNTING scope")
+
+        # ── Priority 3: Explicit outreach intent ──────────────────────────────
+        elif any(k in goal_lower for k in ["send", "email", "outreach", "reply", "follow up"]):
+            scope = self.OUTREACH_TOOLS
+            logger.debug("[scope] Outreach intent detected → OUTREACH scope")
+
+        # ── Priority 4: Safe default (outreach + light research only) ─────────
         else:
-            # General mode: give a small general set
-            scope = HUNTING_TOOLS + ["dispatch_task", "weekly_report", "send_email"]
+            scope = self.OUTREACH_TOOLS + self.LIGHT_RESEARCH_TOOLS
+            logger.debug("[scope] No clear intent → DEFAULT scope (outreach + light research)")
 
-        # Filter TOOLS to only include scoped ones
-        scoped = [t for t in TOOLS if t["function"]["name"] in scope]
-        logger.info(f"🎯 Tool Scope: {len(scoped)} tools for intent: {scope[:3]}...")
-        return scoped if scoped else TOOLS[:8]  # Safety fallback
+        return [t for t in TOOLS if t["function"]["name"] in scope]
 
-    async def execute(self, goal: str, client_id: int = 0, conversation_history: list = None, agent_id: str = "nova"):
-        goal_lower = goal.lower()
-        active_agent = agent_id
+    # ──────────────────────────────────────────────────────────────────────────
+    # execute  — FIXED (Action-First ReAct loop)
+    # ──────────────────────────────────────────────────────────────────────────
+    async def execute(
+        self,
+        goal: str,
+        client_id: int = 0,
+        conversation_history: list = None,
+        agent_id: str = "nova",
+    ):
+        history = list(conversation_history or [])
 
-        # ── DIRECT ACTION: Email Sending ───────────────────────────
-        is_email = any(k in goal_lower for k in ["send email", "email to", "send an email", "email mark"])
-        if is_email:
-            # If the message is complex, skip Direct Action and go to AI Reasoning
-            is_complex = any(k in goal_lower for k in ["intro", "introduce", "write", "draft", "explain", "pitch"])
-            if not is_complex:
-                logger.info("🎯 DIRECT ACTION: Simple email task detected.")
-                email_match = re.search(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', goal)
-                if email_match:
-                    recipient = email_match.group(1)
-                    body_match = re.search(r'(?:saying|content|message|body|say|tell|write)\s+(.*)', goal, re.IGNORECASE)
-                    body = body_match.group(1) if body_match else goal
-                
-                try:
-                    from app.skills.agentmail_skill import send_outreach
-                    res = send_outreach(to=recipient, subject="Nova | Message from OROVA", body=body)
-                    if res.get("status") == "success":
-                        return f"✅ Done, Boss. I've sent that email to {recipient} via AgentMail."
-                    else:
-                        from app.skills.gmail_skill import send_email
-                        res = send_email(to_email=recipient, subject="Message from OROVA", body=body)
-                        if res.get("success"):
-                            return f"✅ Done, Boss. I've sent that email to {recipient} via Gmail."
-                        return f"⚠️ Failed to send: {res.get('error') or res.get('message')}"
-                except Exception as e:
-                    logger.error(f"💥 Direct email failed: {e}")
-                    return f"⚠️ Email tool error: {str(e)}."
+        # ══════════════════════════════════════════════════════════════════════
+        # GATE 1 — ACTION-FIRST INTERCEPT
+        # If a direct email address is in the goal we parse + send immediately.
+        # Zero planning steps, zero hunting. One AI call to extract fields, done.
+        # ══════════════════════════════════════════════════════════════════════
+        direct_email_match = _EMAIL_RE.search(goal)
+        if direct_email_match:
+            logger.info(f"[Nova:{agent_id}] Action-First intercept → direct email detected")
+            direct_email = direct_email_match.group(0)
 
-        # ── DIRECT ACTION: Hunting ──────────────────────────────────
-        is_hunt = any(k in goal_lower for k in ["find", "search", "look", "client", "lead", "hunt", "prospect"])
-        if is_hunt:
-            logger.info("🎯 DIRECT ACTION: Hunting task detected.")
-            import re
-            clean_goal = re.sub(r'(?i)^(nova|hey nova|hi nova)[,\s]*', '', goal)
-            clean_goal = re.sub(r'(?i)\s+using\s+scrapegraph[a-z]*\s*', '', clean_goal)
-            search_query = clean_goal.strip()
-            
-            try:
-                import os
-                if os.getenv("SGAI_API_KEY"):
-                    from app.skills.smart_scraper import sgai_search_and_extract
-                    res = await sgai_search_and_extract(query=search_query, count=3)
-                    if res.get("status") == "success":
-                        data = res.get("data", {})
-                        if data and str(data) != "{}" and "[]" not in str(data):
-                            format_messages = [
-                                {"role": "system", "content": "You are Nova. ONLY present the exact data provided below."},
-                                {"role": "user", "content": f"RAW DATA:\n{str(data)[:3000]}\n\nPresent this to Mark professionally."}
-                            ]
-                            ai_response = await self.ai.chat(messages=format_messages, role=active_agent)
-                            return ai_response.content or "Successfully extracted leads."
-                
-                from app.skills.lead_finder import find_leads
-                raw_results = await find_leads(query=search_query, count=5)
-                lead_text = raw_results.get("text", str(raw_results)) if isinstance(raw_results, dict) else str(raw_results)
-                
-                if lead_text and "non-actionable" not in lead_text.lower() and len(lead_text) > 50:
-                    format_messages = [
-                        {"role": "system", "content": "You are Nova. ONLY summarize the text provided below."},
-                        {"role": "user", "content": f"RAW TEXT:\n{lead_text[:2500]}\n\nPresent these to Mark."}
-                    ]
-                    ai_response = await self.ai.chat(messages=format_messages, role=active_agent)
-                    return ai_response.content or lead_text
-                return lead_text or "No actionable leads found."
-            except Exception as e:
-                logger.error(f"💥 Direct hunt failed: {e}")
-                return f"⚠️ Search tool error: {str(e)}."
-
-        # --- Standard Initialization ---
-        history = conversation_history if conversation_history else []
-        max_steps = 10
-        
-        if not hasattr(self, 'distiller'):
-            from app.core.memory import MemoryDistiller
-            self.distiller = MemoryDistiller(self.ai)
-        history = await self.distiller.distill(history, client_id)
-        
-        # --- MEGA-CLAW: Context Retrieval via Mem0 ---
-        long_term_facts = ""
-        if mega_memory:
-            long_term_facts = await mega_memory.retrieve(goal, user_id=f"client_{client_id}")
-        
-        from app.core.database import DatabaseManager
-        config = await DatabaseManager.get_client_config(client_id)
-        current_niche = config.get("niche", "General Business")
-        current_loc = config.get("location", "California")
-        
-        persona_instructions = self._get_persona_prompt(active_agent)
-        scoped_tools = self._scope_tools(goal)
-        winning_approach = await DatabaseManager.get_winning_approach(goal[:50])
-        learned_context = f"\n[PROVEN SUCCESS PATTERN]:\n{winning_approach}\n" if winning_approach else ""
-        
-        system_prompt = f"""YOU ARE NOVA. Mark's AI Partner at OROVA.
-{persona_instructions}
-TARGET: {current_niche} in {current_loc}.
-{learned_context}
-RULES:
-1. You MUST call a tool function to get data. Do NOT make up business names.
-2. Use 'find_leads' or 'google_search' to search. Use 'research_lead' to deep-dive a URL.
-3. After getting tool results, present them clearly with DONE: prefix when finished.
-4. Be concise. No essays. Results only.
-5. SELF-CRITIQUE: Before every tool call, analyze your current plan. If it's flawed, change it.
-{long_term_facts}"""
-
-        # ── STANDARD AI LOOP ───────────────
-        for i in range(max_steps):
-            logger.info(f"Planner Step {i+1}/{max_steps}")
-            current_messages = [{"role": "system", "content": system_prompt}] + history
-            if i == 0:
-                current_messages.append({"role": "user", "content": goal})
-            try:
-                ai_message = await self.ai.chat(messages=current_messages, tools=scoped_tools, role=active_agent)
-            except Exception as e:
-                logger.error(f"💥 AI Chat failed: {e}")
-                return f"⚠️ I'm experiencing a neural link interruption (API Error: {str(e)}). Please try again in a moment."
-            
-            # --- ANTI-SILENCE PROTOCOL ---
-            if not getattr(ai_message, 'content', None) and not getattr(ai_message, 'tool_calls', None):
-                if i < 3:
-                    logger.warning(f"⚠️ Empty response on step {i+1}. Nudging...")
-                    history.append({"role": "user", "content": "You returned empty. Call 'find_leads' with a search query NOW."})
-                    continue
-                else:
-                    return "⚠️ Nova is having trouble processing. Try a simpler request like: 'find leads remodeling Los Angeles'"
-
-            content = getattr(ai_message, 'content', '') or ""
-            tool_calls = getattr(ai_message, 'tool_calls', None)
-
-            # --- TRUTH GUARDRAIL ---
-            if not tool_calls and "DONE:" not in content.upper() and i == 0:
-                has_list = any(k in content for k in ["1.", "2.", "3."])
-                is_hunt = any(k in goal.lower() for k in ["find", "search", "look", "client", "lead", "hunt"])
-                if has_list and is_hunt:
-                    logger.warning("🚨 HALLUCINATION: Leads without tool call. Rejecting.")
-                    history.append({"role": "assistant", "content": content})
-                    history.append({"role": "user", "content": "REJECTED. Call 'find_leads' tool NOW. Do not type lead names."})
-                    continue
-                if not is_hunt:
-                    return content if content.strip() else "Ready, Mark."
-
-            # Append to history
-            msg_dict = {"role": "assistant", "content": content}
-            if tool_calls:
-                msg_dict["tool_calls"] = [
-                    {"id": tc.id, "type": "function", "function": {"name": tc.function.name, "arguments": tc.function.arguments}} 
-                    for tc in tool_calls
+            # Single lightweight extraction call — not a full ReAct loop
+            parse_response = await self.ai.chat(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "Extract email fields from the instruction. "
+                            "Reply ONLY with valid JSON: "
+                            '{"to": "...", "subject": "...", "body": "..."}. '
+                            "No markdown. No explanation."
+                        ),
+                    },
+                    {"role": "user", "content": goal},
                 ]
-            history.append(msg_dict)
+            )
 
-            if "DONE:" in content.upper():
-                # --- HERMES EVOLUTION: Save Winning Pattern ---
-                await DatabaseManager.evolve_skill(goal[:50], content)
-                # --- MEGA-CLAW: Save to Long-Term Memory ---
-                await mega_memory.add(content, user_id=f"client_{client_id}", metadata={"goal": goal})
-                return re.sub(r'DONE:', '', content, flags=re.IGNORECASE).strip() or "Task complete, Mark."
+            try:
+                raw = getattr(parse_response, "content", parse_response) or ""
+                # Strip any accidental markdown fences before parsing
+                raw = re.sub(r"```[a-z]*", "", raw).strip()
+                email_args = json.loads(raw)
+            except (json.JSONDecodeError, TypeError, AttributeError):
+                logger.warning("[Nova] Field extraction failed — using safe defaults")
+                email_args = {}
 
-            # Execute Tool Calls
-            if tool_calls:
-                for tc in tool_calls:
-                    tool_name = tc.function.name
+            # Guarantee required fields are always present
+            email_args.setdefault("to", direct_email)
+            email_args.setdefault("subject", "Following up")
+            email_args.setdefault("body", goal)
+
+            logger.info(f"[Nova:{agent_id}] Dispatching send_outreach → {email_args['to']}")
+            try:
+                result = await _call_tool(
+                    self.available_functions["send_outreach"], email_args
+                )
+                return {
+                    "status": "ok",
+                    "action": "send_outreach",
+                    "recipient": email_args["to"],
+                    "result": result,
+                }
+            except Exception as e:
+                logger.error(f"[Nova] send_outreach failed: {e}", exc_info=True)
+                return {"status": "error", "action": "send_outreach", "error": str(e)}
+
+        # ══════════════════════════════════════════════════════════════════════
+        # GATE 2 — SCOPED ReAct LOOP
+        # Only reached when no direct email was present.
+        # ══════════════════════════════════════════════════════════════════════
+        tools = self._scope_tools(goal)
+        tool_names = [t["function"]["name"] for t in tools]
+        logger.info(f"[Nova:{agent_id}] ReAct loop | tools={tool_names}")
+
+        SYSTEM_PROMPT = (
+            "You are Nova, an elite AI agent for OROVA — a premium lead generation agency.\n\n"
+            "## Core Rules (strictly enforced, in priority order)\n"
+            "1. **Act immediately** when you have all required information. Never research "
+            "   what you already know.\n"
+            "2. **Direct email = send now.** If a recipient email address is given, call "
+            "   send_outreach or send_email as your FIRST action. Do not call any search "
+            "   or lead-hunting tool first.\n"
+            "3. **Minimum steps.** Use the fewest tool calls necessary. Each step must "
+            "   meaningfully progress toward task completion.\n"
+            "4. **No redundant research.** Never look up a contact you've already been given.\n"
+            "5. **Stop when done.** Once the primary action is complete, return a final answer. "
+            "   Do not continue looping.\n\n"
+            f"Available tools: {tool_names}\n"
+            "Respond with a final answer (no tool call) when the task is complete."
+        )
+
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        # Limit history window to avoid context bloat triggering extra planning
+        if history:
+            messages.extend(history[-6:])
+        messages.append({"role": "user", "content": goal})
+
+        MAX_STEPS = 6  # Reduced from 10 — most tasks need ≤ 3
+        TERMINAL_TOOLS = {"send_outreach", "send_email", "reply_to_email"}
+
+        for step in range(1, MAX_STEPS + 1):
+            logger.info(f"[Nova:{agent_id}] Step {step}/{MAX_STEPS}")
+
+            response = await self.ai.chat(
+                messages=messages,
+                tools=tools,
+                tool_choice="auto",
+            )
+
+            # ── Parse the model response ───────────────────────────────────
+            tool_calls = getattr(response, "tool_calls", None) or []
+            content = getattr(response, "content", "") or ""
+
+            # ── No tool call = model is done ──────────────────────────────
+            if not tool_calls:
+                return {
+                    "status": "ok",
+                    "agent": agent_id,
+                    "steps": step,
+                    "response": content or "Task complete.",
+                }
+
+            # Append assistant message with tool call intent
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": content,
+                    "tool_calls": tool_calls,
+                }
+            )
+
+            # ── Execute each tool call ─────────────────────────────────────
+            terminal_hit = False
+            for tc in tool_calls:
+                fn_name = tc.function.name
+
+                # Deserialise arguments safely
+                try:
+                    raw_args = tc.function.arguments
+                    args = json.loads(raw_args) if isinstance(raw_args, str) else (raw_args or {})
+                except (json.JSONDecodeError, AttributeError):
+                    logger.warning(f"[Nova] Could not parse args for {fn_name} — using empty dict")
+                    args = {}
+
+                logger.info(f"[Nova:{agent_id}] → {fn_name}({list(args.keys())})")
+
+                fn = self.available_functions.get(fn_name)
+                if fn is None:
+                    tool_result = f"[Error] Tool '{fn_name}' not registered in available_functions."
+                    logger.error(tool_result)
+                else:
                     try:
-                        args = json.loads(tc.function.arguments)
-                        logger.info(f"🔧 Executing: {tool_name}({args})")
-                        if tool_name in self.available_functions:
-                            result = await self.available_functions[tool_name](**args)
-                        else:
-                            result = f"Error: Tool '{tool_name}' not registered."
-                    except Exception as e:
-                        logger.error(f"💥 Tool failed: {e}")
-                        result = f"ERROR: {str(e)}"
-                    
-                    result_str = str(result)[:3000]  # Cap tool output to prevent token overflow
-                    history.append({"role": "tool", "tool_call_id": tc.id, "name": tool_name, "content": result_str})
-            elif not content:
-                return "⚠️ AI returned an empty response. Try: 'find leads remodeling LA'"
+                        tool_result = await _call_tool(fn, args)
+                    except Exception as exc:
+                        tool_result = f"[Error] {fn_name} raised: {exc}"
+                        logger.error(f"[Nova] {fn_name} exception", exc_info=True)
 
-        return f"⚠️ Max steps reached. Last: {content[:200]}"
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": str(tool_result),
+                    }
+                )
+
+                # ── Early exit on terminal action ──────────────────────────
+                if fn_name in TERMINAL_TOOLS:
+                    logger.info(f"[Nova:{agent_id}] Terminal action '{fn_name}' complete — exiting loop")
+                    terminal_hit = True
+                    terminal_result = tool_result
+                    break  # stop processing further tool calls in this step
+
+            if terminal_hit:
+                return {
+                    "status": "ok",
+                    "agent": agent_id,
+                    "steps": step,
+                    "action": fn_name,
+                    "result": terminal_result,
+                }
+
+        # ── Max steps reached ──────────────────────────────────────────────
+        logger.warning(
+            f"[Nova:{agent_id}] MAX_STEPS ({MAX_STEPS}) reached for goal: {goal[:100]}"
+        )
+        return {
+            "status": "max_steps",
+            "agent": agent_id,
+            "steps": MAX_STEPS,
+            "response": (
+                "Agent reached the step limit without completing the task. "
+                "Try narrowing the goal or providing a direct email address."
+            ),
+        }
+
 
