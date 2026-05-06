@@ -32,11 +32,20 @@ from app.skills.email_sequence_skill import create_drip_campaign
 from app.skills.copywriting_skill import write_cold_email, write_ad_copy
 from app.skills.analytics_skill import pipeline_report, conversion_analysis, roi_calculator
 from app.core.pipeline import run_pipeline, list_pipelines
-# ── Mega-Claw / Hermes Evolution ──
-from app.skills.mem0_skill import mega_memory
-from app.skills.crawl_skill import elite_scrape
-from app.skills.browser_use_skill import vision_browse
-from app.skills.composio_skill import execute_composio_action as composio_action
+# ── Mega-Claw / Hermes Evolution (Safe Imports) ──
+try:
+    from app.skills.mem0_skill import mega_memory
+    from app.skills.crawl_skill import elite_scrape
+    from app.skills.browser_use_skill import vision_browse
+    from app.skills.composio_skill import execute_composio_action as composio_action
+    MEGA_CLAW_ONLINE = True
+except Exception as e:
+    logger.warning(f"⚠️ Mega-Claw components offline: {e}")
+    MEGA_CLAW_ONLINE = False
+    mega_memory = None
+    elite_scrape = None
+    vision_browse = None
+    composio_action = None
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +160,76 @@ class TaskPlanner:
         return scoped if scoped else TOOLS[:8]  # Safety fallback
 
     async def execute(self, goal: str, client_id: int = 0, conversation_history: list = None, agent_id: str = "nova"):
+        goal_lower = goal.lower()
+        active_agent = agent_id
+
+        # ── DIRECT ACTION: Email Sending ───────────────────────────
+        is_email = any(k in goal_lower for k in ["send email", "email to", "send an email", "email mark"])
+        if is_email:
+            logger.info("🎯 DIRECT ACTION: Email task detected.")
+            # Extract recipient and body using simple regex
+            email_match = re.search(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', goal)
+            if email_match:
+                recipient = email_match.group(1)
+                body_match = re.search(r'(?:saying|content|message|body)\s+(.*)', goal, re.IGNORECASE)
+                body = body_match.group(1) if body_match else goal
+                
+                try:
+                    from app.skills.agentmail_skill import send_outreach
+                    res = await send_outreach(to=recipient, subject="Nova | Message from OROVA", body=body)
+                    if res.get("status") == "success":
+                        return f"✅ Done, Boss. I've sent that email to {recipient} via AgentMail."
+                    else:
+                        from app.skills.gmail_skill import send_email
+                        res = await send_email(to_email=recipient, subject="Message from OROVA", body=body)
+                        if res.get("success"):
+                            return f"✅ Done, Boss. I've sent that email to {recipient} via Gmail."
+                        return f"⚠️ Failed to send: {res.get('error') or res.get('message')}"
+                except Exception as e:
+                    logger.error(f"💥 Direct email failed: {e}")
+                    return f"⚠️ Email tool error: {str(e)}."
+
+        # ── DIRECT ACTION: Hunting ──────────────────────────────────
+        is_hunt = any(k in goal_lower for k in ["find", "search", "look", "client", "lead", "hunt", "prospect"])
+        if is_hunt:
+            logger.info("🎯 DIRECT ACTION: Hunting task detected.")
+            import re
+            clean_goal = re.sub(r'(?i)^(nova|hey nova|hi nova)[,\s]*', '', goal)
+            clean_goal = re.sub(r'(?i)\s+using\s+scrapegraph[a-z]*\s*', '', clean_goal)
+            search_query = clean_goal.strip()
+            
+            try:
+                import os
+                if os.getenv("SGAI_API_KEY"):
+                    from app.skills.smart_scraper import sgai_search_and_extract
+                    res = await sgai_search_and_extract(query=search_query, count=3)
+                    if res.get("status") == "success":
+                        data = res.get("data", {})
+                        if data and str(data) != "{}" and "[]" not in str(data):
+                            format_messages = [
+                                {"role": "system", "content": "You are Nova. ONLY present the exact data provided below."},
+                                {"role": "user", "content": f"RAW DATA:\n{str(data)[:3000]}\n\nPresent this to Mark professionally."}
+                            ]
+                            ai_response = await self.ai.chat(messages=format_messages, role=active_agent)
+                            return ai_response.content or "Successfully extracted leads."
+                
+                from app.skills.lead_finder import find_leads
+                raw_results = await find_leads(query=search_query, count=5)
+                lead_text = raw_results.get("text", str(raw_results)) if isinstance(raw_results, dict) else str(raw_results)
+                
+                if lead_text and "non-actionable" not in lead_text.lower() and len(lead_text) > 50:
+                    format_messages = [
+                        {"role": "system", "content": "You are Nova. ONLY summarize the text provided below."},
+                        {"role": "user", "content": f"RAW TEXT:\n{lead_text[:2500]}\n\nPresent these to Mark."}
+                    ]
+                    ai_response = await self.ai.chat(messages=format_messages, role=active_agent)
+                    return ai_response.content or lead_text
+                return lead_text or "No actionable leads found."
+            except Exception as e:
+                logger.error(f"💥 Direct hunt failed: {e}")
+                return f"⚠️ Search tool error: {str(e)}."
+
+        # --- Standard Initialization ---
         history = conversation_history if conversation_history else []
         max_steps = 10
         
@@ -160,25 +239,20 @@ class TaskPlanner:
         history = await self.distiller.distill(history, client_id)
         
         # --- MEGA-CLAW: Context Retrieval via Mem0 ---
-        long_term_facts = await mega_memory.retrieve(goal, user_id=f"client_{client_id}")
+        long_term_facts = ""
+        if mega_memory:
+            long_term_facts = await mega_memory.retrieve(goal, user_id=f"client_{client_id}")
         
         from app.core.database import DatabaseManager
         config = await DatabaseManager.get_client_config(client_id)
         current_niche = config.get("niche", "General Business")
         current_loc = config.get("location", "California")
         
-        # Nova stays as Nova for direct user messages.
-        # Sub-agents are only used when explicitly dispatched.
-        active_agent = agent_id
         persona_instructions = self._get_persona_prompt(active_agent)
-        
-        # Scope tools to reduce context pressure
         scoped_tools = self._scope_tools(goal)
-
-        # --- HERMES EVOLUTION: Retrieve Winning Approach ---
         winning_approach = await DatabaseManager.get_winning_approach(goal[:50])
         learned_context = f"\n[PROVEN SUCCESS PATTERN]:\n{winning_approach}\n" if winning_approach else ""
-
+        
         system_prompt = f"""YOU ARE NOVA. Mark's AI Partner at OROVA.
 {persona_instructions}
 TARGET: {current_niche} in {current_loc}.
@@ -191,102 +265,7 @@ RULES:
 5. SELF-CRITIQUE: Before every tool call, analyze your current plan. If it's flawed, change it.
 {long_term_facts}"""
 
-        # ── DIRECT ACTION SHORTCUT ──────────────────────────────────
-        # For hunting tasks, skip the unreliable AI tool-calling and
-        # call find_leads directly. Then ask AI to format results.
-        goal_lower = goal.lower()
-        is_hunt = any(k in goal_lower for k in ["find", "search", "look", "client", "lead", "hunt", "prospect"])
-        
-        if is_hunt:
-            logger.info("🎯 DIRECT ACTION: Hunting task detected.")
-            
-            # --- QUERY SANITIZER ---
-            # Remove "Nova,", "using ScrapeGraph", etc. so the search engine doesn't get confused
-            # and search for Chevy Novas.
-            import re
-            clean_goal = re.sub(r'(?i)^(nova|hey nova|hi nova)[,\s]*', '', goal)
-            clean_goal = re.sub(r'(?i)\s+using\s+scrapegraph[a-z]*\s*', '', clean_goal)
-            search_query = clean_goal.strip()
-            
-            try:
-                import os
-                # Use ScrapeGraphAI if available
-                if os.getenv("SGAI_API_KEY"):
-                    logger.info("🎯 Using ScrapeGraphAI for Direct Action...")
-                    from app.skills.smart_scraper import sgai_search_and_extract
-                    res = await sgai_search_and_extract(query=search_query, count=3)
-                    
-                    if res.get("status") == "success":
-                        data = res.get("data", {})
-                        
-                        # ANTI-HALLUCINATION: Don't format empty data
-                        if not data or str(data) == "{}" or "[]" in str(data):
-                            return "⚠️ ScrapeGraphAI search completed, but returned zero results for this query."
-                            
-                        # Ask AI to present the JSON cleanly
-                        format_messages = [
-                            {"role": "system", "content": "You are Nova. ONLY present the exact data provided below. Do NOT invent, hallucinate, or guess business names. If the data is empty, say so."},
-                            {"role": "user", "content": f"RAW DATA:\n{str(data)[:3000]}\n\nPresent this to Mark professionally."}
-                        ]
-                        ai_response = await self.ai.chat(messages=format_messages, role=active_agent)
-                        return ai_response.content or "Successfully extracted leads with ScrapeGraphAI."
-                    else:
-                        logger.warning(f"SGAI failed: {res.get('error')}. Falling back to DDG.")
-                
-                # Fallback to free DDG lead finder
-                logger.info("🎯 Falling back to standard find_leads...")
-                from app.skills.lead_finder import find_leads
-                raw_results = await find_leads(query=search_query, count=5)
-                
-                if isinstance(raw_results, dict):
-                    lead_text = raw_results.get("text", str(raw_results))
-                else:
-                    lead_text = str(raw_results)
-                
-                if lead_text and "non-actionable" not in lead_text.lower() and len(lead_text) > 50:
-                    # Ask AI to present results nicely
-                    format_messages = [
-                        {"role": "system", "content": "You are Nova. ONLY summarize the text provided below. NEVER invent or hallucinate companies that are not in the text."},
-                        {"role": "user", "content": f"RAW TEXT:\n{lead_text[:2500]}\n\nPresent these to Mark."}
-                    ]
-                    ai_response = await self.ai.chat(messages=format_messages, role=active_agent)
-                    return ai_response.content or lead_text
-                else:
-                    return lead_text or "No actionable leads found. Try a more specific query."
-            except Exception as e:
-                logger.error(f"💥 Direct hunt failed: {e}")
-                return f"⚠️ Search tool error: {str(e)}. Try again in a moment."
-
-        # ── DIRECT ACTION: Email Sending ───────────────────────────
-        is_email = any(k in goal_lower for k in ["send email", "email to", "send an email"])
-        if is_email:
-            logger.info("🎯 DIRECT ACTION: Email task detected.")
-            # Extract recipient and body using simple regex
-            email_match = re.search(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', goal)
-            if email_match:
-                recipient = email_match.group(1)
-                # Extract body - everything after "saying" or "content" or just use the whole string
-                body_match = re.search(r'(?:saying|content|message|body)\s+(.*)', goal, re.IGNORECASE)
-                body = body_match.group(1) if body_match else goal
-                
-                try:
-                    # Prefer AgentMail for Nova-to-User communication
-                    from app.skills.agentmail_skill import send_outreach
-                    res = await send_outreach(to=recipient, subject="Nova | Message from OROVA", body=body)
-                    if res.get("status") == "success":
-                        return f"✅ Done, Boss. I've sent that email to {recipient} via AgentMail."
-                    else:
-                        # Fallback to Gmail
-                        from app.skills.gmail_skill import send_email
-                        res = await send_email(to_email=recipient, subject="Message from OROVA", body=body)
-                        if res.get("success"):
-                            return f"✅ Done, Boss. I've sent that email to {recipient} via Gmail."
-                        return f"⚠️ Failed to send: {res.get('error') or res.get('message')}"
-                except Exception as e:
-                    logger.error(f"💥 Direct email failed: {e}")
-                    return f"⚠️ Email tool error: {str(e)}."
-
-        # ── STANDARD AI LOOP (for non-hunting tasks) ───────────────
+        # ── STANDARD AI LOOP ───────────────
         for i in range(max_steps):
             logger.info(f"Planner Step {i+1}/{max_steps}")
             current_messages = [{"role": "system", "content": system_prompt}] + history
