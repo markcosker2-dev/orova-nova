@@ -30,6 +30,29 @@ class Router:
                 logger.info(f"Router: Shortcut matched '{pattern}'")
                 return await handler()
 
+        # 1.5 DIRECT EMAIL INTERCEPT (Bypass AI for speed)
+        if "email" in lower_msg and "@" in lower_msg:
+            logger.info("🎯 ROUTER: Direct Email Intercept triggered.")
+            email_match = re.search(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', message)
+            if email_match:
+                recipient = email_match.group(1)
+                body_match = re.search(r'(?:saying|content|message|body)\s+(.*)', message, re.IGNORECASE)
+                body = body_match.group(1) if body_match else message
+                try:
+                    from app.skills.agentmail_skill import send_outreach
+                    res = await send_outreach(to=recipient, subject="Nova | Message from OROVA", body=body)
+                    if res.get("status") == "success":
+                        return f"✅ Done, Boss. I've sent that email to {recipient} via AgentMail."
+                    else:
+                        from app.skills.gmail_skill import send_email
+                        res = await send_email(to_email=recipient, subject="Message from OROVA", body=body)
+                        if res.get("success"):
+                            return f"✅ Done, Boss. I've sent that email to {recipient} via Gmail."
+                        return f"⚠️ Failed to send: {res.get('error') or res.get('message')}"
+                except Exception as e:
+                    logger.error(f"💥 Router Email failed: {e}")
+                    return f"⚠️ Email tool error: {str(e)}."
+
         # 2. AI Planner (The Brain) - EVERYTHING else goes here
         logger.info(f"Router: Routing to {agent_id.upper()} for Client {chat_id}")
         return await self.planner.execute(message, agent_id=agent_id, client_id=chat_id, conversation_history=history)
