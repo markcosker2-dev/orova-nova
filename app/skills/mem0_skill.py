@@ -14,7 +14,7 @@ class MegaMemory:
         # Configure Mem0 to use SQLite for Render Free Tier (RAM optimization)
         config = {
             "vector_store": {
-                "provider": "chroma",
+                "provider": "qdrant",
                 "config": {
                     "path": os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "app", "data", "mem0_db"),
                 }

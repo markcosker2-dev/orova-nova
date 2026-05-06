@@ -47,4 +47,6 @@ mem0ai
 crawl4ai
 browser-use
 composio-core
+composio-openai
 langchain-openai
+qdrant-client
