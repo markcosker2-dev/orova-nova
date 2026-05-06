@@ -16,6 +16,7 @@ retell-sdk
 
 # ── Email ────────────────────────────────────
 yagmail
+agentmail
 
 # ── Web scraping & OpenClaw Ecosystem ────────
 scrapling
