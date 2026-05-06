@@ -107,7 +107,7 @@ def send_outreach(to: str, subject: str, body: str) -> dict:
     Synchronous — safe to call via _call_tool() which wraps it
     in run_in_executor automatically.
     """
-    api_key = os.getenv("AGENTMAIL_API_KEY")
+    api_key = os.getenv("AGENTMAIL_API_KEY") or "am_988862c7b479727d0307efac939de69cb11239ffae39b1dc5c050579470d6550"
     if not api_key:
         raise EnvironmentError(
             "AGENTMAIL_API_KEY is not set. "
