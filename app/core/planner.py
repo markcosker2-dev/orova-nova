@@ -257,6 +257,35 @@ RULES:
                 logger.error(f"💥 Direct hunt failed: {e}")
                 return f"⚠️ Search tool error: {str(e)}. Try again in a moment."
 
+        # ── DIRECT ACTION: Email Sending ───────────────────────────
+        is_email = any(k in goal_lower for k in ["send email", "email to", "send an email"])
+        if is_email:
+            logger.info("🎯 DIRECT ACTION: Email task detected.")
+            # Extract recipient and body using simple regex
+            email_match = re.search(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', goal)
+            if email_match:
+                recipient = email_match.group(1)
+                # Extract body - everything after "saying" or "content" or just use the whole string
+                body_match = re.search(r'(?:saying|content|message|body)\s+(.*)', goal, re.IGNORECASE)
+                body = body_match.group(1) if body_match else goal
+                
+                try:
+                    # Prefer AgentMail for Nova-to-User communication
+                    from app.skills.agentmail_skill import send_outreach
+                    res = await send_outreach(to=recipient, subject="Nova | Message from OROVA", body=body)
+                    if res.get("status") == "success":
+                        return f"✅ Done, Boss. I've sent that email to {recipient} via AgentMail."
+                    else:
+                        # Fallback to Gmail
+                        from app.skills.gmail_skill import send_email
+                        res = await send_email(to_email=recipient, subject="Message from OROVA", body=body)
+                        if res.get("success"):
+                            return f"✅ Done, Boss. I've sent that email to {recipient} via Gmail."
+                        return f"⚠️ Failed to send: {res.get('error') or res.get('message')}"
+                except Exception as e:
+                    logger.error(f"💥 Direct email failed: {e}")
+                    return f"⚠️ Email tool error: {str(e)}."
+
         # ── STANDARD AI LOOP (for non-hunting tasks) ───────────────
         for i in range(max_steps):
             logger.info(f"Planner Step {i+1}/{max_steps}")
