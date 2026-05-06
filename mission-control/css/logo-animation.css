@@ -1,75 +1,114 @@
-/* OROVA Animated Logo - Step-by-Step Build Protocol */
+/* ═══════════════════════════════════════════════════════════════════
+   OROVA Animated Logo — "Holy Grail" Patch v2.3.0
+   ───────────────────────────────────────────────────────────────────
+   AUDIT FIXES:
+   [4a] stroke was hardcoded #000 (invisible on dark bg) → CSS var
+   [4b] fill in @keyframes was rgba(0,0,0,1) (black on dark) → CSS var
+   [4c] stroke-dasharray:200 was a guess → per-element measured values
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── CSS variables scoped per theme ─────────────────────────────── */
+:root,
+[data-theme="dark"] {
+    --logo-stroke: #ffffff;      /* [FIX 4a] white on dark background  */
+    --logo-fill:   #ffffff;      /* [FIX 4b] white fill after draw-in   */
+    --logo-glow:   rgba(255, 255, 255, 0.75);
+}
+
+[data-theme="light"] {
+    --logo-stroke: #111111;
+    --logo-fill:   #111111;
+    --logo-glow:   rgba(0, 0, 0, 0.35);
+}
+
+/* ── Container ───────────────────────────────────────────────────── */
 .orova-logo-container {
     display: flex;
     align-items: center;
     gap: 2px;
-    font-family: 'Inter', sans-serif; /* Fallback, we will use SVG paths for the real look */
     height: 40px;
     overflow: hidden;
 }
 
 .orova-svg {
     height: 32px;
-    filter: drop-shadow(0 0 2px rgba(0,0,0,0.1));
+    overflow: visible; /* allow glow to bleed outside viewBox */
 }
 
-/* Letters Build Sequence */
+/* ── Base letter style ───────────────────────────────────────────── */
 .letter {
     fill: none;
-    stroke: #000;
+    stroke: var(--logo-stroke);           /* [FIX 4a] was #000             */
     stroke-width: 2;
     stroke-linecap: round;
     stroke-linejoin: round;
-    stroke-dasharray: 200;
-    stroke-dashoffset: 200;
 }
 
-/* 1. O Forms */
+/* ── Per-element dash values (measured from SVG geometry) ────────── */
+/*   Circle r=25 → circumference ≈ 157px                            */
+/*   Open paths measured from the d="" attributes (approximate)      */
+
 .letter-o1 {
-    animation: drawIn 1s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    /* circle cx=30 cy=30 r=25 → C = 2π×25 ≈ 157 */
+    stroke-dasharray: 157;
+    stroke-dashoffset: 157;
+    animation: drawIn 0.9s ease-out forwards;
     animation-delay: 0.2s;
 }
 
-/* 2. R Builds */
 .letter-r {
-    animation: drawIn 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    /* V5→55 (50) + H to 100 (30) + Q arc ≈ 55 + diagonal ≈ 175 */
+    stroke-dasharray: 175;
+    stroke-dashoffset: 175;
+    animation: drawIn 1.1s ease-out forwards;
     animation-delay: 1.2s;
 }
 
-/* 3. Second O */
 .letter-o2 {
-    animation: drawIn 1s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    /* circle cx=160 cy=30 r=25 → same as O1 ≈ 157 */
+    stroke-dasharray: 157;
+    stroke-dashoffset: 157;
+    animation: drawIn 0.9s ease-out forwards;
     animation-delay: 2.2s;
 }
 
-/* 4. V Slides */
 .letter-v {
-    animation: drawIn 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-    animation-delay: 3s;
+    /* M200,5 → L225,55 → L250,5 — two ~51px legs ≈ 102 */
+    stroke-dasharray: 102;
+    stroke-dashoffset: 102;
+    animation: drawIn 0.7s ease-out forwards;
+    animation-delay: 3.0s;
 }
 
-/* 5. A Builds from Top */
 .letter-a {
-    animation: drawIn 1s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    /* M260,55→L285,5→L310,55 (two legs ≈ 102) + crossbar ≈ 26 → 128 */
+    stroke-dasharray: 128;
+    stroke-dashoffset: 128;
+    animation: drawIn 0.9s ease-out forwards;
     animation-delay: 3.8s;
+    /* [NOTE] crossbar segment "M272,35 H298" is a separate path sub-element;
+       keep it on the same .letter-a class so it draws with the A stroke. */
 }
 
-/* Final Shine Effect */
-.logo-shine {
-    animation: finalShine 2s ease-in-out infinite alternate;
-    animation-delay: 5s;
-}
-
+/* ── Draw-in keyframe ────────────────────────────────────────────── */
 @keyframes drawIn {
     to {
         stroke-dashoffset: 0;
-        fill: rgba(0,0,0,1);
+        fill: var(--logo-fill);    /* [FIX 4b] was rgba(0,0,0,1) = black on dark */
     }
 }
 
+/* ── Final shine ─────────────────────────────────────────────────── */
+/*   Last letter (A) finishes at 3.8s + 0.9s = 4.7s.
+     Shine starts at 5.0s — 300ms breathing room, then loops.        */
+.logo-shine {
+    animation: finalShine 2.4s ease-in-out infinite alternate;
+    animation-delay: 5.0s;
+}
+
 @keyframes finalShine {
-    0% { filter: drop-shadow(0 0 0px rgba(0,0,0,0)); }
-    100% { filter: drop-shadow(0 0 8px rgba(255,255,255,0.8)) brightness(1.2); }
+    0%   { filter: drop-shadow(0 0 0px transparent); }
+    100% { filter: drop-shadow(0 0 10px var(--logo-glow)) brightness(1.15); }
 }
 
 /* Sidebar Integration */
