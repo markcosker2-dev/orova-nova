@@ -11,6 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/logo-animation.css">
 </head>
 
 <body>
@@ -22,8 +23,20 @@
     <!-- ═══ SIDEBAR ═══ -->
     <nav id="sidebar">
         <div class="sidebar-brand">
-            <div class="brand-icon">◆</div>
-            <span class="brand-text">OROVA</span>
+            <div class="brand-animation-wrap">
+                <svg class="orova-svg logo-shine" viewBox="0 0 300 60" xmlns="http://www.w3.org/2000/svg">
+                    <!-- O1 -->
+                    <circle class="letter letter-o1" cx="30" cy="30" r="25" />
+                    <!-- R -->
+                    <path class="letter letter-r" d="M70 55 V5 H100 Q120 5 120 25 Q120 45 100 45 H70 M100 45 L120 55" />
+                    <!-- O2 -->
+                    <circle class="letter letter-o2" cx="160" cy="30" r="25" />
+                    <!-- V -->
+                    <path class="letter letter-v" d="M200 5 L225 55 L250 5" />
+                    <!-- A -->
+                    <path class="letter letter-a" d="M260 55 L285 5 L310 55 M272 35 H298" />
+                </svg>
+            </div>
             <span class="brand-sub">Mission Control</span>
         </div>
         

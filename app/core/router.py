@@ -36,20 +36,24 @@ class Router:
             email_match = re.search(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', message)
             if email_match:
                 recipient = email_match.group(1)
-                body_match = re.search(r'(?:saying|content|message|body|say|tell|write|intro|introducing)\s+(.*)', message, re.IGNORECASE)
-                body = body_match.group(1) if body_match else message
-                try:
-                    from app.skills.agentmail_skill import send_outreach
-                    res = send_outreach(to=recipient, subject="Nova | Message from OROVA", body=body)
-                    if res.get("status") == "success":
-                        return f"✅ Done, Boss. I've sent that email to {recipient} via AgentMail."
-                    else:
-                        # Return the ACTUAL AgentMail error to diagnose it
-                        agentmail_error = res.get('error') or res.get('message')
-                        return f"⚠️ AgentMail Failed: {agentmail_error}"
-                except Exception as e:
-                    logger.error(f"💥 Router Email failed: {e}")
-                    return f"⚠️ Email tool error: {str(e)}."
+                # If the message is complex (e.g. 'introduce yourself'), delegate to the Planner
+                # instead of doing a literal regex extract.
+                is_complex = any(k in lower_msg for k in ["intro", "introduce", "write", "draft", "explain", "pitch"])
+                
+                if not is_complex:
+                    body_match = re.search(r'(?:saying|content|message|body|say|tell|write)\s+(.*)', message, re.IGNORECASE)
+                    body = body_match.group(1) if body_match else message
+                    try:
+                        from app.skills.agentmail_skill import send_outreach
+                        res = send_outreach(to=recipient, subject="Nova | Message from OROVA", body=body)
+                        if res.get("status") == "success":
+                            return f"✅ Done, Boss. I've sent that email to {recipient} via AgentMail."
+                        else:
+                            agentmail_error = res.get('error') or res.get('message')
+                            return f"⚠️ AgentMail Failed: {agentmail_error}"
+                    except Exception as e:
+                        logger.error(f"💥 Router Email failed: {e}")
+                        return f"⚠️ Email tool error: {str(e)}."
 
         # 2. AI Planner (The Brain) - EVERYTHING else goes here
         logger.info(f"Router: Routing to {agent_id.upper()} for Client {chat_id}")

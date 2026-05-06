@@ -166,13 +166,15 @@ class TaskPlanner:
         # ── DIRECT ACTION: Email Sending ───────────────────────────
         is_email = any(k in goal_lower for k in ["send email", "email to", "send an email", "email mark"])
         if is_email:
-            logger.info("🎯 DIRECT ACTION: Email task detected.")
-            # Extract recipient and body using simple regex
-            email_match = re.search(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', goal)
-            if email_match:
-                recipient = email_match.group(1)
-                body_match = re.search(r'(?:saying|content|message|body)\s+(.*)', goal, re.IGNORECASE)
-                body = body_match.group(1) if body_match else goal
+            # If the message is complex, skip Direct Action and go to AI Reasoning
+            is_complex = any(k in goal_lower for k in ["intro", "introduce", "write", "draft", "explain", "pitch"])
+            if not is_complex:
+                logger.info("🎯 DIRECT ACTION: Simple email task detected.")
+                email_match = re.search(r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', goal)
+                if email_match:
+                    recipient = email_match.group(1)
+                    body_match = re.search(r'(?:saying|content|message|body|say|tell|write)\s+(.*)', goal, re.IGNORECASE)
+                    body = body_match.group(1) if body_match else goal
                 
                 try:
                     from app.skills.agentmail_skill import send_outreach

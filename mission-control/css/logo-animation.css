@@ -1,0 +1,85 @@
+/* OROVA Animated Logo - Step-by-Step Build Protocol */
+.orova-logo-container {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    font-family: 'Inter', sans-serif; /* Fallback, we will use SVG paths for the real look */
+    height: 40px;
+    overflow: hidden;
+}
+
+.orova-svg {
+    height: 32px;
+    filter: drop-shadow(0 0 2px rgba(0,0,0,0.1));
+}
+
+/* Letters Build Sequence */
+.letter {
+    fill: none;
+    stroke: #000;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 200;
+    stroke-dashoffset: 200;
+}
+
+/* 1. O Forms */
+.letter-o1 {
+    animation: drawIn 1s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    animation-delay: 0.2s;
+}
+
+/* 2. R Builds */
+.letter-r {
+    animation: drawIn 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    animation-delay: 1.2s;
+}
+
+/* 3. Second O */
+.letter-o2 {
+    animation: drawIn 1s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    animation-delay: 2.2s;
+}
+
+/* 4. V Slides */
+.letter-v {
+    animation: drawIn 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    animation-delay: 3s;
+}
+
+/* 5. A Builds from Top */
+.letter-a {
+    animation: drawIn 1s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    animation-delay: 3.8s;
+}
+
+/* Final Shine Effect */
+.logo-shine {
+    animation: finalShine 2s ease-in-out infinite alternate;
+    animation-delay: 5s;
+}
+
+@keyframes drawIn {
+    to {
+        stroke-dashoffset: 0;
+        fill: rgba(0,0,0,1);
+    }
+}
+
+@keyframes finalShine {
+    0% { filter: drop-shadow(0 0 0px rgba(0,0,0,0)); }
+    100% { filter: drop-shadow(0 0 8px rgba(255,255,255,0.8)) brightness(1.2); }
+}
+
+/* Sidebar Integration */
+.sidebar-brand {
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.brand-animation-wrap {
+    margin-bottom: 10px;
+}
