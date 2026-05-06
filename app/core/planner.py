@@ -124,8 +124,8 @@ class TaskPlanner:
         goal_lower = goal.lower()
 
         # Tool name sets by category
-        HUNTING_TOOLS = ["sgai_search_and_extract", "sgai_deep_extract", "find_leads", "google_search", "research_lead", "stealth_search", "stealth_extract"]
-        OUTREACH_TOOLS = ["send_outreach", "write_cold_email", "create_drip_campaign", "generate_sequence", "check_replies"]
+        HUNTING_TOOLS = ["sgai_search_and_extract", "sgai_deep_extract", "find_leads", "google_search", "research_lead", "stealth_search", "stealth_extract", "elite_scrape", "vision_browse", "composio_action"]
+        OUTREACH_TOOLS = ["send_outreach", "send_email", "write_cold_email", "create_drip_campaign", "generate_sequence", "check_replies", "get_inbox"]
         CONTENT_TOOLS = ["write_content", "optimize_post", "create_instagram_post", "generate_ai_image", "write_ad_copy"]
         ANALYTICS_TOOLS = ["pipeline_report", "conversion_analysis", "roi_calculator", "weekly_report", "track_metric"]
         CALENDAR_TOOLS = ["get_today", "get_week", "create_event"]
@@ -143,7 +143,7 @@ class TaskPlanner:
             scope = CALENDAR_TOOLS
         else:
             # General mode: give a small general set
-            scope = HUNTING_TOOLS + ["dispatch_task", "weekly_report"]
+            scope = HUNTING_TOOLS + ["dispatch_task", "weekly_report", "send_email"]
 
         # Filter TOOLS to only include scoped ones
         scoped = [t for t in TOOLS if t["function"]["name"] in scope]
