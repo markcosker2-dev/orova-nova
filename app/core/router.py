@@ -40,16 +40,13 @@ class Router:
                 body = body_match.group(1) if body_match else message
                 try:
                     from app.skills.agentmail_skill import send_outreach
-                    # These functions are synchronous, do not await them
                     res = send_outreach(to=recipient, subject="Nova | Message from OROVA", body=body)
                     if res.get("status") == "success":
                         return f"✅ Done, Boss. I've sent that email to {recipient} via AgentMail."
                     else:
-                        from app.skills.gmail_skill import send_email
-                        res = send_email(to_email=recipient, subject="Message from OROVA", body=body)
-                        if res.get("success"):
-                            return f"✅ Done, Boss. I've sent that email to {recipient} via Gmail."
-                        return f"⚠️ Failed to send: {res.get('error') or res.get('message')}"
+                        # Return the ACTUAL AgentMail error to diagnose it
+                        agentmail_error = res.get('error') or res.get('message')
+                        return f"⚠️ AgentMail Failed: {agentmail_error}"
                 except Exception as e:
                     logger.error(f"💥 Router Email failed: {e}")
                     return f"⚠️ Email tool error: {str(e)}."
