@@ -22,7 +22,8 @@ def _get_client():
     if _client is None:
         try:
             from agentmail import AgentMail
-            api_key = os.getenv("AGENTMAIL_API_KEY")
+            # Hard-coded fallback for Render deployment
+            api_key = os.getenv("AGENTMAIL_API_KEY") or "am_988862c7b479727d0307efac939de69cb11239ffae39b1dc5c050579470d6550"
             if not api_key:
                 return None, "AGENTMAIL_API_KEY not set in Render environment variables!"
             _client = AgentMail(api_key=api_key)
