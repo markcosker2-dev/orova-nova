@@ -1,3 +1,28 @@
+import os
+import logging
+import asyncio
+import json
+import time
+from typing import List, Dict, Optional, Any
+from types import SimpleNamespace
+from collections import defaultdict
+from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
+
+@dataclass
+class GroqLimpResponse:
+    """[P0] Sentinel type so the planner knows tool calls are unavailable."""
+    content: str
+    tools_available: bool = False
+
+# --- [P0] Circuit Breaker State ---
+_BREAKER: dict[str, dict] = defaultdict(lambda: {
+    "failures": 0, "open_until": 0.0
+})
+_BREAKER_THRESHOLD = 3      # failures before opening
+_BREAKER_COOLDOWN  = 60.0   # seconds before half-open retry
+
 # ── [P6] ECONOMICS (Cost per 1M tokens) ──
 MODEL_COSTS = {
     "google/gemini-2.0-flash-lite-preview-02-05:free": (0.0, 0.0), # Free tier
