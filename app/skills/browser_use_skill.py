@@ -1,8 +1,8 @@
 import os
 import asyncio
 import logging
-# pyrefly: ignore [missing-import]
-from browser_use import Agent, Browser, BrowserConfig
+from browser_use import Agent, Browser
+from browser_use.browser.browser import BrowserConfig
 # pyrefly: ignore [missing-import]
 from langchain_openai import ChatOpenAI
 from app.core.semaphore import ram_heavy
