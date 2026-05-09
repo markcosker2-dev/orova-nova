@@ -9,6 +9,14 @@ DECAY_RATE        = 0.15    # Confidence loss per stale cycle
 SUCCESS_THRESHOLD = 0.6     # Min success rate to remain a "Winner"
 MIN_SAMPLE_SIZE   = 5       # Min data points before learning
 
+from app.core.sentinel import send_admin_message
+
+# ── [P5] Thresholds ──────────────────────────────────────────────────────────
+HIGH_CONFIDENCE_THRESHOLD = 0.80     # Score at which Nova surfaces the insight
+INSIGHT_NOTIFY_COOLDOWN = 86400      # 24h
+
+_notified_patterns: dict[str, datetime] = {}
+
 class PatternReinforcer:
     """
     [P2] Nova's Autonomous Learning Loop.
@@ -38,7 +46,6 @@ class PatternReinforcer:
 
     async def _identify_winners(self) -> list:
         """Finds high-performing approaches from recent metrics."""
-        # Simplified logic: Join metrics with patterns
         return await DatabaseManager.fetchall("""
             SELECT task_type, winning_approach, AVG(success_metric) as score
             FROM learned_patterns
@@ -47,15 +54,6 @@ class PatternReinforcer:
             HAVING COUNT(*) >= ? AND score >= ?
         """, (MIN_SAMPLE_SIZE, SUCCESS_THRESHOLD))
 
-from app.core.sentinel import send_admin_message
-
-# ── [P5] Thresholds ──────────────────────────────────────────────────────────
-HIGH_CONFIDENCE_THRESHOLD = 0.80     # Score at which Nova surfaces the insight
-INSIGHT_NOTIFY_COOLDOWN = 86400      # 24h
-
-_notified_patterns: dict[str, datetime] = {}
-
-class PatternReinforcer:
     async def _maybe_notify_insight(self, task_type: str, approach: str, score: float, client_id: int):
         if score < HIGH_CONFIDENCE_THRESHOLD: return
         key = f"{client_id}:{task_type}:{approach}"
