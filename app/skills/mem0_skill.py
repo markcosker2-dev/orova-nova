@@ -11,7 +11,7 @@ class MegaMemory:
     Replaces the basic fact-distiller with a multi-layered knowledge graph.
     """
     def __init__(self):
-        # [P1] FIXED: Use openai_compatible provider to target OpenRouter correctly
+        # [P1] FIXED: Use 'openai' provider with openai_base_url for OpenRouter compatibility
         config = {
             "vector_store": {
                 "provider": "qdrant",
@@ -23,7 +23,7 @@ class MegaMemory:
                 }
             },
             "llm": {
-                "provider": "openai_compatible",
+                "provider": "openai",
                 "config": {
                     "api_key": os.getenv("OPENROUTER_API_KEY"),
                     "model": "google/gemini-2.0-flash-lite-preview-02-05",
@@ -31,7 +31,7 @@ class MegaMemory:
                 }
             },
             "embedder": {
-                "provider": "openai_compatible",
+                "provider": "openai",
                 "config": {
                     "api_key": os.getenv("OPENROUTER_API_KEY"),
                     "model": "openai/text-embedding-3-small",

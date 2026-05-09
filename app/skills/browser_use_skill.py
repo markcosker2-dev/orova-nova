@@ -1,7 +1,11 @@
 import os
 import asyncio
 import logging
-from browser_use import Agent, Browser, BrowserConfig
+from browser_use import Agent, Browser
+try:
+    from browser_use import BrowserConfig
+except ImportError:
+    from browser_use.browser.browser import BrowserConfig
 from langchain_openai import ChatOpenAI
 
 logger = logging.getLogger(__name__)
