@@ -150,9 +150,25 @@ async def health_check():
         "timestamp": now.isoformat(),
         "circuit_breakers": breaker_status,
         "queue_depth": q_depth,
-        "learning_stats": learning_stats
     }
-egram_message, data)
+
+async def process_telegram_message(data: dict):
+    """Worker for the Backpressure Queue."""
+    try:
+        # Resolve Topic/Agent
+        topic_id = str(data.get("message", {}).get("message_thread_id", "1"))
+        agent_role = TOPIC_AGENT_MAP.get(topic_id, "nova")
+        
+        # Route to Brain
+        await router.handle_message(data, agent_role=agent_role)
+    except Exception as e:
+        logger.error(f"[Swarm] Worker failed: {e}")
+
+@app.post("/webhook")
+async def telegram_webhook(request: Request):
+    """Ingest point for Telegram via Queue."""
+    data = await request.json()
+    await tg_queue.put(data)
     return {"status": "ok"}
 
 # --- Static Frontend ---
