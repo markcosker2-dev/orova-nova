@@ -51,3 +51,11 @@ composio-core
 composio-openai
 langchain-openai
 qdrant-client
+
+# ── Production-Grade Hardening (OROVA v1.0) ──
+apscheduler
+dnspython
+phonenumbers
+google-api-python-client
+google-auth
+google-auth-httplib2
