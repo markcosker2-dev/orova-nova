@@ -608,12 +608,17 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "track_metric",
-            "description": "Increment a performance metric counter. Metrics: leads_found, emails_sent, replies_received, meetings_booked, calls_made, proposals_sent, content_created.",
+            "description": "Increment a performance metric counter. Metrics: leads_found, emails_sent, replies_received, meetings_booked, deals_closed, calls_made, proposals_sent, content_created, ad_spend, monthly_recurring_revenue.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "metric_name": {"type": "string", "description": "Metric to increment"},
-                    "increment": {"type": "integer", "description": "Amount to add (default 1)"}
+                    "increment": {
+                        "type": "number", 
+                        "minimum": 0.01,    # Allow decimal increments for spend/MRR
+                        "maximum": 100000, # Prevent extreme runaway inflation
+                        "default": 1
+                    }
                 },
                 "required": ["metric_name"]
             }

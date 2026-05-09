@@ -41,18 +41,25 @@ def _read_json(filename, default=None):
 async def pipeline_report() -> str:
     """
     Generate a comprehensive pipeline analytics report.
-    Analyzes the full funnel: leads → emails → replies → meetings → proposals.
+    Analyzes the full funnel: leads → emails → replies → meetings → deals.
     """
     metrics = _read_json("metrics.json", {})
     history = _read_json("metrics_history.json", [])
 
-    leads = metrics.get("leads_found", 0)
-    emails = metrics.get("emails_sent", 0)
-    replies = metrics.get("replies_received", 0)
+    leads    = metrics.get("leads_found", 0)
+    emails   = metrics.get("emails_sent", 0)
+    replies  = metrics.get("replies_received", 0)
     meetings = metrics.get("meetings_booked", 0)
-    calls = metrics.get("calls_made", 0)
-    proposals = metrics.get("proposals_sent", 0)
-    errors = metrics.get("errors", 0)
+    closed   = metrics.get("deals_closed", 0)
+    mrr      = metrics.get("monthly_recurring_revenue", 0.0)
+    spend    = metrics.get("ad_spend", 0.0)
+    errors   = metrics.get("errors", 0)
+
+    def pct(num, denom):
+        return f"{(num / denom * 100):.1f}%" if denom > 0 else "—"
+
+    def currency(val):
+        return f"${val:,.2f}"
 
     report = "# 📊 OROVA Pipeline Analytics Report\n"
     report += f"**Generated:** {datetime.now().strftime('%B %d, %Y at %I:%M %p')}\n\n"
@@ -62,20 +69,24 @@ async def pipeline_report() -> str:
     report += "| Stage | Count | Conversion |\n"
     report += "|-------|-------|------------|\n"
     report += f"| 🎯 Leads Found | {leads} | — |\n"
+    report += f"| ✉️ Emails Sent | {emails} | {pct(emails, leads)} |\n"
+    report += f"| 💬 Replies | {replies} | {pct(replies, emails)} |\n"
+    report += f"| 📅 Meetings | {meetings} | {pct(meetings, replies)} |\n"
+    report += f"| 💰 Deals Closed | {closed} | {pct(closed, meetings)} |\n\n"
 
-    email_rate = f"{(emails/leads*100):.1f}%" if leads > 0 else "—"
-    report += f"| ✉️ Emails Sent | {emails} | {email_rate} |\n"
+    # ── [P2] ROI Summary ──
+    cpl  = spend / leads if leads > 0 else 0.0
+    cpb  = spend / meetings if meetings > 0 else 0.0
+    roas = mrr / spend if spend > 0 else 0.0
 
-    reply_rate = f"{(replies/emails*100):.1f}%" if emails > 0 else "—"
-    report += f"| 💬 Replies | {replies} | {reply_rate} |\n"
-
-    meeting_rate = f"{(meetings/replies*100):.1f}%" if replies > 0 else "—"
-    report += f"| 📅 Meetings | {meetings} | {meeting_rate} |\n"
-
-    report += f"| 📞 Calls Made | {calls} | — |\n"
-    report += f"| 📝 Proposals | {proposals} | — |\n"
-
-    report += "\n"
+    report += "## 💰 ROI Summary\n\n"
+    report += "| Metric | Value |\n"
+    report += "|--------|-------|\n"
+    report += f"| 💸 Ad Spend | {currency(spend)} |\n"
+    report += f"| 📈 MRR | {currency(mrr)} |\n"
+    report += f"| 🎯 Cost Per Lead | {currency(cpl)} |\n"
+    report += f"| 📅 Cost Per Meeting | {currency(cpb)} |\n"
+    report += f"| 🚀 ROAS (MRR/Spend) | {roas:.2f}x |\n\n"
 
     # ── Health Score ──
     report += "## 🏥 System Health\n"
@@ -105,10 +116,10 @@ async def pipeline_report() -> str:
         recommendations.append("⚠️ Low reply rate. Consider switching email frameworks (try PAS or BAB).")
     if replies > 0 and meetings == 0:
         recommendations.append("📅 You're getting replies but no meetings. Add calendar links to follow-ups.")
+    if closed == 0 and meetings > 2:
+        recommendations.append("🤝 High meeting count but no closes. Audit your sales deck and closing script.")
     if errors > 10:
         recommendations.append("🔧 High error count. Check API keys and service connections.")
-    if leads == 0:
-        recommendations.append("🎯 No leads found yet. Run a hunt: 'find luxury remodel businesses in California'")
 
     if not recommendations:
         recommendations.append("✅ Pipeline looks healthy. Keep the momentum going!")
