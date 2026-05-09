@@ -2,7 +2,16 @@ import os
 import asyncio
 import logging
 from browser_use import Agent, Browser
-from browser_use.browser.browser import BrowserConfig
+try:
+    from browser_use import BrowserConfig
+except ImportError:
+    try:
+        from browser_use.browser.browser import BrowserConfig
+    except ImportError:
+        try:
+            from browser_use.browser.context import BrowserContextConfig as BrowserConfig
+        except ImportError:
+            BrowserConfig = None
 # pyrefly: ignore [missing-import]
 from langchain_openai import ChatOpenAI
 from app.core.semaphore import ram_heavy
@@ -32,10 +41,14 @@ async def vision_browse(objective: str, url: str = None) -> str:
         base_url="https://openrouter.ai/api/v1"
     )
     
-    # [P0] FIXED: Pass cdp_url to BrowserConfig to connect to remote browser
-    browser = Browser(
-        config=BrowserConfig(cdp_url=cdp_url)
-    )
+    # [P0] Connect to remote browser via CDP
+    if BrowserConfig:
+        browser = Browser(config=BrowserConfig(cdp_url=cdp_url))
+    else:
+        # Fallback if config class is totally missing/unreachable
+        logger.warning("[Vision] BrowserConfig missing. Attempting direct connection...")
+        browser = Browser() # This likely won't use CDP, but avoids crash
+        return "⚠️ Vision Browse failed: Could not configure remote browser (Library Mismatch)."
 
     try:
         agent = Agent(
