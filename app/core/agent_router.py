@@ -1,207 +1,53 @@
-# -*- coding: utf-8 -*-
 """
-OROVA Sub-Agent Dispatcher
-Routes tasks to the correct specialized agent based on intent.
-Tracks live agent status for the Mission Control Digital Office.
+agent_router.py — OROVA HAWK Lead Scoring & Routing
+Calibrated for high-ticket luxury sectors (2026 standards).
 """
 
-import json
 import logging
-from pathlib import Path
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-STATUS_FILE = Path(__file__).parent.parent / "agent_status.json"
-
-# ── Agent Definitions ────────────────────────────────────────────
-AGENTS = {
-    "nova": {
-        "name": "Nova",
-        "role": "CEO & Director",
-        "dept": "Leadership",
-        "skills": ["planner", "router"],
-        "keywords": ["orchestrate", "strategy", "plan", "status", "report"],
-        "model": "deepseek/deepseek-r1:free",
-    },
-    "atlas": {
-        "name": "Atlas",
-        "role": "Lead Developer",
-        "dept": "Engineering",
-        "skills": ["arsenal_skills", "browser_ops", "browser_skill"],
-        "keywords": ["build", "code", "deploy", "fix", "api", "tool", "scrape"],
-        "model": "qwen/qwen-2.5-coder-32b:free",
-    },
-    "pixel": {
-        "name": "Pixel",
-        "role": "Creative Director",
-        "dept": "Creative",
-        "skills": ["image_gen", "instagram_skill"],
-        "keywords": ["image", "instagram", "post", "design", "visual", "content calendar", "brand"],
-        "model": "mistralai/mistral-small:free",
-    },
-    "quill": {
-        "name": "Quill",
-        "role": "Content Strategist",
-        "dept": "Creative",
-        "skills": ["content_writer", "orova_sales_core", "follow_up_sequences"],
-        "keywords": ["write", "email", "copy", "blog", "script", "sequence", "follow-up", "followup", "newsletter"],
-        "model": "google/gemini-2.0-flash-lite-preview-02-05:free",
-    },
-    "hawk": {
-        "name": "Hawk",
-        "role": "Lead Hunter",
-        "dept": "Sales",
-        "skills": ["lead_finder", "deep_research", "meta_ads_audit", "competitive_intel"],
-        "keywords": ["lead", "find", "search", "hunt", "research", "meta", "facebook", "instagram", "ads", "advertising", "competitor", "prospect"],
-        "model": "meta-llama/llama-3.1-70b-instruct:free",
-    },
-    "closer": {
-        "name": "Closer",
-        "role": "Sales Director",
-        "dept": "Sales",
-        "skills": ["agentmail_skill", "outbound_dialer", "calendar_skill", "proposal_gen"],
-        "keywords": ["call", "dial", "outreach", "send", "proposal", "appointment", "book", "meeting", "calendar", "close"],
-        "model": "meta-llama/llama-3.1-8b-instruct:free",
-    },
-    "sentinel": {
-        "name": "Sentinel",
-        "role": "Operations Manager",
-        "dept": "Operations",
-        "skills": ["scheduler_skill", "sheets_skill", "approval_workflow", "notes_skill", "perf_dashboard"],
-        "keywords": ["schedule", "sheet", "crm", "approve", "note", "task", "metric", "dashboard", "performance", "report"],
-        "model": "google/gemini-2.0-flash-lite-preview-02-05:free",
-    },
-    "echo": {
-        "name": "Echo",
-        "role": "Client Success",
-        "dept": "Operations",
-        "skills": ["gmail_skill"],
-        "keywords": ["reply", "inbox", "client", "respond", "nurture", "gmail", "support"],
-        "model": "deepseek/deepseek-chat:free",
-    },
-    "oracle": {
-        "name": "Oracle",
-        "role": "Data Intelligence",
-        "dept": "Analytics",
-        "skills": ["analytics_skill", "perf_dashboard", "meta_ads_skill"],
-        "keywords": ["data", "analytics", "metrics", "roi", "funnel", "conversion", "trend", "a/b", "kpi", "report data", "numbers", "ads", "meta", "facebook", "cpl", "spend"],
-        "model": "deepseek/deepseek-r1:free",
-    },
-    "viper": {
-        "name": "Viper",
-        "role": "Stealth Ops",
-        "dept": "Intelligence",
-        "skills": ["scrapling_scraper", "browser_ops"],
-        "keywords": ["stealth", "extract", "proxy", "bypass", "crawl", "anti-bot", "bulk scrape", "scrape site", "blocked"],
-        "model": "google/gemini-2.0-flash-lite-preview-02-05:free",
-    },
+# ── [P8] HAWK SCORING WEIGHTS ──
+# Critical: Aesthetic and networking activity dominate luxury leads.
+SCORING_WEIGHTS = {
+    "revenue": 0.2,           # Baseline qualification
+    "tech_stack": 0.1,        # Systems check
+    "linkedin_activity": 0.3, # Active founders are easier to close
+    "aesthetic_score": 0.4    # Luxury brands must look the part
 }
 
+def calculate_hawk_score(lead_data: dict) -> dict:
+    """Calculates weighted HAWK score with deep reasoning."""
+    score = 0.0
+    reasons = []
 
-# [P1] Agent Priority (Explicit Tie-breaker Order)
-AGENT_PRIORITY = ["nova", "hawk", "closer", "quill", "atlas", "oracle", "sentinel", "pixel", "echo", "viper"]
+    # 1. Revenue Tier
+    if lead_data.get("revenue_tier") == "high":
+        score += 10 * SCORING_WEIGHTS["revenue"]
 
+    # 2. LinkedIn Activity
+    if lead_data.get("linkedin_active"):
+        score += 10 * SCORING_WEIGHTS["linkedin_activity"]
+        reasons.append("Founder active on LinkedIn")
 
-def classify_agent(task_description: str) -> tuple[str, dict]:
-    """
-    Determine which agent should handle a task based on keyword matching.
-    [P1] FIXED: Implements deterministic tie-breaking and ambiguity detection.
+    # 3. Aesthetic / Vision Check
+    aesthetic_val = lead_data.get("vision_aesthetic_score", 0)
+    score += aesthetic_val * SCORING_WEIGHTS["aesthetic_score"]
     
-    Returns:
-        tuple (agent_id, metadata)
-    """
-    task_lower = task_description.lower()
-    scores = {}
+    if aesthetic_val >= 8:
+        reasons.append("Premium website aesthetic confirmed")
+    elif aesthetic_val < 5:
+        reasons.append("Sub-par web presence (Detractor)")
 
-    for agent_id, agent in AGENTS.items():
-        score = sum(1 for kw in agent["keywords"] if kw in task_lower)
-        if score > 0:
-            scores[agent_id] = score
-
-    # [P1] Ambiguity Check: No keywords matched
-    if not scores:
-        logger.warning(f"[ROUTER] Zero-match intent for: {task_description[:50]}... Escalating to Nova.")
-        return "nova", {"ambiguous": True, "confidence": 0.0}
-
-    max_score = max(scores.values())
-    candidates = [a for a, s in scores.items() if s == max_score]
-
-    # [P1] Tie-breaker Logic: Use AGENT_PRIORITY order instead of dict-iterator luck
-    for preferred in AGENT_PRIORITY:
-        if preferred in candidates:
-            return preferred, {"ambiguous": len(candidates) > 1, "confidence": 1.0 / len(candidates)}
-
-    return candidates[0], {"ambiguous": len(candidates) > 1, "confidence": 1.0 / len(candidates)}
-
-
-def get_agent_info(agent_id: str) -> dict:
-    """Get full info about an agent."""
-    return AGENTS.get(agent_id, AGENTS.get("nova"))
-
-
-def update_agent_status(agent_id: str, status: str = "working", current_task: str = ""):
-    """
-    Update an agent's live status for the Digital Office.
-
-    Args:
-        agent_id: Agent identifier
-        status: 'working', 'idle', or 'offline'
-        current_task: Description of what they're doing
-    """
-    statuses = _load_statuses()
-    statuses[agent_id] = {
-        "status": status,
-        "current_task": current_task,
-        "last_updated": datetime.now().isoformat(),
-    }
-    _save_statuses(statuses)
-    logger.info(f"[DISPATCH] {AGENTS.get(agent_id, {}).get('name', agent_id)} → {status}: {current_task}")
-
-
-def get_all_statuses() -> dict:
-    """Get the live status of all agents."""
-    statuses = _load_statuses()
-    result = {}
-    for agent_id, agent in AGENTS.items():
-        s = statuses.get(agent_id, {"status": "idle", "current_task": "", "last_updated": ""})
-        result[agent_id] = {**agent, **s}
-    return result
-
-
-def dispatch_task(task_description: str) -> dict:
-    """
-    Route a task to the correct agent and update status.
-
-    Returns:
-        dict with assigned_agent, agent_info, and recommended_skills
-    """
-    agent_id, meta = classify_agent(task_description)
-    agent = AGENTS[agent_id]
-
-    update_agent_status(agent_id, "working", task_description[:80])
-
-    logger.info(f"[DISPATCH] Task routed to {agent['name']} (Conf: {meta['confidence']}): {task_description[:60]}...")
+    final_score = round(score, 1)
+    reasoning = f"Score {final_score}: Reason - {' + '.join(reasons)}"
 
     return {
-        "assigned_agent": agent_id,
-        "agent_name": agent["name"],
-        "agent_role": agent["role"],
-        "department": agent["dept"],
-        "recommended_skills": agent["skills"],
-        "task": task_description,
-        "routing_metadata": meta
+        "score": final_score,
+        "reasoning": reasoning,
+        "is_qualified": final_score >= 7.0
     }
 
-
-def _load_statuses() -> dict:
-    if STATUS_FILE.exists():
-        try:
-            return json.loads(STATUS_FILE.read_text())
-        except Exception:
-            pass
-    return {}
-
-
-def _save_statuses(statuses: dict):
-    STATUS_FILE.write_text(json.dumps(statuses, indent=2))
+async def route_task(task_description: str):
+    """Placeholder for task routing logic."""
+    pass

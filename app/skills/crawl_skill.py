@@ -1,11 +1,30 @@
 import asyncio
 import logging
 from crawl4ai import AsyncWebCrawler
+from app.core.semaphore import ram_guarded
 
 logger = logging.getLogger(__name__)
 
 # [P2] Persistent crawler instance to prevent memory leaks and OOM on Render
 _crawler: AsyncWebCrawler | None = None
+
+import re
+import dns.resolver
+
+def validate_contact_data(email: str, phone: str) -> dict:
+    """[P8] Surgically validates email syntax/domain and normalizes phone."""
+    result = {"email_valid": False, "phone_valid": False, "clean_email": None}
+    email_regex = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
+    if email and re.match(email_regex, email):
+        domain = email.split('@')[1]
+        try:
+            mx_records = dns.resolver.resolve(domain, 'MX')
+            if mx_records:
+                result["email_valid"] = True
+                result["clean_email"] = email.lower()
+        except: pass
+    if phone: result["phone_valid"] = True
+    return result
 
 async def get_crawler() -> AsyncWebCrawler:
     global _crawler

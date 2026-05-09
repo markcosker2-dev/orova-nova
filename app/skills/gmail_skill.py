@@ -1,8 +1,29 @@
-# -*- coding: utf-8 -*-
-"""
-Gmail Skill for MarkBot
-Read and search personal Gmail inbox
-"""
+import re
+from app.core.database import DatabaseManager
+
+async def process_incoming_email(email_data: dict, client_id: int):
+    """[P7] Scans incoming mail for bounces before passing to the AI."""
+    bounce_indicators = [
+        "Delivery Status Notification (Failure)",
+        "Undeliverable:",
+        "Returned mail: see transcript for details"
+    ]
+    subject = email_data.get("subject", "")
+    
+    if any(indicator in subject for indicator in bounce_indicators):
+        # Extract the original bounced email address via regex from the body
+        body = email_data.get("body", "") or email_data.get("snippet", "")
+        match = re.search(r'[\w\.-]+@[\w\.-]+', body)
+        bounced_email = match.group(0) if match else None
+        
+        # Automatically blacklist the dead email
+        if bounced_email:
+            await DatabaseManager.blacklist_lead(bounced_email)
+            logger.warning(f"[Deliverability] Hard bounce detected: {bounced_email}. Blacklisted.")
+            
+        return {"status": "ignored", "reason": "hard_bounce"}
+        
+    return {"status": "ok"}
 
 import os
 import base64

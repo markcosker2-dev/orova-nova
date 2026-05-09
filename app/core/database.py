@@ -1,3 +1,4 @@
+# pyrefly: ignore [missing-import]
 import aiosqlite
 import os
 import logging
@@ -9,6 +10,20 @@ logger = logging.getLogger(__name__)
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "app", "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 DB_PATH = os.environ.get("DATABASE_URL", f"sqlite+aiosqlite:///{DATA_DIR}/orova_v5.db").replace("sqlite+aiosqlite:///", "")
+
+# ── [P6] ECONOMICS SCHEMA ──
+USAGE_LOGS_DDL = """
+CREATE TABLE IF NOT EXISTS usage_logs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    client_id   INTEGER NOT NULL DEFAULT 0,
+    agent_id    TEXT NOT NULL,
+    model       TEXT,
+    tokens_in   INTEGER DEFAULT 0,
+    tokens_out  INTEGER DEFAULT 0,
+    cost_est    REAL DEFAULT 0.0
+);
+"""
 
 class DatabaseManager:
     """Async SQLite storage for OROVA Mission Control."""
@@ -120,9 +135,14 @@ class DatabaseManager:
                     task_type TEXT,
                     winning_approach TEXT,
                     success_metric INTEGER DEFAULT 1,
+                    client_id INTEGER NOT NULL DEFAULT 0,
+                    last_used_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    decay_score REAL DEFAULT 1.0,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_patterns_client ON learned_patterns(client_id)")
+            
             # Content
             await db.execute('''
                 CREATE TABLE IF NOT EXISTS content (
@@ -151,11 +171,11 @@ class DatabaseManager:
             await db.execute("CREATE INDEX IF NOT EXISTS idx_campaigns_email_status ON campaigns(prospect_email, status)")
             
             await db.commit()
-            logger.info("[DB] Async SQLite initialized with WAL mode and indexes.")
+            logger.info("[DB] Async SQLite initialized with WAL mode, indexes, and Evolution schema.")
 
     @staticmethod
     @asynccontextmanager
-    async def get_connection():
+    async def get_db():
         db = await aiosqlite.connect(DB_PATH)
         db.row_factory = aiosqlite.Row
         try:
@@ -164,42 +184,121 @@ class DatabaseManager:
             await db.close()
 
     @staticmethod
-    async def query(sql, params=(), fetchone=False, fetchall=False):
-        async with DatabaseManager.get_connection() as db:
-            async with db.execute(sql, params) as cursor:
-                res = None
-                if fetchone: res = await cursor.fetchone()
-                elif fetchall: res = await cursor.fetchall()
-                await db.commit()
-                return res
+    async def query(sql, params=()):
+        async with DatabaseManager.get_db() as db:
+            cursor = await db.execute(sql, params)
+            await db.commit()
+            return cursor
 
     @staticmethod
-    async def save_lead(lead_data, default_vertical="Automotive", client_id=0):
-        business = lead_data.get("business") or lead_data.get("company") or lead_data.get("title")
-        url = lead_data.get("url") or ""
+    async def fetchall(sql, params=()):
+        async with DatabaseManager.get_db() as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(sql, params)
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
 
-        if url:
-            existing = await DatabaseManager.query("SELECT id FROM leads WHERE url = ? LIMIT 1", (url,), fetchone=True)
-            if existing: return
-        if business:
-            existing = await DatabaseManager.query("SELECT id FROM leads WHERE LOWER(business) = LOWER(?) LIMIT 1", (business,), fetchone=True)
-            if existing: return
+    @staticmethod
+    async def fetchone(sql, params=()):
+        async with DatabaseManager.get_db() as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(sql, params)
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+    # --- [P1] HARDENED ACCESSORS (Client Isolation) ---
+
+    @staticmethod
+    async def get_metrics(client_id: int):
+        assert client_id > 0, "Security: client_id must be > 0"
+        return await DatabaseManager.fetchone("SELECT * FROM metrics WHERE client_id = ?", (client_id,))
+
+    @staticmethod
+    async def get_leads(client_id: int):
+        assert client_id > 0, "Security: client_id must be > 0"
+        return await DatabaseManager.fetchall("SELECT * FROM leads WHERE client_id = ? ORDER BY created_at DESC", (client_id,))
+
+    @staticmethod
+    async def get_tasks(client_id: int):
+        assert client_id > 0, "Security: client_id must be > 0"
+        return await DatabaseManager.fetchall("SELECT * FROM tasks WHERE client_id = ?", (client_id,))
+
+    @staticmethod
+    async def get_content(client_id: int):
+        assert client_id > 0, "Security: client_id must be > 0"
+        return await DatabaseManager.fetchall("SELECT * FROM content WHERE client_id = ?", (client_id,))
+
+    @staticmethod
+    async def get_memories(client_id: int):
+        assert client_id > 0, "Security: client_id must be > 0"
+        return await DatabaseManager.fetchall("SELECT * FROM memories WHERE client_id = ?", (client_id,))
+
+    @staticmethod
+    async def get_chat_history(client_id: int):
+        # Allow 0 for global/system logs if needed, but restrict for production
+        return await DatabaseManager.fetchall("SELECT * FROM chat_history WHERE client_id = ? ORDER BY created_at ASC", (client_id,))
+
+    @staticmethod
+    async def set_state(key: str, value: str):
+        await DatabaseManager.query(
+            "INSERT INTO system_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP",
+            (key, value)
+        )
+
+    @staticmethod
+    async def get_state(key: str, default: str = None):
+        res = await DatabaseManager.fetchone("SELECT value FROM system_state WHERE key = ?", (key,))
+        return res["value"] if res else default
+
+    @staticmethod
+    async def get_clients():
+        return await DatabaseManager.fetchall("SELECT * FROM clients")
+
+    @staticmethod
+    async def save_lead(lead_data: dict):
+        """[P8] Sanitize, Normalize, and Save Lead."""
+        email = lead_data.get("email")
+        if not email: return
+        
+        # 1. Absolute Guardrail: Blacklist Check
+        is_b = await DatabaseManager.fetchone("SELECT 1 FROM blacklist WHERE email = ?", (email,))
+        if is_b: 
+            logger.warning(f"[P8] Blocked attempt to save blacklisted lead: {email}")
+            return {"status": "blocked", "reason": "blacklisted"}
+
+        # 2. LinkedIn URL Cleaning (Strip tracking parameters)
+        raw_li = lead_data.get("linkedin_url") or lead_data.get("linkedin") or ""
+        clean_li = raw_li.split("?")[0] if raw_li else ""
+
+        # 3. E.164 Phone Normalization
+        raw_p = lead_data.get("phone", "")
+        clean_p = None
+        if raw_p:
+            try:
+                import phonenumbers
+                # Assuming US default, adjust as needed in production
+                parsed = phonenumbers.parse(raw_p, "US")
+                if phonenumbers.is_valid_number(parsed):
+                    clean_p = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+            except: pass
 
         sql = '''
             INSERT INTO leads (business, url, contact, phone, email, vertical, score, status, notes, client_id)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         '''
         params = (
-            business, url,
+            lead_data.get("business") or lead_data.get("company"),
+            lead_data.get("url"),
             lead_data.get("contact") or lead_data.get("owner"),
-            lead_data.get("phone"), lead_data.get("email"),
-            lead_data.get("vertical") or default_vertical,
-            lead_data.get("score") or lead_data.get("lead_score", 0),
+            clean_p, email,
+            lead_data.get("vertical", "Premium Services"),
+            lead_data.get("score", 0),
             lead_data.get("status", "New"),
-            lead_data.get("why") or lead_data.get("notes") or lead_data.get("snippet", ""),
-            int(client_id)
+            lead_data.get("notes") or lead_data.get("reasoning", ""),
+            int(lead_data.get("client_id", 0))
         )
         await DatabaseManager.query(sql, params)
+        logger.info(f"[P8] Lead saved with surgical normalization: {email}")
 
     @staticmethod
     async def get_clients():
@@ -256,19 +355,58 @@ class DatabaseManager:
         )
 
     @staticmethod
-    async def evolve_skill(task_type: str, winning_approach: str):
-        """Save a successful approach to the learned_patterns table."""
-        await DatabaseManager.query(
-            "INSERT INTO learned_patterns (task_type, winning_approach) VALUES (?, ?)",
-            (task_type, winning_approach)
-        )
+    @asynccontextmanager
+    async def transaction():
+        """[P7] Safe transaction context manager."""
+        db = await aiosqlite.connect(DB_PATH)
+        try:
+            await db.execute("BEGIN TRANSACTION;")
+            yield db
+            await db.commit()
+        except Exception as e:
+            await db.rollback()
+            raise e
+        finally:
+            await db.close()
 
     @staticmethod
-    async def get_winning_approach(task_type: str) -> str:
-        """Retrieve the most successful approach for a task type."""
-        row = await DatabaseManager.query(
-            "SELECT winning_approach FROM learned_patterns WHERE task_type = ? ORDER BY success_metric DESC LIMIT 1",
-            (task_type,),
-            fetchone=True
-        )
-        return row["winning_approach"] if row else ""
+    async def blacklist_lead(email: str):
+        """[P7] Wipe lead and blacklist via atomic transaction."""
+        async with DatabaseManager.transaction() as conn:
+            # 1. Erase all trace of the lead
+            await conn.execute("DELETE FROM leads WHERE email = ?", (email,))
+            # 2. Append to immutable blacklist
+            await conn.execute("INSERT OR IGNORE INTO blacklist (email) VALUES (?)", (email,))
+            logger.info(f"[Privacy] Lead {email} blacklisted and forgotten.")
+
+# ── [P7] BLACKLIST SCHEMA ──
+BLACKLIST_DDL = "CREATE TABLE IF NOT EXISTS blacklist (email TEXT PRIMARY KEY, blacklisted_at DATETIME DEFAULT CURRENT_TIMESTAMP);"
+
+PHASE_5_INDEXES = [
+    # Primary: get_winning_approach (Zero table hits)
+    """
+    CREATE INDEX IF NOT EXISTS idx_lp_client_task_decay_metric
+    ON learned_patterns (client_id, task_type, decay_score, success_metric DESC);
+    """,
+    # Aggregate: learning_stats reporting
+    """
+    CREATE INDEX IF NOT EXISTS idx_lp_created_at
+    ON learned_patterns (created_at);
+    """,
+    # Reinforcer: lookups
+    """
+    CREATE INDEX IF NOT EXISTS idx_lp_task_approach
+    ON learned_patterns (task_type, winning_approach);
+    """,
+]
+
+async def run_phase5_migrations():
+    """Idempotent. Safe to call at startup."""
+    import logging
+    logger = logging.getLogger("database.migrations")
+    try:
+        for ddl in PHASE_5_INDEXES:
+            await DatabaseManager.query(ddl)
+        logger.info("[DB] Phase 5 covering indexes applied.")
+    except Exception as e:
+        logger.error(f"[DB] Phase 5 migrations failed: {e}")

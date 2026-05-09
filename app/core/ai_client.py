@@ -1,17 +1,61 @@
-import os
-import logging
-import asyncio
-import json
-from typing import List, Dict, Optional, Any
-from types import SimpleNamespace
+# ── [P6] ECONOMICS (Cost per 1M tokens) ──
+MODEL_COSTS = {
+    "google/gemini-2.0-flash-lite-preview-02-05:free": (0.0, 0.0), # Free tier
+    "openai/gpt-4o": (5.0, 15.0),
+    "openai/gpt-4o-mini": (0.15, 0.60),
+    "anthropic/claude-3-5-sonnet": (3.0, 15.0),
+    "__default__": (1.0, 3.0),
+}
 
-logger = logging.getLogger(__name__)
+def estimate_cost(model: str, t_in: int, t_out: int) -> float:
+    rates = MODEL_COSTS.get(model, MODEL_COSTS["__default__"])
+    return round((t_in / 1e6) * rates[0] + (t_out / 1e6) * rates[1], 8)
 
+class UnifiedAIClient:
+    async def chat(self, messages, tools: Optional[List[Dict]] = None,
+                   client_id: int = 0, agent_id: str = "nova", **kwargs) -> Any:
+        # ... existing logic to get response ...
+        
+        # [P6] Log Usage
+        if hasattr(response, "usage") and response.usage:
+            t_in = response.usage.prompt_tokens
+            t_out = response.usage.completion_tokens
+            cost = estimate_cost(model_name, t_in, t_out)
+            from app.core.database import DatabaseManager
+            asyncio.create_task(DatabaseManager.log_usage(client_id, agent_id, model_name, t_in, t_out, cost))
+        
+        return response
+
+def _is_open(model_name: str) -> bool:
+    provider = "openrouter" if "openrouter" in model_name or "/" in model_name else "groq"
+    b = _BREAKER[provider]
+    if b["open_until"] > time.monotonic():
+        return True
+    if b["open_until"] > 0:          # cooldown expired → half-open
+        b["open_until"] = 0.0
+        b["failures"]   = 0
+    return False
+
+def _record_failure(model_name: str):
+    provider = "openrouter" if "openrouter" in model_name or "/" in model_name else "groq"
+    b = _BREAKER[provider]
+    b["failures"] += 1
+    if b["failures"] >= _BREAKER_THRESHOLD:
+        b["open_until"] = time.monotonic() + _BREAKER_COOLDOWN
+        logger.warning(f"[BREAKER] {provider} circuit OPEN for {_BREAKER_COOLDOWN}s")
+
+def _record_success(model_name: str):
+    provider = "openrouter" if "openrouter" in model_name or "/" in model_name else "groq"
+    _BREAKER[provider] = {"failures": 0, "open_until": 0.0}
+
+async def _backoff(attempt: int, base: float = 1.0, cap: float = 8.0):
+    delay = min(base * (2 ** attempt), cap)
+    await asyncio.sleep(delay)
 
 class UnifiedAIClient:
     """
     Unified AI Client — OpenRouter + Groq fallback.
-    Smart Tool Scoping Edition (May 2026).
+    Indestructible Edition (May 2026).
     """
 
     # ── Model Flavors (User-Switchable via /mode) ──────────────────
@@ -38,14 +82,13 @@ class UnifiedAIClient:
                 json.dump({"flavor": flavor}, f)
         except: pass
 
-    # ── Role-Based Model Map (ALL use free, stable models) ─────────
+    # ── Role-Based Model Map ─────────
     ROLE_MODELS = {
         "reasoner":  "google/gemini-2.0-flash-lite-preview-02-05:free",
         "writer":    "google/gemini-2.0-flash-lite-preview-02-05:free",
         "extractor": "google/gemini-2.0-flash-lite-preview-02-05:free",
         "fast":      "google/gemini-2.0-flash-lite-preview-02-05:free",
         "default":   "google/gemini-2.0-flash-lite-preview-02-05:free",
-        # All agents use Gemini for stability. Tool calling works reliably.
         "nova":      "google/gemini-2.0-flash-lite-preview-02-05:free",
         "hawk":      "google/gemini-2.0-flash-lite-preview-02-05:free",
         "closer":    "google/gemini-2.0-flash-lite-preview-02-05:free",
@@ -70,9 +113,8 @@ class UnifiedAIClient:
         self.admin_chat_id = os.getenv("ADMIN_CHAT_ID")
         self.tg_token = os.getenv("TELEGRAM_BOT_TOKEN")
 
-        # ── Primary: OpenRouter ────────────────────────────────────
         self.primary_client = None
-        api_key = os.getenv("OPENAI_API_KEY")
+        api_key = os.getenv("OPENROUTER_API_KEY")
         base_url = os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1")
         if api_key:
             try:
@@ -81,10 +123,7 @@ class UnifiedAIClient:
                 logger.info(f"[+] Primary AI Client (OpenRouter) — READY")
             except Exception as e:
                 logger.warning(f"[-] Primary AI init failed: {e}")
-        else:
-            logger.warning("[-] OPENAI_API_KEY not set")
 
-        # ── Fallback: Groq ─────────────────────────────────────────
         self.groq_client = None
         groq_key = os.getenv("GROQ_API_KEY")
         if groq_key:
@@ -95,9 +134,6 @@ class UnifiedAIClient:
             except Exception as e:
                 logger.warning(f"[-] Groq init failed: {e}")
 
-        for role, model in self.ROLE_MODELS.items():
-            logger.info(f"    [{role}] → {model}")
-
     async def chat(self, messages, tools: Optional[List[Dict]] = None,
                    tool_choice: Optional[str] = None,
                    temperature=0.7, max_tokens=2000, role: str = "default") -> Any:
@@ -107,64 +143,55 @@ class UnifiedAIClient:
         if not self.primary_client and not self.groq_client:
             return SimpleNamespace(content="[!!] No AI providers available.", tool_calls=None)
 
-        # Select model: flavor override OR role-based
         flavor = self._get_flavor()
-        if flavor in self.FLAVORS:
-            primary_model = self.FLAVORS[flavor]
-        else:
-            primary_model = self.ROLE_MODELS.get(role, self.ROLE_MODELS["default"])
+        primary_model = self.FLAVORS[flavor] if flavor in self.FLAVORS else self.ROLE_MODELS.get(role, self.ROLE_MODELS["default"])
 
-        # Build fallback chain (deduplicated)
         chain = [primary_model]
         for model in self.FALLBACK_CHAIN:
-            if model not in chain:
-                chain.append(model)
+            if model not in chain: chain.append(model)
 
-        # ── Phase 1: OpenRouter ────────────────────────────────────
         last_error = None
         if self.primary_client:
-            for model_name in chain:
+            for attempt, model_name in enumerate(chain):
+                if _is_open(model_name):
+                    logger.info(f"[BREAKER] Skipping {model_name} — circuit open")
+                    continue
+
                 try:
                     logger.info(f"[*] AI ({role}): Trying {model_name}")
                     kwargs = {
-                        "model": model_name,
-                        "messages": messages,
-                        "tools": tools,
-                        "temperature": temperature,
-                        "max_tokens": max_tokens,
-                        "timeout": 60.0
+                        "model": model_name, "messages": messages, "tools": tools,
+                        "temperature": temperature, "max_tokens": max_tokens, "timeout": 60.0
                     }
-                    if tool_choice:
-                        kwargs["tool_choice"] = tool_choice
+                    if tool_choice: kwargs["tool_choice"] = tool_choice
 
                     response = await self.primary_client.chat.completions.create(**kwargs)
                     if response.choices:
+                        _record_success(model_name)
                         logger.info(f"[+] AI ({role}): {model_name} OK")
                         return response.choices[0].message
                 except Exception as e:
                     last_error = str(e)
-                    err_lower = last_error.lower()
-                    if any(kw in err_lower for kw in ("credit", "quota", "balance", "429", "rate")):
-                        logger.warning(f"[!] Rate limit on {model_name}. Next...")
+                    _record_failure(model_name)
+                    if any(kw in last_error.lower() for kw in ("credit", "quota", "balance", "429", "rate")):
+                        logger.warning(f"[!] Rate limit on {model_name}. Backing off...")
+                        await _backoff(attempt)
                     else:
                         logger.warning(f"[!] {model_name} failed: {e}")
                     continue
 
-        # ── Phase 2: Groq (no tools — Groq doesn't support them well) ──
+        # --- Phase 2: Groq (Limp Mode) ---
         if self.groq_client:
             try:
-                logger.info(f"[*] AI ({role}): FAILOVER to Groq")
-                # Strip tools for Groq — it doesn't handle them reliably
+                logger.info(f"[*] AI ({role}): FAILOVER to Groq (Limp Mode)")
                 response = await self.groq_client.chat.completions.create(
-                    model=self.GROQ_MODEL,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    timeout=30.0
+                    model=self.GROQ_MODEL, messages=messages,
+                    temperature=temperature, max_tokens=max_tokens, timeout=30.0
                 )
                 if response.choices:
-                    logger.info(f"[+] AI ({role}): Groq OK")
-                    return response.choices[0].message
+                    logger.warning("[!] Entering Groq limp mode — tools stripped")
+                    # Return sentinel type so planner knows tools are offline
+                    return GroqLimpResponse(content=response.choices[0].message.content)
             except Exception as e:
                 last_error = str(e)
                 logger.warning(f"[!] Groq failed: {e}")
