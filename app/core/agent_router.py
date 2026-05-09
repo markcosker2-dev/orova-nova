@@ -99,10 +99,17 @@ AGENTS = {
 }
 
 
-def classify_agent(task_description: str) -> str:
+# [P1] Agent Priority (Explicit Tie-breaker Order)
+AGENT_PRIORITY = ["nova", "hawk", "closer", "quill", "atlas", "oracle", "sentinel", "pixel", "echo", "viper"]
+
+
+def classify_agent(task_description: str) -> tuple[str, dict]:
     """
     Determine which agent should handle a task based on keyword matching.
-    Returns the agent ID.
+    [P1] FIXED: Implements deterministic tie-breaking and ambiguity detection.
+    
+    Returns:
+        tuple (agent_id, metadata)
     """
     task_lower = task_description.lower()
     scores = {}
@@ -112,10 +119,20 @@ def classify_agent(task_description: str) -> str:
         if score > 0:
             scores[agent_id] = score
 
+    # [P1] Ambiguity Check: No keywords matched
     if not scores:
-        return "nova"  # Default to CEO for unclassified tasks
+        logger.warning(f"[ROUTER] Zero-match intent for: {task_description[:50]}... Escalating to Nova.")
+        return "nova", {"ambiguous": True, "confidence": 0.0}
 
-    return max(scores, key=scores.get)
+    max_score = max(scores.values())
+    candidates = [a for a, s in scores.items() if s == max_score]
+
+    # [P1] Tie-breaker Logic: Use AGENT_PRIORITY order instead of dict-iterator luck
+    for preferred in AGENT_PRIORITY:
+        if preferred in candidates:
+            return preferred, {"ambiguous": len(candidates) > 1, "confidence": 1.0 / len(candidates)}
+
+    return candidates[0], {"ambiguous": len(candidates) > 1, "confidence": 1.0 / len(candidates)}
 
 
 def get_agent_info(agent_id: str) -> dict:
@@ -159,12 +176,12 @@ def dispatch_task(task_description: str) -> dict:
     Returns:
         dict with assigned_agent, agent_info, and recommended_skills
     """
-    agent_id = classify_agent(task_description)
+    agent_id, meta = classify_agent(task_description)
     agent = AGENTS[agent_id]
 
     update_agent_status(agent_id, "working", task_description[:80])
 
-    logger.info(f"[DISPATCH] Task routed to {agent['name']} ({agent['role']}): {task_description[:60]}...")
+    logger.info(f"[DISPATCH] Task routed to {agent['name']} (Conf: {meta['confidence']}): {task_description[:60]}...")
 
     return {
         "assigned_agent": agent_id,
@@ -173,6 +190,7 @@ def dispatch_task(task_description: str) -> dict:
         "department": agent["dept"],
         "recommended_skills": agent["skills"],
         "task": task_description,
+        "routing_metadata": meta
     }
 
 

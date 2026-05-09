@@ -147,17 +147,17 @@ PIPELINES = {
 # Global state for tracking running pipelines
 _active_pipelines = {}
 
+class PipelineStepResult:
+    """[P0] Container for step results to prevent poison propagation."""
+    def __init__(self, value, step_id, success=True):
+        self.value = value
+        self.step_id = step_id
+        self.success = success
 
 async def run_pipeline(pipeline_name: str, params: str = "") -> str:
     """
     Execute a multi-step pipeline by name.
-
-    Args:
-        pipeline_name: One of: full_outreach, morning_report, competitor_blitz, lead_enrich
-        params: Optional JSON string of parameter overrides
-
-    Returns:
-        Combined pipeline output report
+    [P0] HALT logic: Prevents failed step output from poisoning downstream steps.
     """
     pipeline = PIPELINES.get(pipeline_name)
     if not pipeline:
@@ -187,7 +187,8 @@ async def run_pipeline(pipeline_name: str, params: str = "") -> str:
     report += f"**Steps:** {len(pipeline['steps'])}\n"
     report += f"**Run ID:** `{run_id}`\n\n"
 
-    previous_output = ""
+    # [P0] Track the previous step's result as a structured object
+    previous: PipelineStepResult | None = None
 
     for i, step in enumerate(pipeline["steps"]):
         step_num = i + 1
@@ -197,34 +198,41 @@ async def run_pipeline(pipeline_name: str, params: str = "") -> str:
         report += f"## Step {step_num}/{len(pipeline['steps'])}: {step['name']}\n"
         report += f"*{step['description']}*\n\n"
 
+        # [P0] HALT CHECK: If the previous step failed, we MUST stop the pipeline
+        if step.get("uses_previous") and previous and not previous.success:
+            halt_reason = f"❌ **HALTED:** Upstream step '{previous.step_id}' failed. Downstream execution aborted to prevent data corruption."
+            report += f"{halt_reason}\n\n"
+            _active_pipelines[run_id]["status"] = "halted"
+            break
+
         try:
             # Build arguments
             args = {**step.get("default_args", {}), **overrides.get(step["id"], {})}
 
             # If step uses previous output, inject it
-            if step.get("uses_previous") and previous_output:
+            if step.get("uses_previous") and previous and previous.success:
+                prev_val = str(previous.value)
                 # Smart injection: use previous output as the primary argument
                 if "topic" in _get_skill_args(step["skill"]):
-                    args["topic"] = previous_output[:500]
+                    args["topic"] = prev_val[:500]
                 elif "query" in _get_skill_args(step["skill"]):
-                    args["query"] = previous_output[:200]
+                    args["query"] = prev_val[:200]
                 elif "url" in _get_skill_args(step["skill"]):
-                    # Extract first URL from previous output
                     import re
-                    urls = re.findall(r'https?://[^\s\)]+', previous_output)
-                    if urls:
-                        args["url"] = urls[0]
+                    urls = re.findall(r'https?://[^\s\)]+', prev_val)
+                    if urls: args["url"] = urls[0]
                 elif "prospect" in _get_skill_args(step["skill"]):
-                    args["prospect"] = previous_output[:300]
+                    args["prospect"] = prev_val[:300]
                 elif "companies" in _get_skill_args(step["skill"]):
-                    args["companies"] = previous_output[:300]
+                    args["companies"] = prev_val[:300]
 
             # Execute the skill
             result = await _execute_skill(step["skill"], args)
-            previous_output = str(result)
+            
+            # [P0] Wrap result in success container
+            previous = PipelineStepResult(result, step["id"], success=True)
 
             report += f"✅ **Completed**\n\n"
-            # Include truncated result
             result_preview = str(result)[:500]
             report += f"```\n{result_preview}\n```\n\n"
 
@@ -236,24 +244,28 @@ async def run_pipeline(pipeline_name: str, params: str = "") -> str:
 
         except Exception as e:
             logger.error(f"[PIPELINE] Step {step_num} failed: {e}")
-            report += f"❌ **Failed:** {str(e)}\n\n"
+            report += f"❌ **Step Failed:** {str(e)}\n\n"
+            # Mark as failure to trigger the Halt Check in the next iteration
+            previous = PipelineStepResult(str(e), step["id"], success=False)
+            
             _active_pipelines[run_id]["results"].append({
                 "step": step["id"],
                 "status": "error",
                 "error": str(e)
             })
-            # Continue to next step even on failure
 
-    # Mark complete
-    _active_pipelines[run_id]["status"] = "completed"
+    # Mark final status
+    if _active_pipelines[run_id]["status"] == "running":
+        _active_pipelines[run_id]["status"] = "completed"
+        
     _active_pipelines[run_id]["completed"] = datetime.now().isoformat()
 
     report += "---\n"
-    report += f"## ✅ Pipeline Complete\n"
+    report += f"## 🏁 Pipeline Result: {_active_pipelines[run_id]['status'].upper()}\n"
     successes = sum(1 for r in _active_pipelines[run_id]["results"] if r["status"] == "success")
-    report += f"**Results:** {successes}/{len(pipeline['steps'])} steps succeeded\n"
+    report += f"**Final Score:** {successes}/{len(pipeline['steps'])} steps succeeded\n"
 
-    logger.info(f"[PIPELINE] Completed: {pipeline['name']} ({successes}/{len(pipeline['steps'])} OK)")
+    logger.info(f"[PIPELINE] Finished: {pipeline['name']} Status: {_active_pipelines[run_id]['status']}")
     return report
 
 

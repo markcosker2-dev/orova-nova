@@ -16,6 +16,11 @@ class DatabaseManager:
     @staticmethod
     async def init_db():
         async with aiosqlite.connect(DB_PATH) as db:
+            # [P0] Enable WAL mode for concurrent read/write (Essential for multi-agent swarm)
+            await db.execute("PRAGMA journal_mode=WAL")
+            await db.execute("PRAGMA synchronous=NORMAL")
+            await db.execute("PRAGMA cache_size=-32000") # 32MB page cache
+            
             # Phase 10: Clients Table
             await db.execute('''
                 CREATE TABLE IF NOT EXISTS clients (
@@ -58,6 +63,12 @@ class DatabaseManager:
                     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
+            
+            # [P0] INDEXES: Prevent table scan slowdowns as leads grow
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status)")
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_leads_email ON leads(email)")
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_leads_client ON leads(client_id)")
+
             # Tasks
             await db.execute('''
                 CREATE TABLE IF NOT EXISTS tasks (
@@ -124,8 +135,23 @@ class DatabaseManager:
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
+            # Campaigns (For Email Drip Tracking)
+            await db.execute('''
+                CREATE TABLE IF NOT EXISTS campaigns (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    prospect_email TEXT,
+                    sequence_type TEXT,
+                    status TEXT DEFAULT 'active',
+                    stopped_reason TEXT,
+                    stopped_at DATETIME,
+                    client_id INTEGER DEFAULT 0,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_campaigns_email_status ON campaigns(prospect_email, status)")
+            
             await db.commit()
-            logger.info("[DB] Async SQLite initialized successfully.")
+            logger.info("[DB] Async SQLite initialized with WAL mode and indexes.")
 
     @staticmethod
     @asynccontextmanager
