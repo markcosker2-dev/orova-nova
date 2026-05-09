@@ -69,8 +69,8 @@ from app.skills.vault_skill import backup_database, restore_latest, vault_schedu
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # [P5/P6] Run migrations and optimizations
-    await run_phase5_migrations()
     await DatabaseManager.init_db()
+    await run_phase5_migrations()
     await AgentSoul.initialize()
     
     # [P6] Register SIGTERM for Render redeploys

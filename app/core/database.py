@@ -184,9 +184,17 @@ class DatabaseManager:
             await db.close()
 
     @staticmethod
-    async def query(sql, params=()):
+    async def query(sql, params=(), fetchone=False, fetchall=False):
         async with DatabaseManager.get_db() as db:
             cursor = await db.execute(sql, params)
+            if fetchone:
+                row = await cursor.fetchone()
+                await db.commit()
+                return row
+            if fetchall:
+                rows = await cursor.fetchall()
+                await db.commit()
+                return rows
             await db.commit()
             return cursor
 
