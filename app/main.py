@@ -168,7 +168,9 @@ async def process_telegram_message(data: dict):
 async def telegram_webhook(request: Request):
     """Ingest point for Telegram via Queue."""
     data = await request.json()
-    await tg_queue.put(data)
+    accepted = await tg_queue.enqueue(data)
+    if not accepted:
+        return JSONResponse(status_code=503, content={"status": "queue_full", "detail": "Server under heavy load, try again"})
     return {"status": "ok"}
 
 # --- Static Frontend ---
@@ -181,3 +183,4 @@ if __name__ == "__main__":
     # Use $PORT from environment, default to 18789
     port = int(os.environ.get("PORT", 18789))
     uvicorn.run("app.main:app", host="0.0.0.0", port=port)
+
