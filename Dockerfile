@@ -25,6 +25,8 @@ USER nova
 # Install dependencies (as nova user)
 COPY --chown=nova:nova requirements.txt .
 RUN pip install --no-cache-dir --user -r requirements.txt
+RUN pip install --no-cache-dir --user playwright
+RUN playwright install chromium
 
 # Copy application code
 COPY --chown=nova:nova . .
