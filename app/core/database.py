@@ -287,6 +287,17 @@ class DatabaseManager:
     async def get_metrics(client_id=0):
         row = await DatabaseManager.query("SELECT * FROM metrics WHERE client_id = ?", (int(client_id),), fetchone=True)
         return dict(row) if row else {}
+    @staticmethod
+    async def update_metrics(updates: dict, client_id: int = 0):
+        """Upsert metrics for a client."""
+        if not updates:
+            return
+        columns = list(updates.keys())
+        placeholders = ", ".join(["?"] * len(columns))
+        set_clause = ", ".join([col + "=excluded." + col for col in columns])
+        sql = "INSERT INTO metrics (client_id, " + ", ".join(columns) + ") VALUES (?, " + placeholders + ") ON CONFLICT(client_id) DO UPDATE SET " + set_clause
+        params = [client_id] + [updates[col] for col in columns]
+        await DatabaseManager.query(sql, params)
 
     @staticmethod
     async def get_leads(client_id=0):
