@@ -216,35 +216,6 @@ class DatabaseManager:
 
     # --- [P1] HARDENED ACCESSORS (Client Isolation) ---
 
-    @staticmethod
-    async def get_metrics(client_id: int):
-        assert client_id > 0, "Security: client_id must be > 0"
-        return await DatabaseManager.fetchone("SELECT * FROM metrics WHERE client_id = ?", (client_id,))
-
-    @staticmethod
-    async def get_leads(client_id: int):
-        assert client_id > 0, "Security: client_id must be > 0"
-        return await DatabaseManager.fetchall("SELECT * FROM leads WHERE client_id = ? ORDER BY created_at DESC", (client_id,))
-
-    @staticmethod
-    async def get_tasks(client_id: int):
-        assert client_id > 0, "Security: client_id must be > 0"
-        return await DatabaseManager.fetchall("SELECT * FROM tasks WHERE client_id = ?", (client_id,))
-
-    @staticmethod
-    async def get_content(client_id: int):
-        assert client_id > 0, "Security: client_id must be > 0"
-        return await DatabaseManager.fetchall("SELECT * FROM content WHERE client_id = ?", (client_id,))
-
-    @staticmethod
-    async def get_memories(client_id: int):
-        assert client_id > 0, "Security: client_id must be > 0"
-        return await DatabaseManager.fetchall("SELECT * FROM memories WHERE client_id = ?", (client_id,))
-
-    @staticmethod
-    async def get_chat_history(client_id: int):
-        # Allow 0 for global/system logs if needed, but restrict for production
-        return await DatabaseManager.fetchall("SELECT * FROM chat_history WHERE client_id = ? ORDER BY created_at ASC", (client_id,))
 
     @staticmethod
     async def set_state(key: str, value: str):
