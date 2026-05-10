@@ -289,14 +289,6 @@ async def run_reply_monitor(client_id=0):
 # When leads don't open/reply to emails after X days,
 # automatically escalate to phone call.
 # ═══════════════════════════════════════════════════════
-async def run_cold_lead_escalation():
-    """📞 Auto-escalate cold leads to Retell.AI phone calls."""
-    global daily_call_counter
-    _reset_daily_counters()
-
-    if daily_call_counter >= MAX_CALLS_PER_DAY:
-        logger.info("📞 [ESCALATION] Daily call limit reached. Skipping.")
-        return
 
 async def run_cold_lead_escalation(client_id=0):
     """📞 Identify leads that haven't replied and escalate to phone call."""
