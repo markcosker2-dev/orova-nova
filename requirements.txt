@@ -43,15 +43,6 @@ httpx
 nest-asyncio
 oauth2client
 
-# ── Mega-Claw Upgrades (Hermes Evolution) ────
-mem0ai
-crawl4ai
-browser-use
-composio-core
-composio-openai
-langchain-openai
-qdrant-client
-
 # ── Production-Grade Hardening (OROVA v1.0) ──
 apscheduler
 dnspython
