@@ -36,20 +36,6 @@ def estimate_cost(model: str, t_in: int, t_out: int) -> float:
     rates = MODEL_COSTS.get(model, MODEL_COSTS["__default__"])
     return round((t_in / 1e6) * rates[0] + (t_out / 1e6) * rates[1], 8)
 
-class UnifiedAIClient:
-    async def chat(self, messages, tools: Optional[List[Dict]] = None,
-                   client_id: int = 0, agent_id: str = "nova", **kwargs) -> Any:
-        # ... existing logic to get response ...
-        
-        # [P6] Log Usage
-        if hasattr(response, "usage") and response.usage:
-            t_in = response.usage.prompt_tokens
-            t_out = response.usage.completion_tokens
-            cost = estimate_cost(model_name, t_in, t_out)
-            from app.core.database import DatabaseManager
-            asyncio.create_task(DatabaseManager.log_usage(client_id, agent_id, model_name, t_in, t_out, cost))
-        
-        return response
 
 def _is_open(model_name: str) -> bool:
     provider = "openrouter" if "openrouter" in model_name or "/" in model_name else "groq"
