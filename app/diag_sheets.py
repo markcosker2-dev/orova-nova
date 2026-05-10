@@ -1,6 +1,6 @@
 import gspread
 import os
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 
 def diag():
     creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "/app/service_account.json")
@@ -8,7 +8,7 @@ def diag():
     
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     try:
-        creds = ServiceAccountCredentials.from_json_keyfile_name(creds_path, scope)
+        creds = Credentials.from_service_account_file(creds_path, scopes=scope)
         client = gspread.authorize(creds)
         print(f"DEBUG: Service Account Email: {creds.service_account_email}")
         

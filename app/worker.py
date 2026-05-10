@@ -9,7 +9,7 @@ import schedule
 import requests
 import json
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 from dotenv import load_dotenv
 
 # Add app path for imports
@@ -62,7 +62,7 @@ def _get_sheets_client():
     """Get authorized Google Sheets client."""
     creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "credentials.json")
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_name(creds_path, scope)
+    creds = Credentials.from_service_account_file(creds_path, scopes=scope)
     return gspread.authorize(creds)
 
 

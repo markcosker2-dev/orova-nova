@@ -1,11 +1,11 @@
 import gspread
 import os
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 
 def get_id():
     creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "/app/service_account.json")
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_name(creds_path, scope)
+    creds = Credentials.from_service_account_file(creds_path, scopes=scope)
     client = gspread.authorize(creds)
     
     sheet_name = "OROVA Leads" # The name from test_ceo.py
