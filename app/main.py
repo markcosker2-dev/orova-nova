@@ -6,6 +6,7 @@ import logging
 import asyncio
 import threading
 import time
+import httpx
 from typing import Optional
 from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -89,6 +90,18 @@ async def lifespan(app: FastAPI):
     scheduler = AsyncIOScheduler()
     scheduler.add_job(reinforcer.run_cycle, "interval", hours=6)
     scheduler.start()
+    # Keep-alive ping for Render free tier
+    keep_alive_url = os.getenv("RENDER_EXTERNAL_URL")
+    if keep_alive_url:
+        async def _ping():
+            while True:
+                try:
+                    async with httpx.AsyncClient() as client:
+                        await client.get(keep_alive_url, timeout=5)
+                except Exception:
+                    pass
+                await asyncio.sleep(60)
+        asyncio.create_task(_ping())
     
     logger.info("🚀 NOVA Gateway Online | Swarm Survivability Layer Active")
     yield
