@@ -7,6 +7,7 @@ from typing import List, Dict, Optional, Any
 from types import SimpleNamespace
 from collections import defaultdict
 from dataclasses import dataclass
+from app.core.database import DatabaseManager
 
 logger = logging.getLogger(__name__)
 
@@ -78,19 +79,13 @@ class UnifiedAIClient:
 
     FLAVOR_FILE = "app/data/model_flavor.json"
 
-    def _get_flavor(self) -> str:
-        try:
-            if os.path.exists(self.FLAVOR_FILE):
-                with open(self.FLAVOR_FILE, 'r') as f:
-                    return json.load(f).get("flavor", "fast")
-        except: pass
-        return "fast"
+    async def _get_flavor(self) -> str:
+        flavor = await DatabaseManager.get_state("model_flavor")
+        return flavor if flavor else "fast"
 
-    def _set_flavor(self, flavor: str):
+    async def _set_flavor(self, flavor: str):
         try:
-            os.makedirs(os.path.dirname(self.FLAVOR_FILE), exist_ok=True)
-            with open(self.FLAVOR_FILE, 'w') as f:
-                json.dump({"flavor": flavor}, f)
+            await DatabaseManager.set_state("model_flavor", flavor)
         except: pass
 
     # ── Role-Based Model Map ─────────
@@ -154,7 +149,7 @@ class UnifiedAIClient:
         if not self.primary_client and not self.groq_client:
             return SimpleNamespace(content="[!!] No AI providers available.", tool_calls=None)
 
-        flavor = self._get_flavor()
+        flavor = await self._get_flavor()
         primary_model = self.FLAVORS[flavor] if flavor in self.FLAVORS else self.ROLE_MODELS.get(role, self.ROLE_MODELS["default"])
 
         chain = [primary_model]
