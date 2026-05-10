@@ -75,3 +75,13 @@ async def search_and_elite_scrape(query: str):
     """Placeholder for combined search + elite scrape workflow."""
     # In a real integration, this would use DDG to find URLs and then Crawl4AI to rip them.
     pass
+
+async def cleanup_crawler():
+    """Close the global crawler on shutdown."""
+    global _crawler
+    if _crawler is not None:
+        try:
+            await _crawler.__aexit__(None, None, None)
+        except Exception:
+            pass
+        _crawler = None

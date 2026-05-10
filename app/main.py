@@ -66,6 +66,7 @@ async def require_client(x_client_id: Optional[str] = Header(None), client_id: O
 
 from app.core.database import run_phase5_migrations, register_sigterm_handler, get_usage_stats
 from app.skills.vault_skill import backup_database, restore_latest, vault_scheduler_loop
+from app.skills.crawl_skill import cleanup_crawler
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -92,6 +93,7 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 NOVA Gateway Online | Swarm Survivability Layer Active")
     yield
     await tg_queue.stop()
+    await cleanup_crawler()
     scheduler.shutdown()
 
 app = FastAPI(title="OROVA Indestructible Agency Bridge", lifespan=lifespan)
