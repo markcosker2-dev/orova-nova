@@ -660,32 +660,6 @@ def capture_video(url: str, duration: int = 10, output_path: str = None) -> Dict
     return loop.run_until_complete(capture_video_async(url, duration, output_path))
 
 
-def research_lead(url: str) -> Dict[str, Any]:
-    """
-    Synchronous wrapper for lead research.
-    Instantiates a BrowsingAgent and runs research.
-    """
-    async def _run():
-        async with BrowsingAgent() as agent:
-            return await agent.research_lead_async(url)
-            
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-    if loop.is_running():
-        try:
-            import nest_asyncio
-            nest_asyncio.apply()
-            return loop.run_until_complete(_run())
-        except ImportError:
-             # Fallback if nest_asyncio missing or fails
-             pass
-             
-    # New loop if needed
-    return asyncio.run(_run())
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
