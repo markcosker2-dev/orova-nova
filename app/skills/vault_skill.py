@@ -12,6 +12,7 @@ import shutil
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
+from app.core.database import DB_PATH
 
 # Note: These imports require google-api-python-client and google-auth
 try:
@@ -26,7 +27,6 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # ── Settings & Paths ──
-DB_PATH = Path("nova.db")
 BACKUP_PATH = Path("nova_backup.db")
 DRIVE_FOLDER = "OROVA_BACKUPS"
 BACKUP_PREFIX = "nova_backup_"
