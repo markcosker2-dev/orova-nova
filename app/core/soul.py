@@ -40,6 +40,7 @@ LIMP MODE ACTIVE. Constraints tighten:
 - Prioritize task completion over explanation.
 """
 
+BRAND_VOICE_BLOCK = "BRAND: OROVA. Voice: terse, high-status, zero filler. Never use 'certainly', 'absolutely', or 'as an AI'."
 # ── Voice QC Validator ────────────────────────────────────────────────────────
 AI_ISM_PATTERNS = [
     r"\bgreat\b", r"\babsolutely\b", r"\bcertainly\b", r"\bsure\b",
