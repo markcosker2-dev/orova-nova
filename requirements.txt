@@ -6,6 +6,9 @@ agentmail==0.4.15
 beautifulsoup4==4.12.3
 duckduckgo-search==8.1.1
 
+# Web framework (required by app/main.py)
+fastapi==0.104.1
+
 google-auth==2.29.0
 google-auth-oauthlib==1.2.1
 google-api-python-client==2.126.0
@@ -29,6 +32,7 @@ requests==2.31.0
 retell-sdk==4.1.0
 schedule==1.2.1
 tenacity==8.3.0
+apscheduler==3.10.4
 
 # Optional server tooling (not required for the built-in HTTPServer, but kept for dev)
 uvicorn==0.29.0
