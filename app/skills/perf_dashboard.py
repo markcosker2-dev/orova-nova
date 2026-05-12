@@ -74,34 +74,35 @@ async def generate_weekly_report() -> str:
     reply_rate = (m["replies_received"] / max(m["emails_sent"], 1)) * 100
     book_rate = (m["meetings_booked"] / max(m["replies_received"], 1)) * 100
 
+    # IMPORTANT: keep this report ASCII-only to avoid source-file encoding issues on Linux builders.
     report = f"""
-?? **OROVA CEO PULSE — Weekly Report**
-??????????????????????
-?? Week of: {m.get('week_start', today.strftime('%Y-%m-%d'))}
-? Generated: {today.strftime('%b %d, %Y %I:%M %p PT')}
+OROVA CEO PULSE - Weekly Report
+--------------------------------
+Week of:     {m.get('week_start', today.strftime('%Y-%m-%d'))}
+Generated:   {today.strftime('%b %d, %Y %I:%M %p')}
 
-?? **PIPELINE PERFORMANCE**
-+-----------------------------+
-¦ ?? Leads Found:      {m['leads_found']:>5} ¦
-¦ ?? Emails Sent:      {m['emails_sent']:>5} ¦
-¦ ?? Replies Received:  {m['replies_received']:>5} ¦
-¦ ?? Calls Made:        {m['calls_made']:>5} ¦
-¦ ?? Proposals Sent:    {m['proposals_sent']:>5} ¦
-¦ ?? Meetings Booked:   {m['meetings_booked']:>5} ¦
-¦ ?? Content Created:   {m['content_created']:>5} ¦
-+-----------------------------+
+PIPELINE PERFORMANCE
+--------------------------------
+Leads Found:        {m['leads_found']:>5}
+Emails Sent:        {m['emails_sent']:>5}
+Replies Received:   {m['replies_received']:>5}
+Calls Made:         {m['calls_made']:>5}
+Proposals Sent:     {m['proposals_sent']:>5}
+Meetings Booked:    {m['meetings_booked']:>5}
+Content Created:    {m['content_created']:>5}
 
-?? **CONVERSION RATES**
-• Email ? Reply:    {reply_rate:.1f}%
-• Reply ? Meeting:  {book_rate:.1f}%
+CONVERSION RATES
+--------------------------------
+Email -> Reply:     {reply_rate:.1f}%
+Reply -> Meeting:   {book_rate:.1f}%
 
-?? **AGENT STATUS**
-• Nova (CEO): ? Active — orchestrating all operations
-• Hawk (Lead Hunter): ? Active — hunting {m['leads_found']} leads
-• Quill (Content): ? Active — {m['content_created']} pieces created
-• Closer (Sales): ? Active — {m['proposals_sent']} proposals sent
-• Sentinel (Ops): ? Active — monitoring all systems
-??????????????????????
+AGENT STATUS
+--------------------------------
+Nova (CEO):     Active - orchestrating all operations
+Hawk (Leads):   Active - hunting {m['leads_found']} leads
+Quill (Content):Active - {m['content_created']} pieces created
+Closer (Sales): Active - {m['proposals_sent']} proposals sent
+Sentinel (Ops): Active - monitoring all systems
 """
     return report.strip()
 
