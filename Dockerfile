@@ -15,15 +15,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy app
 COPY app/ app/
-COPY smoke_test.py .
-COPY run.py .
+COPY mission-control/ mission-control/
 
 # Create dirs
-RUN mkdir -p /app/data /app/logs
+RUN mkdir -p /app/data /app/app/data /app/logs
 
 EXPOSE ${PORT:-10000}
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:${PORT:-10000}/health || exit 1
 
-CMD ["python", "run.py"]
+CMD ["python", "app/main.py"]
