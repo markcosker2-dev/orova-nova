@@ -44,3 +44,7 @@ python-dateutil==2.8.2
 tenacity==8.2.3
 yagmail==0.15.293
 
+# Database
+aiosqlite==0.20.0
+phonenumbers==8.13.42
+

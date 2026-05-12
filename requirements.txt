@@ -33,3 +33,7 @@ tenacity==8.3.0
 # Optional server tooling (not required for the built-in HTTPServer, but kept for dev)
 uvicorn==0.29.0
 yagmail==0.15.293
+
+# Database dependencies (required by app/core/database.py)
+aiosqlite==0.20.0
+phonenumbers==8.13.42
