@@ -1,0 +1,27 @@
+{
+  "tenant_id": "car_dealer",
+  "name": "Luxury Car Dealers",
+  "niche": "Ferrari/Porsche dealerships",
+  "scraping_params": {
+    "keywords": ["luxury car dealer", "ferrari dealership", "porsche dealer"],
+    "locations": ["Los Angeles", "Miami", "New York"],
+    "luxury_alignment_threshold": 85
+  },
+  "meta_ads_config": {
+    "target_audience": "High-net-worth individuals",
+    "budget_daily": 100,
+    "roas_threshold": 2.0
+  },
+  "wise_bank_details": {
+    "usd_account": "USD account details here",
+    "eur_account": "EUR account details here"
+  },
+  "google_sheets": {
+    "master_sheet_id": "your_google_sheet_id_here",
+    "tabs": {
+      "hunt": "HUNT",
+      "war_room": "WAR-ROOM",
+      "cash": "CASH"
+    }
+  }
+}

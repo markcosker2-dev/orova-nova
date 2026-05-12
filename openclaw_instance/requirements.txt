@@ -1,0 +1,46 @@
+# OpenClaw / OROVA (Render-friendly) dependencies
+# Keep this file lean for low-memory deploy targets.
+# Heavy/optional deps are moved to requirements-mega.txt.
+
+pydantic>=2.12.0
+pydantic-settings>=2.1.0
+python-dotenv==0.21.0
+python-multipart==0.0.6
+
+# Telegram Bot
+python-telegram-bot>=20.8
+
+# AI Providers
+openai==1.55.0
+groq==0.11.0
+google-genai==0.3.0
+
+# Retell AI
+retell-sdk==4.1.0
+
+# Web Search / HTTP
+duckduckgo-search==8.1.1
+beautifulsoup4==4.12.3
+httpx==0.27.0
+requests==2.31.0
+agentmail==0.4.15
+
+# PDF Generation
+reportlab==4.2.0
+
+# Google Integration
+google-auth==2.25.2
+google-auth-oauthlib==1.2.0
+google-api-python-client==2.111.0
+gspread==5.12.4
+email-validator==2.1.0
+
+# Scheduling / Utils
+schedule==1.2.1
+pytz==2023.3.post1
+aiohttp==3.9.1
+nest-asyncio==1.5.8
+python-dateutil==2.8.2
+tenacity==8.2.3
+yagmail==0.15.293
+

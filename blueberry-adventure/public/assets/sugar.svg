@@ -1,0 +1,6 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <path d="M24,80 C24,110 104,110 104,80 L104,50 L24,50 Z" fill="#fab1a0" stroke="#e17055" stroke-width="4" />
+  <path d="M24,50 C24,30 104,30 104,50" fill="#ff7675" stroke="#e17055" stroke-width="4" />
+  <circle cx="64" cy="30" r="10" fill="#e17055" />
+  <text x="64" y="85" font-family="Arial" font-size="18" text-anchor="middle" fill="#fff" font-weight="bold">SUGAR</text>
+</svg>

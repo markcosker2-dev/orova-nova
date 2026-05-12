@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: orova-nova
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: PYTHONPATH
+        value: "/app"
+      # Add your secrets in Render dashboard, NOT here:
+      # TELEGRAM_BOT_TOKEN
+      # OPENROUTER_API_KEY
+      # MIMO_API_KEY
+      # MIMO_BASE_URL
+      # MIMO_MODEL
+      # OPENAI_API_KEY
+      # GROQ_API_KEY
+      # RETELL_API_KEY
+      # RETELL_AGENT_ID
+      # RETELL_FROM_NUMBER
+      # AGENTMAIL_API_KEY
+      # OROVA_API_KEY

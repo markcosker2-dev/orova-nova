@@ -1,0 +1,67 @@
+# Shield-OROVA Model Configuration
+# Zero-downtime model updates without code changes
+# Loaded automatically on startup, supports hot reload
+
+fallback_sequence:
+  - groq
+  - openrouter
+  - gemini
+  - deepseek
+  - local
+
+providers:
+  groq:
+    name: "Groq"
+    base_url: "https://api.groq.com/openai/v1"
+    cost_per_1k: 0.0
+    models:
+      default: "llama-3.3-70b-versatile"
+      fast: "llama-3.1-8b-instant"
+      reasoning: "qwen-2.5-coder-32b"
+
+  openrouter:
+    name: "OpenRouter"
+    base_url: "https://openrouter.ai/api/v1"
+    cost_per_1k: 0.0
+    models:
+      default: "google/gemini-2.0-flash-lite-preview-02-05:free"
+      vision: "openai/gpt-4o-mini"
+      reasoning: "anthropic/claude-3-haiku"
+
+  gemini:
+    name: "Google Gemini"
+    base_url: "https://generativelanguage.googleapis.com/v1beta"
+    cost_per_1k: 0.0
+    models:
+      default: "gemini-2.0-flash"
+      long: "gemini-2.0-flash-001"
+
+  deepseek:
+    name: "DeepSeek"
+    base_url: "https://api.deepseek.com/v1"
+    cost_per_1k: 0.0014
+    models:
+      default: "deepseek-chat"
+      reasoning: "deepseek-reasoner"
+
+  openai:
+    name: "OpenAI"
+    base_url: "https://api.openai.com/v1"
+    cost_per_1k: 0.0015
+    models:
+      default: "gpt-4o-mini"
+      long: "gpt-4o"
+
+  mimo:
+    name: "MiMo v2 Pro"
+    base_url: "https://api.kilocode.ai/v1"
+    cost_per_1k: 0.0
+    models:
+      default: "MiMo/v2-pro"
+
+settings:
+  auto_reload: true
+  reload_interval: 300
+  max_retries_per_provider: 1
+  default_max_tokens: 4096
+  default_temperature: 0.7

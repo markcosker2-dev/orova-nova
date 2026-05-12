@@ -1,0 +1,35 @@
+# OROVA (Render-friendly) dependencies
+# Keep this file lean for low-memory deploy targets.
+# Heavy/optional scraping deps are moved to requirements-mega.txt.
+
+agentmail==0.4.15
+beautifulsoup4==4.12.3
+duckduckgo-search==8.1.1
+
+google-auth==2.29.0
+google-auth-oauthlib==1.2.1
+google-api-python-client==2.126.0
+google-generativeai==0.8.3
+gspread==6.1.0
+
+httpx==0.26.0
+nest-asyncio==1.6.0
+openai==1.51.0
+redis==5.0.8
+
+python-telegram-bot==20.8
+python-dotenv==0.21.0
+python-multipart==0.0.6
+pydantic==2.13.0
+pydantic-settings==2.13.0
+pytz==2024.1
+
+reportlab==4.2.0
+requests==2.31.0
+retell-sdk==4.1.0
+schedule==1.2.1
+tenacity==8.3.0
+
+# Optional server tooling (not required for the built-in HTTPServer, but kept for dev)
+uvicorn==0.29.0
+yagmail==0.15.293

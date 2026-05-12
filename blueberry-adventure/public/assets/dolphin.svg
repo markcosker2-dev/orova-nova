@@ -1,0 +1,14 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="dolphinGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#81ecec;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#00cec9;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <!-- Dolphin Body -->
+  <path d="M110,60 C110,35 90,15 60,15 C30,15 10,40 10,60 C10,75 25,85 40,85 L20,110 L50,100 C60,110 80,110 90,100 L115,115 L105,90 C115,85 125,75 110,60 Z" fill="url(#dolphinGrad)" />
+  <!-- Eye -->
+  <circle cx="95" cy="50" r="4" fill="#2d3436" />
+  <!-- Fin -->
+  <path d="M60,15 L75,5 L85,15 Z" fill="#00b894" opacity="0.8" />
+</svg>

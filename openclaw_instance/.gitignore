@@ -1,0 +1,57 @@
+# Secrets
+.env
+.env.bak
+service_account.json
+*.pem
+
+# Data & Logs (created at runtime)
+data/
+logs/
+*.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Legacy/Debug/Test files (not needed for deployment)
+agent_status.json
+notifications.json
+*.png
+bundle_audit.ps1
+bundle_code.py
+check_header.py
+Claude_Export.md
+debug_google.py
+diagnose_ai.py
+FULL_CODE_EXPORT.md
+hello_world_scrape.py
+list_sheets.py
+ORACLE_CLOUD_DEPLOY.md
+OROVA_AUDIT_PACKAGE.md
+probe_nvidia.py
+reproduce_issue.py
+reproduce_search_issue.py
+sanity_check_sheets.py
+start_nova_local.bat
+start_nova.bat
+test_*.py
+USER.md
+verify_agent.py
+verify_mimo.py
+tools/
+arsenal/
+legacy_backup/
+legacy_skills/
+mission-control/
+orova_worker.service
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,5 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <rect x="16" y="44" width="96" height="40" fill="#ffe66d" stroke="#e1b12c" stroke-width="4" />
+  <path d="M16,44 L30,30 L112,30 L112,70 L98,84" fill="#fff200" opacity="0.5" />
+  <text x="64" y="72" font-family="Arial" font-size="16" text-anchor="middle" fill="#2d3436" font-weight="bold">BUTTER</text>
+</svg>

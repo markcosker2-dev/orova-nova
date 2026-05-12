@@ -1,0 +1,12 @@
+{
+    "sender_name": "Mark",
+    "agency_name": "OROVA",
+    "value_proposition": "bringing you qualified luxury buyers and sellers on autopilot, no cold calling needed",
+    "tone": "professional yet warm, high-status, concise",
+    "subject_patterns": [
+        "saw your listing",
+        "idea for your pipeline",
+        "question about {business}",
+        "your market area"
+    ]
+}

@@ -1,0 +1,5 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <rect x="24" y="32" width="80" height="80" rx="10" fill="#f5f6fa" stroke="#bdc3c7" stroke-width="4" />
+  <path d="M24,40 C24,30 40,20 64,20 C88,20 104,30 104,40" fill="none" stroke="#bdc3c7" stroke-width="4" />
+  <text x="64" y="85" font-family="Arial" font-size="18" text-anchor="middle" fill="#2d3436" font-weight="bold">FLOUR</text>
+</svg>

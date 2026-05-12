@@ -1,0 +1,12 @@
+{
+    "sender_name": "Mark",
+    "agency_name": "OROVA",
+    "value_proposition": "keeping your project pipeline full with qualified homeowners ready to invest $50K+ in their dream renovation",
+    "tone": "direct, professional, builder-to-builder respect",
+    "subject_patterns": [
+        "your renovation work",
+        "idea for {business}",
+        "question about your projects",
+        "saw your portfolio"
+    ]
+}

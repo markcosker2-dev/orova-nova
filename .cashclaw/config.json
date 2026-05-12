@@ -1,0 +1,45 @@
+{
+  "agent": {
+    "name": "OROVA CashClaw Agent",
+    "description": "Luxury niche lead generation and business operations",
+    "version": "1.0.0"
+  },
+  "stripe": {
+    "enabled": false,
+    "api_key": null,
+    "webhook_secret": null
+  },
+  "wise": {
+    "enabled": true,
+    "usd_account": "USD account details here",
+    "eur_account": "EUR account details here"
+  },
+  "hyrve": {
+    "enabled": false,
+    "api_key": null,
+    "agent_id": null
+  },
+  "services": {
+    "seo_audit": true,
+    "content_writer": true,
+    "lead_generator": true,
+    "email_outreach": true,
+    "competitor_analyzer": true,
+    "data_scraper": true,
+    "landing_page": true,
+    "reputation_manager": true
+  },
+  "pricing": {
+    "seo_audit_standard": 29,
+    "lead_generation_50": 15,
+    "content_1500w": 12,
+    "email_outreach_3seq": 9
+  },
+  "tenants": {
+    "car_dealer": {
+      "niche": "luxury automotive",
+      "scraping_enabled": true,
+      "sheets_sync": true
+    }
+  }
+}

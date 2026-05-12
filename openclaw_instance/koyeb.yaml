@@ -1,0 +1,28 @@
+# koyeb.yaml — Koyeb deployment config
+# Deploy: push to GitHub, connect Koyeb, auto-deploys
+
+name: orova-nova
+services:
+  - name: orova
+    type: web
+    instance_type: nano
+    ports:
+      - port: 7860
+        protocol: http
+    routes:
+      - path: /
+    health_check:
+      http_get:
+        path: /health
+        port: 7860
+      interval: 30
+    env:
+      - key: PORT
+        value: "7860"
+      - key: PYTHONPATH
+        value: "/app"
+    # Set your secrets in Koyeb dashboard, not here:
+    # TELEGRAM_BOT_TOKEN
+    # MIMO_API_KEY
+    # RETELL_API_KEY
+    # etc.

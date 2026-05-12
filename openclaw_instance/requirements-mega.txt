@@ -1,0 +1,22 @@
+# Heavy / optional dependencies (local or beefy servers)
+# Install with: pip install -r requirements.txt -r requirements-mega.txt
+
+# Web server framework (optional; not required for the built-in HTTPServer)
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# Stealth scraping / browser automation
+playwright>=1.40.0
+lxml>=5.3.0
+scrapling==0.2.95
+
+# Meta Ads
+facebook-business==20.0.0
+
+# Research tooling
+tavily-python==0.3.1
+
+# Data / analytics
+pandas==2.1.4
+plotly==5.18.0
+chromadb==0.4.24

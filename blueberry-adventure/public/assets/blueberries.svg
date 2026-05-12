@@ -1,0 +1,11 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="64" cy="80" r="45" fill="#4834d4" opacity="0.3" />
+  <g fill="#0652DD">
+    <circle cx="44" cy="64" r="15" />
+    <circle cx="84" cy="64" r="15" />
+    <circle cx="64" cy="50" r="15" />
+    <circle cx="50" cy="84" r="15" />
+    <circle cx="78" cy="84" r="15" />
+  </g>
+  <text x="64" y="115" font-family="Arial" font-size="14" text-anchor="middle" fill="#2d3436" font-weight="bold">BLUEBERRIES</text>
+</svg>

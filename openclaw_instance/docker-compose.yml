@@ -1,0 +1,19 @@
+services:
+  openclaw-python:
+    build: .
+    container_name: openclaw-python-engine
+    restart: unless-stopped
+    env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8000:8000"
+      - "8080:8080"
+    volumes:
+      - .:/app
+      - ../Core_Engine:/app/Core_Engine
+      - ../Niche_Verticals:/app/Niche_Verticals
+      - ../Client_Data:/app/Client_Data
+      - ../mission-control:/app/mission-control
+    environment:
+      - PYTHONUNBUFFERED=1
