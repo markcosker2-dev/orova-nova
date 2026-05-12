@@ -1,106 +1,102 @@
+# -*- coding: utf-8 -*-
 """
-Core_Engine/crm_sync.py
-Fixed version — uses google-auth instead of deprecated oauth2client,
-adds two-way sync (pull updates from sheet back into SQLite).
+OROVA Core Engine — CRM Sync
+Extracted from worker.py. Syncs leads to Google Sheets per vertical.
 """
 
+import os
+import json
 import logging
-from typing import List, Dict, Any
-
+import requests
 import gspread
-from google.oauth2.service_account import Credentials
 
-from .db_manager import DatabaseManager
-
-logger = logging.getLogger("nova.crm")
-
-SCOPES = [
-    "https://spreadsheets.google.com/feeds",
-    "https://www.googleapis.com/auth/drive",
-    "https://www.googleapis.com/auth/spreadsheets",
-]
-
-HEADERS = ["ID", "Business", "Contact", "Phone", "Email", "Website", "Vertical", "Score", "Status"]
+logger = logging.getLogger(__name__)
 
 
 class CRMSync:
-    """Synchronises SQLite lead data with Google Sheets (both directions)."""
+    """Sync leads to Google Sheets / CRM. One sheet per vertical."""
 
-    def __init__(self, sheet_id: str, credentials_file: str = "service_account.json"):
-        self.sheet_id = sheet_id
-        self.db = DatabaseManager()
+    def __init__(self, vertical_name: str = None):
+        self.vertical_name = vertical_name
+        self.creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "service_account.json")
+        self.client = None
+        self._connect()
+
+    def _connect(self):
+        """Authenticate with Google Sheets."""
+        try:
+            self.client = gspread.service_account(filename=self.creds_path)
+            logger.info("CRM: Connected to Google Sheets")
+        except Exception as e:
+            logger.error(f"CRM: Connection failed: {e}")
+
+    def get_sheet(self, sheet_name: str = None):
+        """Get or create a sheet for the vertical."""
+        if not self.client:
+            return None
+
+        if sheet_name is None:
+            sheet_name = f"OROVA Leads - {self.vertical_name}" if self.vertical_name else "OROVA Leads"
 
         try:
-            creds = Credentials.from_service_account_file(credentials_file, scopes=SCOPES)
-            gc = gspread.authorize(creds)
-            self.sheet = gc.open_by_key(sheet_id).sheet1
-            logger.info(f"[CRM] Connected to sheet: {sheet_id}")
-        except FileNotFoundError:
-            logger.error(f"[CRM] service_account.json not found — CRM sync disabled")
-            self.sheet = None
-        except Exception as e:
-            logger.error(f"[CRM] Failed to connect to Google Sheets: {e}")
-            self.sheet = None
+            spreadsheet = self.client.open(sheet_name)
+            return spreadsheet.sheet1
+        except gspread.SpreadsheetNotFound:
+            logger.warning(f"Sheet '{sheet_name}' not found.")
+            return None
 
-    def _check_sheet(self):
-        if not self.sheet:
-            raise RuntimeError("Google Sheets not connected. Check service_account.json and CRM_SHEET_ID.")
+    def push_leads(self, leads: list, sheet_name: str = None):
+        """Push a list of lead dicts to Google Sheets."""
+        sheet = self.get_sheet(sheet_name)
+        if not sheet:
+            return False
 
-    def sync_leads_to_sheet(self, client_id: int = 0):
-        """Push all leads from SQLite → Google Sheets. Clears sheet first."""
-        self._check_sheet()
-        leads = self.db.get_all_leads(client_id)
-        logger.info(f"[CRM] Syncing {len(leads)} leads to Google Sheets")
+        headers = sheet.row_values(1)
+        if not headers:
+            # Initialize headers from first lead
+            if leads:
+                headers = list(leads[0].keys())
+                sheet.append_row(headers)
 
-        self.sheet.clear()
-        self.sheet.append_row(HEADERS)
-
-        rows = []
         for lead in leads:
-            rows.append([
-                lead.get("id", ""),
-                lead.get("business", ""),
-                lead.get("contact", ""),
-                lead.get("phone", ""),
-                lead.get("email", ""),
-                lead.get("website", ""),
-                lead.get("vertical", ""),
-                lead.get("score", 0),
-                lead.get("status", "New"),
-            ])
+            row = [str(lead.get(h, "")) for h in headers]
+            sheet.append_row(row)
 
-        if rows:
-            self.sheet.append_rows(rows, value_input_option="USER_ENTERED")
+        logger.info(f"Pushed {len(leads)} leads to '{sheet_name or 'default'}'")
+        return True
 
-        logger.info(f"[CRM] ✅ Synced {len(rows)} rows to Google Sheets")
+    def get_leads_by_status(self, status: str, sheet_name: str = None) -> list:
+        """Get all leads with a specific status."""
+        sheet = self.get_sheet(sheet_name)
+        if not sheet:
+            return []
 
-    def sync_sheet_to_leads(self) -> int:
-        """
-        Pull status updates from Google Sheets back into SQLite.
-        Only the Status column is synced back (don't overwrite scores etc.).
-        Returns the count of records updated.
-        """
-        self._check_sheet()
-        rows = self.sheet.get_all_records()
-        updated = 0
+        rows = sheet.get_all_records()
+        return [r for r in rows if r.get("Status", "") == status]
 
-        for row in rows:
-            lead_id = row.get("ID")
-            new_status = row.get("Status", "").strip()
+    def update_status(self, row_index: int, new_status: str, sheet_name: str = None):
+        """Update lead status in the sheet."""
+        sheet = self.get_sheet(sheet_name)
+        if not sheet:
+            return
 
-            if not lead_id or not new_status:
-                continue
+        headers = sheet.row_values(1)
+        status_col = headers.index("Status") + 1 if "Status" in headers else 8
+        sheet.update_cell(row_index, status_col, new_status)
 
-            try:
-                lead_id = int(lead_id)
-                existing = self.db.get_lead(lead_id)
-                if existing and existing.get("status") != new_status:
-                    self.db.update_lead_status(lead_id, new_status)
-                    logger.info(f"[CRM] Lead {lead_id} status updated from sheet: {new_status}")
-                    updated += 1
-            except (ValueError, TypeError) as e:
-                logger.debug(f"[CRM] Skipping invalid row: {e}")
-                continue
+    def send_telegram_report(self, message: str):
+        """Send a report to Telegram (CEO notification)."""
+        token = os.getenv("TELEGRAM_BOT_TOKEN")
+        chat_id = os.getenv("PERSONAL_CHAT_ID")
+        if not token or not chat_id:
+            return
 
-        logger.info(f"[CRM] Pulled {updated} status updates from Google Sheets")
-        return updated
+        try:
+            url = f"https://api.telegram.org/bot{token}/sendMessage"
+            requests.post(url, data={
+                "chat_id": chat_id,
+                "text": message,
+                "parse_mode": "Markdown"
+            })
+        except Exception as e:
+            logger.error(f"Telegram report failed: {e}")

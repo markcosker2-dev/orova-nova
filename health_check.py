@@ -35,10 +35,7 @@ async def check_connectivity():
     else:
         try:
             import gspread
-            from oauth2client.service_account import ServiceAccountCredentials
-            scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-            creds = ServiceAccountCredentials.from_json_keyfile_name(sheets_creds, scope)
-            client = gspread.authorize(creds)
+            client = gspread.service_account(filename=sheets_creds)
             # Try to list sheets
             sheets = client.openall()
             print(f"[+] Google Sheets: Connected (Found {len(sheets)} sheets)")

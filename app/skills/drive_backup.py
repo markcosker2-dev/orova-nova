@@ -4,7 +4,13 @@ import time
 import shutil
 import logging
 import requests
-from oauth2client.service_account import ServiceAccountCredentials
+import json
+try:
+    from google.oauth2.service_account import Credentials as ServiceAccountCredentials
+    from google.auth.transport.requests import Request as AuthRequest
+    HAS_GOOGLE_AUTH = True
+except ImportError:
+    HAS_GOOGLE_AUTH = False
 
 logger = logging.getLogger(__name__)
 
@@ -13,21 +19,17 @@ SCOPES = ["https://www.googleapis.com/auth/drive"]
 BACKUP_FILENAME = "orova_cloud_backup.db"
 
 def _get_access_token():
-    import base64
-    import json
-    creds_b64 = os.getenv("GOOGLE_CREDENTIALS_JSON")
-    
+    if not HAS_GOOGLE_AUTH:
+        logger.warning("[DRIVE BACKUP] google-auth not installed. Skipping.")
+        return None
+    creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "credentials.json")
+    if not os.path.exists(creds_path):
+        return None
     try:
-        if creds_b64:
-            creds_dict = json.loads(base64.b64decode(creds_b64).decode("utf-8"))
-            creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, SCOPES)
-        else:
-            creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "credentials.json")
-            if not os.path.exists(creds_path):
-                return None
-            creds = ServiceAccountCredentials.from_json_keyfile_name(creds_path, SCOPES)
-            
-        return creds.get_access_token().access_token
+        # Service account credentials do not necessarily have a token until refreshed.
+        creds = ServiceAccountCredentials.from_service_account_file(creds_path, scopes=SCOPES)
+        creds.refresh(AuthRequest())
+        return creds.token
     except Exception as e:
         logger.error(f"[DRIVE BACKUP] Failed to get OAuth token: {e}")
         return None
@@ -54,6 +56,7 @@ def upload_database(db_path: str):
         return
 
     if not os.path.exists(db_path):
+        logger.warning(f"⚠️ Cloud Backup skipped — DB not found: {db_path}")
         return
 
     # Create safe copy to upload (avoids SQLite lock)
@@ -80,9 +83,8 @@ def upload_database(db_path: str):
                 'metadata': ('', json.dumps(metadata), 'application/json'),
                 'file': (BACKUP_FILENAME, file_data, 'application/octet-stream')
             }
-            # Needs requests to handle multipart format correctly
-            import json
-            
+            # requests' multipart helpers don't work with Drive's multipart/related easily;
+            # send the multipart/related body explicitly.
             boundary = '-------314159265358979323846'
             body = (
                 f"--{boundary}\r\n"
@@ -102,6 +104,10 @@ def upload_database(db_path: str):
     finally:
         if os.path.exists(backup_path):
             os.remove(backup_path)
+
+def backup_database(db_path: str):
+    """Backwards-compatible alias used by app.main shutdown hook."""
+    return upload_database(db_path)
 
 def restore_database(db_path: str) -> bool:
     """Download database from Drive if local doesn't exist or is empty."""

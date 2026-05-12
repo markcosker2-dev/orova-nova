@@ -1,427 +1,385 @@
-# pyrefly: ignore [missing-import]
-import aiosqlite
 import os
 import logging
-from contextlib import asynccontextmanager
+import time
+import threading
+import queue
+import atexit
+from typing import Dict, List, Optional, Any
+
+# Canonical data/DB paths (importable by other modules)
+# NOTE: keep DB on the DATA_DIR so Render disk mounts (or any persistent volume) can target one directory.
+DEFAULT_DATA_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # .../app
+DATA_DIR = os.getenv("DATA_DIR", DEFAULT_DATA_DIR)
+os.makedirs(DATA_DIR, exist_ok=True)
+DB_PATH = os.path.join(DATA_DIR, "orova.db")
 
 logger = logging.getLogger(__name__)
 
-# Data directory mounted from Docker Volume
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "app", "data")
-os.makedirs(DATA_DIR, exist_ok=True)
-DB_PATH = os.environ.get("DATABASE_URL", f"sqlite+aiosqlite:///{DATA_DIR}/orova_v5.db").replace("sqlite+aiosqlite:///", "")
-
-# ── [P6] ECONOMICS SCHEMA ──
-USAGE_LOGS_DDL = """
-CREATE TABLE IF NOT EXISTS usage_logs (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
-    client_id   INTEGER NOT NULL DEFAULT 0,
-    agent_id    TEXT NOT NULL,
-    model       TEXT,
-    tokens_in   INTEGER DEFAULT 0,
-    tokens_out  INTEGER DEFAULT 0,
-    cost_est    REAL DEFAULT 0.0
-);
-"""
-
+# FREE Database Manager - Redis Primary, SQLite Fallback
 class DatabaseManager:
-    """Async SQLite storage for OROVA Mission Control."""
-    
-    @staticmethod
-    async def init_db():
-        async with aiosqlite.connect(DB_PATH) as db:
-            # [P0] Enable WAL mode for concurrent read/write (Essential for multi-agent swarm)
-            await db.execute("PRAGMA journal_mode=WAL")
-            await db.execute("PRAGMA synchronous=NORMAL")
-            await db.execute("PRAGMA cache_size=-32000") # 32MB page cache
-            
-            # Phase 10: Clients Table
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS clients (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    business_name TEXT,
-                    niche TEXT,
-                    target_location TEXT,
-                    is_active BOOLEAN DEFAULT 1
-                )
-            ''')
-            # Metrics
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS metrics (
-                    client_id INTEGER PRIMARY KEY DEFAULT 0,
-                    leads_found INTEGER DEFAULT 0,
-                    emails_sent INTEGER DEFAULT 0,
-                    replies_received INTEGER DEFAULT 0,
-                    meetings_booked INTEGER DEFAULT 0,
-                    calls_made INTEGER DEFAULT 0,
-                    proposals_sent INTEGER DEFAULT 0
-                )
-            ''')
-            await db.execute("INSERT OR IGNORE INTO metrics (client_id) VALUES (0)")
-            
-            # Leads Table
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS leads (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    business TEXT,
-                    url TEXT,
-                    contact TEXT,
-                    phone TEXT,
-                    email TEXT,
-                    vertical TEXT,
-                    score INTEGER DEFAULT 0,
-                    status TEXT DEFAULT 'New',
-                    notes TEXT,
-                    client_id INTEGER DEFAULT 0,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            
-            # [P0] INDEXES: Prevent table scan slowdowns as leads grow
-            await db.execute("CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status)")
-            await db.execute("CREATE INDEX IF NOT EXISTS idx_leads_email ON leads(email)")
-            await db.execute("CREATE INDEX IF NOT EXISTS idx_leads_client ON leads(client_id)")
+    """FREE Database Manager — Upstash Redis Primary, SQLite Fallback."""
 
-            # Tasks
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS tasks (
-                    id TEXT PRIMARY KEY,
-                    title TEXT,
-                    description TEXT,
-                    assignee TEXT,
-                    priority TEXT,
-                    status TEXT,
-                    client_id INTEGER DEFAULT 0,
-                    due TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            # Memories (Wiki)
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS memories (
-                    id TEXT PRIMARY KEY,
-                    category TEXT,
-                    content TEXT,
-                    client_id INTEGER DEFAULT 0,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            # State Table (NEW for Soul/UUID)
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS system_state (
-                    key TEXT PRIMARY KEY,
-                    value TEXT,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            # Chat History
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS chat_history (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    role TEXT,
-                    content TEXT,
-                    client_id INTEGER DEFAULT 0,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            # Learned Patterns (Hermes Evolution)
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS learned_patterns (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    task_type TEXT,
-                    winning_approach TEXT,
-                    success_metric INTEGER DEFAULT 1,
-                    client_id INTEGER NOT NULL DEFAULT 0,
-                    last_used_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    decay_score REAL DEFAULT 1.0,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            await db.execute("CREATE INDEX IF NOT EXISTS idx_patterns_client ON learned_patterns(client_id)")
-            
-            # Content
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS content (
-                    id TEXT PRIMARY KEY,
-                    title TEXT,
-                    body TEXT,
-                    type TEXT,
-                    status TEXT,
-                    client_id INTEGER DEFAULT 0,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            # Campaigns (For Email Drip Tracking)
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS campaigns (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    prospect_email TEXT,
-                    sequence_type TEXT,
-                    status TEXT DEFAULT 'active',
-                    stopped_reason TEXT,
-                    stopped_at DATETIME,
-                    client_id INTEGER DEFAULT 0,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            await db.execute("CREATE INDEX IF NOT EXISTS idx_campaigns_email_status ON campaigns(prospect_email, status)")
-            
-            await db.commit()
-            logger.info("[DB] Async SQLite initialized with WAL mode, indexes, and Evolution schema.")
+    _redis_manager = None
+    _sqlite_fallback = None
+    _use_redis = True
 
-    @staticmethod
-    @asynccontextmanager
-    async def get_db():
-        db = await aiosqlite.connect(DB_PATH)
-        db.row_factory = aiosqlite.Row
+    @classmethod
+    def init_db(cls):
+        """Initialize FREE database system."""
+        # Try Redis first (FREE Upstash)
         try:
-            yield db
-        finally:
-            await db.close()
-
-    @staticmethod
-    async def query(sql, params=(), fetchone=False, fetchall=False):
-        async with DatabaseManager.get_db() as db:
-            cursor = await db.execute(sql, params)
-            if fetchone:
-                row = await cursor.fetchone()
-                await db.commit()
-                return row
-            if fetchall:
-                rows = await cursor.fetchall()
-                await db.commit()
-                return rows
-            await db.commit()
-            return cursor
-
-    @staticmethod
-    async def fetchall(sql, params=()):
-        async with DatabaseManager.get_db() as db:
-            db.row_factory = aiosqlite.Row
-            cursor = await db.execute(sql, params)
-            rows = await cursor.fetchall()
-            return [dict(r) for r in rows]
-
-    @staticmethod
-    async def fetchone(sql, params=()):
-        async with DatabaseManager.get_db() as db:
-            db.row_factory = aiosqlite.Row
-            cursor = await db.execute(sql, params)
-            row = await cursor.fetchone()
-            return dict(row) if row else None
-
-    # --- [P1] HARDENED ACCESSORS (Client Isolation) ---
-
-
-    @staticmethod
-    async def set_state(key: str, value: str):
-        await DatabaseManager.query(
-            "INSERT INTO system_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP",
-            (key, value)
-        )
-
-    @staticmethod
-    async def get_state(key: str, default: str = None):
-        res = await DatabaseManager.fetchone("SELECT value FROM system_state WHERE key = ?", (key,))
-        return res["value"] if res else default
-
-    @staticmethod
-    async def get_clients():
-        return await DatabaseManager.fetchall("SELECT * FROM clients")
-
-    @staticmethod
-    async def save_lead(lead_data: dict):
-        """[P8] Sanitize, Normalize, and Save Lead."""
-        email = lead_data.get("email")
-        if not email: return
-        
-        # 1. Absolute Guardrail: Blacklist Check
-        is_b = await DatabaseManager.fetchone("SELECT 1 FROM blacklist WHERE email = ?", (email,))
-        if is_b: 
-            logger.warning(f"[P8] Blocked attempt to save blacklisted lead: {email}")
-            return {"status": "blocked", "reason": "blacklisted"}
-
-        # 2. LinkedIn URL Cleaning (Strip tracking parameters)
-        raw_li = lead_data.get("linkedin_url") or lead_data.get("linkedin") or ""
-        clean_li = raw_li.split("?")[0] if raw_li else ""
-
-        # 3. E.164 Phone Normalization
-        raw_p = lead_data.get("phone", "")
-        clean_p = None
-        if raw_p:
-            try:
-                import phonenumbers
-                # Assuming US default, adjust as needed in production
-                parsed = phonenumbers.parse(raw_p, "US")
-                if phonenumbers.is_valid_number(parsed):
-                    clean_p = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
-            except: pass
-
-        sql = '''
-            INSERT INTO leads (business, url, contact, phone, email, vertical, score, status, notes, client_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        '''
-        params = (
-            lead_data.get("business") or lead_data.get("company"),
-            lead_data.get("url"),
-            lead_data.get("contact") or lead_data.get("owner"),
-            clean_p, email,
-            lead_data.get("vertical", "Premium Services"),
-            lead_data.get("score", 0),
-            lead_data.get("status", "New"),
-            lead_data.get("notes") or lead_data.get("reasoning", ""),
-            int(lead_data.get("client_id", 0))
-        )
-        await DatabaseManager.query(sql, params)
-        logger.info(f"[P8] Lead saved with surgical normalization: {email}")
-
-    @staticmethod
-    async def get_clients():
-        return await DatabaseManager.query("SELECT * FROM clients", fetchall=True)
-
-    @staticmethod
-    async def get_metrics(client_id=0):
-        row = await DatabaseManager.query("SELECT * FROM metrics WHERE client_id = ?", (int(client_id),), fetchone=True)
-        return dict(row) if row else {}
-    @staticmethod
-    async def update_metrics(updates: dict, client_id: int = 0):
-        """Upsert metrics for a client."""
-        if not updates:
-            return
-        columns = list(updates.keys())
-        placeholders = ", ".join(["?"] * len(columns))
-        set_clause = ", ".join([col + "=excluded." + col for col in columns])
-        sql = "INSERT INTO metrics (client_id, " + ", ".join(columns) + ") VALUES (?, " + placeholders + ") ON CONFLICT(client_id) DO UPDATE SET " + set_clause
-        params = [client_id] + [updates[col] for col in columns]
-        await DatabaseManager.query(sql, params)
-
-    @staticmethod
-    async def get_leads(client_id=0):
-        rows = await DatabaseManager.query("SELECT * FROM leads WHERE client_id = ? ORDER BY created_at DESC", (int(client_id),), fetchall=True)
-        return [dict(r) for r in rows] if rows else []
-
-    @staticmethod
-    async def get_tasks(client_id=0):
-        rows = await DatabaseManager.query("SELECT * FROM tasks WHERE client_id = ? ORDER BY created_at DESC", (int(client_id),), fetchall=True)
-        return [dict(r) for r in rows] if rows else []
-
-    @staticmethod
-    async def get_content(client_id=0):
-        rows = await DatabaseManager.query("SELECT * FROM content WHERE client_id = ? ORDER BY created_at DESC", (int(client_id),), fetchall=True)
-        return [dict(r) for r in rows] if rows else []
-
-    @staticmethod
-    async def get_memories(client_id=0):
-        rows = await DatabaseManager.query("SELECT * FROM memories WHERE client_id = ? ORDER BY created_at DESC", (int(client_id),), fetchall=True)
-        return [dict(r) for r in rows] if rows else []
-
-    @staticmethod
-    async def get_chat_history(client_id=0):
-        rows = await DatabaseManager.query("SELECT * FROM chat_history WHERE client_id = ? ORDER BY created_at ASC", (int(client_id),), fetchall=True)
-        return [dict(r) for r in rows] if rows else []
-
-    @staticmethod
-    async def get_client_config(client_id=0):
-        # Simplified: Fetch from clients table or return default
-        row = await DatabaseManager.query("SELECT * FROM clients WHERE id = ?", (int(client_id),), fetchone=True)
-        if row:
-            return dict(row)
-        return {"business_name": "OROVA Internal", "niche": os.getenv("VERTICAL_NAME", "Automotive, Luxury Remodeling, Private Aviation, Real Estate"), "location": "California"}
-
-    @staticmethod
-    async def get_state(key: str, default=None):
-        row = await DatabaseManager.query("SELECT value FROM system_state WHERE key = ?", (key,), fetchone=True)
-        return row["value"] if row else default
-
-    @staticmethod
-    async def set_state(key: str, value: str):
-        await DatabaseManager.query(
-            "INSERT INTO system_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP",
-            (key, value)
-        )
-
-    @staticmethod
-    @asynccontextmanager
-    async def transaction():
-        """[P7] Safe transaction context manager."""
-        db = await aiosqlite.connect(DB_PATH)
-        try:
-            await db.execute("BEGIN TRANSACTION;")
-            yield db
-            await db.commit()
+            from app.core.redis_manager import redis_manager
+            cls._redis_manager = redis_manager
+            cls._use_redis = True
+            logger.info("✅ FREE Database: Upstash Redis initialized")
         except Exception as e:
-            await db.rollback()
-            raise e
+            logger.warning(f"⚠️  Redis init failed: {e}")
+            cls._use_redis = False
+
+        # Fallback to SQLite if Redis fails
+        if not cls._use_redis:
+            try:
+                import sqlite3
+                import threading
+
+                # SQLite connection pool
+                cls._db_path = DB_PATH
+                cls._pool = queue.Queue(maxsize=10)
+                cls._pool_lock = threading.Lock()
+                cls._max_connections = 10
+                cls._active_connections = 0
+                cls._sqlite_fallback = True
+                
+                # Register cleanup hook
+                atexit.register(cls._close_all_connections)
+
+                # Initialize SQLite schema (legacy)
+                cls._init_sqlite_fallback()
+                logger.info("📁 Database: SQLite fallback initialized")
+            except Exception as e:
+                logger.error(f"❌ All database systems failed: {e}")
+                cls._sqlite_fallback = False
+
+    @classmethod
+    def _init_sqlite_fallback(cls):
+        """Initialize SQLite as fallback."""
+        import sqlite3
+
+        conn = sqlite3.connect(cls._db_path)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA cache_size=-20000")
+        conn.execute("PRAGMA foreign_keys=ON")
+        cursor = conn.cursor()
+
+        # Minimal schema for fallback
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS leads (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                business TEXT,
+                url TEXT,
+                email TEXT,
+                phone TEXT,
+                vertical TEXT,
+                status TEXT DEFAULT 'New',
+                notes TEXT,
+                client_id INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS metrics (
+                client_id INTEGER PRIMARY KEY DEFAULT 0,
+                leads_found INTEGER DEFAULT 0,
+                emails_sent INTEGER DEFAULT 0,
+                replies_received INTEGER DEFAULT 0
+            )
+        ''')
+
+        cursor.execute("INSERT OR IGNORE INTO metrics (client_id) VALUES (0)")
+        conn.commit()
+        conn.close()
+
+    @classmethod
+    def _get_conn(cls):
+        """Get a connection from the pool, or create new if pool is empty."""
+        import sqlite3
+        try:
+            return cls._pool.get(block=False)
+        except queue.Empty:
+            with cls._pool_lock:
+                if cls._active_connections < cls._max_connections:
+                    conn = sqlite3.connect(cls._db_path, timeout=30, check_same_thread=False)
+                    conn.row_factory = sqlite3.Row
+                    conn.execute("PRAGMA journal_mode=WAL")
+                    conn.execute("PRAGMA synchronous=NORMAL")
+                    conn.execute("PRAGMA cache_size=-20000")
+                    cls._active_connections += 1
+                    return conn
+                # Wait up to 5 seconds for an available connection
+                return cls._pool.get(block=True, timeout=5)
+
+    @classmethod
+    def _release_conn(cls, conn):
+        """Return connection to pool or close if pool is full."""
+        try:
+            cls._pool.put(conn, block=False)
+        except queue.Full:
+            conn.close()
+            with cls._pool_lock:
+                cls._active_connections -= 1
+
+    @classmethod
+    def _close_all_connections(cls):
+        """Close all connections in the pool on exit."""
+        while not cls._pool.empty():
+            try:
+                conn = cls._pool.get(block=False)
+                conn.close()
+            except (queue.Empty, Exception):
+                pass
+        with cls._pool_lock:
+            cls._active_connections = 0
+        logger.info("SQLite connection pool cleaned up")
+
+    @classmethod
+    def _sqlite_query(cls, sql, params=(), fetchone=False, fetchall=False):
+        """SQLite fallback query method with proper connection pooling."""
+        import sqlite3
+        conn = None
+        try:
+            conn = cls._get_conn()
+            cursor = conn.cursor()
+            cursor.execute(sql, params)
+            res: Any = None
+            if fetchone:
+                res = cursor.fetchone()
+            elif fetchall:
+                res = cursor.fetchall()
+            conn.commit()
+            return res
+        except sqlite3.Error as e:
+            logger.error(f"[SQLITE] Query error: {e} | SQL: {sql[:100]}")
+            if conn:
+                # Force close broken connection
+                try:
+                    conn.close()
+                    with cls._pool_lock:
+                        cls._active_connections -= 1
+                except:
+                    pass
+            raise
         finally:
-            await db.close()
+            if conn:
+                cls._release_conn(conn)
 
-    @staticmethod
-    async def blacklist_lead(email: str):
-        """[P7] Wipe lead and blacklist via atomic transaction."""
-        async with DatabaseManager.transaction() as conn:
-            # 1. Erase all trace of the lead
-            await conn.execute("DELETE FROM leads WHERE email = ?", (email,))
-            # 2. Append to immutable blacklist
-            await conn.execute("INSERT OR IGNORE INTO blacklist (email) VALUES (?)", (email,))
-            logger.info(f"[Privacy] Lead {email} blacklisted and forgotten.")
+    @classmethod
+    def get_clients(cls):
+        """Get all active clients."""
+        if cls._use_redis and cls._redis_manager:
+            # Redis stores clients as hash
+            clients_data = cls._redis_manager._redis_op("hgetall", "clients") or {}
+            clients = []
+            for client_id, client_json in clients_data.items():
+                try:
+                    client = cls._redis_manager._decompress_data(client_json)
+                    if client.get("is_active", True):
+                        clients.append(client)
+                except:
+                    continue
+            return clients
+        elif cls._sqlite_fallback:
+            rows = cls._sqlite_query("SELECT * FROM clients WHERE is_active=1", fetchall=True)
+            return [dict(r) for r in rows] if rows else []
+        return []
 
-# ── [P7] BLACKLIST SCHEMA ──
-BLACKLIST_DDL = "CREATE TABLE IF NOT EXISTS blacklist (email TEXT PRIMARY KEY, blacklisted_at DATETIME DEFAULT CURRENT_TIMESTAMP);"
+    @classmethod
+    def get_client_config(cls, client_id=0):
+        """Get the niche and location for a specific client."""
+        if client_id == 0:
+            return {"niche": os.getenv("VERTICAL_NAME", "Automotive"), "location": "California"}
 
-PHASE_5_INDEXES = [
-    # Primary: get_winning_approach (Zero table hits)
-    """
-    CREATE INDEX IF NOT EXISTS idx_lp_client_task_decay_metric
-    ON learned_patterns (client_id, task_type, decay_score, success_metric DESC);
-    """,
-    # Aggregate: learning_stats reporting
-    """
-    CREATE INDEX IF NOT EXISTS idx_lp_created_at
-    ON learned_patterns (created_at);
-    """,
-    # Reinforcer: lookups
-    """
-    CREATE INDEX IF NOT EXISTS idx_lp_task_approach
-    ON learned_patterns (task_type, winning_approach);
-    """,
-]
+        if cls._use_redis and cls._redis_manager:
+            client_json = cls._redis_manager._redis_op("hget", "clients", str(client_id))
+            if client_json:
+                try:
+                    client = cls._redis_manager._decompress_data(client_json)
+                    return {"niche": client.get("niche"), "location": client.get("target_location")}
+                except:
+                    pass
 
-async def run_phase5_migrations():
-    """Idempotent. Safe to call at startup."""
-    import logging
-    logger = logging.getLogger("database.migrations")
-    try:
-        for ddl in PHASE_5_INDEXES:
-            await DatabaseManager.query(ddl)
-        logger.info("[DB] Phase 5 covering indexes applied.")
-    except Exception as e:
-        logger.error(f"[DB] Phase 5 migrations failed: {e}")
+        elif cls._sqlite_fallback:
+            row = cls._sqlite_query("SELECT niche, target_location FROM clients WHERE id = ?", (int(client_id),), fetchone=True)
+            if row:
+                return {"niche": row["niche"], "location": row["target_location"]}
 
-# ── [P6] LIFECYCLE & TELEMETRY ──
+        return {"niche": "Automotive", "location": "California"}
 
-async def log_usage(client_id: int, agent_id: str, model: str, t_in: int, t_out: int, cost: float):
-    """Logs AI consumption for economic tracking."""
-    sql = "INSERT INTO usage_logs (client_id, agent_id, model, tokens_in, tokens_out, cost_est) VALUES (?, ?, ?, ?, ?, ?)"
-    await DatabaseManager.query(sql, (client_id, agent_id, model, t_in, t_out, cost))
+    @classmethod
+    def add_client(cls, business_name, niche, target_location):
+        """Add a new client."""
+        client_id = int(time.time())  # Simple ID generation
+        client_data = {
+            "id": client_id,
+            "business_name": business_name,
+            "niche": niche,
+            "target_location": target_location,
+            "is_active": True,
+            "created_at": time.time()
+        }
 
-async def get_usage_stats():
-    """Aggregates costs for the /stats command."""
-    sql = "SELECT COUNT(*) as reqs, SUM(tokens_in) as t_in, SUM(tokens_out) as t_out, SUM(cost_est) as cost FROM usage_logs"
-    res = await DatabaseManager.fetchone(sql)
-    return {"totals": res or {"reqs": 0, "t_in": 0, "t_out": 0, "cost": 0.0}}
+        if cls._use_redis and cls._redis_manager:
+            client_json = cls._redis_manager._compress_data(client_data)
+            cls._redis_manager._redis_op("hset", "clients", str(client_id), client_json)
+            cls._redis_manager._redis_op("expire", "clients", cls._redis_manager.memory_limits["ttl_seconds"])
+        elif cls._sqlite_fallback:
+            cls._sqlite_query(
+                "INSERT INTO clients (business_name, niche, target_location) VALUES (?, ?, ?)",
+                (business_name, niche, target_location)
+            )
 
-def register_sigterm_handler(loop):
-    """[P6] Ensure WAL checkpointing on Render SIGTERM."""
-    import signal
-    def handle_sigterm():
-        logger.info("[P6] SIGTERM received. Executing atomic WAL checkpoint...")
-        # Note: We can't easily run async code in a signal handler synchronously 
-        # but SQLite will attempt to flush on close/shutdown if we are careful.
-        # This is a sentinel for graceful shutdown.
-    try:
-        loop.add_signal_handler(signal.SIGTERM, handle_sigterm)
-    except: pass # Windows compatibility
+    @classmethod
+    def save_lead(cls, lead_data, default_vertical="Automotive", client_id=0):
+        """Save a lead with FREE Redis deduplication."""
+        if cls._use_redis and cls._redis_manager:
+            cls._redis_manager.save_lead(lead_data, client_id)
+        elif cls._sqlite_fallback:
+            # Legacy SQLite fallback
+            business = lead_data.get("business") or lead_data.get("company") or lead_data.get("title")
+            url = lead_data.get("url") or ""
+
+            # Deduplication
+            if url:
+                existing = cls._sqlite_query(
+                    "SELECT id FROM leads WHERE url = ? LIMIT 1", (url,), fetchone=True
+                )
+                if existing:
+                    logger.info(f"[SQLITE] Duplicate lead skipped (URL match): {url}")
+                    return
+
+            if business:
+                existing = cls._sqlite_query(
+                    "SELECT id FROM leads WHERE LOWER(business) = LOWER(?) LIMIT 1", (business,), fetchone=True
+                )
+                if existing:
+                    logger.info(f"[SQLITE] Duplicate lead skipped (name match): {business}")
+                    return
+
+            sql = '''
+                INSERT INTO leads (business, url, email, phone, vertical, status, notes, client_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            '''
+            params = (
+                business,
+                url,
+                lead_data.get("email"),
+                lead_data.get("phone"),
+                lead_data.get("vertical") or default_vertical,
+                lead_data.get("status", "New"),
+                lead_data.get("notes") or lead_data.get("snippet", ""),
+                int(client_id)
+            )
+            cls._sqlite_query(sql, params)
+
+    @classmethod
+    def get_leads(cls, client_id=0):
+        """Get all leads for a client."""
+        if cls._use_redis and cls._redis_manager:
+            return cls._redis_manager.get_leads(client_id)
+        elif cls._sqlite_fallback:
+            rows = cls._sqlite_query("SELECT * FROM leads WHERE client_id = ? ORDER BY created_at DESC", (int(client_id),), fetchall=True)
+            return [dict(r) for r in rows] if rows else []
+        return []
+
+    @classmethod
+    def get_metrics(cls, client_id=0):
+        """Get metrics for a client."""
+        if cls._use_redis and cls._redis_manager:
+            return cls._redis_manager.get_metrics(client_id)
+        elif cls._sqlite_fallback:
+            row = cls._sqlite_query("SELECT * FROM metrics WHERE client_id = ?", (int(client_id),), fetchone=True)
+            if row:
+                return dict(row)
+        return {"leads_found": 0, "emails_sent": 0, "replies_received": 0, "meetings_booked": 0, "calls_made": 0, "proposals_sent": 0}
+
+    @classmethod
+    def get_tasks(cls, client_id=0):
+        """Get all tasks for a client."""
+        if cls._use_redis and cls._redis_manager:
+            return cls._redis_manager.get_tasks(client_id)
+        return []
+
+    @classmethod
+    def get_content(cls, client_id=0):
+        """Get all content for a client."""
+        if cls._use_redis and cls._redis_manager:
+            return cls._redis_manager.get_content(client_id)
+        return []
+
+    @classmethod
+    def get_memories(cls, client_id=0):
+        """Get all memories for a client."""
+        if cls._use_redis and cls._redis_manager:
+            return cls._redis_manager.get_memories(client_id)
+        return []
+
+    @classmethod
+    def get_chat_history(cls, client_id=0):
+        """Get chat history for a client."""
+        if cls._use_redis and cls._redis_manager:
+            return cls._redis_manager.get_chat_history(client_id, "default")
+        return []
+    @classmethod
+    def update_metrics(cls, data, client_id=0):
+        """Update metrics (merge, not overwrite)."""
+        if cls._use_redis and cls._redis_manager:
+            cls._redis_manager.update_metrics(data, client_id)
+        elif cls._sqlite_fallback:
+            if not data:
+                return
+            valid_keys = ["leads_found", "emails_sent", "replies_received", "meetings_booked", "calls_made", "proposals_sent"]
+            keys = [k for k in data.keys() if k in valid_keys]
+            if not keys:
+                return
+
+            cls._sqlite_query("INSERT OR IGNORE INTO metrics (client_id) VALUES (?)", (int(client_id),))
+
+            set_clause = ", ".join([f"{k} = ?" for k in keys])
+            vals = [data[k] for k in keys]
+            vals.append(int(client_id))
+            cls._sqlite_query(f"UPDATE metrics SET {set_clause} WHERE client_id = ?", tuple(vals))
+
+    @classmethod
+    def log_email_sent(cls, lead_id, subject):
+        """Log an email send for cold-lead timing."""
+        # Simplified for Redis - just track in metrics
+        if cls._use_redis and cls._redis_manager:
+            # Could be extended to track per-lead email history in Redis
+            pass
+        elif cls._sqlite_fallback:
+            cls._sqlite_query(
+                "INSERT INTO email_tracking (lead_id, subject) VALUES (?, ?)",
+                (lead_id, subject)
+            )
+
+    @classmethod
+    def get_cold_leads(cls, days_threshold=5, client_id=0):
+        """Get leads that were emailed but haven't replied within X days."""
+        # Simplified for free tier - return leads marked as contacted but not replied
+        leads = cls.get_leads(client_id)
+        cold_leads = []
+
+        for lead in leads:
+            if lead.get("status") in ("Email Sent", "Contacted"):
+                # Check if it was contacted more than threshold days ago
+                last_contacted = lead.get("last_contacted_at")
+                if last_contacted:
+                    days_since = (time.time() - last_contacted) / 86400
+                    if days_since > days_threshold:
+                        cold_leads.append(lead)
+                else:
+                    # If no timestamp, assume it's old enough
+                    cold_leads.append(lead)
+
+        return cold_leads

@@ -1,16 +1,16 @@
 import gspread
 import os
-from google.oauth2.service_account import Credentials
 
 def diag():
-    creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "/app/service_account.json")
+    creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "service_account.json")
     print(f"DEBUG: Using creds from {creds_path}")
-    
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+
     try:
-        creds = Credentials.from_service_account_file(creds_path, scopes=scope)
-        client = gspread.authorize(creds)
-        print(f"DEBUG: Service Account Email: {creds.service_account_email}")
+        client = gspread.service_account(filename=creds_path)
+        # gspread exposes the email on the underlying credentials object
+        email = getattr(getattr(client, "auth", None), "service_account_email", None)
+        if email:
+            print(f"DEBUG: Service Account Email: {email}")
         
         sheets = client.openall()
         print(f"DEBUG: Found {len(sheets)} spreadsheets:")

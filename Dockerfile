@@ -1,38 +1,29 @@
-# Lightweight Python image for Render Free Tier
-FROM python:3.11-slim
-
-# Set environment variables for better performance
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    curl \
-    gcc \
-    python3-dev \
+# Install system deps for Playwright (Chromium) + Build Tools for LXML/Pandas
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential gcc wget curl gnupg libnss3 libatk-bridge2.0-0 libdrm2 \
+    libxcomposite1 libxdamage1 libxrandr2 libgbm1 libasound2 \
+    libpangocairo-1.0-0 libgtk-3-0 fonts-liberation ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# [SECURITY] Create a non-root user 'nova'
-RUN useradd -m nova && chown -R nova:nova /app
+# Install all pinned dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# [P2] FIXED: Ensure PATH is set BEFORE pip install so scripts are recognized
-ENV PATH="/home/nova/.local/bin:${PATH}"
+# Copy app
+COPY app/ app/
+COPY smoke_test.py .
+COPY run.py .
 
-USER nova
+# Create dirs
+RUN mkdir -p /app/data /app/logs
 
-# Install dependencies (as nova user)
-COPY --chown=nova:nova requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
-RUN pip install --no-cache-dir --user playwright
-RUN playwright install chromium
+EXPOSE ${PORT:-10000}
 
-# Copy application code
-COPY --chown=nova:nova . .
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:${PORT:-10000}/health || exit 1
 
-# Expose Gateway port
-EXPOSE 18789
-
-# Default command
-CMD ["python", "app/main.py"]
+CMD ["python", "run.py"]
