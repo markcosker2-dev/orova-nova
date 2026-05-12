@@ -1,0 +1,22 @@
+{
+  "Lead Hunter": {
+    "name": "Lead Hunter",
+    "status": "active",
+    "last_action": "Hunting at 22:08:48"
+  },
+  "Outreach Agent": {
+    "name": "Outreach Agent",
+    "status": "idle",
+    "last_action": "Never"
+  },
+  "CEO Reporter": {
+    "name": "CEO Reporter",
+    "status": "idle",
+    "last_action": "Checking approvals at 22:08:38"
+  },
+  "Support Nova": {
+    "name": "Support Nova",
+    "status": "online",
+    "last_action": "Never"
+  }
+}

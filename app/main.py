@@ -79,6 +79,25 @@ async def lifespan(app: FastAPI):
     loop = asyncio.get_running_loop()
     DatabaseManager.register_sigterm_handler(loop)
     
+    # [P6] Register Telegram Webhook
+    tg_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    render_url = os.getenv("RENDER_EXTERNAL_URL")
+    if tg_token and render_url:
+        webhook_url = f"{render_url}/telegram"
+        try:
+            async with httpx.AsyncClient() as client:
+                res = await client.post(
+                    f"https://api.telegram.org/bot{tg_token}/setWebhook",
+                    json={"url": webhook_url, "allowed_updates": ["message"]},
+                    timeout=10
+                )
+                if res.status_code == 200:
+                    logger.info(f"✅ Telegram webhook registered: {webhook_url}")
+                else:
+                    logger.warning(f"⚠️  Telegram webhook registration failed: {res.text}")
+        except Exception as e:
+            logger.warning(f"⚠️  Could not register Telegram webhook: {e}")
+    
     # [P6] Start Vault Scheduler (Auto-backup)
     asyncio.create_task(vault_scheduler_loop())
     
@@ -170,14 +189,33 @@ async def health_check():
 async def process_telegram_message(data: dict):
     """Worker for the Backpressure Queue."""
     try:
+        msg_obj = data.get("message", {})
+        if not msg_obj:
+            logger.warning("[Telegram] Received update with no message object")
+            return
+        
+        # Extract chat_id and text
+        chat_id = msg_obj.get("chat", {}).get("id")
+        text = msg_obj.get("text") or msg_obj.get("caption", "")
+        
+        if not chat_id or not text:
+            logger.warning(f"[Telegram] Missing chat_id or text in message")
+            return
+        
         # Resolve Topic/Agent
-        topic_id = str(data.get("message", {}).get("message_thread_id", "1"))
+        topic_id = str(msg_obj.get("message_thread_id", "1"))
         agent_role = TOPIC_AGENT_MAP.get(topic_id, "nova")
         
+        logger.info(f"[Telegram] Processing: chat_id={chat_id}, text={text[:50]}..., agent={agent_role}")
+        
         # Route to Brain
-        await router.handle_message(data, agent_role=agent_role)
+        result = await router.handle_message(text, chat_id=chat_id, history=None)
+        
+        # Send response back to Telegram
+        if result:
+            await router._send_telegram(chat_id, str(result)[:4096])
     except Exception as e:
-        logger.error(f"[Swarm] Worker failed: {e}")
+        logger.error(f"[Swarm] Worker failed: {e}", exc_info=True)
 
 @app.post("/webhook")
 async def telegram_webhook(request: Request):
