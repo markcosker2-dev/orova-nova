@@ -65,20 +65,19 @@ async def require_client(x_client_id: Optional[str] = Header(None), client_id: O
         raise HTTPException(status_code=401, detail="Valid client_id required")
     return resolved
 
-from app.core.database import run_phase5_migrations, register_sigterm_handler, get_usage_stats
 from app.skills.vault_skill import backup_database, restore_latest, vault_scheduler_loop
 from app.skills.crawl_skill import cleanup_crawler
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # [P5/P6] Run migrations and optimizations
-    await DatabaseManager.init_db()
-    await run_phase5_migrations()
+    DatabaseManager.init_db()
+    await DatabaseManager.run_phase5_migrations()
     await AgentSoul.initialize()
     
     # [P6] Register SIGTERM for Render redeploys
     loop = asyncio.get_running_loop()
-    register_sigterm_handler(loop)
+    DatabaseManager.register_sigterm_handler(loop)
     
     # [P6] Start Vault Scheduler (Auto-backup)
     asyncio.create_task(vault_scheduler_loop())
@@ -129,7 +128,7 @@ async def cmd_restore(update, context):
 
 async def cmd_stats(update, context):
     """/stats — Report Economics."""
-    usage = await get_usage_stats()
+    usage = await DatabaseManager.get_usage_stats()
     totals = usage["totals"]
     msg = (
         f"📊 *OROVA Economic Report*\n"

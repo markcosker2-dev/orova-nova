@@ -1,33 +1,48 @@
 import asyncio
 import logging
-from crawl4ai import AsyncWebCrawler
 from app.core.semaphore import ram_guarded
 
 logger = logging.getLogger(__name__)
+AsyncWebCrawler = None
+dns = None
+
+try:
+    from crawl4ai import AsyncWebCrawler
+except ImportError:
+    logger.warning("⚠️ crawl4ai is not installed. elite_scrape will be disabled.")
+
+try:
+    import dns.resolver
+    dns = dns.resolver
+except ImportError:
+    logger.warning("⚠️ dnspython is not installed. contact validation may be limited.")
 
 # [P2] Persistent crawler instance to prevent memory leaks and OOM on Render
-_crawler: AsyncWebCrawler | None = None
+_crawler: "AsyncWebCrawler | None" = None
 
 import re
-import dns.resolver
 
 def validate_contact_data(email: str, phone: str) -> dict:
     """[P8] Surgically validates email syntax/domain and normalizes phone."""
     result = {"email_valid": False, "phone_valid": False, "clean_email": None}
     email_regex = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
-    if email and re.match(email_regex, email):
+    if email and re.match(email_regex, email) and dns is not None:
         domain = email.split('@')[1]
         try:
-            mx_records = dns.resolver.resolve(domain, 'MX')
+            mx_records = dns.resolve(domain, 'MX')
             if mx_records:
                 result["email_valid"] = True
                 result["clean_email"] = email.lower()
-        except: pass
-    if phone: result["phone_valid"] = True
+        except Exception:
+            pass
+    if phone:
+        result["phone_valid"] = True
     return result
 
-async def get_crawler() -> AsyncWebCrawler:
+async def get_crawler() -> "AsyncWebCrawler":
     global _crawler
+    if AsyncWebCrawler is None:
+        raise RuntimeError("crawl4ai is not available in this environment")
     if _crawler is None:
         _crawler = AsyncWebCrawler(verbose=False)
         await _crawler.__aenter__()
