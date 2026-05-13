@@ -1,6 +1,9 @@
 import asyncio
 import logging
-from typing import Callable, Awaitable
+import os
+from typing import Callable, Awaitable, Optional
+
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +22,34 @@ class TelegramQueue:
         self._handler = handler
         self._worker_task = asyncio.create_task(self._worker())
         logger.info(f"📥 Telegram Bounded Queue started (maxsize={self._q.maxsize})")
+
+    async def add_message(self, chat_id: int, text: str, parse_mode: Optional[str] = None) -> bool:
+        """Send an outgoing Telegram message via the Bot API."""
+        token = os.getenv("TELEGRAM_BOT_TOKEN")
+        if not token:
+            logger.error("[TelegramQueue] Cannot send message: TELEGRAM_BOT_TOKEN missing.")
+            return False
+
+        payload = {
+            "chat_id": chat_id,
+            "text": text,
+        }
+        if parse_mode:
+            payload["parse_mode"] = parse_mode
+
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                res = await client.post(
+                    f"https://api.telegram.org/bot{token}/sendMessage",
+                    json=payload,
+                )
+            if res.status_code == 200:
+                return True
+            logger.error(f"[TelegramQueue] Failed to send message: {res.status_code} {res.text}")
+            return False
+        except Exception as e:
+            logger.error(f"[TelegramQueue] Exception sending Telegram message: {e}")
+            return False
 
     async def stop(self):
         await self._q.join()
