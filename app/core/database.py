@@ -29,6 +29,9 @@ class DatabaseManager:
             cls._redis_manager = redis_manager
             cls._use_redis = True
             logger.info("✅ FREE Database: Upstash Redis initialized")
+        except ImportError:
+            logger.info("ℹ️ Redis manager unavailable; using SQLite fallback.")
+            cls._use_redis = False
         except Exception as e:
             logger.warning(f"⚠️  Redis init failed: {e}")
             cls._use_redis = False

@@ -97,6 +97,8 @@ async def lifespan(app: FastAPI):
                     logger.warning(f"⚠️  Telegram webhook registration failed: {res.text}")
         except Exception as e:
             logger.warning(f"⚠️  Could not register Telegram webhook: {e}")
+    else:
+        logger.warning("⚠️ Telegram webhook not registered: TELEGRAM_BOT_TOKEN or RENDER_EXTERNAL_URL missing")
     
     # [P6] Start Vault Scheduler (Auto-backup)
     asyncio.create_task(vault_scheduler_loop())
@@ -221,6 +223,7 @@ async def process_telegram_message(data: dict):
 async def telegram_webhook(request: Request):
     """Ingest point for Telegram via Queue."""
     data = await request.json()
+    logger.info(f"[Telegram] Webhook received update: {list(data.keys())}")
     accepted = await tg_queue.enqueue(data)
     if not accepted:
         return JSONResponse(status_code=503, content={"status": "queue_full", "detail": "Server under heavy load, try again"})
