@@ -217,7 +217,7 @@ async def process_telegram_message(data: dict):
     except Exception as e:
         logger.error(f"[Swarm] Worker failed: {e}", exc_info=True)
 
-@app.post("/webhook")
+@app.post("/telegram")
 async def telegram_webhook(request: Request):
     """Ingest point for Telegram via Queue."""
     data = await request.json()
