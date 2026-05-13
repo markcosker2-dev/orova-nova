@@ -70,8 +70,8 @@ class Router:
 
     async def _send_telegram(self, chat_id: int, text: str, parse_mode: Optional[str] = None) -> bool:
         try:
-            from app.core.telegram_queue import telegram_queue
-            await telegram_queue.add_message(chat_id, text, parse_mode=parse_mode)
+            from app.core.telegram_queue import tg_queue
+            await tg_queue.add_message(chat_id, text, parse_mode=parse_mode)
             return True
         except Exception as e:
             logger.error(f"[Router] Telegram send failed: {e}")
