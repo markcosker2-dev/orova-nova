@@ -36,6 +36,8 @@ from app.skills.email_sequence_skill import create_drip_campaign
 from app.skills.copywriting_skill import write_cold_email, write_ad_copy
 from app.skills.analytics_skill import pipeline_report, conversion_analysis, roi_calculator
 from app.core.pipeline import run_pipeline, list_pipelines
+from app.skills.lead_validator import validate_contact, score_lead
+from app.skills.email_templates import generate_email, generate_follow_up_sequence
 try:
     from app.skills.mem0_skill import mega_memory
     from app.skills.crawl_skill import elite_scrape
@@ -111,6 +113,8 @@ class TaskPlanner:
             "create_drip_campaign": create_drip_campaign, "write_cold_email": write_cold_email,
             "write_ad_copy": write_ad_copy, "pipeline_report": pipeline_report, "conversion_analysis": conversion_analysis,
             "roi_calculator": roi_calculator, "run_pipeline": run_pipeline, "list_pipelines": list_pipelines,
+            "validate_contact": validate_contact, "score_lead": score_lead,
+            "generate_email": generate_email, "generate_follow_up_sequence": generate_follow_up_sequence,
             "elite_scrape": elite_scrape, "vision_browse": vision_browse, "composio_action": composio_action,
         }
 
