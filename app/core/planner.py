@@ -119,8 +119,8 @@ class TaskPlanner:
         }
 
     HUNTING_TOOLS = ["sgai_search_and_extract", "sgai_deep_extract", "find_leads", "google_search", "research_lead", "stealth_search", "stealth_extract", "elite_scrape", "vision_browse", "composio_action"]
-    OUTREACH_TOOLS = ["send_outreach", "send_email", "write_cold_email", "create_drip_campaign", "generate_sequence", "check_replies", "reply_to_email", "get_inbox"]
-    LIGHT_RESEARCH_TOOLS = ["deep_research", "browse_agent"]
+    OUTREACH_TOOLS = ["send_outreach", "send_email", "write_cold_email", "create_drip_campaign", "generate_sequence", "check_replies", "reply_to_email", "get_inbox", "trigger_retell_call"]
+    LIGHT_RESEARCH_TOOLS = ["deep_research", "browse_agent", "run_seo_audit"]
 
     def _scope_tools(self, goal: str) -> list:
         goal_lower = goal.lower()
