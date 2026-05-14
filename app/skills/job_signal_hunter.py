@@ -1,6 +1,6 @@
 """
 Job Signal Hunter - Hawk's Hiring Intent Detection
-Uses JobSpy to scan job postings as a proxy for company hiring signals.
+Uses python-jobspy to scan job postings as a proxy for company hiring signals.
 This is a strong intent signal: if they're hiring, they have money and a problem.
 """
 
