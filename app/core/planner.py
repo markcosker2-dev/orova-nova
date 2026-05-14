@@ -38,6 +38,10 @@ from app.skills.analytics_skill import pipeline_report, conversion_analysis, roi
 from app.core.pipeline import run_pipeline, list_pipelines
 from app.skills.lead_validator import validate_contact, score_lead
 from app.skills.email_templates import generate_email, generate_follow_up_sequence
+from app.skills.job_signal_hunter import hunt_hiring_signals, generate_hiring_outreach
+from app.skills.apollo_enrichment import enrich_lead_apollo, bulk_enrich_leads
+from app.skills.timezone_scheduler import is_business_hours, next_business_hours_slot
+from app.skills.cal_booking import handle_cal_booking_webhook, generate_cal_booking_link
 try:
     from app.skills.mem0_skill import mega_memory
     from app.skills.crawl_skill import elite_scrape
@@ -115,12 +119,16 @@ class TaskPlanner:
             "roi_calculator": roi_calculator, "run_pipeline": run_pipeline, "list_pipelines": list_pipelines,
             "validate_contact": validate_contact, "score_lead": score_lead,
             "generate_email": generate_email, "generate_follow_up_sequence": generate_follow_up_sequence,
+            "hunt_hiring_signals": hunt_hiring_signals, "generate_hiring_outreach": generate_hiring_outreach,
+            "enrich_lead_apollo": enrich_lead_apollo, "bulk_enrich_leads": bulk_enrich_leads,
+            "is_business_hours": is_business_hours, "next_business_hours_slot": next_business_hours_slot,
+            "generate_cal_booking_link": generate_cal_booking_link,
             "elite_scrape": elite_scrape, "vision_browse": vision_browse, "composio_action": composio_action,
         }
 
-    HUNTING_TOOLS = ["sgai_search_and_extract", "sgai_deep_extract", "find_leads", "google_search", "research_lead", "stealth_search", "stealth_extract", "elite_scrape", "vision_browse", "composio_action"]
-    OUTREACH_TOOLS = ["send_outreach", "send_email", "write_cold_email", "create_drip_campaign", "generate_sequence", "check_replies", "reply_to_email", "get_inbox", "trigger_retell_call"]
-    LIGHT_RESEARCH_TOOLS = ["deep_research", "browse_agent", "run_seo_audit"]
+    HUNTING_TOOLS = ["sgai_search_and_extract", "sgai_deep_extract", "find_leads", "google_search", "research_lead", "stealth_search", "stealth_extract", "hunt_hiring_signals", "elite_scrape", "vision_browse", "composio_action"]
+    OUTREACH_TOOLS = ["send_outreach", "send_email", "write_cold_email", "create_drip_campaign", "generate_sequence", "check_replies", "reply_to_email", "get_inbox", "trigger_retell_call", "generate_hiring_outreach", "enrich_lead_apollo", "is_business_hours"]
+    LIGHT_RESEARCH_TOOLS = ["deep_research", "browse_agent", "run_seo_audit", "bulk_enrich_leads", "next_business_hours_slot", "generate_cal_booking_link"]
 
     def _scope_tools(self, goal: str) -> list:
         goal_lower = goal.lower()
