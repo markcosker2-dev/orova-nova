@@ -39,7 +39,7 @@ uvicorn==0.29.0
 yagmail==0.15.293
 
 # [NEW] Email & Phone Validation (Render-friendly, lightweight)
-email-validator==2.1.0
+email-validator==2.0.0
 phonenumbers==8.13.0
 
 # [NEW] Email Templating & Lead Scoring (Free ML)
