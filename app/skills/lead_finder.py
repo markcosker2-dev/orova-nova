@@ -44,7 +44,8 @@ async def verify_business_intent(title: str, snippet: str, url: str) -> bool:
         res = await ai.quick(prompt)
         return "YES" in res.upper()
     except:
-        return True # Fallback to true if AI fails
+        logger.warning("[AI SCORER] AI failed to verify business. Rejecting for safety.")
+        return False # Strict: Reject if we can't verify
 
 async def find_leads(count: int = 5, query: str = "business leads"):
     """
@@ -97,7 +98,7 @@ async def find_leads(count: int = 5, query: str = "business leads"):
         try:
             logger.info("[GOOGLE] DDG failed. Trying hyper-reliable fallback...")
             from app.skills.browser_ops import google_search_scrape
-            leads = await google_search_scrape(query, count=count*2)
+            leads = await google_search_scrape(query, limit=count*2)
             logger.info(f"[GOOGLE] Found {len(leads)} raw results")
         except Exception as e:
             logger.error(f"[GOOGLE] Search error: {e}")
