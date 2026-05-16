@@ -461,6 +461,13 @@ class DatabaseManager:
 
     @classmethod
     def save_lead(cls, lead_data, default_vertical="Automotive", client_id=0, sync_to_sheets=True):
+        url = (lead_data.get("url") or "").lower()
+        # [NUCLEAR SHIELD] Block junk domains at the database entry point
+        banned = ["wordreference.com", "dictionary.com", "wikipedia.org", "thesaurus.com", "merriam-webster", "britannica", "quora", "reddit", "glosbe.com", "linguee.com", "definition"]
+        if any(b in url for b in banned):
+            logger.warning(f"[NUCLEAR SHIELD] Refused to save junk lead: {url}")
+            return None
+
         if cls._use_redis and cls._redis_manager:
             cls._redis_manager.save_lead(lead_data, client_id)
         elif cls._sqlite_fallback:
