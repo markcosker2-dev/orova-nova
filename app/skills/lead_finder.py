@@ -2,6 +2,9 @@ import os
 import logging
 import asyncio
 import re
+from app.core.ai_client import UnifiedAIClient
+
+ai = UnifiedAIClient()
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +27,24 @@ JUNK_KEYWORDS = [
     r"\bdefinition\b", r"\bmeaning\b", r"\bsynonyms\b", r"\bwiki\b", r"\bblog\b", r"\barticle\b", r"\bnews\b",
     r"\bporn\b", r"\bsex\b", r"\badult\b", r"\bxxx\b", r"\bnaked\b", r"\bescort\b", r"\bdictionary\b"
 ]
+
+async def verify_business_intent(title: str, snippet: str, url: str) -> bool:
+    """Uses AI to determine if a search result is a real business or just info/junk."""
+    prompt = f"""
+    Analyze this search result and determine if it is a REAL LOCAL BUSINESS (e.g. contractor, dealer, service provider).
+    Respond with ONLY 'YES' or 'NO'.
+    
+    Title: {title}
+    Snippet: {snippet}
+    URL: {url}
+    
+    Is this a real business? (NO if it's a dictionary, wiki, blog, or news site)
+    """
+    try:
+        res = await ai.quick(prompt)
+        return "YES" in res.upper()
+    except:
+        return True # Fallback to true if AI fails
 
 async def find_leads(count: int = 5, query: str = "business leads"):
     """
@@ -94,8 +115,14 @@ async def find_leads(count: int = 5, query: str = "business leads"):
         else:
             lead["business"] = title.split(" - ")[0].split(" | ")[0].strip()
 
-        # 4. Language Check: Delete if contains non-English characters (Chinese/Japanese/etc.)
+        # 4. Language Check: Delete if contains non-English characters
         if re.search(r'[^\x00-\x7F]+', lead["business"]):
+            continue
+
+        # 5. [NEW] EXECUTIVE AI SCORER: Verify business intent via LLM
+        # We only do this for the top candidates to save tokens
+        if not await verify_business_intent(title, snippet, url):
+            logger.info(f"[AI SCORER] Rejected non-business: {title}")
             continue
 
         filtered.append(lead)
