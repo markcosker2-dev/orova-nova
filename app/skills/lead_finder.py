@@ -57,10 +57,10 @@ async def find_leads(count: int = 5, query: str = "business leads"):
     # ─── THE YELP HAMMER (100% Business Only) ───────────────────
     # Force search into Yelp to avoid dictionaries and blog posts
     if "site:" not in query.lower():
-        # Strip existing quotes to prevent double-quote bug
+        # Remove quotes to allow broader matching
         clean_query = query.replace('"', '').replace("'", "")
-        query = f'site:yelp.com "{clean_query}"'
-        logger.info(f"[YELP HAMMER] Locked to business directory: {query}")
+        query = f'site:yelp.com {clean_query}'
+        logger.info(f"[YELP HAMMER] Broadened: {query}")
         
     logger.info(f"[LEAD FINDER] Searching for {count} leads: '{query}'")
     leads = []
@@ -91,6 +91,16 @@ async def find_leads(count: int = 5, query: str = "business leads"):
             logger.info(f"[DDG] Found {len(leads)} raw results")
         except Exception as e:
             logger.error(f"[DDG] Search error: {e}")
+
+    # ─── TIER 3: Google (Hyper-Reliable Fallback) ───────────────
+    if not leads:
+        try:
+            logger.info("[GOOGLE] DDG failed. Trying hyper-reliable fallback...")
+            from app.skills.browser_ops import google_search_scrape
+            leads = await google_search_scrape(query, count=count*2)
+            logger.info(f"[GOOGLE] Found {len(leads)} raw results")
+        except Exception as e:
+            logger.error(f"[GOOGLE] Search error: {e}")
 
     # ─── AI VERIFICATION & FILTERING ────────────────────────────
     filtered = []
