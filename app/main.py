@@ -300,6 +300,31 @@ async def job_backup(authorization: str = Header(None), x_api_key: str = Header(
     res = await backup_database()
     return {"status": "complete", "backup": res}
 
+@app.get("/api/observability/metrics")
+async def get_metrics_prometheus(authorized: bool = Depends(require_dashboard_api_key)):
+    """Get Prometheus-format metrics."""
+    from app.core.monitoring import metrics_collector
+    return {"prometheus": metrics_collector.export_prometheus()}
+
+@app.get("/api/observability/errors")
+async def get_errors(authorized: bool = Depends(require_dashboard_api_key)):
+    """Get error tracking summary."""
+    from app.core.monitoring import error_tracker
+    return {"status": "ok", "errors": error_tracker.get_error_summary()}
+
+@app.get("/api/observability/performance")
+async def get_performance(authorized: bool = Depends(require_dashboard_api_key)):
+    """Get performance profiling stats."""
+    from app.core.monitoring import profiler
+    return {"status": "ok", "performance": profiler.get_all_stats()}
+
+@app.get("/api/observability/dashboard")
+async def get_observability_dashboard(authorized: bool = Depends(require_dashboard_api_key)):
+    """Get complete observability dashboard data."""
+    from app.core.monitoring import observability
+    dashboard_data = await observability.get_dashboard_data()
+    return {"status": "ok", **dashboard_data}
+
 async def process_telegram_message(data: dict):
     """Worker for the Backpressure Queue."""
     try:
