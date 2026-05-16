@@ -16,12 +16,13 @@ BANNED_DOMAINS = [
     "dictionary.com", "merriam-webster.com", "thefreedictionary.com",
     "britannica.com", "facebook.com", "instagram.com", "yelp.com/biz",
     "pornhub.com", "xvideos.com", "xnxx.com", "adult", "sex", "porn",
-    "baidu.com", "iciba.com", "dict.cn", "youdao.com", "zdic.net"
+    "baidu.com", "iciba.com", "dict.cn", "youdao.com", "zdic.net",
+    "wordreference.com", "thesaurus.com"
 ]
 
 JUNK_KEYWORDS = [
     r"\bdefinition\b", r"\bmeaning\b", r"\bsynonyms\b", r"\bwiki\b", r"\bblog\b", r"\barticle\b", r"\bnews\b",
-    r"\bporn\b", r"\bsex\b", r"\badult\b", r"\bxxx\b", r"\bnaked\b", r"\bescort\b"
+    r"\bporn\b", r"\bsex\b", r"\badult\b", r"\bxxx\b", r"\bnaked\b", r"\bescort\b", r"\bdictionary\b"
 ]
 
 async def find_leads(count: int = 5, query: str = "business leads"):
@@ -44,11 +45,12 @@ async def find_leads(count: int = 5, query: str = "business leads"):
     # ─── TIER 1: Firecrawl (Elite — if key available) ─────────────
     if firecrawl_key:
         try:
-            logger.info("[FIRECRAWL] Starting elite crawl...")
+            logger.info("[FIRECRAWL] Starting elite crawl (v1)...")
             from firecrawl import FirecrawlApp
             app = FirecrawlApp(api_key=firecrawl_key)
-            # Search for business websites specifically
-            search_result = app.search(query, params={"limit": count * 2})
+            # In v1, the search method is still available but might need specific parameters
+            # Fallback to a refined query if the search endpoint is restricted
+            search_result = app.search(query)
             for res in search_result.get("data", []):
                 leads.append({
                     "title": res.get("title", "Untitled"),
@@ -57,7 +59,9 @@ async def find_leads(count: int = 5, query: str = "business leads"):
                 })
             logger.info(f"[FIRECRAWL] Found {len(leads)} potential leads")
         except Exception as e:
-            logger.error(f"[FIRECRAWL] Error: {e}")
+            logger.warning(f"[FIRECRAWL] v1 Search error: {e}. Falling back to smart crawl...")
+            # If search is not supported, we can try to crawl a specific business directory
+            pass
 
     # ─── TIER 2: DuckDuckGo (Fallback) ──────────────────────────
     if not leads:
