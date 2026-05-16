@@ -129,7 +129,7 @@ async def enrich_lead_lite(lead: Dict[str, Any]) -> Dict[str, Any]:
         markdown = await asyncio.get_event_loop().run_in_executor(None, _firecrawl_scrape, url)
         
         if markdown:
-             logger.info(f"[TELEMETRY] Firecrawl returned {len(markdown)} chars of markdown.")
+            logger.info(f"[TELEMETRY] Firecrawl returned {len(markdown)} chars of markdown.")
             yelp_data = _extract_from_yelp_markdown(markdown)
 
             if yelp_data["phone"]:
