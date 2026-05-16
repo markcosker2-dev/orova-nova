@@ -20,7 +20,7 @@ BANNED_DOMAINS = [
     "britannica.com", "facebook.com", "instagram.com", "yelp.com/biz",
     "pornhub.com", "xvideos.com", "xnxx.com", "adult", "sex", "porn",
     "baidu.com", "iciba.com", "dict.cn", "youdao.com", "zdic.net",
-    "wordreference.com", "thesaurus.com"
+    "wordreference.com", "thesaurus.com", "glosbe.com", "linguee.com"
 ]
 
 JUNK_KEYWORDS = [
