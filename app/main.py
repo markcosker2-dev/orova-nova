@@ -220,6 +220,12 @@ async def health_check():
         "active_traces": len(tracer.traces),
     }
 
+async def require_dashboard_api_key(x_api_key: Optional[str] = Header(None)):
+    expected = os.getenv("DASHBOARD_API_KEY")
+    if not expected or x_api_key != expected:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    return True
+
 @app.get("/api/hardening/metrics")
 async def get_hardening_metrics(authorized: bool = Depends(require_dashboard_api_key)):
     """Get hardening metrics: memory, rate limits, request traces."""
@@ -241,11 +247,7 @@ async def get_request_trace(request_id: str, authorized: bool = Depends(require_
     trace = tracer.get_trace(request_id)
     return {"status": "ok", "request_id": request_id, "trace": trace}
 
-async def require_dashboard_api_key(x_api_key: Optional[str] = Header(None)):
-    expected = os.getenv("DASHBOARD_API_KEY")
-    if not expected or x_api_key != expected:
-        raise HTTPException(status_code=403, detail="Unauthorized")
-    return True
+
 
 @app.get("/api/leads")
 async def get_leads(limit: int = 100, authorized: bool = Depends(require_dashboard_api_key)):
