@@ -235,12 +235,15 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
                     lead = await enrich_lead_lite(lead)
                     
                     # [NEW] Phase 2.1: Opportunity Scanner - ONLY for high-value leads or manual trigger
-                    # To save time on Render, we don't scan EVERY raw lead here anymore.
-                    # This prevents the system from hanging on Playwright browser launches.
                     lead["score"] = 0 
                     lead["icebreaker"] = "Pending review..."
                     
-                    DatabaseManager.save_lead(lead, client_id=client_id)
+                    # Populate CRM Metadata
+                    lead["source"] = "Yelp Direct" if "yelp.com" in (lead.get("url") or "") else "Web Search"
+                    lead["date"] = datetime.now().strftime("%Y-%m-%d")
+                    lead["vertical"] = niche # Use the actual search query as the vertical
+                    
+                    DatabaseManager.save_lead(lead, default_vertical=niche, client_id=client_id)
 
             # Update metrics
             try:
