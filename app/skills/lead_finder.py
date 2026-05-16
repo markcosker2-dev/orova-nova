@@ -230,21 +230,19 @@ async def _httpx_search(query: str, count: int) -> list:
 async def direct_yelp_crawl(topic: str, count: int) -> list:
     """Scrapes Yelp search results directly when search engines fail."""
     leads = []
+    search_topic = topic.replace(" ", "+")
+    yelp_url = f"https://www.yelp.com/search?find_desc={search_topic}"
+    
     try:
         from firecrawl import FirecrawlApp
         firecrawl_key = os.getenv("FIRECRAWL_API_KEY")
         if firecrawl_key:
             app = FirecrawlApp(api_key=firecrawl_key)
-            # Build direct Yelp search URL
-            search_topic = topic.replace(" ", "+")
-            yelp_url = f"https://www.yelp.com/search?find_desc={search_topic}"
+            logger.info(f"[YELP DIRECT] Crawling with Firecrawl: {yelp_url}")
+            # Use markdown format - no schema required, very robust
+            scrape_res = app.scrape_url(yelp_url, params={'formats': ['markdown']})
+            content = str(scrape_res.get("markdown", ""))
             
-            logger.info(f"[YELP DIRECT] Crawling: {yelp_url}")
-            # Use crawl/scrape to get the listings
-            scrape_res = app.scrape_url(yelp_url, params={'formats': ['json']})
-            # Try to extract businesses from the structured data or content
-            # (Heuristic: Look for links in the data)
-            content = str(scrape_res)
             # Find URLs like /biz/business-name
             matches = re.findall(r'/biz/[a-zA-Z0-9\-%]+', content)
             for m in list(set(matches))[:count*2]:
@@ -255,7 +253,24 @@ async def direct_yelp_crawl(topic: str, count: int) -> list:
                     "snippet": "Directly sourced from Yelp listings."
                 })
     except Exception as e:
-        logger.error(f"[YELP DIRECT] Firecrawl failed: {e}")
+        logger.warning(f"[YELP DIRECT] Firecrawl failed: {e}. Falling back to internal browser...")
+
+    if not leads:
+        try:
+            from app.skills.browser_ops import browse_and_extract
+            logger.info(f"[YELP DIRECT] Internal Browser Sourcing: {yelp_url}")
+            res = await browse_and_extract(url=yelp_url, objective="Find links to business profiles (starting with /biz/)")
+            content = str(res)
+            matches = re.findall(r'/biz/[a-zA-Z0-9\-%]+', content)
+            for m in list(set(matches))[:count*2]:
+                biz_url = f"https://www.yelp.com{m}"
+                leads.append({
+                    "title": m.split("/")[-1].replace("-", " ").title(),
+                    "url": biz_url,
+                    "snippet": "Sourced via Internal Browser."
+                })
+        except Exception as e:
+            logger.error(f"[YELP DIRECT] Internal Browser failed: {e}")
     
     return leads[:count]
 
