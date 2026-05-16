@@ -97,8 +97,8 @@ async def find_leads(count: int = 5, query: str = "business leads"):
     if not leads:
         try:
             logger.info("[GOOGLE] DDG failed. Trying hyper-reliable fallback...")
-            from app.skills.browser_ops import google_search_scrape
-            leads = await google_search_scrape(query, limit=count*2)
+            from app.skills.browser_ops import google_search_scrape_async
+            leads = await google_search_scrape_async(query, limit=count*2)
             logger.info(f"[GOOGLE] Found {len(leads)} raw results")
         except Exception as e:
             logger.error(f"[GOOGLE] Search error: {e}")
