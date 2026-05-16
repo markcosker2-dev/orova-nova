@@ -15,7 +15,8 @@ BANNED_DOMAINS = [
     "quora.com", "medium.com", "twitter.com", "tiktok.com",
     "dictionary.com", "merriam-webster.com", "thefreedictionary.com",
     "britannica.com", "facebook.com", "instagram.com", "yelp.com/biz",
-    "pornhub.com", "xvideos.com", "xnxx.com", "adult", "sex", "porn"
+    "pornhub.com", "xvideos.com", "xnxx.com", "adult", "sex", "porn",
+    "baidu.com", "iciba.com", "dict.cn", "youdao.com", "zdic.net"
 ]
 
 JUNK_KEYWORDS = [
@@ -89,6 +90,10 @@ async def find_leads(count: int = 5, query: str = "business leads"):
         else:
             lead["business"] = title.split(" - ")[0].split(" | ")[0].strip()
 
+        # 4. Language Check: Delete if contains non-English characters (Chinese/Japanese/etc.)
+        if re.search(r'[^\x00-\x7F]+', lead["business"]):
+            continue
+
         filtered.append(lead)
 
     leads = filtered[:count]
@@ -120,8 +125,8 @@ async def _duckduckgo_search(query: str, count: int) -> list:
         # Run synchronous DDG in executor to avoid blocking
         def _search():
             with DDGS() as ddgs:
-                # Add safesearch="strict" to ensure business-only results
-                return list(ddgs.text(query, max_results=count, safesearch="strict"))
+                # region="us-en" forces US results only
+                return list(ddgs.text(query, max_results=count, safesearch="strict", region="us-en"))
 
         results = await asyncio.get_event_loop().run_in_executor(None, _search)
 
