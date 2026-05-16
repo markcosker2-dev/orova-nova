@@ -37,6 +37,14 @@ service_account.json
 *.json.bak
 credentials.json
 
+# Secrets
+*.pem
+*.key
+*.pfx
+*.p12
+private_key.json
+aws_credentials
+
 # IDEs
 .vscode/
 .idea/
