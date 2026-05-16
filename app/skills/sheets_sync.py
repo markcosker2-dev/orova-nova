@@ -105,6 +105,8 @@ async def restore_leads_from_sheets() -> List[Dict[str, Any]]:
         return []
 
 async def sync_lead_to_sheets(lead: Dict[str, Any]) -> Dict[str, Any]:
+    # [P0] Rate Limit Protection: Wait to avoid Google 429 errors
+    await asyncio.sleep(2)
     try:
         worksheet = await _get_worksheet("Leads")
         row = [
@@ -148,6 +150,7 @@ async def sync_lead_to_sheets(lead: Dict[str, Any]) -> Dict[str, Any]:
         return {"ok": False, "error": str(exc)}
 
 async def update_lead_status_sheets(lead_id: int, new_status: str) -> Dict[str, Any]:
+    await asyncio.sleep(1)
     try:
         worksheet = await _get_worksheet("Leads")
         cell = await asyncio.to_thread(worksheet.find, str(lead_id))
