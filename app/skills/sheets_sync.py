@@ -43,16 +43,17 @@ async def get_sheets_client() -> Optional[gspread.Client]:
 
     return await asyncio.to_thread(_sync)
 
-async def _open_workbook() -> Optional[gspread.Spreadsheet]:
+async def _open_workbook(workbook_name: Optional[str] = None) -> Optional[gspread.Spreadsheet]:
     client = await get_sheets_client()
     if not client:
         return None
 
+    name = workbook_name or SHEET_NAME
     def _sync():
         try:
-            return client.open(SHEET_NAME)
+            return client.open(name)
         except Exception:
-            return client.create(SHEET_NAME)
+            return client.create(name)
 
     workbook = await asyncio.to_thread(_sync)
     if workbook is None:
@@ -69,8 +70,8 @@ async def _open_workbook() -> Optional[gspread.Spreadsheet]:
             worksheet.update("A1", [headers])
     return workbook
 
-async def _get_worksheet(tab_name: str):
-    workbook = await _open_workbook()
+async def _get_worksheet(tab_name: str, workbook_name: Optional[str] = None):
+    workbook = await _open_workbook(workbook_name)
     if not workbook:
         raise RuntimeError("Google Sheets workbook unavailable")
     try:
@@ -104,11 +105,11 @@ async def restore_leads_from_sheets() -> List[Dict[str, Any]]:
         logger.warning(f"[SheetsSync] Could not restore leads from sheets: {exc}")
         return []
 
-async def sync_lead_to_sheets(lead: Dict[str, Any]) -> Dict[str, Any]:
+async def sync_lead_to_sheets(lead: Dict[str, Any], workbook_name: Optional[str] = None) -> Dict[str, Any]:
     # [P0] Rate Limit Protection: Wait to avoid Google 429 errors
     await asyncio.sleep(2)
     try:
-        worksheet = await _get_worksheet("Leads")
+        worksheet = await _get_worksheet("Leads", workbook_name)
         row = [
             lead.get("id") or "",
             lead.get("business") or "",
@@ -149,10 +150,10 @@ async def sync_lead_to_sheets(lead: Dict[str, Any]) -> Dict[str, Any]:
         logger.error(f"[SheetsSync] sync_lead_to_sheets failed: {exc}")
         return {"ok": False, "error": str(exc)}
 
-async def update_lead_status_sheets(lead_id: int, new_status: str) -> Dict[str, Any]:
+async def update_lead_status_sheets(lead_id: int, new_status: str, workbook_name: Optional[str] = None) -> Dict[str, Any]:
     await asyncio.sleep(1)
     try:
-        worksheet = await _get_worksheet("Leads")
+        worksheet = await _get_worksheet("Leads", workbook_name)
         cell = await asyncio.to_thread(worksheet.find, str(lead_id))
         headers = WORKSHEET_HEADERS["Leads"]
         status_col = headers.index("Status") + 1
@@ -162,9 +163,9 @@ async def update_lead_status_sheets(lead_id: int, new_status: str) -> Dict[str, 
         logger.error(f"[SheetsSync] update_lead_status_sheets failed: {exc}")
         return {"ok": False, "error": str(exc)}
 
-async def sync_metric_to_sheets(client_id: int, metric_name: str, value: Any) -> Dict[str, Any]:
+async def sync_metric_to_sheets(client_id: int, metric_name: str, value: Any, workbook_name: Optional[str] = None) -> Dict[str, Any]:
     try:
-        worksheet = await _get_worksheet("Metrics")
+        worksheet = await _get_worksheet("Metrics", workbook_name)
         records = await asyncio.to_thread(worksheet.get_all_records)
         row_number = None
         for idx, row in enumerate(records, start=2):
@@ -186,9 +187,9 @@ async def sync_metric_to_sheets(client_id: int, metric_name: str, value: Any) ->
         logger.error(f"[SheetsSync] sync_metric_to_sheets failed: {exc}")
         return {"ok": False, "error": str(exc)}
 
-async def log_call_to_sheets(call_data: Dict[str, Any]) -> Dict[str, Any]:
+async def log_call_to_sheets(call_data: Dict[str, Any], workbook_name: Optional[str] = None) -> Dict[str, Any]:
     try:
-        worksheet = await _get_worksheet("CallLog")
+        worksheet = await _get_worksheet("CallLog", workbook_name)
         row = [
             call_data.get("call_id") or "",
             call_data.get("lead_id") or "",

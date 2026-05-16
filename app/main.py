@@ -290,6 +290,11 @@ async def get_agent_status(authorized: bool = Depends(require_dashboard_api_key)
 async def get_logs(authorized: bool = Depends(require_dashboard_api_key)):
     return {"status": "ok", "logs": LOG_BUFFER}
 
+@app.get("/api/performance")
+async def get_performance(client_id: int = 0, authorized: bool = Depends(require_dashboard_api_key)):
+    stats = await DatabaseManager.get_performance_stats(client_id)
+    return {"status": "ok", "performance": stats}
+
 @app.post("/api/leads/{lead_id}/approve")
 async def approve_lead(lead_id: int, authorized: bool = Depends(require_dashboard_api_key)):
     await DatabaseManager.query("UPDATE leads SET status = 'Approved' WHERE id = ?", (lead_id,))

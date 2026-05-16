@@ -1,4 +1,4 @@
-﻿import os
+import os
 import json
 import logging
 import time
@@ -72,6 +72,8 @@ class DatabaseManager:
                 vertical TEXT,
                 status TEXT DEFAULT 'New',
                 notes TEXT,
+                icebreaker TEXT,
+                score INTEGER DEFAULT 0,
                 client_id INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -121,6 +123,7 @@ class DatabaseManager:
                 business_name TEXT,
                 niche TEXT,
                 target_location TEXT,
+                workbook_name TEXT,
                 is_active INTEGER DEFAULT 1,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -142,6 +145,19 @@ class DatabaseManager:
                 success_metric REAL DEFAULT 0.0,
                 decay_score REAL DEFAULT 1.0,
                 last_used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS performance_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                client_id INTEGER DEFAULT 0,
+                operation TEXT,
+                latency REAL,
+                cost REAL DEFAULT 0.0,
+                status TEXT,
+                error_msg TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
@@ -303,6 +319,7 @@ class DatabaseManager:
                     business_name TEXT,
                     niche TEXT,
                     target_location TEXT,
+                    workbook_name TEXT,
                     is_active INTEGER DEFAULT 1,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -330,6 +347,18 @@ class DatabaseManager:
                     success_metric REAL DEFAULT 0.0,
                     decay_score REAL DEFAULT 1.0,
                     last_used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            await cls.query('''
+                CREATE TABLE IF NOT EXISTS performance_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    client_id INTEGER DEFAULT 0,
+                    operation TEXT,
+                    latency REAL,
+                    cost REAL DEFAULT 0.0,
+                    status TEXT,
+                    error_msg TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
@@ -400,10 +429,14 @@ class DatabaseManager:
                 except:
                     pass
         elif cls._sqlite_fallback:
-            row = cls._sqlite_query("SELECT niche, target_location FROM clients WHERE id = ?", (int(client_id),), fetchone=True)
+            row = cls._sqlite_query("SELECT niche, target_location, workbook_name FROM clients WHERE id = ?", (int(client_id),), fetchone=True)
             if row:
-                return {"niche": row["niche"], "location": row["target_location"]}
-        return {"niche": "Automotive", "location": "California"}
+                return {
+                    "niche": row["niche"], 
+                    "location": row["target_location"],
+                    "workbook": row["workbook_name"] or os.getenv("GOOGLE_SHEETS_WORKBOOK", "OROVA CRM")
+                }
+        return {"niche": "Automotive", "location": "California", "workbook": os.getenv("GOOGLE_SHEETS_WORKBOOK", "OROVA CRM")}
 
     @classmethod
     def add_client(cls, business_name, niche, target_location):
@@ -443,20 +476,24 @@ class DatabaseManager:
                 if existing:
                     logger.info(f"[SQLITE] Duplicate lead skipped (name match): {business}")
                     return
-            sql = '''INSERT INTO leads (business, url, email, phone, vertical, status, notes, client_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'''
+            sql = '''INSERT INTO leads (business, url, email, phone, vertical, status, notes, icebreaker, score, client_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'''
             params = (
                 business, url, lead_data.get("email"), lead_data.get("phone"),
                 lead_data.get("vertical") or default_vertical,
                 lead_data.get("status", "New"),
                 lead_data.get("notes") or lead_data.get("snippet", ""),
+                lead_data.get("icebreaker", ""),
+                lead_data.get("score", 0),
                 int(client_id)
             )
             lead_id = cls._sqlite_query(sql, params, return_lastrowid=True)
             if lead_id and sync_to_sheets:
                 lead_data["id"] = lead_id
                 try:
+                    config = cls.get_client_config(client_id)
+                    workbook = config.get("workbook")
                     from app.skills.sheets_sync import sync_lead_to_sheets
-                    cls._schedule_async_task(sync_lead_to_sheets(lead_data))
+                    cls._schedule_async_task(sync_lead_to_sheets(lead_data, workbook_name=workbook))
                 except Exception as exc:
                     logger.warning(f"[SQLITE] Sheet sync could not be scheduled: {exc}")
 
@@ -485,8 +522,12 @@ class DatabaseManager:
         elif cls._sqlite_fallback:
             cls._sqlite_query("UPDATE leads SET status = ? WHERE id = ?", (new_status, int(lead_id)))
             try:
+                lead = cls.get_lead_by_id(lead_id)
+                client_id = lead.get("client_id", 0) if lead else 0
+                config = cls.get_client_config(client_id)
+                workbook = config.get("workbook")
                 from app.skills.sheets_sync import update_lead_status_sheets
-                cls._schedule_async_task(update_lead_status_sheets(int(lead_id), new_status))
+                cls._schedule_async_task(update_lead_status_sheets(int(lead_id), new_status, workbook_name=workbook))
             except Exception as exc:
                 logger.warning(f"[SQLITE] Sheet status sync could not be scheduled: {exc}")
 
@@ -573,6 +614,24 @@ class DatabaseManager:
         elif cls._sqlite_fallback:
             cls._sqlite_query("INSERT OR IGNORE INTO blacklist (email, phone, business, reason) VALUES (?, ?, ?, ?)", (email, phone, business, reason))
 
+
+    @classmethod
+    def log_performance(cls, client_id, operation, latency, cost=0.0, status="success", error_msg=None):
+        if cls._sqlite_fallback:
+            cls._sqlite_query(
+                "INSERT INTO performance_logs (client_id, operation, latency, cost, status, error_msg) VALUES (?, ?, ?, ?, ?, ?)",
+                (int(client_id), operation, float(latency), float(cost), status, error_msg)
+            )
+
+    @classmethod
+    async def get_performance_stats(cls, client_id=0, limit=100):
+        if cls._sqlite_fallback:
+            rows = await cls.fetchall(
+                "SELECT * FROM performance_logs WHERE client_id = ? ORDER BY created_at DESC LIMIT ?",
+                (int(client_id), limit)
+            )
+            return [dict(r) for r in rows] if rows else []
+        return []
 
 # Backward compatibility aliases for module-level imports
 run_phase5_migrations = DatabaseManager.run_phase5_migrations

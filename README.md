@@ -28,6 +28,10 @@ A production-ready, autonomous AI agent designed to run for free on Railway/Rend
    - `RENDER_EXTERNAL_URL` (recommended)
    - `DATABASE_URL` = `sqlite+aiosqlite:///app/app/data/orova_v5.db`
    - `GOOGLE_CREDENTIALS_JSON` or `GOOGLE_APPLICATION_CREDENTIALS`
+5. Add GitHub Secrets:
+   - `RENDER_API_KEY`
+   - `RENDER_SERVICE_ID`
+6. Push to `main` to trigger GitHub Actions deployment.
 
 ## 🛠 Local Setup
 ```bash

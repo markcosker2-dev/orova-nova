@@ -20,6 +20,7 @@ from app.skills.outbound_dialer import trigger_retell_call
 from app.skills.agentmail_skill import check_replies
 from app.core.database import DatabaseManager
 from app.skills.light_enrich import enrich_lead_lite
+from app.skills.opportunity_scanner import scan_opportunity
 
 # Logging
 logging.basicConfig(
@@ -42,6 +43,7 @@ COLD_CALL_CHECK_MINUTES = 30    # Check for cold leads to auto-call
 MAX_RUNS_PER_DAY = 10
 MAX_CALLS_PER_DAY = 5           # Safety cap for Retell calls
 COLD_LEAD_DAYS_THRESHOLD = 5    # Days before escalating to phone call
+MAX_DAILY_COST = 5.0            # $5.00 daily safety cap
 
 # Security: Wallet Drain Safeguard
 daily_hunt_counter = 0
@@ -189,6 +191,12 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
         logger.info(f"🌙 [SLOW LANE] [Client {client_id}] Daily limit reached. Skipping lead hunt.")
         return
 
+    # Check Cost Guardrail
+    metrics = DatabaseManager.get_metrics(client_id)
+    if float(metrics.get("cost", 0)) >= MAX_DAILY_COST:
+        logger.warning(f"🛑 [WALLET] Daily cost limit (${MAX_DAILY_COST}) reached for Client {client_id}. Halting.")
+        return
+
     import random
     if client_id == 0 or not niche:
         niches = [
@@ -225,6 +233,14 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
                 if isinstance(lead, dict):
                     # [Enrichment] Find email/phone before saving
                     lead = await enrich_lead_lite(lead)
+                    
+                    # [NEW] Phase 2.1: Opportunity Scanner
+                    if lead.get("url"):
+                        opp = await scan_opportunity(lead["url"], lead["business"])
+                        lead["notes"] = f"{lead.get('notes', '')} | GAPS: {', '.join(opp.get('gaps', []))}"
+                        lead["score"] = opp.get("score", 0)
+                        lead["icebreaker"] = opp.get("hook", "")
+                    
                     DatabaseManager.save_lead(lead, client_id=client_id)
 
             # Update metrics
