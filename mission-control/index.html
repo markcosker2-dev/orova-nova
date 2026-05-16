@@ -68,6 +68,11 @@
     </table>
     <p class="note">Use the API key in the JavaScript to authenticate requests. Update it in the file after deployment.</p>
 
+    <h2>Live Activity Feed</h2>
+    <div id="log-feed" style="background: #000; color: #0f0; padding: 15px; border-radius: 12px; font-family: monospace; height: 200px; overflow-y: scroll; font-size: 12px; margin-bottom: 40px; border: 1px solid #333;">
+        [System] Waiting for activity...
+    </div>
+
     <script>
         const API_KEY = "nova_admin_2026";
 
@@ -115,6 +120,15 @@
                         <td>${l.status === 'New' ? `<button class="btn" onclick="approve(${l.id})">Approve</button>` : '✓'}</td>
                     </tr>
                 `).join('');
+
+                // Load Logs
+                const logRes = await fetch('/api/logs', { headers: {'X-API-Key': API_KEY} });
+                const logData = await logRes.json();
+                const logFeed = document.getElementById('log-feed');
+                if (logData.logs && logData.logs.length > 0) {
+                    logFeed.innerHTML = logData.logs.map(log => `<div>[${log.ts}] ${log.msg}</div>`).join('');
+                    logFeed.scrollTop = logFeed.scrollHeight;
+                }
             } catch (error) {
                 console.error(error);
                 document.getElementById('lead-table').innerHTML = '<tr><td colspan="4" style="color: #f55;">Unable to load dashboard data.</td></tr>';
@@ -149,6 +163,7 @@
         }
 
         loadData();
+        setInterval(loadData, 5000);
     </script>
 </body>
 </html>

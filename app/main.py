@@ -30,28 +30,28 @@ from app.core.database import DatabaseManager
 from app.core.soul import AgentSoul
 from app.skills.lead_finder import find_leads
 
+class BufferHandler(logging.Handler):
+    def emit(self, record):
+        if 'LOG_BUFFER' in globals():
+            _append_log(self.format(record))
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
+logger.addHandler(BufferHandler())
 
 # --- State ---
 ai_client = UnifiedAIClient()
 planner = TaskPlanner(ai_client)
 router = Router(planner, lead_hunter=find_leads)
 LOG_BUFFER = []
-# All topics route through Nova — she's the CEO and calls tools herself.
-# Sub-agent models were causing 429 rate limits.
 TOPIC_AGENT_MAP = {
-    "1": "nova",    # General
-    "2": "nova",    # Lead hunt
-    "3": "nova",    # Sales
-    "5": "nova",    # Creative
-    "6": "nova",    # Financials
-    "7": "nova"     # Dev
+    "1": "nova", "2": "nova", "3": "nova", "5": "nova", "6": "nova", "7": "nova"
 }
 
 def _append_log(msg: str):
     LOG_BUFFER.append({"ts": datetime.now().strftime("%H:%M:%S"), "msg": msg})
     if len(LOG_BUFFER) > 100: LOG_BUFFER.pop(0)
+
 from app.core.telegram_queue import tg_queue
 from app.core.pattern_reinforcer import reinforcer
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -270,6 +270,10 @@ async def get_agent_status(authorized: bool = Depends(require_dashboard_api_key)
         {"name": "Oracle", "role": "Data Intel", "status": "online"}
     ]
     return {"status": "ok", "agents": agents}
+
+@app.get("/api/logs")
+async def get_logs(authorized: bool = Depends(require_dashboard_api_key)):
+    return {"status": "ok", "logs": LOG_BUFFER}
 
 @app.post("/api/leads/{lead_id}/approve")
 async def approve_lead(lead_id: int, authorized: bool = Depends(require_dashboard_api_key)):

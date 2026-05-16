@@ -39,8 +39,11 @@ async def find_leads(count: int = 5, query: str = "business leads"):
 
     # ─── TIER 1: DuckDuckGo (Primary — always available) ─────────
     try:
-        leads = await _duckduckgo_search(query, count * 3)  # Over-fetch to allow filtering
-        logger.info(f"[DDG] Raw results: {len(leads)}")
+        leads = await _duckduckgo_search(query, count * 3)
+        if not leads:
+            logger.warning(f"[LEAD FINDER] DuckDuckGo returned 0 results for: {query}")
+        else:
+            logger.info(f"[DDG] Successfully found {len(leads)} raw results")
     except Exception as e:
         logger.error(f"[DDG] Search error: {e}")
 
