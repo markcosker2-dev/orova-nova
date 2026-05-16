@@ -295,6 +295,14 @@ async def get_performance(client_id: int = 0, authorized: bool = Depends(require
     stats = await DatabaseManager.get_performance_stats(client_id)
     return {"status": "ok", "performance": stats}
 
+@app.post("/api/leads/clear")
+async def clear_leads(authorized: bool = Depends(require_dashboard_api_key)):
+    """Wipe all leads from the database."""
+    if DatabaseManager._sqlite_fallback:
+        DatabaseManager._sqlite_query("DELETE FROM leads")
+        logger.info("[CLEAR] All leads wiped from database")
+    return {"status": "ok", "message": "All leads cleared"}
+
 @app.post("/api/leads/{lead_id}/approve")
 async def approve_lead(lead_id: int, authorized: bool = Depends(require_dashboard_api_key)):
     await DatabaseManager.query("UPDATE leads SET status = 'Approved' WHERE id = ?", (lead_id,))

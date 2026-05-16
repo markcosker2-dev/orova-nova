@@ -462,10 +462,21 @@ class DatabaseManager:
     @classmethod
     def save_lead(cls, lead_data, default_vertical="Automotive", client_id=0, sync_to_sheets=True):
         url = (lead_data.get("url") or "").lower()
+        business = (lead_data.get("business") or lead_data.get("title") or "").strip()
         # [NUCLEAR SHIELD] Block junk domains at the database entry point
-        banned = ["wordreference.com", "dictionary.com", "wikipedia.org", "thesaurus.com", "merriam-webster", "britannica", "quora", "reddit", "glosbe.com", "linguee.com", "definition"]
+        banned = [
+            "wordreference.com", "dictionary.com", "wikipedia.org", "thesaurus.com",
+            "merriam-webster", "britannica", "quora", "reddit", "glosbe.com",
+            "linguee.com", "definition", "baidu.com", "dict.cn", "iciba.com",
+            "youdao.com", "zdic.net", "baike."
+        ]
         if any(b in url for b in banned):
             logger.warning(f"[NUCLEAR SHIELD] Refused to save junk lead: {url}")
+            return None
+        # Block non-English business names
+        import re as _re
+        if business and _re.search(r'[^\x00-\x7F]', business):
+            logger.warning(f"[NUCLEAR SHIELD] Refused non-English lead: {business}")
             return None
 
         if cls._use_redis and cls._redis_manager:
