@@ -201,10 +201,10 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
     if client_id == 0 or not niche:
         niches = [
             'luxury car dealer california',
-            'home remodeling california free estimate',
-            'custom home builder california contact',
-            'private jet charter california quote',
-            'helicopter charter california book now'
+            'home remodeling california',
+            'custom home builder california',
+            'private jet california',
+            'helicopter charter california'
         ]
         query = random.choice(niches)
     else:

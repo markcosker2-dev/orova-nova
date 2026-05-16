@@ -809,6 +809,18 @@ async def google_search_scrape_async(query: str, limit: int = 10) -> List[Dict[s
                     }
                 });
             }
+
+            // Strategy 4: Universal link crawler (last-last resort)
+            if (items.length === 0) {
+                document.querySelectorAll('a').forEach(a => {
+                    const href = a.href || '';
+                    if (href.includes('google.com') || !href.startsWith('http')) return;
+                    const h3 = a.querySelector('h3') || a.parentElement?.querySelector('h3');
+                    if (h3) {
+                        items.push({ title: h3.innerText, url: href, snippet: '' });
+                    }
+                });
+            }
             
             // Deduplicate by URL
             const seen = new Set();
