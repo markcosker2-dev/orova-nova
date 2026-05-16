@@ -11,9 +11,7 @@ logger = logging.getLogger(__name__)
 
 EMAIL_REGEX = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
 PHONE_REGEX = r'\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}'
-
-# Emails to ignore (junk patterns from JS/CSS files)
-JUNK_EMAIL_PATTERNS = ['example', 'png', 'jpg', 'gif', 'sentry', 'webpack', 'wixpress', 'noreply', 'test@']
+JUNK_EMAIL_PATTERNS = ['example', 'png', 'jpg', 'gif', 'sentry', 'webpack', 'wixpress', 'noreply', 'test@', 'email@']
 
 
 async def _fetch_page(url: str) -> Optional[str]:
@@ -34,135 +32,151 @@ async def _fetch_page(url: str) -> Optional[str]:
 
 
 def _extract_emails(text: str) -> list:
-    """Extract valid emails from text, filtering junk."""
     emails = re.findall(EMAIL_REGEX, text)
     return [e for e in emails if not any(j in e.lower() for j in JUNK_EMAIL_PATTERNS)]
 
 
 def _extract_phones(text: str) -> list:
-    """Extract phone numbers from text."""
     return re.findall(PHONE_REGEX, text)
 
 
-def _extract_real_website_from_yelp(html: str) -> Optional[str]:
-    """Extract the business's actual website from a Yelp business page."""
-    soup = BeautifulSoup(html, "html.parser")
-    
-    # Strategy 1: Look for outbound links that Yelp redirects through
-    for a in soup.find_all("a", href=True):
-        href = a["href"]
-        # Yelp wraps external links like: /biz_redir?url=https://realbusiness.com
-        if "biz_redir" in href and "url=" in href:
-            real_url = href.split("url=")[-1].split("&")[0]
-            from urllib.parse import unquote
-            return unquote(real_url)
-    
-    # Strategy 2: Look for aria-label "Business website" or similar
-    for a in soup.find_all("a", href=True):
-        label = a.get("aria-label", "").lower()
-        text = a.get_text(strip=True).lower()
-        if any(k in label or k in text for k in ["business website", "website", "company site"]):
-            href = a["href"]
-            if href.startswith("http") and "yelp.com" not in href:
-                return href
-    
-    # Strategy 3: Look for any external link that's not social media
-    social = ["facebook.com", "instagram.com", "twitter.com", "linkedin.com", "youtube.com", "tiktok.com", "yelp.com"]
-    for a in soup.find_all("a", href=True):
-        href = a["href"]
-        if href.startswith("http") and not any(s in href for s in social):
-            return href
-    
-    return None
+def _firecrawl_scrape(url: str) -> Optional[str]:
+    """Use Firecrawl to scrape a page (renders JavaScript). Returns markdown."""
+    try:
+        from firecrawl import FirecrawlApp
+        key = os.getenv("FIRECRAWL_API_KEY")
+        if not key:
+            return None
+        app = FirecrawlApp(api_key=key)
+        result = app.scrape_url(url, params={'formats': ['markdown']})
+        return result.get("markdown", "")
+    except Exception as e:
+        logger.warning(f"[ENRICH] Firecrawl scrape failed for {url}: {e}")
+        return None
 
 
-def _extract_phone_from_yelp(html: str) -> Optional[str]:
-    """Extract phone number from Yelp page."""
-    soup = BeautifulSoup(html, "html.parser")
-    
-    # Look for phone patterns in the page text
-    text = soup.get_text()
-    phones = _extract_phones(text)
+def _extract_from_yelp_markdown(markdown: str) -> Dict[str, Any]:
+    """Extract phone, website, and business info from Yelp page markdown."""
+    data = {"phone": None, "website": None, "address": None}
+
+    # Phone: Look for phone number patterns
+    phones = _extract_phones(markdown)
     if phones:
-        return phones[0]
-    
-    # Look for tel: links
-    for a in soup.find_all("a", href=True):
-        if a["href"].startswith("tel:"):
-            return a["href"].replace("tel:", "").strip()
-    
-    return None
+        data["phone"] = phones[0]
+
+    # Website: Look for URLs that aren't yelp/social media
+    social = ["yelp.com", "facebook.com", "instagram.com", "twitter.com", "linkedin.com", "youtube.com", "tiktok.com"]
+    urls = re.findall(r'https?://[^\s\)\]\"\'<>]+', markdown)
+    for u in urls:
+        u_clean = u.rstrip('.,;:)')
+        if not any(s in u_clean.lower() for s in social):
+            data["website"] = u_clean
+            break
+
+    # Also try to find website from common Yelp markdown patterns
+    # Yelp often shows "Business website" or just the domain
+    website_patterns = [
+        r'(?:Business website|Website)[:\s]*\[?([^\]\s]+)',
+        r'(?:http[s]?://(?:www\.)?[a-zA-Z0-9][-a-zA-Z0-9]*\.[a-zA-Z]{2,}(?:/[^\s\)\]]*)?)',
+    ]
+    if not data["website"]:
+        for pattern in website_patterns:
+            match = re.search(pattern, markdown, re.IGNORECASE)
+            if match:
+                url_candidate = match.group(1) if match.lastindex else match.group(0)
+                if not any(s in url_candidate.lower() for s in social):
+                    data["website"] = url_candidate
+                    break
+
+    # Address: Look for state abbreviations near numbers
+    addr_match = re.search(r'\d+\s+[A-Za-z\s]+(?:St|Ave|Blvd|Dr|Rd|Way|Ln|Ct|Pl|Pkwy)[^,]*,\s*[A-Za-z\s]+,\s*[A-Z]{2}\s*\d{5}', markdown)
+    if addr_match:
+        data["address"] = addr_match.group(0)
+
+    return data
 
 
 async def enrich_lead_lite(lead: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Enrichment pipeline:
-    1. Visit Yelp page → extract phone + real website URL
-    2. Visit real website → extract email, phone, owner name
-    3. Try Apollo API for decision-maker info
+    3-step enrichment:
+    1. Use Firecrawl to read the Yelp page (renders JS) → phone + real website
+    2. Visit real website with httpx → email + about info
+    3. Apollo API → decision-maker name + verified email
     """
     url = lead.get("url")
     if not url or not url.startswith("http"):
         return lead
 
-    logger.info(f"[ENRICH] Starting enrichment for: {lead.get('business', url)}")
-    
+    biz_name = lead.get("business", "Unknown")
+    logger.info(f"[ENRICH] Starting enrichment for: {biz_name}")
+
     real_website = None
-    
-    # ─── STEP 1: Extract data from Yelp page ──────────────────
+
+    # ─── STEP 1: Firecrawl the Yelp page ──────────────────────
     if "yelp.com/biz/" in url:
-        logger.info(f"[ENRICH] Step 1: Reading Yelp page...")
-        yelp_html = await _fetch_page(url)
-        if yelp_html:
-            # Get phone from Yelp (they often show it)
-            phone = _extract_phone_from_yelp(yelp_html)
-            if phone:
-                lead["phone"] = phone
-                logger.info(f"[ENRICH] → Yelp Phone: {phone}")
-            
-            # Get real website from Yelp
-            real_website = _extract_real_website_from_yelp(yelp_html)
-            if real_website:
-                logger.info(f"[ENRICH] → Real Website: {real_website}")
+        logger.info(f"[ENRICH] Step 1: Firecrawl reading Yelp page...")
+        
+        # Use Firecrawl (renders JS, bypasses Yelp's bot wall)
+        markdown = await asyncio.get_event_loop().run_in_executor(None, _firecrawl_scrape, url)
+
+        if markdown:
+            yelp_data = _extract_from_yelp_markdown(markdown)
+
+            if yelp_data["phone"]:
+                lead["phone"] = yelp_data["phone"]
+                logger.info(f"[ENRICH] → Phone: {lead['phone']}")
+
+            if yelp_data["website"]:
+                real_website = yelp_data["website"]
+                logger.info(f"[ENRICH] → Website: {real_website}")
+
+            if yelp_data["address"]:
+                lead["notes"] = (lead.get("notes", "") + f" | Address: {yelp_data['address']}").strip(" |")
+        else:
+            logger.warning("[ENRICH] Firecrawl returned nothing for Yelp page")
     else:
         real_website = url
-    
-    # ─── STEP 2: Visit real website for email/phone ───────────
+
+    # ─── STEP 2: Visit real website for email ─────────────────
     if real_website:
         logger.info(f"[ENRICH] Step 2: Scraping real website: {real_website}")
         site_html = await _fetch_page(real_website)
         if site_html:
-            # Extract emails
             if not lead.get("email"):
                 emails = _extract_emails(site_html)
                 if emails:
                     lead["email"] = emails[0]
                     logger.info(f"[ENRICH] → Email: {lead['email']}")
-            
-            # Extract phone if we don't have one yet
+
             if not lead.get("phone"):
                 phones = _extract_phones(site_html)
                 if phones:
                     lead["phone"] = phones[0]
                     logger.info(f"[ENRICH] → Phone: {lead['phone']}")
-            
-            # Try to find owner/contact name
-            soup = BeautifulSoup(site_html, "html.parser")
-            # Look for "About" sections or owner mentions
-            about_text = ""
-            for sel in ["#about", ".about", "[class*='about']", "[id*='about']", "[class*='team']", "[class*='owner']"]:
-                el = soup.select_one(sel)
-                if el:
-                    about_text = el.get_text(strip=True)[:500]
-                    break
-            
-            if about_text and not lead.get("owner"):
-                lead["notes"] = (lead.get("notes", "") + f" | About: {about_text[:200]}").strip(" |")
 
-    # ─── STEP 3: Apollo Enrichment (if key available) ─────────
+            # Try contact page too
+            if not lead.get("email"):
+                for path in ["/contact", "/contact-us", "/about", "/about-us"]:
+                    try:
+                        contact_url = real_website.rstrip("/") + path
+                        contact_html = await _fetch_page(contact_url)
+                        if contact_html:
+                            emails = _extract_emails(contact_html)
+                            if emails:
+                                lead["email"] = emails[0]
+                                logger.info(f"[ENRICH] → Email (from {path}): {lead['email']}")
+                                break
+                            if not lead.get("phone"):
+                                phones = _extract_phones(contact_html)
+                                if phones:
+                                    lead["phone"] = phones[0]
+                    except:
+                        pass
+
+    # ─── STEP 3: Apollo enrichment ────────────────────────────
     apollo_key = os.getenv("APOLLO_API_KEY")
     domain = (real_website or url).split("//")[-1].split("/")[0].replace("www.", "")
-    
+
     if apollo_key and domain and "yelp.com" not in domain:
         logger.info(f"[ENRICH] Step 3: Apollo lookup for {domain}...")
         try:
@@ -183,5 +197,5 @@ async def enrich_lead_lite(lead: Dict[str, Any]) -> Dict[str, Any]:
         except Exception as ap_err:
             logger.warning(f"[ENRICH] Apollo failed: {ap_err}")
 
-    logger.info(f"[ENRICH] Complete: {lead.get('business')} | Email: {lead.get('email', 'N/A')} | Phone: {lead.get('phone', 'N/A')}")
+    logger.info(f"[ENRICH] Done: {biz_name} | Phone: {lead.get('phone', 'N/A')} | Email: {lead.get('email', 'N/A')}")
     return lead
