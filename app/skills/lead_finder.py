@@ -57,7 +57,9 @@ async def find_leads(count: int = 5, query: str = "business leads"):
     # ─── THE YELP HAMMER (100% Business Only) ───────────────────
     # Force search into Yelp to avoid dictionaries and blog posts
     if "site:" not in query.lower():
-        query = f'site:yelp.com "{query}"'
+        # Strip existing quotes to prevent double-quote bug
+        clean_query = query.replace('"', '').replace("'", "")
+        query = f'site:yelp.com "{clean_query}"'
         logger.info(f"[YELP HAMMER] Locked to business directory: {query}")
         
     logger.info(f"[LEAD FINDER] Searching for {count} leads: '{query}'")
@@ -69,8 +71,6 @@ async def find_leads(count: int = 5, query: str = "business leads"):
             logger.info("[FIRECRAWL] Starting elite crawl (v1)...")
             from firecrawl import FirecrawlApp
             app = FirecrawlApp(api_key=firecrawl_key)
-            # In v1, the search method is still available but might need specific parameters
-            # Fallback to a refined query if the search endpoint is restricted
             search_result = app.search(query)
             for res in search_result.get("data", []):
                 leads.append({
@@ -80,8 +80,8 @@ async def find_leads(count: int = 5, query: str = "business leads"):
                 })
             logger.info(f"[FIRECRAWL] Found {len(leads)} potential leads")
         except Exception as e:
-            logger.warning(f"[FIRECRAWL] v1 Search error: {e}. Falling back to smart crawl...")
-            # If search is not supported, we can try to crawl a specific business directory
+            logger.warning(f"[FIRECRAWL] Search failed: {e}. Trying direct crawl...")
+            # If search fails, we try to crawl the first page of results directly if we can
             pass
 
     # ─── TIER 2: DuckDuckGo (Fallback) ──────────────────────────
