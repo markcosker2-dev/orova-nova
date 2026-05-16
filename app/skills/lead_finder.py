@@ -89,25 +89,37 @@ async def find_leads(count: int = 5, query: str = "business leads"):
         except Exception as e:
             logger.warning(f"[FIRECRAWL] Search failed: {e}. Trying direct crawl...")
 
-    # ─── TIER 2: DuckDuckGo (Fallback) ──────────────────────────
+    # ─── TIER 2: DuckDuckGo (Fallback 1) ───────────────────────
     if not leads:
         try:
-            leads = await _duckduckgo_search(query, count * 3)
+            # DDG doesn't like 'site:' operators. Strip it and just add 'yelp'
+            ddg_query = query.replace("site:yelp.com", "yelp")
+            leads = await _duckduckgo_search(ddg_query, count * 3)
             logger.info(f"[DDG] Found {len(leads)} raw results")
         except Exception as e:
             logger.error(f"[DDG] Search error: {e}")
 
-    # ─── TIER 3: Google (Hyper-Reliable Fallback) ───────────────
+    # ─── TIER 3: HTTPX Scraper (Fallback 2 — Best for Render) ────
     if not leads:
         try:
-            logger.info("[GOOGLE] DDG failed. Trying hyper-reliable fallback...")
+            logger.info("[HTTPX] Trying direct HTML scrape fallback...")
+            httpx_query = query.replace("site:yelp.com", "yelp")
+            leads = await _httpx_search(httpx_query, count * 2)
+            logger.info(f"[HTTPX] Found {len(leads)} raw results")
+        except Exception as e:
+            logger.error(f"[HTTPX] Search error: {e}")
+
+    # ─── TIER 4: Google (Fallback 3 — Unreliable on Render) ──────
+    if not leads:
+        try:
+            logger.info("[GOOGLE] Searching fallback...")
             from app.skills.browser_ops import google_search_scrape_async
             leads = await google_search_scrape_async(query, limit=count*2)
             logger.info(f"[GOOGLE] Found {len(leads)} raw results")
         except Exception as e:
             logger.error(f"[GOOGLE] Search error: {e}")
 
-    # ─── TIER 4: Direct Yelp Crawl (The "Front Door") ──────────
+    # ─── TIER 5: Direct Yelp Crawl (The "Front Door") ──────────
     if not leads:
         try:
             logger.info("[YELP DIRECT] Search engines blocked us. Going to the front door...")
@@ -266,7 +278,10 @@ async def direct_yelp_crawl(topic: str, count: int) -> list:
         try:
             from app.skills.browser_ops import browse_and_extract
             logger.info(f"[YELP DIRECT] Internal Browser Sourcing: {yelp_url}")
-            res = await browse_and_extract(url=yelp_url, objective="Find links to business profiles (starting with /biz/)")
+            # browse_and_extract is sync, run in executor
+            res = await asyncio.get_event_loop().run_in_executor(
+                None, browse_and_extract, yelp_url, "Find links to business profiles (starting with /biz/)"
+            )
             content = str(res)
             matches = re.findall(r'/biz/[a-zA-Z0-9\-%]+', content)
             for m in list(set(matches))[:count*2]:
