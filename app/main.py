@@ -261,7 +261,20 @@ async def get_request_trace(request_id: str, authorized: bool = Depends(require_
 
 @app.get("/api/leads")
 async def get_leads(limit: int = 100, authorized: bool = Depends(require_dashboard_api_key)):
-    leads = await DatabaseManager.query("SELECT * FROM leads ORDER BY id DESC LIMIT ?", (limit,), fetchall=True)
+    query = """
+        SELECT 
+            id, business, url, 
+            COALESCE(email, '') as email, 
+            COALESCE(phone, '') as phone, 
+            vertical, status, 
+            COALESCE(notes, '') as notes, 
+            COALESCE(icebreaker, 'No hook generated') as icebreaker, 
+            COALESCE(score, 0) as score, 
+            client_id, created_at
+        FROM leads 
+        ORDER BY id DESC LIMIT ?
+    """
+    leads = await DatabaseManager.query(query, (limit,), fetchall=True)
     return {"status": "ok", "leads": [dict(r) for r in leads]}
 
 @app.get("/api/metrics")
@@ -297,18 +310,42 @@ async def get_performance(client_id: int = 0, authorized: bool = Depends(require
 
 @app.post("/api/leads/{lead_id}/approve")
 async def approve_lead(lead_id: int, authorized: bool = Depends(require_dashboard_api_key)):
-    await DatabaseManager.query("UPDATE leads SET status = 'Approved' WHERE id = ?", (lead_id,))
+    # 1. Get the lead data
+    lead = await DatabaseManager.query("SELECT * FROM leads WHERE id = ?", (lead_id,), fetchone=True)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    lead_dict = dict(lead)
+    
+    # 2. Run Opportunity Scanner (Moved from worker to here for efficiency)
+    from app.skills.opportunity_scanner import scan_opportunity
+    if lead_dict.get("url"):
+        logger.info(f"[APPROVE] Deep-scanning approved lead: {lead_dict['business']}")
+        opp = await scan_opportunity(lead_dict["url"], lead_dict["business"])
+        
+        notes = f"{lead_dict.get('notes') or ''} | GAPS: {', '.join(opp.get('gaps', []))}"
+        score = opp.get("score", 0)
+        icebreaker = opp.get("hook", "")
+        
+        await DatabaseManager.query(
+            "UPDATE leads SET status = 'Approved', notes = ?, score = ?, icebreaker = ? WHERE id = ?",
+            (notes, score, icebreaker, lead_id)
+        )
+    else:
+        await DatabaseManager.query("UPDATE leads SET status = 'Approved' WHERE id = ?", (lead_id,))
+    
+    # 3. Sync to Google Sheets
     await update_lead_status_sheets(lead_id, "Approved")
-    return {"status": "ok", "message": f"Lead {lead_id} approved"}
+    return {"status": "ok", "message": f"Lead {lead_id} approved and deep-scanned"}
 
 @app.post("/api/jobs/hunt")
-async def job_hunt(authorization: str = Header(None), x_api_key: str = Header(None)):
+async def job_hunt(query: str = "business leads", authorization: str = Header(None), x_api_key: str = Header(None)):
     authorized = (authorization == f"Bearer {os.getenv('CRON_SECRET')}") or (x_api_key == os.getenv("DASHBOARD_API_KEY"))
     if not authorized:
         raise HTTPException(status_code=403)
     from app.worker import run_lead_hunt_slow_lane
-    asyncio.create_task(run_lead_hunt_slow_lane(client_id=0))
-    return {"status": "job_started", "job": "lead_hunt"}
+    asyncio.create_task(run_lead_hunt_slow_lane(client_id=0, niche=query))
+    return {"status": "job_started", "job": "lead_hunt", "query": query}
 
 @app.post("/api/jobs/check-replies")
 async def job_replies(authorization: str = Header(None), x_api_key: str = Header(None)):

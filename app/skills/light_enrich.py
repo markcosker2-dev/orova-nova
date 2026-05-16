@@ -110,16 +110,26 @@ async def enrich_lead_lite(lead: Dict[str, Any]) -> Dict[str, Any]:
     biz_name = lead.get("business", "Unknown")
     logger.info(f"[ENRICH] Starting enrichment for: {biz_name}")
 
+    # If lead already has phone from the search tier, don't re-scrape unless needed
+    if lead.get("phone"):
+        logger.info(f"[ENRICH] Lead already has phone: {lead['phone']}. Skipping Yelp deep-scrape.")
+        real_website = None # We'll try to find it on the Yelp page still if we need email
+    
     real_website = None
 
     # ─── STEP 1: Firecrawl the Yelp page ──────────────────────
     if "yelp.com/biz/" in url:
+        # If we have phone but no email/website, we still need to hit Yelp to find the real website
+        if lead.get("phone") and lead.get("email"):
+             logger.info("[ENRICH] Lead already fully enriched. Skipping.")
+             return lead
+
         logger.info(f"[ENRICH] Step 1: Firecrawl reading Yelp page...")
-        
         # Use Firecrawl (renders JS, bypasses Yelp's bot wall)
         markdown = await asyncio.get_event_loop().run_in_executor(None, _firecrawl_scrape, url)
-
+        
         if markdown:
+             logger.info(f"[TELEMETRY] Firecrawl returned {len(markdown)} chars of markdown.")
             yelp_data = _extract_from_yelp_markdown(markdown)
 
             if yelp_data["phone"]:

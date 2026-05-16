@@ -206,9 +206,12 @@
 
     <div class="section-header">
         <h2>Executive Action Center</h2>
-        <button class="btn" onclick="runJob('hunt', event)">
-            <span>🚀</span> Start Lead Hunt
-        </button>
+        <div style="display: flex; gap: 12px; flex: 1; max-width: 500px;">
+            <input type="text" id="search-query" class="input-field" placeholder="e.g. Roofers in Los Angeles" style="flex: 1; background: var(--card); border: 1px solid var(--border); color: white; padding: 12px; border-radius: 12px;">
+            <button class="btn" onclick="runJob('hunt', event)">
+                <span>🚀</span> Hunt
+            </button>
+        </div>
     </div>
 
     <div class="table-container">
@@ -266,7 +269,10 @@
                     table.innerHTML = leads.slice(0, 20).map(l => `
                         <tr>
                             <td style="font-weight: 600;">${l.business || 'Unknown'}</td>
-                            <td style="color: var(--text-dim); font-size: 13px;">${l.email || l.phone || l.url || 'N/A'}</td>
+                            <td style="color: var(--text-dim); font-size: 13px;">
+                                <div style="color: var(--accent);">${l.email || '—'}</div>
+                                <div style="opacity: 0.7;">${l.phone || '—'}</div>
+                            </td>
                             <td><span class="score-badge">${l.score || 0}</span></td>
                             <td><span class="status-pill status-${(l.status || 'new').toLowerCase()}">${l.status || 'New'}</span></td>
                             <td>
@@ -299,8 +305,10 @@
             const original = btn.innerHTML;
             btn.innerHTML = "Processing...";
             btn.disabled = true;
+            const query = document.getElementById('search-query')?.value || '';
             try {
-                await fetch(`/api/jobs/${jobName}`, { method: 'POST', headers: {'X-API-Key': API_KEY} });
+                const url = `/api/jobs/${jobName}${jobName === 'hunt' ? `?query=${encodeURIComponent(query)}` : ''}`;
+                await fetch(url, { method: 'POST', headers: {'X-API-Key': API_KEY} });
                 loadData();
             } catch (e) {
                 alert("Job failed: " + e.message);

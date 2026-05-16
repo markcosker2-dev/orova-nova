@@ -263,13 +263,24 @@ async def direct_yelp_crawl(topic: str, count: int) -> list:
             scrape_res = app.scrape_url(yelp_url, params={'formats': ['markdown']})
             content = str(scrape_res.get("markdown", ""))
             
-            matches = re.findall(r'/biz/[a-zA-Z0-9\-%]+', content)
-            for m in list(set(matches))[:count*2]:
+            # Find URLs like /biz/business-name and their surrounding context
+            # We look for the business blocks
+            biz_matches = re.findall(r'/biz/[a-zA-Z0-9\-%]+', content)
+            for m in list(set(biz_matches))[:count*2]:
                 biz_url = f"https://www.yelp.com{m}"
+                
+                # Try to find a phone number near this link in the markdown
+                # (Heuristic: search 500 chars around the match)
+                start_idx = content.find(m)
+                context = content[max(0, start_idx-200):min(len(content), start_idx+500)]
+                phone_match = re.search(r'\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}', context)
+                phone = phone_match.group(0) if phone_match else None
+
                 leads.append({
                     "title": m.split("/")[-1].replace("-", " ").title(),
                     "url": biz_url,
-                    "snippet": "Directly sourced from Yelp listings."
+                    "phone": phone,
+                    "snippet": f"Directly sourced. {f'Phone: {phone}' if phone else ''}"
                 })
     except Exception as e:
         logger.warning(f"[YELP DIRECT] Firecrawl failed: {e}. Falling back to internal browser...")
