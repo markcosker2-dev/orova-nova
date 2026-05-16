@@ -19,6 +19,7 @@ from app.skills.lead_finder import find_leads
 from app.skills.outbound_dialer import trigger_retell_call
 from app.skills.agentmail_skill import check_replies
 from app.core.database import DatabaseManager
+from app.skills.light_enrich import enrich_lead_lite
 
 # Logging
 logging.basicConfig(
@@ -223,6 +224,8 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
             # Save each lead to SQLite
             for lead in leads:
                 if isinstance(lead, dict):
+                    # [Enrichment] Find email/phone before saving
+                    lead = await enrich_lead_lite(lead)
                     DatabaseManager.save_lead(lead, client_id=client_id)
 
             # Update metrics
