@@ -59,10 +59,16 @@ def _reset_daily_counters():
 
 
 def _get_sheets_client():
-    """Get authorized Google Sheets client."""
-    creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "credentials.json")
+    """Get authorized Google Sheets client using env vars or file."""
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = Credentials.from_service_account_file(creds_path, scopes=scope)
+    creds_b64 = os.getenv("GOOGLE_CREDENTIALS_JSON")
+    if creds_b64:
+        import base64
+        creds_dict = json.loads(base64.b64decode(creds_b64).decode("utf-8"))
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+    else:
+        creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "credentials.json")
+        creds = Credentials.from_service_account_file(creds_path, scopes=scope)
     return gspread.authorize(creds)
 
 
@@ -93,7 +99,8 @@ async def run_ceo_fast_lane(client_id=0):
         # For now, we utilize a single master sheet, but filter by client_id in the notes/metadata
         # Future: support client-specific sheet names stored in the 'clients' table
         client_auth = _get_sheets_client()
-        sheet = client_auth.open("OROVA Leads").sheet1
+        sheet_name = os.getenv("GOOGLE_SHEETS_WORKBOOK", "OROVA CRM")
+        sheet = client_auth.open(sheet_name).sheet1
         rows = sheet.get_all_values()
 
         for idx, row in enumerate(rows[1:], start=2):
@@ -310,7 +317,8 @@ async def run_cold_lead_escalation(client_id=0):
         cold_business_names = {l["business"].lower() for l in cold_leads if l.get("business")}
 
         client_auth = _get_sheets_client()
-        sheet = client_auth.open("OROVA Leads").sheet1
+        sheet_name = os.getenv("GOOGLE_SHEETS_WORKBOOK", "OROVA CRM")
+        sheet = client_auth.open(sheet_name).sheet1
         rows = sheet.get_all_values()
 
         escalated = 0
