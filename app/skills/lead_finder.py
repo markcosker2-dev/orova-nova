@@ -25,60 +25,64 @@ JUNK_KEYWORDS = [
 
 async def find_leads(count: int = 5, query: str = "business leads"):
     """
-    Search for business leads using DuckDuckGo (free, no API key).
-    Returns real URLs with titles and snippets.
+    Search for business leads using Firecrawl (Elite) or DuckDuckGo (Fallback).
+    Uses AI verification to ensure leads are actual business websites.
     """
     count = int(count)
-
+    firecrawl_key = os.getenv("FIRECRAWL_API_KEY")
+    
     # ─── RELIABLE LOCAL SEARCH ─────────────────────────────
     # Standardize query to find actual business websites
     if "site:" not in query.lower() and "contact" not in query.lower():
-        query = f'"{query}" contact us'
+        query = f'"{query}" (contact OR about OR services)'
         logger.info(f"[SEARCH] Refined Query: {query}")
         
     logger.info(f"[LEAD FINDER] Searching for {count} leads: '{query}'")
     leads = []
 
-    # ─── TIER 1: DuckDuckGo (Primary — always available) ─────────
-    try:
-        leads = await _duckduckgo_search(query, count * 3)
-        if not leads:
-            logger.warning(f"[LEAD FINDER] DuckDuckGo returned 0 results for: {query}")
-        else:
-            logger.info(f"[DDG] Successfully found {len(leads)} raw results")
-    except Exception as e:
-        logger.error(f"[DDG] Search error: {e}")
+    # ─── TIER 1: Firecrawl (Elite — if key available) ─────────────
+    if firecrawl_key:
+        try:
+            logger.info("[FIRECRAWL] Starting elite crawl...")
+            from firecrawl import FirecrawlApp
+            app = FirecrawlApp(api_key=firecrawl_key)
+            # Search for business websites specifically
+            search_result = app.search(query, params={"limit": count * 2})
+            for res in search_result.get("data", []):
+                leads.append({
+                    "title": res.get("title", "Untitled"),
+                    "url": res.get("url", ""),
+                    "snippet": res.get("description", "")
+                })
+            logger.info(f"[FIRECRAWL] Found {len(leads)} potential leads")
+        except Exception as e:
+            logger.error(f"[FIRECRAWL] Error: {e}")
 
-    # ─── TIER 2: HTTPX Fallback (if DDG fails) ───────────────────
+    # ─── TIER 2: DuckDuckGo (Fallback) ──────────────────────────
     if not leads:
         try:
-            logger.info("[HTTPX] DDG failed. Trying httpx fallback...")
-            leads = await _httpx_search(query, count * 3)
-            logger.info(f"[HTTPX] Raw results: {len(leads)}")
+            leads = await _duckduckgo_search(query, count * 3)
+            logger.info(f"[DDG] Found {len(leads)} raw results")
         except Exception as e:
-            logger.error(f"[HTTPX] Fallback error: {e}")
+            logger.error(f"[DDG] Search error: {e}")
 
-    # ─── Filter banned domains and junk keywords ──────────────────
+    # ─── AI VERIFICATION & FILTERING ────────────────────────────
     filtered = []
     for lead in leads:
         url = lead.get("url", "").lower()
         title = lead.get("title", "")
         snippet = lead.get("snippet", "").lower()
         
-        # 1. Domain/Keyword check
-        if any(d in url for d in BANNED_DOMAINS):
-            continue
-            
-        import re
-        if any(re.search(k, title.lower()) or re.search(k, snippet) for k in JUNK_KEYWORDS):
-            continue
-
-        # 2. Heuristic Business Check: Skip known informational sites
-        info_sites = [".gov", ".edu", ".org", "forbes.com", "news.", "blog.", "wiki", "dictionary"]
+        # Basic Safety
+        if any(d in url for d in BANNED_DOMAINS): continue
+        if any(re.search(k, title.lower()) or re.search(k, snippet) for k in JUNK_KEYWORDS): continue
+        
+        # Hard Skip for Information Sites
+        info_sites = [".gov", ".edu", ".org", "forbes.com", "news.", "blog.", "wiki", "dictionary", "merriam-webster"]
         if any(site in url for site in info_sites):
             continue
 
-        # 3. Clean Business Name: If title is too long or looks like a blog post, extract from domain
+        # Clean Name
         if len(title) > 40 or any(x in title.lower() for x in ["best", "top", "how to"]):
             domain_part = url.split("//")[-1].split("/")[0].replace("www.", "").split(".")[0]
             lead["business"] = domain_part.replace("-", " ").replace("_", " ").title()

@@ -54,3 +54,4 @@ sqlmodel==0.0.14
 
 # [NEW] Quick Win: Timezone Detection (Premium UX)
 timezonefinder==6.2.0
+firecrawl-py==1.1.0
