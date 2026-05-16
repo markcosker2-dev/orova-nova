@@ -1,6 +1,8 @@
 ﻿import re
 import logging
+import uuid
 from typing import Optional
+from app.core.hardening import rate_limiter, sanitizer, tracer, RequestSanitizer
 
 logger = logging.getLogger(__name__)
 
@@ -20,30 +22,55 @@ class Router:
         self.shortcuts = {r"/reset": self._reset_instruction}
 
     async def route(self, message: str, chat_id: int, history: list = None, agent_id: str = "nova") -> str | dict:
-        message = message.strip()
+        # [P4] Hardening: Generate request ID for tracing
+        request_id = str(uuid.uuid4())[:8]
+        client_id_str = f"tg_{chat_id}"
+        
+        # [P4] Rate limiting check
+        if not rate_limiter.is_allowed(client_id_str):
+            retry_after = rate_limiter.get_retry_after(client_id_str)
+            logger.warning(f"[Router] Rate limit exceeded for {client_id_str}. Retry after {retry_after:.1f}s")
+            tracer.trace(request_id, "rate_limit_exceeded", {"client_id": chat_id, "retry_after": retry_after})
+            return {"error": "Rate limit exceeded. Please try again later.", "retry_after": retry_after}
+        
+        # [P4] Sanitize input
+        message = RequestSanitizer.sanitize_string(message.strip(), max_len=5000)
+        if not message:
+            logger.warning(f"[Router] Empty/invalid message from {chat_id}")
+            return "Your message appears to be empty. Please try again."
+        
+        tracer.trace(request_id, "route_start", {"client_id": chat_id, "agent_id": agent_id, "msg_len": len(message)})
+        
         lower_msg = message.lower()
 
         if _IDENTITY_PROBE_RE.search(lower_msg):
-            logger.info("[Router] Identity probe intercepted — returning persona deflect")
+            logger.info(f"[Router] {request_id} Identity probe intercepted")
+            tracer.trace(request_id, "identity_probe")
             return _IDENTITY_DEFLECT
 
         for pattern, handler in self.shortcuts.items():
             if re.search(pattern, lower_msg):
-                logger.info(f"[Router] Shortcut matched '{pattern}'")
+                logger.info(f"[Router] {request_id} Shortcut matched '{pattern}'")
+                tracer.trace(request_id, "shortcut_matched", {"pattern": pattern})
                 return await handler()
 
         email_match = _EMAIL_RE.search(message)
         send_intent = any(k in lower_msg for k in ["send", "write", "email", "reach out", "follow up"])
 
         if email_match and send_intent:
-            logger.info(f"[Router] Direct-send intercept → {email_match.group(0)}")
+            logger.info(f"[Router] {request_id} Direct-send intercept → {email_match.group(0)}")
+            tracer.trace(request_id, "direct_send", {"email": email_match.group(0)})
             return await self.planner.execute(
                 message, client_id=chat_id, conversation_history=history, agent_id="nova", _already_intercepted=True
             )
 
-        return await self.planner.execute(
+        tracer.trace(request_id, "planner_execute", {"message_preview": message[:100]})
+        result = await self.planner.execute(
             message, client_id=chat_id, conversation_history=history, agent_id=agent_id
         )
+        tracer.trace(request_id, "route_complete", {"result_type": type(result).__name__})
+        
+        return result
 
     async def _reset_instruction(self):
         return "Use the /reset command to wipe memory."

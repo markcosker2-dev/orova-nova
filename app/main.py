@@ -180,8 +180,10 @@ async def cmd_stats(update, context):
 
 @app.get("/health")
 async def health_check():
-    """Phase 5: Full system pulse — circuit breakers, queue depth, learning stats."""
+    """Phase 4+: Full system pulse — circuit breakers, queue depth, learning stats, hardening metrics."""
     from app.core.ai_client import _BREAKER
+    from app.core.hardening import memory_monitor, health_checks, tracer
+    
     now = datetime.utcnow()
     window_24h = now - timedelta(hours=24)
     
@@ -197,15 +199,47 @@ async def health_check():
         row = await DatabaseManager.fetchone("SELECT COUNT(*) as cnt, AVG(decay_score) as avg_score FROM learned_patterns WHERE last_used_at >= ?", (window_24h.isoformat(),))
         learning_stats = {"patterns_reinforced": row["cnt"], "avg_confidence": row["avg_score"]}
     except: learning_stats = {}
-
+    
+    # [P4] Memory monitoring
+    memory_status = await memory_monitor.check_memory()
+    
+    # [P4] Health checks
+    hardening_health = await health_checks.run_all()
+    
     any_open = any(v["state"] == "open" for v in breaker_status.values())
+    memory_critical = memory_status.get("critical", False)
     
     return {
-        "status": "Degraded" if any_open else "Operational",
+        "status": "Critical" if memory_critical else ("Degraded" if any_open else "Operational"),
         "timestamp": now.isoformat(),
         "circuit_breakers": breaker_status,
         "queue_depth": q_depth,
+        "learning_stats": learning_stats,
+        "memory": memory_status,
+        "hardening_health": hardening_health,
+        "active_traces": len(tracer.traces),
     }
+
+@app.get("/api/hardening/metrics")
+async def get_hardening_metrics(authorized: bool = Depends(require_dashboard_api_key)):
+    """Get hardening metrics: memory, rate limits, request traces."""
+    from app.core.hardening import memory_monitor, tracer
+    
+    memory_stats = await memory_monitor.get_memory_stats()
+    return {
+        "status": "ok",
+        "memory": memory_stats,
+        "rate_limiter_state": dict(tracer.traces),
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+@app.get("/api/trace/{request_id}")
+async def get_request_trace(request_id: str, authorized: bool = Depends(require_dashboard_api_key)):
+    """Get trace for a specific request ID."""
+    from app.core.hardening import tracer
+    
+    trace = tracer.get_trace(request_id)
+    return {"status": "ok", "request_id": request_id, "trace": trace}
 
 async def require_dashboard_api_key(x_api_key: Optional[str] = Header(None)):
     expected = os.getenv("DASHBOARD_API_KEY")
