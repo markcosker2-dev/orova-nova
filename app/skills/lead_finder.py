@@ -18,8 +18,8 @@ BANNED_DOMAINS = [
 ]
 
 JUNK_KEYWORDS = [
-    "definition", "meaning", "synonyms", "wiki", "blog", "article", "news",
-    "porn", "sex", "adult", "xxx", "naked", "escort"
+    r"\bdefinition\b", r"\bmeaning\b", r"\bsynonyms\b", r"\bwiki\b", r"\bblog\b", r"\barticle\b", r"\bnews\b",
+    r"\bporn\b", r"\bsex\b", r"\badult\b", r"\bxxx\b", r"\bnaked\b", r"\bescort\b"
 ]
 
 async def find_leads(count: int = 5, query: str = "business leads"):
@@ -30,11 +30,10 @@ async def find_leads(count: int = 5, query: str = "business leads"):
     count = int(count)
 
     # ─── RELIABLE LOCAL SEARCH ─────────────────────────────
-    # Use a more balanced search that doesn't trigger bot protection as easily
-    if "site:" not in query.lower():
-        # Mix in business directories but don't force a single one to avoid blocks
-        query = f'"{query}" (yelp OR "yellow pages" OR "business directory")'
-        logger.info(f"[SEARCH] Enhanced Query: {query}")
+    # Standardize query to find actual business websites
+    if "site:" not in query.lower() and "contact" not in query.lower():
+        query = f'"{query}" contact us'
+        logger.info(f"[SEARCH] Refined Query: {query}")
         
     logger.info(f"[LEAD FINDER] Searching for {count} leads: '{query}'")
     leads = []
@@ -62,19 +61,29 @@ async def find_leads(count: int = 5, query: str = "business leads"):
     filtered = []
     for lead in leads:
         url = lead.get("url", "").lower()
-        title = lead.get("title", "").lower()
+        title = lead.get("title", "")
         snippet = lead.get("snippet", "").lower()
         
-        # Domain check
+        # 1. Domain/Keyword check
         if any(d in url for d in BANNED_DOMAINS):
-            logger.info(f"[FILTER] Skipped banned domain: {url[:60]}")
             continue
             
-        # Junk keyword check
-        if any(k in title or k in snippet for k in JUNK_KEYWORDS):
-            logger.info(f"[FILTER] Skipped junk keyword in: {title[:40]}")
+        import re
+        if any(re.search(k, title.lower()) or re.search(k, snippet) for k in JUNK_KEYWORDS):
             continue
-            
+
+        # 2. Heuristic Business Check: Skip known informational sites
+        info_sites = [".gov", ".edu", ".org", "forbes.com", "news.", "blog.", "wiki", "dictionary"]
+        if any(site in url for site in info_sites):
+            continue
+
+        # 3. Clean Business Name: If title is too long or looks like a blog post, extract from domain
+        if len(title) > 40 or any(x in title.lower() for x in ["best", "top", "how to"]):
+            domain_part = url.split("//")[-1].split("/")[0].replace("www.", "").split(".")[0]
+            lead["business"] = domain_part.replace("-", " ").replace("_", " ").title()
+        else:
+            lead["business"] = title.split(" - ")[0].split(" | ")[0].strip()
+
         filtered.append(lead)
 
     leads = filtered[:count]
