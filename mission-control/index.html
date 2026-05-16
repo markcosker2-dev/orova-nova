@@ -164,7 +164,8 @@
                 });
                 alert(`Job ${jobName} triggered successfully!`);
             } catch (error) {
-                alert("Failed to trigger job.");
+                console.error(error);
+                alert("Failed to trigger job: " + error.message);
             } finally {
                 btn.innerText = originalText;
                 btn.disabled = false;

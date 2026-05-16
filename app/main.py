@@ -52,6 +52,14 @@ def _append_log(msg: str):
     LOG_BUFFER.append({"ts": datetime.now().strftime("%H:%M:%S"), "msg": msg})
     if len(LOG_BUFFER) > 100: LOG_BUFFER.pop(0)
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    error_msg = f"GLOBAL ERROR: {str(exc)}"
+    logger.error(error_msg)
+    if '_append_log' in globals():
+        _append_log(f"❌ {error_msg}")
+    return JSONResponse(status_code=500, content={"status": "error", "message": str(exc)})
+
 from app.core.telegram_queue import tg_queue
 from app.core.pattern_reinforcer import reinforcer
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
