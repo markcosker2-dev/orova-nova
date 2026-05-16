@@ -33,11 +33,11 @@ async def find_leads(count: int = 5, query: str = "business leads"):
     count = int(count)
     firecrawl_key = os.getenv("FIRECRAWL_API_KEY")
     
-    # ─── RELIABLE LOCAL SEARCH ─────────────────────────────
-    # Standardize query to find actual business websites
-    if "site:" not in query.lower() and "contact" not in query.lower():
-        query = f'"{query}" (contact OR about OR services)'
-        logger.info(f"[SEARCH] Refined Query: {query}")
+    # ─── THE YELP HAMMER (100% Business Only) ───────────────────
+    # Force search into Yelp to avoid dictionaries and blog posts
+    if "site:" not in query.lower():
+        query = f'site:yelp.com "{query}"'
+        logger.info(f"[YELP HAMMER] Locked to business directory: {query}")
         
     logger.info(f"[LEAD FINDER] Searching for {count} leads: '{query}'")
     leads = []
