@@ -13,10 +13,14 @@ BANNED_DOMAINS = [
     "wikipedia.org", "reddit.com", "youtube.com", "pinterest.com",
     "quora.com", "medium.com", "twitter.com", "tiktok.com",
     "dictionary.com", "merriam-webster.com", "thefreedictionary.com",
-    "britannica.com", "facebook.com", "instagram.com", "yelp.com/biz", # We want Yelp listings, not the directory search pages
+    "britannica.com", "facebook.com", "instagram.com", "yelp.com/biz",
+    "pornhub.com", "xvideos.com", "xnxx.com", "adult", "sex", "porn"
 ]
 
-JUNK_KEYWORDS = ["definition", "meaning", "synonyms", "wiki", "blog", "article", "news"]
+JUNK_KEYWORDS = [
+    "definition", "meaning", "synonyms", "wiki", "blog", "article", "news",
+    "porn", "sex", "adult", "xxx", "naked", "escort"
+]
 
 async def find_leads(count: int = 5, query: str = "business leads"):
     """
@@ -102,7 +106,8 @@ async def _duckduckgo_search(query: str, count: int) -> list:
         # Run synchronous DDG in executor to avoid blocking
         def _search():
             with DDGS() as ddgs:
-                return list(ddgs.text(query, max_results=count))
+                # Add safesearch="strict" to ensure business-only results
+                return list(ddgs.text(query, max_results=count, safesearch="strict"))
 
         results = await asyncio.get_event_loop().run_in_executor(None, _search)
 
@@ -130,7 +135,8 @@ async def _httpx_search(query: str, count: int) -> list:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
         }
-        search_url = f"https://html.duckduckgo.com/html/?q={query.replace(' ', '+')}"
+        # kp=-2 is DuckDuckGo's "Strict" SafeSearch parameter
+        search_url = f"https://html.duckduckgo.com/html/?q={query.replace(' ', '+')}&kp=-2"
 
         async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=15.0) as client:
             resp = await client.get(search_url)
