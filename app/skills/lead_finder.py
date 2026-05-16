@@ -25,12 +25,12 @@ async def find_leads(count: int = 5, query: str = "business leads"):
     """
     count = int(count)
 
-    # ─── HIGH-PRECISION DIRECTORY X-RAY ─────────────────────────
-    # If the user hasn't specified a site, force Yelp/YellowPages for local businesses
+    # ─── RELIABLE LOCAL SEARCH ─────────────────────────────
+    # Use a more balanced search that doesn't trigger bot protection as easily
     if "site:" not in query.lower():
-        # Heuristic: If it looks like a local business search, use Yelp X-Ray
-        query = f'site:yelp.com "{query}"'
-        logger.info(f"[X-RAY] Upgraded to Yelp High-Precision: {query}")
+        # Mix in business directories but don't force a single one to avoid blocks
+        query = f'"{query}" (yelp OR "yellow pages" OR "business directory")'
+        logger.info(f"[SEARCH] Enhanced Query: {query}")
         
     logger.info(f"[LEAD FINDER] Searching for {count} leads: '{query}'")
     leads = []

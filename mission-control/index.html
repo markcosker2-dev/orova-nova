@@ -112,14 +112,24 @@
                     return;
                 }
 
-                table.innerHTML = lData.leads.slice(0, 20).map(l => `
-                    <tr>
-                        <td>${l.business || 'Unnamed'}</td>
-                        <td>${l.email || l.phone || 'N/A'}</td>
-                        <td>${mapStatusLabel(l.status)}</td>
-                        <td>${l.status === 'New' ? `<button class="btn" onclick="approve(${l.id})">Approve</button>` : '✓'}</td>
-                    </tr>
-                `).join('');
+                table.innerHTML = lData.leads.slice(0, 20).map(l => {
+                    // Fix mapping: check for business, company, or title
+                    const name = l.business || l.company || l.title || 'Unnamed';
+                    const contact = l.email || l.phone || l.url || 'N/A';
+                    return `
+                        <tr>
+                            <td>${name}</td>
+                            <td>${contact}</td>
+                            <td>${mapStatusLabel(l.status)}</td>
+                            <td>${l.status === 'New' ? `<button class="btn" onclick="approve(${l.id})">Approve</button>` : '✓'}</td>
+                        </tr>
+                    `;
+                }).join('');
+
+                // Auto-sync metrics from the lead list if they are 0
+                if (parseInt(document.getElementById('stat-leads').innerText) === 0 && lData.leads.length > 0) {
+                    document.getElementById('stat-leads').innerText = lData.leads.length;
+                }
 
                 // Load Logs
                 const logRes = await fetch('/api/logs', { headers: {'X-API-Key': API_KEY} });
