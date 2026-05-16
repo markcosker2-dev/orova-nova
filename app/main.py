@@ -259,6 +259,11 @@ async def get_metrics(client_id: int = 0, authorized: bool = Depends(require_das
     metrics = DatabaseManager.get_metrics(client_id)
     return {"status": "ok", "metrics": metrics}
 
+@app.post("/api/leads/clear")
+async def clear_leads(authorized: bool = Depends(require_dashboard_api_key)):
+    await DatabaseManager.query("DELETE FROM leads")
+    return {"status": "ok", "message": "All leads cleared"}
+
 @app.get("/api/agents")
 async def get_agent_status(authorized: bool = Depends(require_dashboard_api_key)):
     agents = [

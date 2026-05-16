@@ -58,6 +58,9 @@
         <div class="card" style="padding: 15px;">
             <h3>System Backup</h3>
             <button class="btn" style="margin-top: 10px; background: #888;" onclick="runJob('backup', event)">Manual Backup</button>
+        <div class="card" style="padding: 15px;">
+            <h3>Database</h3>
+            <button class="btn" style="margin-top: 10px; background: #ff4444; color: white;" onclick="clearLeads()">Clear All Leads</button>
         </div>
     </div>
 
@@ -169,6 +172,12 @@
 
         async function approve(id) {
             await fetch(`/api/leads/${id}/approve`, { method: 'POST', headers: {'X-API-Key': API_KEY} });
+            loadData();
+        }
+
+        async function clearLeads() {
+            if (!confirm("Are you sure you want to delete ALL leads?")) return;
+            await fetch('/api/leads/clear', { method: 'POST', headers: {'X-API-Key': API_KEY} });
             loadData();
         }
 
