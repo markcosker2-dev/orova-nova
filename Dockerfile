@@ -1,23 +1,22 @@
-FROM python:3.10-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install system deps for Playwright (Chromium) + Build Tools for LXML/Pandas
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential gcc wget curl gnupg libnss3 libatk-bridge2.0-0 libdrm2 \
-    libxcomposite1 libxdamage1 libxrandr2 libgbm1 libasound2 \
-    libpangocairo-1.0-0 libgtk-3-0 fonts-liberation ca-certificates \
+    gcc \
+    curl \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install all pinned dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+ENV PYTHONUNBUFFERED=1
 
-# Copy app
+COPY requirements.txt .
+RUN python -m pip install --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
+
 COPY app/ app/
 COPY mission-control/ mission-control/
 
-# Create dirs
 RUN mkdir -p /app/data /app/app/data /app/logs
 
 EXPOSE ${PORT:-10000}
@@ -25,4 +24,4 @@ EXPOSE ${PORT:-10000}
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:${PORT:-10000}/health || exit 1
 
-CMD ["python", "app/main.py"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-18789}"]

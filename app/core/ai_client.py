@@ -98,12 +98,8 @@ class UnifiedAIClient:
         "nova":      "google/gemini-2.0-flash-lite-preview-02-05:free",
         "hawk":      "google/gemini-2.0-flash-lite-preview-02-05:free",
         "closer":    "google/gemini-2.0-flash-lite-preview-02-05:free",
-        "pixel":     "google/gemini-2.0-flash-lite-preview-02-05:free",
-        "atlas":     "google/gemini-2.0-flash-lite-preview-02-05:free",
         "oracle":    "google/gemini-2.0-flash-lite-preview-02-05:free",
         "sentinel":  "google/gemini-2.0-flash-lite-preview-02-05:free",
-        "echo":      "google/gemini-2.0-flash-lite-preview-02-05:free",
-        "viper":     "google/gemini-2.0-flash-lite-preview-02-05:free",
         "quill":     "google/gemini-2.0-flash-lite-preview-02-05:free",
     }
 

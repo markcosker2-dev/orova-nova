@@ -189,7 +189,27 @@ class DatabaseManager:
         logger.info("SQLite connection pool cleaned up")
 
     @classmethod
-    def _sqlite_query(cls, sql, params=(), fetchone=False, fetchall=False):
+    def _schedule_async_task(cls, coro):
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)
+
+        task = loop.create_task(coro)
+
+        def _on_done(task):
+            try:
+                exc = task.exception()
+                if exc:
+                    logger.error(f"[AsyncTask] {exc}")
+            except asyncio.CancelledError:
+                pass
+
+        task.add_done_callback(_on_done)
+        return task
+
+    @classmethod
+    def _sqlite_query(cls, sql, params=(), fetchone=False, fetchall=False, return_lastrowid=False):
         import sqlite3
         conn = None
         try:
@@ -201,6 +221,8 @@ class DatabaseManager:
                 res = cursor.fetchone()
             elif fetchall:
                 res = cursor.fetchall()
+            elif return_lastrowid:
+                res = cursor.lastrowid
             conn.commit()
             return res
         except sqlite3.Error as e:
@@ -218,11 +240,11 @@ class DatabaseManager:
                 cls._release_conn(conn)
 
     @classmethod
-    async def query(cls, sql, params=(), fetchone=False, fetchall=False):
+    async def query(cls, sql, params=(), fetchone=False, fetchall=False, return_lastrowid=False):
         if cls._use_redis and cls._redis_manager:
             raise RuntimeError("Redis query is not implemented in this fallback")
         elif cls._sqlite_fallback:
-            return await asyncio.to_thread(cls._sqlite_query, sql, params, fetchone, fetchall)
+            return await asyncio.to_thread(cls._sqlite_query, sql, params, fetchone, fetchall, return_lastrowid)
         raise RuntimeError("No database backend available")
 
     @classmethod
@@ -232,6 +254,15 @@ class DatabaseManager:
     @classmethod
     async def fetchall(cls, sql, params=()):
         return await cls.query(sql, params, fetchall=True)
+
+    @classmethod
+    async def is_empty(cls):
+        if cls._use_redis and cls._redis_manager:
+            return len(cls._redis_manager.get_leads(0)) == 0
+        elif cls._sqlite_fallback:
+            row = await cls.fetchone("SELECT COUNT(*) as cnt FROM leads")
+            return not row or int(row["cnt"]) == 0
+        return True
 
     @classmethod
     async def get_state(cls, key, default=None):
@@ -396,7 +427,7 @@ class DatabaseManager:
             )
 
     @classmethod
-    def save_lead(cls, lead_data, default_vertical="Automotive", client_id=0):
+    def save_lead(cls, lead_data, default_vertical="Automotive", client_id=0, sync_to_sheets=True):
         if cls._use_redis and cls._redis_manager:
             cls._redis_manager.save_lead(lead_data, client_id)
         elif cls._sqlite_fallback:
@@ -420,7 +451,14 @@ class DatabaseManager:
                 lead_data.get("notes") or lead_data.get("snippet", ""),
                 int(client_id)
             )
-            cls._sqlite_query(sql, params)
+            lead_id = cls._sqlite_query(sql, params, return_lastrowid=True)
+            if lead_id and sync_to_sheets:
+                lead_data["id"] = lead_id
+                try:
+                    from app.skills.sheets_sync import sync_lead_to_sheets
+                    cls._schedule_async_task(sync_lead_to_sheets(lead_data))
+                except Exception as exc:
+                    logger.warning(f"[SQLITE] Sheet sync could not be scheduled: {exc}")
 
     @classmethod
     def get_leads(cls, client_id=0):
@@ -430,6 +468,27 @@ class DatabaseManager:
             rows = cls._sqlite_query("SELECT * FROM leads WHERE client_id = ? ORDER BY created_at DESC", (int(client_id),), fetchall=True)
             return [dict(r) for r in rows] if rows else []
         return []
+
+    @classmethod
+    def get_lead_by_id(cls, lead_id):
+        if cls._use_redis and cls._redis_manager:
+            return cls._redis_manager.get_lead(lead_id)
+        elif cls._sqlite_fallback:
+            row = cls._sqlite_query("SELECT * FROM leads WHERE id = ?", (int(lead_id),), fetchone=True)
+            return dict(row) if row else None
+        return None
+
+    @classmethod
+    def update_lead_status(cls, lead_id, new_status):
+        if cls._use_redis and cls._redis_manager:
+            return cls._redis_manager.update_lead_status(lead_id, new_status)
+        elif cls._sqlite_fallback:
+            cls._sqlite_query("UPDATE leads SET status = ? WHERE id = ?", (new_status, int(lead_id)))
+            try:
+                from app.skills.sheets_sync import update_lead_status_sheets
+                cls._schedule_async_task(update_lead_status_sheets(int(lead_id), new_status))
+            except Exception as exc:
+                logger.warning(f"[SQLITE] Sheet status sync could not be scheduled: {exc}")
 
     @classmethod
     def get_metrics(cls, client_id=0):

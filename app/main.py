@@ -65,8 +65,10 @@ async def require_client(x_client_id: Optional[str] = Header(None), client_id: O
         raise HTTPException(status_code=401, detail="Valid client_id required")
     return resolved
 
+from app.skills.agentmail_skill import check_replies
 from app.skills.vault_skill import backup_database, restore_latest, vault_scheduler_loop
 from app.skills.crawl_skill import cleanup_crawler
+from app.skills.sheets_sync import restore_leads_from_sheets, update_lead_status_sheets
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -74,7 +76,24 @@ async def lifespan(app: FastAPI):
     DatabaseManager.init_db()
     await DatabaseManager.run_phase5_migrations()
     await AgentSoul.initialize()
-    
+
+    if await DatabaseManager.is_empty():
+        logger.info("♻️ Database appears empty. Checking Google Sheets for restoration source of truth...")
+        leads = await restore_leads_from_sheets()
+        if leads:
+            for lead in leads:
+                DatabaseManager.save_lead(lead, sync_to_sheets=False)
+            logger.info(f"♻️ Restored {len(leads)} leads from Google Sheets")
+        else:
+            logger.warning("⚠️ No leads found in Google Sheets. Attempting Google Drive backup restore...")
+            restore_res = await restore_latest()
+            if restore_res.get("ok"):
+                logger.info(f"♻️ Restored database snapshot from Drive: {restore_res.get('filename')}")
+                DatabaseManager._close_all_connections()
+                DatabaseManager._init_sqlite_fallback()
+            else:
+                logger.warning(f"⚠️ No Drive backup available or restore failed: {restore_res.get('error')}")
+
     # [P6] Register SIGTERM for Render redeploys
     loop = asyncio.get_running_loop()
     DatabaseManager.register_sigterm_handler(loop)
@@ -187,6 +206,65 @@ async def health_check():
         "circuit_breakers": breaker_status,
         "queue_depth": q_depth,
     }
+
+async def require_dashboard_api_key(x_api_key: Optional[str] = Header(None)):
+    expected = os.getenv("DASHBOARD_API_KEY")
+    if not expected or x_api_key != expected:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    return True
+
+@app.get("/api/leads")
+async def get_leads(limit: int = 100, authorized: bool = Depends(require_dashboard_api_key)):
+    leads = await DatabaseManager.query("SELECT * FROM leads ORDER BY id DESC LIMIT ?", (limit,), fetchall=True)
+    return {"status": "ok", "leads": [dict(r) for r in leads]}
+
+@app.get("/api/metrics")
+async def get_metrics(client_id: int = 0, authorized: bool = Depends(require_dashboard_api_key)):
+    metrics = DatabaseManager.get_metrics(client_id)
+    return {"status": "ok", "metrics": metrics}
+
+@app.get("/api/agents")
+async def get_agent_status(authorized: bool = Depends(require_dashboard_api_key)):
+    agents = [
+        {"name": "Nova", "role": "CEO", "status": "online"},
+        {"name": "Hawk", "role": "Lead Hunter", "status": "online"},
+        {"name": "Closer", "role": "Sales Director", "status": "online"},
+        {"name": "Quill", "role": "Content Strategist", "status": "online"},
+        {"name": "Sentinel", "role": "Operations", "status": "online"},
+        {"name": "Oracle", "role": "Data Intel", "status": "online"}
+    ]
+    return {"status": "ok", "agents": agents}
+
+@app.post("/api/leads/{lead_id}/approve")
+async def approve_lead(lead_id: int, authorized: bool = Depends(require_dashboard_api_key)):
+    await DatabaseManager.query("UPDATE leads SET status = 'Approved' WHERE id = ?", (lead_id,))
+    await update_lead_status_sheets(lead_id, "Approved")
+    return {"status": "ok", "message": f"Lead {lead_id} approved"}
+
+@app.post("/api/jobs/hunt")
+async def job_hunt(authorization: str = Header(None), x_api_key: str = Header(None)):
+    authorized = (authorization == f"Bearer {os.getenv('CRON_SECRET')}") or (x_api_key == os.getenv("DASHBOARD_API_KEY"))
+    if not authorized:
+        raise HTTPException(status_code=403)
+    from app.worker import run_lead_hunt_slow_lane
+    asyncio.create_task(run_lead_hunt_slow_lane(client_id=0))
+    return {"status": "job_started", "job": "lead_hunt"}
+
+@app.post("/api/jobs/check-replies")
+async def job_replies(authorization: str = Header(None), x_api_key: str = Header(None)):
+    authorized = (authorization == f"Bearer {os.getenv('CRON_SECRET')}") or (x_api_key == os.getenv("DASHBOARD_API_KEY"))
+    if not authorized:
+        raise HTTPException(status_code=403)
+    res = check_replies(limit=5)
+    return {"status": "complete", "replies_found": res.get("count", 0)}
+
+@app.post("/api/jobs/backup")
+async def job_backup(authorization: str = Header(None), x_api_key: str = Header(None)):
+    authorized = (authorization == f"Bearer {os.getenv('CRON_SECRET')}") or (x_api_key == os.getenv("DASHBOARD_API_KEY"))
+    if not authorized:
+        raise HTTPException(status_code=403)
+    res = await backup_database()
+    return {"status": "complete", "backup": res}
 
 async def process_telegram_message(data: dict):
     """Worker for the Backpressure Queue."""

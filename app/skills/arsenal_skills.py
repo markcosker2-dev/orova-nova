@@ -61,7 +61,10 @@ async def advanced_browser(url: str, objective: str) -> Dict[str, Any]:
     Returns:
         Dict with results and status
     """
-    from playwright.async_api import async_playwright
+    try:
+        from playwright.async_api import async_playwright
+    except ImportError:
+        return {"success": False, "error": "Playwright not available on this system"}
     
     result = {
         "success": False,

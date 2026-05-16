@@ -21,7 +21,6 @@ from app.skills.competitive_intel import analyze_competitor, compare_competitors
 from app.skills.content_writer import write_content, optimize_post
 from app.skills.approval_workflow import request_approval, list_pending
 from app.skills.agentmail_skill import create_inbox, send_outreach, check_replies, reply_to_email, summarize_and_categorize_inbox
-from app.skills.instagram_skill import create_instagram_post, create_content_calendar
 from app.skills.outbound_dialer import trigger_retell_call
 from app.skills.image_gen import generate_ai_image
 from app.skills.follow_up_sequences import generate_sequence, get_sequence_templates
@@ -31,7 +30,6 @@ from app.core.agent_router import dispatch_task, get_all_statuses
 from app.skills.definitions import TOOLS
 from app.core.guardrails import Guardrails
 from app.skills.smart_scraper import sgai_search_and_extract, sgai_deep_extract
-from app.skills.scrapling_scraper import stealth_search, stealth_extract, bulk_scrape
 from app.skills.email_sequence_skill import create_drip_campaign
 from app.skills.copywriting_skill import write_cold_email, write_ad_copy
 from app.skills.analytics_skill import pipeline_report, conversion_analysis, roi_calculator
@@ -44,9 +42,6 @@ from app.skills.timezone_scheduler import is_business_hours, next_business_hours
 from app.skills.cal_booking import handle_cal_booking_webhook, generate_cal_booking_link
 try:
     from app.skills.mem0_skill import mega_memory
-    from app.skills.crawl_skill import elite_scrape
-    from app.skills.browser_use_skill import vision_browse
-    from app.skills.composio_skill import execute_composio_action as composio_action
     MEGA_CLAW_ONLINE = True
 except Exception as e:
     logger = logging.getLogger(__name__)
@@ -109,11 +104,9 @@ class TaskPlanner:
             "create_new_sheet": create_new_sheet, "request_approval": request_approval, "list_pending": list_pending,
             "create_inbox": create_inbox, "send_outreach": send_outreach, "check_replies": check_replies,
             "reply_to_email": reply_to_email, "summarize_and_categorize_inbox": summarize_and_categorize_inbox,
-            "create_instagram_post": create_instagram_post, "create_content_calendar": create_content_calendar,
             "trigger_retell_call": trigger_retell_call, "generate_ai_image": generate_ai_image,
             "run_seo_audit": seo_audit, "generate_sequence": generate_sequence, "generate_proposal": generate_proposal,
             "weekly_report": generate_weekly_report, "track_metric": track_metric, "dispatch_task": dispatch_task,
-            "stealth_search": stealth_search, "stealth_extract": stealth_extract, "bulk_scrape": bulk_scrape,
             "create_drip_campaign": create_drip_campaign, "write_cold_email": write_cold_email,
             "write_ad_copy": write_ad_copy, "pipeline_report": pipeline_report, "conversion_analysis": conversion_analysis,
             "roi_calculator": roi_calculator, "run_pipeline": run_pipeline, "list_pipelines": list_pipelines,
@@ -123,10 +116,9 @@ class TaskPlanner:
             "enrich_lead_apollo": enrich_lead_apollo, "bulk_enrich_leads": bulk_enrich_leads,
             "is_business_hours": is_business_hours, "next_business_hours_slot": next_business_hours_slot,
             "generate_cal_booking_link": generate_cal_booking_link,
-            "elite_scrape": elite_scrape, "vision_browse": vision_browse, "composio_action": composio_action,
         }
 
-    HUNTING_TOOLS = ["sgai_search_and_extract", "sgai_deep_extract", "find_leads", "google_search", "research_lead", "stealth_search", "stealth_extract", "hunt_hiring_signals", "elite_scrape", "vision_browse", "composio_action"]
+    HUNTING_TOOLS = ["sgai_search_and_extract", "sgai_deep_extract", "find_leads", "google_search", "research_lead", "hunt_hiring_signals"]
     OUTREACH_TOOLS = ["send_outreach", "send_email", "write_cold_email", "create_drip_campaign", "generate_sequence", "check_replies", "reply_to_email", "get_inbox", "trigger_retell_call", "generate_hiring_outreach", "enrich_lead_apollo", "is_business_hours"]
     LIGHT_RESEARCH_TOOLS = ["deep_research", "browse_agent", "run_seo_audit", "bulk_enrich_leads", "next_business_hours_slot", "generate_cal_booking_link"]
 

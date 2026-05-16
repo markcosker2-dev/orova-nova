@@ -5,8 +5,6 @@ services:
     plan: free
     region: ohio
     envVars:
-      - key: PORT
-        value: 18789
       - key: DATABASE_URL
         value: sqlite+aiosqlite:///app/app/data/orova_v5.db
       - fromContext: OLLAMA_AUTH_TOKEN
