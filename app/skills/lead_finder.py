@@ -9,16 +9,16 @@ ai = UnifiedAIClient()
 logger = logging.getLogger(__name__)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# LEAD FINDER — DuckDuckGo Primary (100% Free, No API Key Required)
+# LEAD FINDER — Multi-Tier Sourcing Engine
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Only ban truly useless domains. Keep business directories that have real leads.
+# Ban junk domains. NEVER ban yelp.com — it's our primary source.
 BANNED_DOMAINS = [
     "wikipedia.org", "reddit.com", "youtube.com", "pinterest.com",
     "quora.com", "medium.com", "twitter.com", "tiktok.com",
     "dictionary.com", "merriam-webster.com", "thefreedictionary.com",
-    "britannica.com", "facebook.com", "instagram.com", "yelp.com/biz",
-    "pornhub.com", "xvideos.com", "xnxx.com", "adult", "sex", "porn",
+    "britannica.com", "facebook.com", "instagram.com",
+    "pornhub.com", "xvideos.com", "xnxx.com",
     "baidu.com", "iciba.com", "dict.cn", "youdao.com", "zdic.net",
     "wordreference.com", "thesaurus.com", "glosbe.com", "linguee.com"
 ]
@@ -28,8 +28,13 @@ JUNK_KEYWORDS = [
     r"\bporn\b", r"\bsex\b", r"\badult\b", r"\bxxx\b", r"\bnaked\b", r"\bescort\b", r"\bdictionary\b"
 ]
 
+
 async def verify_business_intent(title: str, snippet: str, url: str) -> bool:
     """Uses AI to determine if a search result is a real business or just info/junk."""
+    # Yelp business pages are ALWAYS real businesses — skip AI check
+    if "yelp.com/biz/" in url.lower():
+        return True
+
     prompt = f"""
     Analyze this search result and determine if it is a REAL LOCAL BUSINESS (e.g. contractor, dealer, service provider).
     Respond with ONLY 'YES' or 'NO'.
@@ -44,8 +49,10 @@ async def verify_business_intent(title: str, snippet: str, url: str) -> bool:
         res = await ai.quick(prompt)
         return "YES" in res.upper()
     except:
-        logger.warning("[AI SCORER] AI failed to verify business. Rejecting for safety.")
-        return False # Strict: Reject if we can't verify
+        # If AI is unavailable, allow the lead through — better to have a lead than nothing
+        logger.warning("[AI SCORER] AI unavailable. Allowing lead through.")
+        return True
+
 
 async def find_leads(count: int = 5, query: str = "business leads"):
     """
@@ -58,7 +65,6 @@ async def find_leads(count: int = 5, query: str = "business leads"):
     # ─── THE YELP HAMMER (100% Business Only) ───────────────────
     # Force search into Yelp to avoid dictionaries and blog posts
     if "site:" not in query.lower():
-        # Remove quotes to allow broader matching
         clean_query = query.replace('"', '').replace("'", "")
         query = f'site:yelp.com {clean_query}'
         logger.info(f"[YELP HAMMER] Broadened: {query}")
@@ -66,7 +72,7 @@ async def find_leads(count: int = 5, query: str = "business leads"):
     logger.info(f"[LEAD FINDER] Searching for {count} leads: '{query}'")
     leads = []
 
-    # ─── TIER 1: Firecrawl (Elite — if key available) ─────────────
+    # ─── TIER 1: Firecrawl Search (if key available) ────────────
     if firecrawl_key:
         try:
             logger.info("[FIRECRAWL] Starting elite crawl (v1)...")
@@ -82,8 +88,6 @@ async def find_leads(count: int = 5, query: str = "business leads"):
             logger.info(f"[FIRECRAWL] Found {len(leads)} potential leads")
         except Exception as e:
             logger.warning(f"[FIRECRAWL] Search failed: {e}. Trying direct crawl...")
-            # If search fails, we try to crawl the first page of results directly if we can
-            pass
 
     # ─── TIER 2: DuckDuckGo (Fallback) ──────────────────────────
     if not leads:
@@ -112,35 +116,43 @@ async def find_leads(count: int = 5, query: str = "business leads"):
         except Exception as e:
             logger.error(f"[YELP DIRECT] Error: {e}")
 
-    # ─── AI VERIFICATION & FILTERING ────────────────────────────
+    # ─── FILTERING ─────────────────────────────────────────────
     filtered = []
     for lead in leads:
         url = lead.get("url", "").lower()
         title = lead.get("title", "")
         snippet = lead.get("snippet", "").lower()
         
-        # Basic Safety
-        if any(d in url for d in BANNED_DOMAINS): continue
-        if any(re.search(k, title.lower()) or re.search(k, snippet) for k in JUNK_KEYWORDS): continue
+        # Ban junk domains (but NEVER ban yelp.com)
+        if any(d in url for d in BANNED_DOMAINS):
+            logger.info(f"[FILTER] Banned domain: {url}")
+            continue
+        if any(re.search(k, title.lower()) or re.search(k, snippet) for k in JUNK_KEYWORDS):
+            logger.info(f"[FILTER] Junk keyword: {title}")
+            continue
         
         # Hard Skip for Information Sites
-        info_sites = [".gov", ".edu", ".org", "forbes.com", "news.", "blog.", "wiki", "dictionary", "merriam-webster"]
+        info_sites = [".gov", ".edu", "forbes.com", "news.", "blog.", "wiki", "dictionary", "merriam-webster"]
         if any(site in url for site in info_sites):
+            logger.info(f"[FILTER] Info site: {url}")
             continue
 
         # Clean Name
-        if len(title) > 40 or any(x in title.lower() for x in ["best", "top", "how to"]):
+        if "yelp.com/biz/" in url:
+            # Extract clean business name from Yelp URL
+            biz_slug = url.split("/biz/")[-1].split("?")[0]
+            lead["business"] = biz_slug.replace("-", " ").title()
+        elif len(title) > 40 or any(x in title.lower() for x in ["best", "top", "how to"]):
             domain_part = url.split("//")[-1].split("/")[0].replace("www.", "").split(".")[0]
             lead["business"] = domain_part.replace("-", " ").replace("_", " ").title()
         else:
             lead["business"] = title.split(" - ")[0].split(" | ")[0].strip()
 
-        # 4. Language Check: Delete if contains non-English characters
+        # Language Check: Delete if contains non-English characters
         if re.search(r'[^\x00-\x7F]+', lead["business"]):
             continue
 
-        # 5. [NEW] EXECUTIVE AI SCORER: Verify business intent via LLM
-        # We only do this for the top candidates to save tokens
+        # AI SCORER: Verify business intent (auto-passes Yelp businesses)
         if not await verify_business_intent(title, snippet, url):
             logger.info(f"[AI SCORER] Rejected non-business: {title}")
             continue
@@ -173,10 +185,8 @@ async def _duckduckgo_search(query: str, count: int) -> list:
     try:
         from duckduckgo_search import DDGS
 
-        # Run synchronous DDG in executor to avoid blocking
         def _search():
             with DDGS() as ddgs:
-                # region="us-en" forces US results only
                 return list(ddgs.text(query, max_results=count, safesearch="strict", region="us-en"))
 
         results = await asyncio.get_event_loop().run_in_executor(None, _search)
@@ -205,7 +215,6 @@ async def _httpx_search(query: str, count: int) -> list:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
         }
-        # kp=-2 is DuckDuckGo's "Strict" SafeSearch parameter
         search_url = f"https://html.duckduckgo.com/html/?q={query.replace(' ', '+')}&kp=-2"
 
         async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=15.0) as client:
@@ -239,11 +248,9 @@ async def direct_yelp_crawl(topic: str, count: int) -> list:
         if firecrawl_key:
             app = FirecrawlApp(api_key=firecrawl_key)
             logger.info(f"[YELP DIRECT] Crawling with Firecrawl: {yelp_url}")
-            # Use markdown format - no schema required, very robust
             scrape_res = app.scrape_url(yelp_url, params={'formats': ['markdown']})
             content = str(scrape_res.get("markdown", ""))
             
-            # Find URLs like /biz/business-name
             matches = re.findall(r'/biz/[a-zA-Z0-9\-%]+', content)
             for m in list(set(matches))[:count*2]:
                 biz_url = f"https://www.yelp.com{m}"
