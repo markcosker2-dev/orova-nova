@@ -19,7 +19,7 @@ BANNED_DOMAINS = [
     "wikipedia.org", "reddit.com", "youtube.com", "pinterest.com",
     "quora.com", "medium.com", "twitter.com", "tiktok.com",
     "dictionary.com", "merriam-webster.com", "thefreedictionary.com",
-    "britannica.com", "facebook.com", "instagram.com",
+    "britannica.com", "facebook.com", "instagram.com", "yelp.com",
     "pornhub.com", "xvideos.com", "xnxx.com",
     "baidu.com", "iciba.com", "dict.cn", "youdao.com", "zdic.net",
     "wordreference.com", "thesaurus.com", "glosbe.com", "linguee.com"
@@ -36,49 +36,37 @@ JUNK_COMPILED = [re.compile(p, re.IGNORECASE) for p in JUNK_KEYWORDS]
 async def find_leads(count: int = 5, query: str = "business leads"):
     """
     Multi-source lead discovery engine.
-    Sources leads from DuckDuckGo, Yelp, and business directories.
-    Does NOT force everything through Yelp — searches broadly for real businesses.
+    Sources leads from DuckDuckGo, BBB, and business directories.
+    Strictly bypasses Yelp.
     """
     count = int(count)
     logger.info(f"[LEAD FINDER V3] Searching for {count} leads: '{query}'")
     all_leads = []
 
     # ─── SOURCE 1: DuckDuckGo — Broad Business Search ──────────
-    # Search for actual businesses, not just Yelp listings
     ddg_leads = await _source_duckduckgo(query, count * 2)
     all_leads.extend(ddg_leads)
     logger.info(f"[SOURCE 1: DDG] Found {len(ddg_leads)} leads")
 
-    # ─── SOURCE 2: DuckDuckGo — Yelp-Focused Search ───────────
-    # Also search Yelp specifically to catch directory-listed businesses
-    yelp_leads = await _source_duckduckgo(f"{query} yelp", count)
-    all_leads.extend(yelp_leads)
-    logger.info(f"[SOURCE 2: DDG+Yelp] Found {len(yelp_leads)} leads")
-
-    # ─── SOURCE 3: HTTPX Direct HTML Scrape ────────────────────
+    # ─── SOURCE 2: HTTPX Direct HTML Scrape ────────────────────
     if len(all_leads) < count:
         httpx_leads = await _source_httpx(query, count * 2)
         all_leads.extend(httpx_leads)
-        logger.info(f"[SOURCE 3: HTTPX] Found {len(httpx_leads)} leads")
+        logger.info(f"[SOURCE 2: HTTPX] Found {len(httpx_leads)} leads")
 
-    # ─── SOURCE 4: Direct Yelp Crawl (Firecrawl) ──────────────
-    if len(all_leads) < count:
-        yelp_direct = await _source_yelp_direct(query, count)
-        all_leads.extend(yelp_direct)
-        logger.info(f"[SOURCE 4: Yelp Direct] Found {len(yelp_direct)} leads")
-
-    # ─── SOURCE 4.5: BBB.org (Better Business Bureau) ────────
+    # ─── SOURCE 3: BBB.org (Better Business Bureau) ────────
     if len(all_leads) < count:
         bbb_leads = await _source_bbb(query, count)
         all_leads.extend(bbb_leads)
-        logger.info(f"[SOURCE 4.5: BBB.org] Found {len(bbb_leads)} leads")
+        logger.info(f"[SOURCE 3: BBB.org] Found {len(bbb_leads)} leads")
 
-    # ─── SOURCE 5: SerpAPI Google Maps (if key available) ──────
+    # ─── SOURCE 4: SerpAPI Google Maps (if key available) ──────
     serpapi_key = os.getenv("SERPAPI_KEY")
     if serpapi_key and len(all_leads) < count:
         maps_leads = await _source_google_maps(query, count, serpapi_key)
         all_leads.extend(maps_leads)
-        logger.info(f"[SOURCE 5: Google Maps] Found {len(maps_leads)} leads")
+        logger.info(f"[SOURCE 4: Google Maps] Found {len(maps_leads)} leads")
+
 
     # ─── DEDUP & FILTER ───────────────────────────────────────
     filtered = _filter_and_deduplicate(all_leads, count)
