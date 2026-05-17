@@ -891,26 +891,34 @@ async def enrich_lead_lite(lead: Dict[str, Any]) -> Dict[str, Any]:
             headers = {
                 "Cache-Control": "no-cache",
                 "Content-Type": "application/json",
-                "x-api-key": apollo_key
+                "X-Api-Key": apollo_key
             }
             payload = {
                 "q_organization_domains": domain,
-                "person_titles": ["owner", "founder", "ceo", "president", "partner", "principal"],
+                "q_organization_domains_list": [domain],
+                "person_titles": ["owner", "founder", "ceo", "president", "partner", "principal", "managing director", "director"],
                 "page": 1,
-                "per_page": 3
+                "per_page": 5
             }
             async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.post("https://api.apollo.io/v1/mixed_people/search", json=payload, headers=headers)
+                resp = await client.post("https://api.apollo.io/v1/mixed_people/api_search", json=payload, headers=headers)
                 if resp.status_code == 200:
                     people = resp.json().get("people", [])
                     if people:
-                        p = people[0]
-                        if not lead.get("owner"):
+                        # Find first person with a non-empty email
+                        p = next((person for person in people if person.get("email")), people[0])
+                        if not lead.get("owner") and p.get("name"):
                             lead["owner"] = p.get("name")
                             logger.info(f"[ENRICH] → Owner from Apollo: {lead['owner']}")
                         if not lead.get("email") and p.get("email"):
                             lead["email"] = p.get("email")
                             logger.info(f"[ENRICH] → Email from Apollo: {lead['email']}")
+                        # Fetch phone number if available
+                        if not lead.get("phone") and p.get("phone_numbers"):
+                            lead["phone"] = p.get("phone_numbers")[0].get("raw_number")
+                            logger.info(f"[ENRICH] → Phone from Apollo: {lead['phone']}")
+                else:
+                    logger.warning(f"[ENRICH] Apollo API returned status {resp.status_code}: {resp.text[:200]}")
         except Exception as e:
             logger.warning(f"[ENRICH] Apollo failed: {e}")
 
