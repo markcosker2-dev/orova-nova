@@ -162,21 +162,24 @@ async def sync_lead_to_sheets(lead: Dict[str, Any], workbook_name: Optional[str]
             lead.get("notes") or "",
         ]
 
+        target_row = None
         if lead.get("id"):
             try:
-                cell = worksheet.find(str(lead["id"]))
-                target_row = cell.row
-            except Exception:
-                target_row = None
-        else:
-            target_row = None
+                id_vals = await asyncio.to_thread(worksheet.col_values, 1)
+                search_id = str(lead["id"])
+                if search_id in id_vals:
+                    target_row = id_vals.index(search_id) + 1
+            except Exception as exc:
+                logger.warning(f"[SheetsSync] Find by ID failed: {exc}")
 
         if not target_row and lead.get("url"):
             try:
-                url_cell = worksheet.find(lead["url"])
-                target_row = url_cell.row
-            except Exception:
-                target_row = None
+                url_vals = await asyncio.to_thread(worksheet.col_values, 7)
+                search_url = str(lead["url"])
+                if search_url in url_vals:
+                    target_row = url_vals.index(search_url) + 1
+            except Exception as exc:
+                logger.warning(f"[SheetsSync] Find by URL failed: {exc}")
 
         async with _sheets_lock:
             # Additional small delay inside the lock to ensure Google respects the rate limit
