@@ -81,53 +81,50 @@ def _extract_owner_name(html: str) -> Optional[str]:
     return None
 
 
-def _extract_website_from_yelp(markdown: str) -> Optional[str]:
-    """Extract the real business website URL from Yelp page markdown."""
+import urllib.parse
+
+def _extract_website_from_yelp(html: str) -> Optional[str]:
+    """Extract the real business website URL from Yelp HTML via /biz_redir links."""
+    if not html:
+        return None
+    
+    soup = BeautifulSoup(html, "html.parser")
     social = ["yelp.com", "facebook.com", "instagram.com", "twitter.com",
-              "linkedin.com", "youtube.com", "tiktok.com", "google.com",
-              "yelpcdn.com", ".jpg", ".jpeg", ".png", ".gif", ".svg", "schema.org", "w3.org"]
-
-    # Method 1: Look for explicit website label
-    patterns = [
-        r'(?:Business website|Website|business\.website)[:\s]*\[?([^\]\s\)]+)',
-        r'(?:website|web\s*site)[:\s]*(https?://[^\s\)\]]+)',
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, markdown, re.IGNORECASE)
-        if match:
-            url = match.group(1).rstrip('.,;:)')
-            if not any(s in url.lower() for s in social):
-                return url
-
-    # Method 2: Find non-social URLs in the content
-    urls = re.findall(r'https?://[^\s\)\]\"\'\<\>]+', markdown)
-    for u in urls:
-        u_clean = u.rstrip('.,;:)')
-        if not any(s in u_clean.lower() for s in social):
-            return u_clean
-
+              "linkedin.com", "youtube.com", "tiktok.com", "google.com"]
+              
+    for a in soup.find_all('a', href=True):
+        href = a['href']
+        if '/biz_redir?url=' in href:
+            try:
+                parsed_qs = urllib.parse.parse_qs(urllib.parse.urlparse(href).query)
+                if 'url' in parsed_qs:
+                    target_url = parsed_qs['url'][0]
+                    if not any(s in target_url.lower() for s in social):
+                        return target_url
+            except Exception:
+                continue
     return None
 
 
-def _firecrawl_scrape(url: str) -> Optional[str]:
-    """Use Firecrawl to scrape a page (renders JavaScript). Returns markdown."""
+def _firecrawl_scrape(url: str) -> Dict[str, str]:
+    """Use Firecrawl to scrape a page. Returns markdown and html."""
     try:
         from firecrawl import FirecrawlApp
         key = os.getenv("FIRECRAWL_API_KEY")
         if not key:
-            return None
+            return {"markdown": "", "html": ""}
         app = FirecrawlApp(api_key=key)
-        result = app.scrape_url(url, params={'formats': ['markdown']})
+        result = app.scrape_url(url, params={'formats': ['markdown', 'html']})
 
-        # Handle different response formats
         if isinstance(result, dict):
-            return result.get("markdown", result.get("content", str(result)))
-        elif isinstance(result, str):
-            return result
-        return str(result)
+            return {
+                "markdown": result.get("markdown", result.get("content", "")),
+                "html": result.get("html", "")
+            }
+        return {"markdown": str(result), "html": str(result)}
     except Exception as e:
         logger.warning(f"[ENRICH] Firecrawl scrape failed for {url}: {e}")
-        return None
+        return {"markdown": "", "html": ""}
 
 
 async def enrich_lead_lite(lead: Dict[str, Any]) -> Dict[str, Any]:
@@ -154,7 +151,9 @@ async def enrich_lead_lite(lead: Dict[str, Any]) -> Dict[str, Any]:
             logger.info("[ENRICH] Lead already fully enriched. Skipping Yelp scrape.")
         else:
             logger.info(f"[ENRICH] Step 1: Scraping Yelp page for contact info...")
-            markdown = await asyncio.get_event_loop().run_in_executor(None, _firecrawl_scrape, url)
+            scrape_data = await asyncio.get_event_loop().run_in_executor(None, _firecrawl_scrape, url)
+            markdown = scrape_data.get("markdown", "")
+            html = scrape_data.get("html", "")
 
             if markdown:
                 logger.info(f"[TELEMETRY] Firecrawl returned {len(markdown)} chars")
@@ -167,8 +166,8 @@ async def enrich_lead_lite(lead: Dict[str, Any]) -> Dict[str, Any]:
                         logger.info(f"[ENRICH] → Phone from Yelp: {lead['phone']}")
 
                 # Extract real website
-                if not real_website:
-                    real_website = _extract_website_from_yelp(markdown)
+                if not real_website and html:
+                    real_website = _extract_website_from_yelp(html)
                     if real_website:
                         lead["website"] = real_website
                         logger.info(f"[ENRICH] → Website from Yelp: {real_website}")

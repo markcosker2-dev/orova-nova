@@ -13,7 +13,13 @@ from gspread.exceptions import WorksheetNotFound
 logger = logging.getLogger(__name__)
 
 # Global lock to prevent Google Sheets 429 Rate Limit errors when syncing multiple leads
-_sheets_lock = asyncio.Lock()
+_sheets_lock = None
+
+async def _get_sheets_lock():
+    global _sheets_lock
+    if _sheets_lock is None:
+        _sheets_lock = asyncio.Lock()
+    return _sheets_lock
 
 SHEET_NAME = os.getenv("GOOGLE_SHEETS_WORKBOOK", "OROVA CRM")
 WORKSHEET_HEADERS = {
@@ -144,7 +150,8 @@ async def sync_lead_to_sheets(lead: Dict[str, Any], workbook_name: Optional[str]
             except Exception:
                 target_row = None
 
-        async with _sheets_lock:
+        lock = await _get_sheets_lock()
+        async with lock:
             # Additional small delay inside the lock to ensure Google respects the rate limit
             await asyncio.sleep(1.5)
             if target_row:
