@@ -2,7 +2,11 @@ import re
 import logging
 import socket
 import ipaddress
+import asyncio
+import concurrent.futures
 from urllib.parse import urlparse
+
+_DNS_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="dns")
 
 logger = logging.getLogger(__name__)
 
@@ -46,9 +50,9 @@ class Guardrails:
             return True  # Malformed IP → treat as unsafe
 
     @staticmethod
-    def validate_url(url: str) -> bool:
+    async def validate_url_async(url: str) -> bool:
         """
-        Validate URL is safe to visit.
+        Validate URL is safe to visit asynchronously.
         Blocks: Non-http schemes, internal IPs, localhosts, cloud metadata.
         """
         try:
@@ -81,8 +85,11 @@ class Guardrails:
 
             # 4. DNS resolution: fail CLOSED if unresolvable
             try:
-                # getaddrinfo handles both IPv4 and IPv6
-                infos = socket.getaddrinfo(hostname, 80)
+                loop = asyncio.get_running_loop()
+                infos = await loop.run_in_executor(
+                    _DNS_EXECUTOR,
+                    lambda: socket.getaddrinfo(hostname, 80)
+                )
             except socket.gaierror:
                 logger.warning(f"Guardrails: DNS resolution failed for {hostname} — REJECTING")
                 return False
@@ -98,6 +105,15 @@ class Guardrails:
         except Exception as e:
             logger.error(f"Guardrails Error: {e}")
             return False
+
+    @staticmethod
+    def validate_url(url: str) -> bool:
+        """Sync shim — do NOT call from within an async context."""
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+        return loop.run_until_complete(Guardrails.validate_url_async(url))
 
     @staticmethod
     def sanitize_input(text: str) -> str:

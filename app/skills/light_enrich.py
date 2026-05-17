@@ -7,8 +7,77 @@ import logging
 import urllib.parse
 from bs4 import BeautifulSoup, NavigableString
 from typing import Dict, Any, Optional, Tuple
+from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
+
+# ─── SINGLETONS, EXECUTORS AND HELPERS ────────────────────────────
+_ai_client = None
+_ai_client_lock = asyncio.Lock()
+
+async def _get_ai_client_async():
+    global _ai_client
+    if _ai_client is None:
+        async with _ai_client_lock:
+            if _ai_client is None:
+                from app.core.ai_client import UnifiedAIClient
+                _ai_client = UnifiedAIClient()
+    return _ai_client
+
+
+_shared_client = None
+_shared_client_lock = asyncio.Lock()
+
+async def _get_shared_client() -> httpx.AsyncClient:
+    global _shared_client
+    if _shared_client is None:
+        async with _shared_client_lock:
+            if _shared_client is None:
+                _shared_client = httpx.AsyncClient(
+                    follow_redirects=True,
+                    timeout=8.0,
+                    verify=True,
+                    limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+                )
+    return _shared_client
+
+
+_firecrawl_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="firecrawl")
+_crawl_semaphore = asyncio.Semaphore(10)
+_NON_DIGIT_RE = re.compile(r'\D')
+
+
+def _score_and_select_email(emails: list, domain: str) -> Optional[str]:
+    if not emails:
+        return None
+    # 1. Prioritize domain matches
+    domain_matches = [e for e in emails if e.lower().endswith(f"@{domain}")]
+    if domain_matches:
+        # Prioritize non-generic domain matches
+        non_generic = [e for e in domain_matches if not any(g in e.lower() for g in ["info@", "contact@", "sales@", "hello@", "support@"])]
+        if non_generic:
+            return non_generic[0]
+        return domain_matches[0]
+    # 2. Then non-generic emails
+    non_generic = [e for e in emails if not any(g in e.lower() for g in ["info@", "contact@", "sales@", "hello@", "support@"])]
+    if non_generic:
+        return non_generic[0]
+    # 3. Fallback to the first one
+    return emails[0]
+
+
+def _normalize_phone_to_e164(phone: str) -> str:
+    if not phone:
+        return ""
+    digits = _NON_DIGIT_RE.sub('', phone)
+    if len(digits) == 10:
+        return f"+1{digits}"
+    elif len(digits) == 11 and digits.startswith("1"):
+        return f"+{digits}"
+    elif len(digits) > 10:
+        return f"+{digits}"
+    logger.warning(f"[PHONE] Could not normalize to E.164: '{phone}' ({len(digits)} digits). Discarding.")
+    return ""
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ENRICHMENT ENGINE V4 — Patched Core
@@ -73,6 +142,8 @@ async def _fetch_page(url: str) -> Optional[Dict[str, str]]:
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
     ]
 
+    _client = await _get_shared_client()
+
     for ua in UA_POOL[:2]:
         try:
             headers = {
@@ -84,13 +155,7 @@ async def _fetch_page(url: str) -> Optional[Dict[str, str]]:
                 "Connection": "keep-alive",
                 "Upgrade-Insecure-Requests": "1",
             }
-            async with httpx.AsyncClient(
-                headers=headers,
-                follow_redirects=True,
-                timeout=18.0,
-                verify=False,
-            ) as client:
-                resp = await client.get(url)
+            resp = await _client.get(url, headers=headers)
 
             if resp.status_code not in (200, 203):
                 logger.debug(f"[FETCH] HTTP {resp.status_code} for {url}")
@@ -118,7 +183,7 @@ async def _fetch_page(url: str) -> Optional[Dict[str, str]]:
     logger.info(f"[FETCH] Falling back to Firecrawl for {url}")
     try:
         scrape_data = await asyncio.get_running_loop().run_in_executor(
-            None, _firecrawl_scrape, url
+            _firecrawl_executor, _firecrawl_scrape, url
         )
         markdown = scrape_data.get("markdown", "")
         html = scrape_data.get("html", "")
@@ -148,6 +213,10 @@ def _extract_emails(html: str) -> list:
     found = set()
     soup = BeautifulSoup(html, "html.parser")
 
+    # Single full-text extraction — reuse across all regex passes
+    full_text = soup.get_text(separator=" ")
+    entity_decoded_text = full_text.replace("&#64;", "@").replace("&#x40;", "@").replace("&commat;", "@")
+
     # 1. JSON-LD structured data
     for script in soup.find_all("script", type="application/ld+json"):
         try:
@@ -164,9 +233,8 @@ def _extract_emails(html: str) -> list:
             if email:
                 found.add(email.lower())
 
-    # 3. HTML entity decode
-    entity_decoded = html.replace("&#64;", "@").replace("&#x40;", "@").replace("&commat;", "@")
-    for e in re.findall(EMAIL_REGEX, entity_decoded):
+    # 3. HTML entity decode pass on the decoded text
+    for e in re.findall(EMAIL_REGEX, entity_decoded_text):
         found.add(e.lower())
 
     # 4. data-* attributes
@@ -177,18 +245,13 @@ def _extract_emails(html: str) -> list:
                 for m in matches:
                     found.add(m.lower())
 
-    # 5. Raw text regex
-    text = soup.get_text(separator=" ")
-    for e in re.findall(EMAIL_REGEX, text):
-        found.add(e.lower())
-
     # 6. Obfuscated text patterns
     obf_patterns = [
         r'([a-zA-Z0-9._%+\-]+)\s*[\[\(]?\s*(?:at|AT)\s*[\]\)]?\s*([a-zA-Z0-9.\-]+)\s*[\[\(]?\s*(?:dot|DOT)\s*[\]\)]?\s*([a-zA-Z]{2,})',
         r'([a-zA-Z0-9._%+\-]+)\s+at\s+([a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})',
     ]
     for pat in obf_patterns:
-        for m in re.finditer(pat, text, re.IGNORECASE):
+        for m in re.finditer(pat, full_text, re.IGNORECASE):
             groups = m.groups()
             if len(groups) == 3:
                 found.add(f"{groups[0]}@{groups[1]}.{groups[2]}".lower())
@@ -252,8 +315,8 @@ def _extract_owner_name(html: str) -> Optional[str]:
             if _is_plausible_name(val):
                 return val
 
-    # 3. DOM adjacency scan — FIXED
-    heading_tags = soup.find_all(["h1", "h2", "h3", "h4", "p", "span", "div", "li"])
+    # 3. DOM adjacency scan — FIXED (capped to prevent CPU blocking)
+    heading_tags = soup.find_all(["h1", "h2", "h3", "h4", "p", "span"], limit=300)
     for tag in heading_tags:
         direct_text = "".join(
             child for child in tag.children if isinstance(child, NavigableString)
@@ -375,7 +438,6 @@ async def _ddg_enrich_contact(biz_name: str, domain: str) -> Tuple[Optional[str]
         "owner": [
             f'"{biz_name}" owner OR founder OR CEO',
             f'site:linkedin.com "{biz_name}" owner OR founder',
-            f'"{biz_name}" "{domain}" about',
         ],
         "email": [
             f'"{biz_name}" "@{domain}"',
@@ -390,8 +452,11 @@ async def _ddg_enrich_contact(biz_name: str, domain: str) -> Tuple[Optional[str]
     if tavily_key:
         logger.info(f"[ENRICH] Using Tavily for contact enrichment of {biz_name}...")
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                for q in queries["owner"][:2]:
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                owner_tasks = []
+                email_tasks = []
+                
+                async def _fetch_tavily_owner(q):
                     payload = {"api_key": tavily_key, "query": q, "max_results": 3, "search_depth": "light"}
                     resp = await client.post("https://api.tavily.com/search", json=payload)
                     if resp.status_code == 200:
@@ -400,7 +465,8 @@ async def _ddg_enrich_contact(biz_name: str, domain: str) -> Tuple[Optional[str]
                                 "title": res.get("title", ""),
                                 "snippet": res.get("content", ""),
                             })
-                for q in queries["email"][:2]:
+                            
+                async def _fetch_tavily_email(q):
                     payload = {"api_key": tavily_key, "query": q, "max_results": 2, "search_depth": "light"}
                     resp = await client.post("https://api.tavily.com/search", json=payload)
                     if resp.status_code == 200:
@@ -409,6 +475,13 @@ async def _ddg_enrich_contact(biz_name: str, domain: str) -> Tuple[Optional[str]
                                 "title": res.get("title", ""),
                                 "snippet": res.get("content", ""),
                             })
+                            
+                for q in queries["owner"][:2]:
+                    owner_tasks.append(_fetch_tavily_owner(q))
+                for q in queries["email"][:2]:
+                    email_tasks.append(_fetch_tavily_email(q))
+                    
+                await asyncio.gather(*(owner_tasks + email_tasks), return_exceptions=True)
         except Exception as e:
             logger.warning(f"[ENRICH] Tavily contact search failed: {e}")
 
@@ -420,82 +493,52 @@ async def _ddg_enrich_contact(biz_name: str, domain: str) -> Tuple[Optional[str]
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
         }
-        import urllib.parse
+        
+        async def _fetch_ddg_and_bing(client, query, category):
+            # DDG Search
+            try:
+                ddg_url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote_plus(query)}"
+                resp = await client.get(ddg_url)
+                if resp.status_code == 200:
+                    soup = BeautifulSoup(resp.text, "html.parser")
+                    items = soup.select("div.result, div.web-result")
+                    for item in items:
+                        a_tag = item.select_one("a.result__a, a.result__url")
+                        snippet_tag = item.select_one("a.result__snippet, div.result__snippet")
+                        if a_tag:
+                            results[category].append({
+                                "title": a_tag.get_text(strip=True),
+                                "snippet": snippet_tag.get_text(strip=True) if snippet_tag else "",
+                            })
+            except Exception as e:
+                logger.debug(f"[ENRICH] DDG {category} search error: {e}")
+
+            # Bing Search
+            try:
+                search_url = f"https://www.bing.com/search?q={urllib.parse.quote_plus(query)}"
+                resp = await client.get(search_url)
+                if resp.status_code == 200:
+                    soup = BeautifulSoup(resp.text, "html.parser")
+                    items = soup.select("li.b_algo")
+                    for item in items:
+                        title_el = item.select_one("h2 a")
+                        snippet_el = item.select_one("div.b_caption p, p")
+                        results[category].append({
+                            "title": title_el.get_text(strip=True) if title_el else "",
+                            "snippet": snippet_el.get_text(strip=True) if snippet_el else "",
+                        })
+            except Exception as e:
+                logger.debug(f"[ENRICH] Bing {category} search error: {e}")
+
         try:
-            async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=15.0) as client:
+            async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=5.0) as client:
+                tasks = []
                 for q in queries["owner"][:2]:
-                    # 1. Try DuckDuckGo HTML Search
-                    try:
-                        ddg_url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote_plus(q)}"
-                        resp = await client.get(ddg_url)
-                        if resp.status_code == 200:
-                            soup = BeautifulSoup(resp.text, "html.parser")
-                            items = soup.select("div.result, div.web-result")
-                            for item in items:
-                                a_tag = item.select_one("a.result__a, a.result__url")
-                                snippet_tag = item.select_one("a.result__snippet, div.result__snippet")
-                                if a_tag:
-                                    results["owner"].append({
-                                        "title": a_tag.get_text(strip=True),
-                                        "snippet": snippet_tag.get_text(strip=True) if snippet_tag else "",
-                                    })
-                    except Exception as e:
-                        logger.debug(f"[ENRICH] DDG owner search error: {e}")
-
-                    # 2. Try Bing Search
-                    try:
-                        search_url = f"https://www.bing.com/search?q={urllib.parse.quote_plus(q)}"
-                        resp = await client.get(search_url)
-                        if resp.status_code == 200:
-                            soup = BeautifulSoup(resp.text, "html.parser")
-                            items = soup.select("li.b_algo")
-                            for item in items:
-                                title_el = item.select_one("h2 a")
-                                snippet_el = item.select_one("div.b_caption p, p")
-                                results["owner"].append({
-                                    "title": title_el.get_text(strip=True) if title_el else "",
-                                    "snippet": snippet_el.get_text(strip=True) if snippet_el else "",
-                                })
-                    except Exception:
-                        pass
-                    await asyncio.sleep(0.5)
-
+                    tasks.append(_fetch_ddg_and_bing(client, q, "owner"))
                 for q in queries["email"][:2]:
-                    # 1. Try DuckDuckGo HTML Search
-                    try:
-                        ddg_url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote_plus(q)}"
-                        resp = await client.get(ddg_url)
-                        if resp.status_code == 200:
-                            soup = BeautifulSoup(resp.text, "html.parser")
-                            items = soup.select("div.result, div.web-result")
-                            for item in items:
-                                a_tag = item.select_one("a.result__a, a.result__url")
-                                snippet_tag = item.select_one("a.result__snippet, div.result__snippet")
-                                if a_tag:
-                                    results["email"].append({
-                                        "title": a_tag.get_text(strip=True),
-                                        "snippet": snippet_tag.get_text(strip=True) if snippet_tag else "",
-                                    })
-                    except Exception as e:
-                        logger.debug(f"[ENRICH] DDG email search error: {e}")
-
-                    # 2. Try Bing Search
-                    try:
-                        search_url = f"https://www.bing.com/search?q={urllib.parse.quote_plus(q)}"
-                        resp = await client.get(search_url)
-                        if resp.status_code == 200:
-                            soup = BeautifulSoup(resp.text, "html.parser")
-                            items = soup.select("li.b_algo")
-                            for item in items:
-                                title_el = item.select_one("h2 a")
-                                snippet_el = item.select_one("div.b_caption p, p")
-                                results["email"].append({
-                                    "title": title_el.get_text(strip=True) if title_el else "",
-                                    "snippet": snippet_el.get_text(strip=True) if snippet_el else "",
-                                })
-                    except Exception:
-                        pass
-                    await asyncio.sleep(0.5)
+                    tasks.append(_fetch_ddg_and_bing(client, q, "email"))
+                
+                await asyncio.gather(*tasks, return_exceptions=True)
         except Exception as e:
             logger.warning(f"[ENRICH] Direct search scrapers failed: {e}")
 
@@ -523,8 +566,7 @@ async def _ddg_enrich_contact(biz_name: str, domain: str) -> Tuple[Optional[str]
         user_prompt = f"Business Name: {biz_name}\nDomain: {domain}\n\nSearch Results:\n{snippets_text}"
         
         try:
-            from app.core.ai_client import UnifiedAIClient
-            ai = UnifiedAIClient()
+            ai = await _get_ai_client_async()
             messages = [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
@@ -653,8 +695,7 @@ async def _ai_extract_contacts(text: str, biz_name: str) -> Dict[str, Optional[s
     ]
 
     try:
-        from app.core.ai_client import UnifiedAIClient
-        ai = UnifiedAIClient()
+        ai = await _get_ai_client_async()
         response = await ai.chat(messages, role="hawk", temperature=0.1, max_tokens=200)
         content = response.content or ""
         
@@ -682,12 +723,25 @@ async def _ai_extract_contacts(text: str, biz_name: str) -> Dict[str, Optional[s
         return {}
 
 
+ENRICH_TOTAL_TIMEOUT = 25.0  # Hard ceiling below Render's 30s kill
+
 async def enrich_lead_lite(lead: Dict[str, Any]) -> Dict[str, Any]:
+    url = lead.get("url")
+    if not url or not url.startswith("http"):
+        return lead
+    try:
+        return await asyncio.wait_for(_enrich_lead_lite_inner(lead), timeout=ENRICH_TOTAL_TIMEOUT)
+    except asyncio.TimeoutError:
+        logger.warning(f"[ENRICH] Hard timeout hit for {lead.get('business')}. Returning partial data.")
+        return lead
+
+async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
     url = lead.get("url")
     if not url or not url.startswith("http"):
         return lead
 
     biz_name = lead.get("business", "Unknown")
+    domain = _get_domain(lead.get("website") or lead.get("url") or "")
     logger.info(f"[ENRICH] ═══ Starting enrichment for: {biz_name} ═══")
 
     real_website = lead.get("website") or None
@@ -698,7 +752,7 @@ async def enrich_lead_lite(lead: Dict[str, Any]) -> Dict[str, Any]:
             logger.info("[ENRICH] Lead already fully enriched. Skipping Yelp scrape.")
         else:
             logger.info(f"[ENRICH] Step 1: Scraping Yelp page for contact info...")
-            scrape_data = await asyncio.get_running_loop().run_in_executor(None, _firecrawl_scrape, url)
+            scrape_data = await asyncio.get_running_loop().run_in_executor(_firecrawl_executor, _firecrawl_scrape, url)
             markdown = scrape_data.get("markdown", "")
             html = scrape_data.get("html", "")
 
@@ -708,7 +762,7 @@ async def enrich_lead_lite(lead: Dict[str, Any]) -> Dict[str, Any]:
                 if not lead.get("phone"):
                     phones = _extract_phones(markdown)
                     if phones:
-                        lead["phone"] = phones[0]
+                        lead["phone"] = _normalize_phone_to_e164(phones[0])
                         logger.info(f"[ENRICH] → Phone from Yelp: {lead['phone']}")
 
                 # Extract website using dual HTML + Markdown parser
@@ -719,6 +773,7 @@ async def enrich_lead_lite(lead: Dict[str, Any]) -> Dict[str, Any]:
                         real_website = _extract_website_from_markdown(markdown)
                     if real_website:
                         lead["website"] = real_website
+                        domain = _get_domain(real_website)
                         logger.info(f"[ENRICH] → Website from Yelp: {real_website}")
 
                 addr_match = re.search(
@@ -780,10 +835,21 @@ async def enrich_lead_lite(lead: Dict[str, Any]) -> Dict[str, Any]:
             for path in ["/contact", "/contact-us", "/about", "/about-us", "/team", "/our-team"]:
                 pages_to_crawl.append(real_website.rstrip("/") + path)
 
-        for page_url in pages_to_crawl:
-            page_data = await _fetch_page(page_url)
-            if not page_data:
+        # Deduplicate to prevent double-crawling the same pages
+        pages_to_crawl = list(dict.fromkeys(pages_to_crawl))
+
+        # Perform high-performance concurrent page crawl using asyncio.gather with a semaphore
+        async def _fetch_page_guarded(u):
+            async with _crawl_semaphore:
+                return await _fetch_page(u)
+
+        crawl_tasks = [_fetch_page_guarded(u) for u in pages_to_crawl]
+        pages_results = await asyncio.gather(*crawl_tasks, return_exceptions=True)
+
+        for page_url, page_data in zip(pages_to_crawl, pages_results):
+            if isinstance(page_data, Exception) or not page_data:
                 continue
+
             html = page_data.get("html", "")
             markdown_fallback = page_data.get("markdown", "")
             content_for_extraction = html or markdown_fallback
@@ -813,20 +879,21 @@ async def enrich_lead_lite(lead: Dict[str, Any]) -> Dict[str, Any]:
                 if not lead.get("phone"):
                     phones = _extract_phones(content_for_extraction)
                     if phones:
-                        lead["phone"] = phones[0]
+                        lead["phone"] = _normalize_phone_to_e164(phones[0])
                         logger.info(f"[BBB] Phone from BBB: {lead['phone']}")
                 continue
 
             if not lead.get("email"):
                 emails = _extract_emails(content_for_extraction)
-                if emails:
-                    lead["email"] = emails[0]
+                best_email = _score_and_select_email(emails, domain)
+                if best_email:
+                    lead["email"] = best_email
                     logger.info(f"[ENRICH] → Email from {page_url}: {lead['email']}")
 
             if not lead.get("phone"):
                 phones = _extract_phones(content_for_extraction)
                 if phones:
-                    lead["phone"] = phones[0]
+                    lead["phone"] = _normalize_phone_to_e164(phones[0])
                     logger.info(f"[ENRICH] → Phone from {page_url}: {lead['phone']}")
 
             if not lead.get("owner"):
@@ -849,7 +916,7 @@ async def enrich_lead_lite(lead: Dict[str, Any]) -> Dict[str, Any]:
                     logger.info(f"[HAWK AI] → Email extracted: {lead['email']}")
                 
                 if ai_contacts.get("phone") and not lead.get("phone"):
-                    lead["phone"] = ai_contacts["phone"]
+                    lead["phone"] = _normalize_phone_to_e164(ai_contacts["phone"])
                     logger.info(f"[HAWK AI] → Phone extracted: {lead['phone']}")
 
             if lead.get("email") and lead.get("phone") and lead.get("owner"):
@@ -864,22 +931,23 @@ async def enrich_lead_lite(lead: Dict[str, Any]) -> Dict[str, Any]:
     if hunter_key and domain and "yelp.com" not in domain and not lead.get("email"):
         logger.info(f"[ENRICH] Step 3: Hunter.io lookup for {domain}...")
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(
-                    f"https://api.hunter.io/v2/domain-search?domain={domain}&api_key={hunter_key}"
-                )
-                if resp.status_code == 200:
-                    data = resp.json().get("data", {})
-                    emails = data.get("emails", [])
-                    if emails:
-                        lead["email"] = emails[0].get("value")
-                        logger.info(f"[ENRICH] → Email from Hunter: {lead['email']}")
-                        
-                        if not lead.get("owner") and emails[0].get("first_name"):
-                            fn = emails[0].get("first_name")
-                            ln = emails[0].get("last_name") or ""
-                            lead["owner"] = f"{fn} {ln}".strip()
-                            logger.info(f"[ENRICH] → Owner from Hunter: {lead['owner']}")
+            client = await _get_shared_client()
+            resp = await client.get(
+                f"https://api.hunter.io/v2/domain-search?domain={domain}&api_key={hunter_key}",
+                timeout=10.0
+            )
+            if resp.status_code == 200:
+                data = resp.json().get("data", {})
+                emails = data.get("emails", [])
+                if emails:
+                    lead["email"] = emails[0].get("value")
+                    logger.info(f"[ENRICH] → Email from Hunter: {lead['email']}")
+                    
+                    if not lead.get("owner") and emails[0].get("first_name"):
+                        fn = emails[0].get("first_name")
+                        ln = emails[0].get("last_name") or ""
+                        lead["owner"] = f"{fn} {ln}".strip()
+                        logger.info(f"[ENRICH] → Owner from Hunter: {lead['owner']}")
         except Exception as e:
             logger.warning(f"[ENRICH] Hunter lookup failed: {e}")
 
@@ -900,25 +968,25 @@ async def enrich_lead_lite(lead: Dict[str, Any]) -> Dict[str, Any]:
                 "page": 1,
                 "per_page": 5
             }
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.post("https://api.apollo.io/v1/mixed_people/api_search", json=payload, headers=headers)
-                if resp.status_code == 200:
-                    people = resp.json().get("people", [])
-                    if people:
-                        # Find first person with a non-empty email
-                        p = next((person for person in people if person.get("email")), people[0])
-                        if not lead.get("owner") and p.get("name"):
-                            lead["owner"] = p.get("name")
-                            logger.info(f"[ENRICH] → Owner from Apollo: {lead['owner']}")
-                        if not lead.get("email") and p.get("email"):
-                            lead["email"] = p.get("email")
-                            logger.info(f"[ENRICH] → Email from Apollo: {lead['email']}")
-                        # Fetch phone number if available
-                        if not lead.get("phone") and p.get("phone_numbers"):
-                            lead["phone"] = p.get("phone_numbers")[0].get("raw_number")
-                            logger.info(f"[ENRICH] → Phone from Apollo: {lead['phone']}")
-                else:
-                    logger.warning(f"[ENRICH] Apollo API returned status {resp.status_code}: {resp.text[:200]}")
+            client = await _get_shared_client()
+            resp = await client.post("https://api.apollo.io/v1/mixed_people/api_search", json=payload, headers=headers, timeout=10.0)
+            if resp.status_code == 200:
+                people = resp.json().get("people", [])
+                if people:
+                    # Find first person with a non-empty email
+                    p = next((person for person in people if person.get("email")), people[0])
+                    if not lead.get("owner") and p.get("name"):
+                        lead["owner"] = p.get("name")
+                        logger.info(f"[ENRICH] → Owner from Apollo: {lead['owner']}")
+                    if not lead.get("email") and p.get("email"):
+                        lead["email"] = p.get("email")
+                        logger.info(f"[ENRICH] → Email from Apollo: {lead['email']}")
+                    # Fetch phone number if available
+                    if not lead.get("phone") and p.get("phone_numbers"):
+                        lead["phone"] = _normalize_phone_to_e164(p.get("phone_numbers")[0].get("raw_number"))
+                        logger.info(f"[ENRICH] → Phone from Apollo: {lead['phone']}")
+            else:
+                logger.warning(f"[ENRICH] Apollo API returned status {resp.status_code}: {resp.text[:200]}")
         except Exception as e:
             logger.warning(f"[ENRICH] Apollo failed: {e}")
 
@@ -945,6 +1013,10 @@ async def enrich_lead_lite(lead: Dict[str, Any]) -> Dict[str, Any]:
             lead["email"] = guesses[0]
             lead["notes"] = (lead.get("notes", "") + f" | Email guessed (verify before sending)").strip(" |")
             logger.info(f"[ENRICH] → Guessed email: {lead['email']}")
+
+    # Final Phone Normalization Guardrail
+    if lead.get("phone"):
+        lead["phone"] = _normalize_phone_to_e164(lead["phone"])
 
     logger.info(
         f"[ENRICH] ═══ Done: {biz_name} | "

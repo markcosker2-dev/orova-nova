@@ -1,8 +1,9 @@
-﻿import re
+import re
 import logging
 import uuid
-from typing import Optional
+from typing import Optional, Union
 from app.core.hardening import rate_limiter, sanitizer, tracer, RequestSanitizer
+from app.core.guardrails import Guardrails
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ class Router:
         self.lead_hunter = lead_hunter
         self.shortcuts = {r"/reset": self._reset_instruction}
 
-    async def route(self, message: str, chat_id: int, history: list = None, agent_id: str = "nova") -> str | dict:
+    async def route(self, message: str, chat_id: int, history: list = None, agent_id: str = "nova") -> Union[str, dict]:
         # [P4] Hardening: Generate request ID for tracing
         request_id = str(uuid.uuid4())[:8]
         client_id_str = f"tg_{chat_id}"
@@ -35,9 +36,11 @@ class Router:
         
         # [P4] Sanitize input
         message = RequestSanitizer.sanitize_string(message.strip(), max_len=5000)
+        # Also run the prompt-injection guardrail
+        message = Guardrails.sanitize_input(message)
         if not message:
             logger.warning(f"[Router] Empty/invalid message from {chat_id}")
-            return "Your message appears to be empty. Please try again."
+            return "Your message appears to be empty or was rejected by safety guardrails. Please try again."
         
         tracer.trace(request_id, "route_start", {"client_id": chat_id, "agent_id": agent_id, "msg_len": len(message)})
         

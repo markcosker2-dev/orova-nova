@@ -5,6 +5,9 @@ import shutil
 import logging
 import requests
 import json
+import asyncio
+from typing import Optional
+
 try:
     from google.oauth2.service_account import Credentials as ServiceAccountCredentials
     from google.auth.transport.requests import Request as AuthRequest
@@ -34,8 +37,10 @@ def _get_access_token():
         logger.error(f"[DRIVE BACKUP] Failed to get OAuth token: {e}")
         return None
 
-def _find_backup_file_id(token):
+def _find_backup_file_id(token: Optional[str]) -> Optional[str]:
     """Searches Google Drive for an existing backup file."""
+    if not token:
+        return None
     headers = {"Authorization": f"Bearer {token}"}
     query = f"name='{BACKUP_FILENAME}' and trashed=false"
     url = f"https://www.googleapis.com/drive/v3/files?q={query}&fields=files(id, name)"
@@ -48,8 +53,8 @@ def _find_backup_file_id(token):
         logger.error(f"[DRIVE SEARCH] Error: {e}")
     return None
 
-def upload_database(db_path: str):
-    """Back up the local SQLite db to Google Drive."""
+def _blocking_upload(db_path: str) -> None:
+    """Synchronous database upload logic. Run inside to_thread pool."""
     token = _get_access_token()
     if not token:
         logger.warning("⚠️ No Google Credentials found. Cloud Backup skipped.")
@@ -79,10 +84,6 @@ def upload_database(db_path: str):
             url = "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart"
             
             metadata = {"name": BACKUP_FILENAME}
-            files = {
-                'metadata': ('', json.dumps(metadata), 'application/json'),
-                'file': (BACKUP_FILENAME, file_data, 'application/octet-stream')
-            }
             # requests' multipart helpers don't work with Drive's multipart/related easily;
             # send the multipart/related body explicitly.
             boundary = '-------314159265358979323846'
@@ -105,12 +106,8 @@ def upload_database(db_path: str):
         if os.path.exists(backup_path):
             os.remove(backup_path)
 
-def backup_database(db_path: str):
-    """Backwards-compatible alias used by app.main shutdown hook."""
-    return upload_database(db_path)
-
-def restore_database(db_path: str) -> bool:
-    """Download database from Drive if local doesn't exist or is empty."""
+def _blocking_restore(db_path: str) -> bool:
+    """Synchronous database restore logic. Run inside to_thread pool."""
     if os.path.exists(db_path) and os.path.getsize(db_path) > 100 * 1024:
         # Local DB already exists and has data (>100KB), no need to restore
         return False
@@ -141,3 +138,15 @@ def restore_database(db_path: str) -> bool:
         logger.error(f"❌ [DRIVE RESTORE] Exception: {e}")
     
     return False
+
+async def upload_database(db_path: str) -> None:
+    """Async-safe entry point. Offloads all blocking I/O to thread pool."""
+    await asyncio.to_thread(_blocking_upload, db_path)
+
+async def backup_database(db_path: str) -> None:
+    """Async-safe entry point. Offloads all blocking I/O to thread pool."""
+    await asyncio.to_thread(_blocking_upload, db_path)
+
+async def restore_database(db_path: str) -> bool:
+    """Async-safe entry point. Offloads all blocking I/O to thread pool."""
+    return await asyncio.to_thread(_blocking_restore, db_path)

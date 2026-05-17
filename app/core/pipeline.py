@@ -14,7 +14,9 @@ import asyncio
 import json
 import os
 import time
+import collections
 from datetime import datetime
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -144,8 +146,9 @@ PIPELINES = {
 # PIPELINE RUNNER
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Global state for tracking running pipelines
-_active_pipelines = {}
+# Global state for tracking running pipelines (capped to avoid memory growth)
+_active_pipelines: collections.OrderedDict = collections.OrderedDict()
+_MAX_PIPELINE_HISTORY = 200
 
 class PipelineStepResult:
     """[P0] Container for step results to prevent poison propagation."""
@@ -173,6 +176,8 @@ async def run_pipeline(pipeline_name: str, params: str = "") -> str:
     logger.info(f"[PIPELINE] Starting: {pipeline['name']} ({len(pipeline['steps'])} steps)")
 
     run_id = f"pipeline_{int(time.time())}"
+    if len(_active_pipelines) >= _MAX_PIPELINE_HISTORY:
+        _active_pipelines.popitem(last=False)   # evict oldest
     _active_pipelines[run_id] = {
         "name": pipeline_name,
         "status": "running",
@@ -188,7 +193,7 @@ async def run_pipeline(pipeline_name: str, params: str = "") -> str:
     report += f"**Run ID:** `{run_id}`\n\n"
 
     # [P0] Track the previous step's result as a structured object
-    previous: PipelineStepResult | None = None
+    previous: Optional[PipelineStepResult] = None
 
     for i, step in enumerate(pipeline["steps"]):
         step_num = i + 1
@@ -324,7 +329,7 @@ async def _execute_skill(skill_name: str, args: dict):
     if asyncio.iscoroutinefunction(func):
         return await func(**args)
     else:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, lambda: func(**args))
 
 

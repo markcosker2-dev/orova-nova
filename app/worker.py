@@ -29,6 +29,26 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ─── SHEETS COLUMNS CONFIGURATION ─────────────────────────────
+# 0-indexed Python row list indices
+COL_IDX_ID = 0
+COL_IDX_COMPANY = 1      # Business (Company)
+COL_IDX_OWNER = 2        # Owner (Contact Name)
+COL_IDX_EMAIL = 3        # Email
+COL_IDX_PHONE = 4        # Phone
+COL_IDX_WEBSITE = 5      # Website
+COL_IDX_URL = 6          # URL
+COL_IDX_STATUS = 7       # Status
+COL_IDX_SCORE = 8        # Score
+COL_IDX_SOURCE = 9       # Source
+COL_IDX_DATE = 10        # Date
+COL_IDX_NOTES = 11       # Notes
+
+# 1-indexed Google Sheets column numbers for updates
+COL_SHEET_STATUS = 8     # Column H
+COL_SHEET_NOTES = 12     # Column L
+COL_SHEET_CALL_ID = 13   # Column M (Place Call ID here)
+
 load_dotenv()
 
 # Initialize database
@@ -41,20 +61,22 @@ APPROVAL_CHECK_MINUTES = 2
 REPLY_CHECK_MINUTES = 5
 COLD_CALL_CHECK_MINUTES = 30    # Check for cold leads to auto-call
 MAX_RUNS_PER_DAY = 10
-MAX_CALLS_PER_DAY = 5           # Safety cap for Retell calls
-COLD_LEAD_DAYS_THRESHOLD = 5    # Days before escalating to phone call
+MAX_CALLS_PER_DAY = int(os.getenv("MAX_CALLS_PER_DAY", "5"))           # Safety cap for Retell calls
+COLD_LEAD_DAYS_THRESHOLD = int(os.getenv("COLD_LEAD_DAYS_THRESHOLD", "5"))    # Days before escalating to phone call
 MAX_DAILY_COST = 5.0            # $5.00 daily safety cap
 
 # Security: Wallet Drain Safeguard
 daily_hunt_counter = 0
 daily_call_counter = 0
-last_reset_day = time.strftime("%d")
+_pst_tz = pytz.timezone('America/Los_Angeles')
+last_reset_day = datetime.now(_pst_tz).day
 
 
 def _reset_daily_counters():
-    """Reset daily counters at midnight."""
+    """Reset daily counters at midnight PST."""
     global daily_hunt_counter, daily_call_counter, last_reset_day
-    current_day = time.strftime("%d")
+    _pst_tz = pytz.timezone('America/Los_Angeles')
+    current_day = datetime.now(_pst_tz).day
     if current_day != last_reset_day:
         daily_hunt_counter = 0
         daily_call_counter = 0
@@ -94,49 +116,58 @@ def send_telegram_report(message):
 # LANE 1: FAST LANE — Approval checks + execute calls
 # Runs every 2 minutes
 # ═══════════════════════════════════════════════════════
+_call_counter_lock = asyncio.Lock()
+
 async def run_ceo_fast_lane(client_id=0):
     """⚡ Check for leads needing approval and execute approved calls."""
     logger.info(f"⚡ [FAST LANE] [Client {client_id}] Checking approvals and pending calls...")
 
     try:
-        # For now, we utilize a single master sheet, but filter by client_id in the notes/metadata
-        # Future: support client-specific sheet names stored in the 'clients' table
-        client_auth = _get_sheets_client()
+        loop = asyncio.get_running_loop()
+        client_auth = await loop.run_in_executor(None, _get_sheets_client)
         sheet_name = os.getenv("GOOGLE_SHEETS_WORKBOOK", "OROVA CRM")
-        sheet = client_auth.open(sheet_name).sheet1
-        rows = sheet.get_all_values()
+        sheet = await loop.run_in_executor(None, lambda: client_auth.open(sheet_name).sheet1)
+        rows = await loop.run_in_executor(None, sheet.get_all_values)
 
         for idx, row in enumerate(rows[1:], start=2):
-            status = row[7] if len(row) > 7 else ""
+            status = row[COL_IDX_STATUS] if len(row) > COL_IDX_STATUS else ""
             
             # --- Execute approved calls ---
             if status == "Approved":
-                _execute_approved_call(sheet, row, idx, client_id=client_id)
+                # Lock row immediately to prevent duplicate Retell escalation races
+                await loop.run_in_executor(None, lambda: sheet.update_cell(idx, COL_SHEET_STATUS, "Processing"))
+                await _execute_approved_call(sheet, row, idx, client_id=client_id)
 
     except Exception as e:
         logger.error(f"Fast Lane Error (Client {client_id}): {e}")
 
 
-def _execute_approved_call(sheet, row, idx, client_id=0):
+async def _execute_approved_call(sheet, row, idx, client_id=0):
     """Execute a call for an approved lead."""
     global daily_call_counter
     _reset_daily_counters()
+    loop = asyncio.get_running_loop()
 
     # SAFETY: Do not call outside of 9 AM - 5 PM California time (PST)
     pst_tz = pytz.timezone('America/Los_Angeles')
     now_pst = datetime.now(pst_tz)
     if now_pst.hour < 9 or now_pst.hour >= 17:
-        logger.info(f"⏳ [FAST Lane] Call queued for {row[4]}, but it is outside PST business hours ({now_pst.strftime('%H:%M')}). Waiting.")
+        logger.info(f"⏳ [FAST Lane] Call queued for {row[COL_IDX_COMPANY]}, but it is outside PST business hours ({now_pst.strftime('%H:%M')}). Waiting.")
+        await loop.run_in_executor(None, lambda: sheet.update_cell(idx, COL_SHEET_STATUS, "Approved"))  # Release lock
         return
 
-    if daily_call_counter >= MAX_CALLS_PER_DAY:
-        logger.info(f"📞 Daily call limit ({MAX_CALLS_PER_DAY}) reached. Skipping.")
-        return
+    async with _call_counter_lock:
+        if daily_call_counter >= MAX_CALLS_PER_DAY:
+            logger.info(f"📞 Daily call limit ({MAX_CALLS_PER_DAY}) reached. Skipping.")
+            await loop.run_in_executor(None, lambda: sheet.update_cell(idx, COL_SHEET_STATUS, "Approved"))  # Release lock
+            return
+        # Reserve the slot atomically
+        daily_call_counter += 1
 
-    phone = row[3]
-    company = row[4]
-    contact = f"{row[1]} {row[2]}".strip() if len(row) > 2 else ""
-    intel = row[8] if len(row) > 8 else ""
+    phone = row[COL_IDX_PHONE] if len(row) > COL_IDX_PHONE else ""
+    company = row[COL_IDX_COMPANY] if len(row) > COL_IDX_COMPANY else ""
+    contact = row[COL_IDX_OWNER] if len(row) > COL_IDX_OWNER else ""
+    intel = row[COL_IDX_NOTES] if len(row) > COL_IDX_NOTES else ""
 
     logger.info(f"📞 [CALL] Triggering Retell for {company} ({phone})...")
 
@@ -147,35 +178,44 @@ def _execute_approved_call(sheet, row, idx, client_id=0):
         "offer_gap": "",
     }
 
-    result = trigger_retell_call(phone, context)
+    # Run trigger_retell_call (check if async/coroutine, else run in thread pool executor)
+    import inspect
+    if inspect.iscoroutinefunction(trigger_retell_call):
+        result = await trigger_retell_call(phone, context)
+    else:
+        result = await loop.run_in_executor(None, trigger_retell_call, phone, context)
 
     if result.get("success"):
         call_id = result.get("call_id")
         logger.info(f"✅ [CALL] Success! ID: {call_id}")
-        sheet.update_cell(idx, 8, "Call Initiated")
+        await loop.run_in_executor(None, lambda: sheet.update_cell(idx, COL_SHEET_STATUS, "Call Initiated"))
         # Ensure enough columns
-        while len(row) < 10:
+        while len(row) < COL_SHEET_CALL_ID:
             row.append("")
-        sheet.update_cell(idx, 10, call_id)
-        daily_call_counter += 1
+        await loop.run_in_executor(None, lambda: sheet.update_cell(idx, COL_SHEET_CALL_ID, call_id))
 
-        send_telegram_report(
+        await loop.run_in_executor(None, lambda: send_telegram_report(
             f"📞 **Call Initiated**\n\n"
             f"I am now calling **{company}** ({contact}).\n"
             f"Call ID: `{call_id}`"
-        )
+        ))
 
         # Update SQLite metrics
         try:
-            metrics = DatabaseManager.get_metrics(client_id)
-            DatabaseManager.update_metrics({"calls_made": metrics.get("calls_made", 0) + 1}, client_id=client_id)
+            metrics = await loop.run_in_executor(None, DatabaseManager.get_metrics, client_id)
+            await loop.run_in_executor(
+                None,
+                lambda: DatabaseManager.update_metrics({"calls_made": metrics.get("calls_made", 0) + 1}, client_id=client_id)
+            )
         except Exception:
             pass
     else:
         error = result.get("error", "Unknown error")
         logger.error(f"❌ [CALL] Failed: {error}")
-        sheet.update_cell(idx, 8, "Call Failed")
-        send_telegram_report(f"⚠️ **Call Failed**\n\nError calling **{company}**: {error}")
+        async with _call_counter_lock:
+            daily_call_counter -= 1  # Release slot on failure
+        await loop.run_in_executor(None, lambda: sheet.update_cell(idx, COL_SHEET_STATUS, "Call Failed"))
+        await loop.run_in_executor(None, lambda: send_telegram_report(f"⚠️ **Call Failed**\n\nError calling **{company}**: {error}"))
 
 
 # ═══════════════════════════════════════════════════════
@@ -186,13 +226,14 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
     """🕵️ Hunt for new leads via multi-tier search."""
     global daily_hunt_counter
     _reset_daily_counters()
+    loop = asyncio.get_running_loop()
 
     if daily_hunt_counter >= MAX_RUNS_PER_DAY:
         logger.info(f"🌙 [SLOW LANE] [Client {client_id}] Daily limit reached. Skipping lead hunt.")
         return
 
     # Check Cost Guardrail
-    metrics = DatabaseManager.get_metrics(client_id)
+    metrics = await loop.run_in_executor(None, DatabaseManager.get_metrics, client_id)
     if float(metrics.get("cost", 0)) >= MAX_DAILY_COST:
         logger.warning(f"🛑 [WALLET] Daily cost limit (${MAX_DAILY_COST}) reached for Client {client_id}. Halting.")
         return
@@ -249,22 +290,22 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
                     lead["date"] = datetime.now().strftime("%Y-%m-%d")
                     lead["vertical"] = niche
                     
-                    DatabaseManager.save_lead(lead, default_vertical=niche, client_id=client_id)
+                    await loop.run_in_executor(None, lambda l=lead: DatabaseManager.save_lead(l, default_vertical=niche, client_id=client_id))
 
             # Update metrics
             try:
-                metrics = DatabaseManager.get_metrics(client_id)
-                DatabaseManager.update_metrics({
+                metrics = await loop.run_in_executor(None, DatabaseManager.get_metrics, client_id)
+                await loop.run_in_executor(None, lambda: DatabaseManager.update_metrics({
                     "leads_found": metrics.get("leads_found", 0) + count
-                }, client_id=client_id)
+                }, client_id=client_id))
             except Exception:
                 pass
 
-            send_telegram_report(
+            await loop.run_in_executor(None, lambda: send_telegram_report(
                 f"☀️ **Lead Hunt Complete**\n\n"
                 f"Found **{count}** new leads for '{query}'.\n\n"
                 f"{summary_text[:500]}"
-            )
+            ))
         else:
             logger.info("   -> No leads found this shift.")
 
@@ -273,7 +314,7 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
 
     except Exception as e:
         logger.error(f"   !!! ERROR in Slow Lane: {e}")
-        send_telegram_report(f"⚠️ **Lead Hunt Error**: {str(e)}")
+        await loop.run_in_executor(None, lambda: send_telegram_report(f"⚠️ **Lead Hunt Error**: {str(e)}"))
 
 
 # ═══════════════════════════════════════════════════════
@@ -284,9 +325,8 @@ async def run_reply_monitor(client_id=0):
     """📬 Check AgentMail for new prospect replies."""
     logger.info(f"📬 [REPLY MONITOR] [Client {client_id}] Checking for new messages...")
     try:
-        # Note: check_replies currently uses a global email account. 
-        # For Phase 10, we at least isolate the Metric updates to the client.
-        res = check_replies(limit=5)
+        loop = asyncio.get_running_loop()
+        res = await loop.run_in_executor(None, lambda: check_replies(limit=5))
         if res.get("status") == "success" and res.get("count", 0) > 0:
             for msg in res.get("messages", []):
                 sender = msg.get("from")
@@ -302,14 +342,14 @@ async def run_reply_monitor(client_id=0):
                     f"📝 **Snippet:** \"{snippet}...\"\n\n"
                     f"Shall I check the calendar and propose a slot?"
                 )
-                send_telegram_report(report)
+                await loop.run_in_executor(None, lambda: send_telegram_report(report))
 
                 # Update reply metrics
                 try:
-                    metrics = DatabaseManager.get_metrics(client_id)
-                    DatabaseManager.update_metrics({
+                    metrics = await loop.run_in_executor(None, DatabaseManager.get_metrics, client_id)
+                    await loop.run_in_executor(None, lambda: DatabaseManager.update_metrics({
                         "replies_received": metrics.get("replies_received", 0) + 1
-                    }, client_id=client_id)
+                    }, client_id=client_id))
                 except Exception:
                     pass
     except Exception as e:
@@ -327,6 +367,7 @@ async def run_cold_lead_escalation(client_id=0):
     """📞 Identify leads that haven't replied and escalate to phone call."""
     logger.info(f"📞 [ESCALATION] [Client {client_id}] Checking for cold leads...")
     try:
+        loop = asyncio.get_running_loop()
         pst_tz = pytz.timezone('America/Los_Angeles')
         now_pst = datetime.now(pst_tz)
         
@@ -335,46 +376,49 @@ async def run_cold_lead_escalation(client_id=0):
             logger.info(f"⏳ [ESCALATION] Outside prime calling hours ({now_pst.strftime('%I:%M %p')} PST). Suspending escalations.")
             return
 
-        cold_leads = DatabaseManager.get_cold_leads(COLD_LEAD_DAYS_THRESHOLD, client_id=client_id)
+        cold_leads = await loop.run_in_executor(None, lambda: DatabaseManager.get_cold_leads(COLD_LEAD_DAYS_THRESHOLD, client_id=client_id))
         if not cold_leads:
             logger.info(f"📞 [ESCALATION] [Client {client_id}] No true cold leads to escalate.")
             return
 
         cold_business_names = {l["business"].lower() for l in cold_leads if l.get("business")}
 
-        client_auth = _get_sheets_client()
+        client_auth = await loop.run_in_executor(None, _get_sheets_client)
         sheet_name = os.getenv("GOOGLE_SHEETS_WORKBOOK", "OROVA CRM")
-        sheet = client_auth.open(sheet_name).sheet1
-        rows = sheet.get_all_values()
+        sheet = await loop.run_in_executor(None, lambda: client_auth.open(sheet_name).sheet1)
+        rows = await loop.run_in_executor(None, sheet.get_all_values)
 
         escalated = 0
         for idx, row in enumerate(rows[1:], start=2):
             if daily_call_counter >= MAX_CALLS_PER_DAY:
                 break
 
-            status = row[7] if len(row) > 7 else ""
-            company = row[4] if len(row) > 4 else "Unknown"
-            contact = f"{row[1]} {row[2]}".strip() if len(row) > 2 else ""
+            status = row[COL_IDX_STATUS] if len(row) > COL_IDX_STATUS else ""
+            company = row[COL_IDX_COMPANY] if len(row) > COL_IDX_COMPANY else "Unknown"
+            contact = row[COL_IDX_OWNER] if len(row) > COL_IDX_OWNER else ""
 
             # Only escalate leads for this specific client and matching names
             if status in ("Email Sent", "Contacted") and company.lower() in cold_business_names:
                 logger.info(f"📞 [ESCALATION] [Client {client_id}] True cold lead detected: {company}. Escalating to call.")
 
                 # Mark as Ready for Call (requires CEO approval in Fast Lane)
-                sheet.update_cell(idx, 8, "Ready for Call")
-                notes = row[8] if len(row) > 8 else ""
-                sheet.update_cell(idx, 9, f"{notes} | Client {client_id} Auto-escalated: {COLD_LEAD_DAYS_THRESHOLD}+ days no reply")
+                await loop.run_in_executor(None, lambda: sheet.update_cell(idx, COL_SHEET_STATUS, "Ready for Call"))
+                notes = row[COL_IDX_NOTES] if len(row) > COL_IDX_NOTES else ""
+                await loop.run_in_executor(None, lambda: sheet.update_cell(idx, COL_SHEET_NOTES, f"{notes} | Client {client_id} Auto-escalated: {COLD_LEAD_DAYS_THRESHOLD}+ days no reply"))
 
                 # Update SQLite to match so it doesn't get flagged again
-                DatabaseManager.query("UPDATE leads SET status = 'Ready for Call' WHERE LOWER(business) = ? AND client_id = ?", (company.lower(), int(client_id)))
+                await loop.run_in_executor(None, lambda: DatabaseManager.query(
+                    "UPDATE leads SET status = 'Ready for Call' WHERE LOWER(business) = ? AND client_id = ?",
+                    (company.lower(), int(client_id))
+                ))
 
                 escalated += 1
 
-                send_telegram_report(
+                await loop.run_in_executor(None, lambda: send_telegram_report(
                     f"📞 **Cold Lead Auto-Escalation** [Client {client_id}]\n\n"
                     f"**{company}** ({contact}) has not replied to emails for {COLD_LEAD_DAYS_THRESHOLD}+ days.\n"
                     f"Marked as **Ready for Call**. Approve in Fast Lane."
-                )
+                ))
 
         if escalated > 0:
             logger.info(f"📞 [ESCALATION] [Client {client_id}] Escalated {escalated} cold leads to call queue.")
@@ -390,32 +434,39 @@ async def run_cold_lead_escalation(client_id=0):
 # ═══════════════════════════════════════════════════════
 def fast_lane_job():
     clients = DatabaseManager.get_clients()
-    # Always include internal OROVA client 0
     client_list = [{"id": 0}] + (clients if clients else [])
-    for client in client_list:
-        asyncio.run(run_ceo_fast_lane(client_id=client.get("id", 0)))
+    async def run_all():
+        tasks = [run_ceo_fast_lane(client_id=c.get("id", 0)) for c in client_list]
+        await asyncio.gather(*tasks, return_exceptions=True)
+    asyncio.run(run_all())
 
 def slow_lane_job():
     clients = DatabaseManager.get_clients()
     client_list = [{"id": 0}] + (clients if clients else [])
-    for client in client_list:
-        asyncio.run(run_lead_hunt_slow_lane(
-            client_id=client.get("id", 0), 
-            niche=client.get("niche"), 
-            location=client.get("target_location")
-        ))
+    async def run_all():
+        tasks = [run_lead_hunt_slow_lane(
+            client_id=c.get("id", 0), 
+            niche=c.get("niche"), 
+            location=c.get("target_location")
+        ) for c in client_list]
+        await asyncio.gather(*tasks, return_exceptions=True)
+    asyncio.run(run_all())
 
 def reply_monitor_job():
     clients = DatabaseManager.get_clients()
     client_list = [{"id": 0}] + (clients if clients else [])
-    for client in client_list:
-        asyncio.run(run_reply_monitor(client_id=client.get("id", 0)))
+    async def run_all():
+        tasks = [run_reply_monitor(client_id=c.get("id", 0)) for c in client_list]
+        await asyncio.gather(*tasks, return_exceptions=True)
+    asyncio.run(run_all())
 
 def cold_escalation_job():
     clients = DatabaseManager.get_clients()
     client_list = [{"id": 0}] + (clients if clients else [])
-    for client in client_list:
-        asyncio.run(run_cold_lead_escalation(client_id=client.get("id", 0)))
+    async def run_all():
+        tasks = [run_cold_lead_escalation(client_id=c.get("id", 0)) for c in client_list]
+        await asyncio.gather(*tasks, return_exceptions=True)
+    asyncio.run(run_all())
 
 def cloud_backup_job():
     logger.info("☁️ [LANE 5] Triggering Google Drive Database Backup...")

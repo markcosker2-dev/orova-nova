@@ -7,6 +7,7 @@ import time
 import json
 from functools import wraps
 from typing import Any, Callable, Optional, Dict, List
+import collections
 from collections import defaultdict
 from datetime import datetime, timedelta
 
@@ -84,15 +85,31 @@ class RateLimiter:
         """rate: requests per period (in seconds)"""
         self.rate = rate
         self.period = period
-        self.tokens: Dict[str, float] = defaultdict(lambda: rate)
-        self.last_update: Dict[str, float] = defaultdict(time.time)
+        # Cap at 10,000 unique clients; evict LRU automatically
+        self._MAX_CLIENTS = 10_000
+        self.tokens: dict = {}
+        self.last_update: dict = {}
+        self._access_order: collections.OrderedDict = collections.OrderedDict()
         
+    def _evict_if_needed(self, client_id: str):
+        if client_id not in self._access_order:
+            if len(self._access_order) >= self._MAX_CLIENTS:
+                evicted, _ = self._access_order.popitem(last=False)
+                self.tokens.pop(evicted, None)
+                self.last_update.pop(evicted, None)
+            self._access_order[client_id] = True
+        else:
+            self._access_order.move_to_end(client_id)
+
     def is_allowed(self, client_id: str) -> bool:
         now = time.time()
-        time_passed = now - self.last_update[client_id]
+        self._evict_if_needed(client_id)
+        last = self.last_update.get(client_id, now)
+        time_passed = now - last
         
         # Refill tokens
-        self.tokens[client_id] = min(self.rate, self.tokens[client_id] + time_passed * (self.rate / self.period))
+        current_tokens = self.tokens.get(client_id, self.rate)
+        self.tokens[client_id] = min(self.rate, current_tokens + time_passed * (self.rate / self.period))
         self.last_update[client_id] = now
         
         if self.tokens[client_id] >= 1:
@@ -102,8 +119,10 @@ class RateLimiter:
     
     def get_retry_after(self, client_id: str) -> float:
         """Returns seconds to wait before retry is allowed."""
-        if self.tokens[client_id] < 1:
-            return (1 - self.tokens[client_id]) * (self.period / self.rate)
+        self._evict_if_needed(client_id)
+        current_tokens = self.tokens.get(client_id, self.rate)
+        if current_tokens < 1:
+            return (1 - current_tokens) * (self.period / self.rate)
         return 0.0
 
 # ─────── [P4.4] REQUEST SANITIZATION ─────────
@@ -309,6 +328,8 @@ class RequestTracer:
     
     def __init__(self):
         self.traces: Dict[str, List[Dict]] = defaultdict(list)
+        self._trace_count = 0
+        self._CLEANUP_INTERVAL = 500   # clean every 500 traces written
         
     def trace(self, request_id: str, event: str, data: Dict[str, Any] = None):
         """Record a trace event."""
@@ -317,6 +338,10 @@ class RequestTracer:
             "event": event,
             "data": data or {}
         })
+        self._trace_count += 1
+        if self._trace_count >= self._CLEANUP_INTERVAL:
+            self._trace_count = 0
+            self.clear_old_traces(max_age_hours=1)
         
         # Cleanup old traces (keep max 1000 per request)
         if len(self.traces[request_id]) > 1000:

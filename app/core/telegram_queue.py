@@ -15,8 +15,8 @@ class TelegramQueue:
     """
     def __init__(self, maxsize: int = 50):
         self._q: asyncio.Queue = asyncio.Queue(maxsize=maxsize)
-        self._worker_task: asyncio.Task | None = None
-        self._handler: Callable[[dict], Awaitable[None]] | None = None
+        self._worker_task: Optional[asyncio.Task] = None
+        self._handler: Optional[Callable[[dict], Awaitable[None]]] = None
 
     async def start(self, handler: Callable[[dict], Awaitable[None]]):
         self._handler = handler

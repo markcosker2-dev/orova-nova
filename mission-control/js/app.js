@@ -11,52 +11,40 @@ const Store = {
         const res = await apiFetch('/api/tasks');
         return res ? res.tasks : []; 
     },
-    async setTasks(v) { 
-        await apiFetch('/api/tasks', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(v) });
-    },
     async getContent() { 
         const res = await apiFetch('/api/content');
         return res ? res.content : []; 
-    },
-    async setContent(v) { 
-        await apiFetch('/api/content', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(v) });
     },
     async getMemories() { 
         const res = await apiFetch('/api/memory');
         return res ? res.memories : []; 
     },
-    async setMemories(v) { 
-        await apiFetch('/api/memory', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(v) });
-    },
     async getChatHistory() { 
         const res = await apiFetch('/api/chat/history');
         return res ? res.history : []; 
-    },
-    async setChatHistory(v) { 
-        await apiFetch('/api/chat/history', { method: 'POST', body: JSON.stringify({history: v}) });
-    },
+    }
 };
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
 // ═══════════════════ AGENT DATA ═══════════════════
 const AGENTS = [
-    { id: 'nova', name: 'Nova', role: 'CEO & Director', dept: 'Leadership', color: '#6366f1', initial: 'N', desc: 'Orchestrates all operations. The brain behind every decision.', status: 'working', task: 'Coordinating lead outreach campaign', model: 'DeepSeek-R1' },
-    { id: 'atlas', name: 'Atlas', role: 'Lead Developer', dept: 'Engineering', color: '#3b82f6', initial: 'AT', desc: 'Builds tools, integrations, APIs, and automations.', status: 'working', task: 'Building Mission Control dashboard', model: 'Qwen-2.5-Coder' },
-    { id: 'pixel', name: 'Pixel', role: 'Creative Director', dept: 'Creative', color: '#ec4899', initial: 'PX', desc: 'B&W luxury aesthetics. Instagram visual identity.', status: 'working', task: 'Designing social media content', model: 'Mistral-Small' },
-    { id: 'quill', name: 'Quill', role: 'Content Strategist', dept: 'Creative', color: '#a855f7', initial: 'QU', desc: 'Cold emails, scripts, blog posts, ad copy.', status: 'idle', task: '', model: 'Gemini 2.0 Flash' },
-    { id: 'hawk', name: 'Hawk', role: 'Lead Hunter', dept: 'Sales', color: '#f59e0b', initial: 'HK', desc: 'Prospecting, competitive intel, lead research.', status: 'working', task: 'Hunting luxury remodel leads in LA', model: 'Llama-3.1-70B' },
-    { id: 'closer', name: 'Closer', role: 'Sales Director', dept: 'Sales', color: '#ef4444', initial: 'CL', desc: 'Outreach sequences, follow-ups, appointment setting.', status: 'idle', task: '', model: 'Llama-3.1-8B' },
-    { id: 'sentinel', name: 'Sentinel', role: 'Operations Manager', dept: 'Operations', color: '#10b981', initial: 'SN', desc: 'Scheduling, monitoring, CRM, reporting.', status: 'working', task: 'Monitoring reply inbox & cron jobs', model: 'Gemini 2.0 Flash' },
-    { id: 'echo', name: 'Echo', role: 'Client Success', dept: 'Operations', color: '#14b8a6', initial: 'EC', desc: 'Reply management, relationship nurturing.', status: 'idle', task: '', model: 'DeepSeek-Chat' },
-    { id: 'oracle', name: 'Oracle', role: 'Data Intelligence', dept: 'Analytics', color: '#8b5cf6', initial: 'OR', desc: 'Pipeline analytics, conversion tracking, ROI analysis.', status: 'idle', task: '', model: 'DeepSeek-R1' },
-    { id: 'viper', name: 'Viper', role: 'Stealth Ops', dept: 'Intelligence', color: '#059669', initial: 'VP', desc: 'Anti-bot scraping, proxy rotation, stealth extraction.', status: 'idle', task: '', model: 'Gemini 2.0 Flash' },
+    { id: 'nova', name: 'Nova', role: 'CEO & Director', dept: 'Leadership', color: '#6366f1', initial: 'N', desc: 'Orchestrates all operations. The brain behind every decision.', status: 'working', task: 'Coordinating lead outreach campaign' },
+    { id: 'atlas', name: 'Atlas', role: 'Lead Developer', dept: 'Engineering', color: '#3b82f6', initial: 'AT', desc: 'Builds tools, integrations, APIs, and automations.', status: 'working', task: 'Building Mission Control dashboard' },
+    { id: 'pixel', name: 'Pixel', role: 'Creative Director', dept: 'Creative', color: '#ec4899', initial: 'PX', desc: 'B&W luxury aesthetics. Instagram visual identity.', status: 'working', task: 'Designing social media content' },
+    { id: 'quill', name: 'Quill', role: 'Content Strategist', dept: 'Creative', color: '#a855f7', initial: 'QU', desc: 'Cold emails, scripts, blog posts, ad copy.', status: 'idle', task: '' },
+    { id: 'hawk', name: 'Hawk', role: 'Lead Hunter', dept: 'Sales', color: '#f59e0b', initial: 'HK', desc: 'Prospecting, competitive intel, lead research.', status: 'working', task: 'Hunting luxury remodel leads in LA' },
+    { id: 'closer', name: 'Closer', role: 'Sales Director', dept: 'Sales', color: '#ef4444', initial: 'CL', desc: 'Outreach sequences, follow-ups, appointment setting.', status: 'idle', task: '' },
+    { id: 'sentinel', name: 'Sentinel', role: 'Operations Manager', dept: 'Operations', color: '#10b981', initial: 'SN', desc: 'Scheduling, monitoring, CRM, reporting.', status: 'working', task: 'Monitoring reply inbox & cron jobs' },
+    { id: 'echo', name: 'Echo', role: 'Client Success', dept: 'Operations', color: '#14b8a6', initial: 'EC', desc: 'Reply management, relationship nurturing.', status: 'idle', task: '' },
+    { id: 'oracle', name: 'Oracle', role: 'Data Intelligence', dept: 'Analytics', color: '#8b5cf6', initial: 'OR', desc: 'Pipeline analytics, conversion tracking, ROI analysis.', status: 'idle', task: '' },
+    { id: 'viper', name: 'Viper', role: 'Stealth Ops', dept: 'Intelligence', color: '#059669', initial: 'VP', desc: 'Anti-bot scraping, proxy rotation, stealth extraction.', status: 'idle', task: '' },
 ];
 
 // ═══════════════════ DEFAULT MEMORIES ═══════════════════
 const DEFAULT_MEMORIES = [
     { id: uid(), tag: 'config', title: 'Office Hours (California Law)', body: 'Mark\'s office hours are strictly 7:30 AM – 11:30 AM and 6:00 PM – 8:00 PM California Time (PT). Never propose or book meetings outside these windows.', date: '2026-02-15' },
-    { id: uid(), tag: 'persona', title: 'Nova CEO Persona (Hormozi-Mode)', body: 'Nova operates as OROVA\'s autonomous CEO. She leads with $4k-$5k Meta Lead Gen offers, identifies Offer Gaps via social audits, and executes multi-channel attacks (Email + Retell AI Voice). Social replies max 25 words.', date: '2026-04-30' },
+    { id: uid(), tag: 'persona', title: 'Nova CEO Persona (Hormozi-Mode)', body: 'Nova operates as OROVA\'s autonomous CEO. She leads with Grand Slam Offers, identifies Offer Gaps via SEO audits, and executes multi-channel attacks (Email + Voice). Social replies max 25 words.', date: '2026-02-14' },
     { id: uid(), tag: 'strategy', title: 'Brand Aesthetic: B&W Luxury', body: 'All Instagram visuals MUST be high-contrast Black & White, minimalist, luxury. The Creative Director (Pixel) enforces this via brand_guidelines.json.', date: '2026-02-14' },
     { id: uid(), tag: 'outreach', title: 'AgentMail Configuration', body: 'Nova\'s email identity runs on AgentMail. She can create inboxes, send outreach, check replies, and respond. Reply Monitor polls every 5 minutes.', date: '2026-02-15' },
     { id: uid(), tag: 'lead', title: 'Lead Qualification Criteria', body: 'Target: High-end businesses with $4-5k+ CLV. Must find Owner Name + Phone. Use 4-tier search fallback: Stealth (Scrapling) → Tavily → Google Scraper → DuckDuckGo. Deep-scrape every candidate site.', date: '2026-02-12' },
@@ -81,7 +69,7 @@ const CRON_EVENTS = [
 // [REMOVED] seedTasks is now handled by backend SQLite migrations.
 
 // ═══════════════════ API HELPER ═══════════════════
-const NOVA_API_KEY = "nova-unsecured";
+const NOVA_API_KEY = localStorage.getItem('NOVA_API_KEY') || 'nova_admin_2026';
 
 async function apiFetch(path, opts) {
     try {
@@ -92,6 +80,7 @@ async function apiFetch(path, opts) {
         // Add API Key
         opts.headers['X-API-Key'] = NOVA_API_KEY;
 
+        // Ensure client_id is present
         const separator = fetchPath.includes('?') ? '&' : '?';
         fetchPath += `${separator}client_id=${currentClientId}`;
         
@@ -109,6 +98,28 @@ async function apiFetch(path, opts) {
         return null;
     }
 }
+
+// ═══════════════════ NOVA INTELLIGENCE ═══════════════════
+function updateNovaStatus(msg) {
+    const el = document.getElementById('nova-status');
+    if (el) el.textContent = msg;
+}
+
+const NOVA_STATUSES = [
+    "Analyzing Business Growth...",
+    "Reviewing Client ROI...",
+    "Routing Lead Sequences...",
+    "Optimizing Ad Spend...",
+    "Identifying Offer Gaps...",
+    "Drafting CEO Commands..."
+];
+
+setInterval(() => {
+    if (Math.random() > 0.7) {
+        const randomStatus = NOVA_STATUSES[Math.floor(Math.random() * NOVA_STATUSES.length)];
+        updateNovaStatus(randomStatus);
+    }
+}, 8000);
 
 // ═══════════════════ TOAST SYSTEM ═══════════════════
 function showToast(message, type) {
@@ -214,24 +225,31 @@ document.getElementById('btn-add-task').addEventListener('click', function () {
 document.getElementById('btn-save-task').addEventListener('click', async function () {
     var title = document.getElementById('task-title').value.trim();
     if (!title) return;
-    var tasks = await Store.getTasks();
+    
     var data = {
+        id: editingTaskId || uid(),
         title: title,
-        desc: document.getElementById('task-desc').value.trim(),
+        description: document.getElementById('task-desc').value.trim(),
         assignee: document.getElementById('task-assignee').value,
         priority: document.getElementById('task-priority').value,
         status: document.getElementById('task-status').value,
         due: document.getElementById('task-due').value,
     };
-    if (editingTaskId) {
-        var idx = tasks.findIndex(function (t) { return t.id === editingTaskId; });
-        if (idx !== -1) tasks[idx] = Object.assign({}, tasks[idx], data);
+
+    showToast('💾 Saving task...', 'info');
+    const res = await apiFetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+
+    if (res && res.status === 'ok') {
+        showToast('✅ Task saved!', 'success');
+        closeModals();
+        await renderTasks();
     } else {
-        tasks.push(Object.assign({ id: uid() }, data));
+        showToast('❌ Failed to save task', 'error');
     }
-    await Store.setTasks(tasks);
-    closeModals();
-    await renderTasks();
 });
 
 var taskFilter = 'all';
@@ -287,9 +305,16 @@ window.editTask = async function (id) {
 };
 
 window.deleteTask = async function (id) {
-    const tasks = await Store.getTasks();
-    await Store.setTasks(tasks.filter(function (t) { return t.id !== id; }));
-    await renderTasks();
+    if (!confirm('Are you sure you want to delete this task?')) return;
+    showToast('🗑️ Deleting task...', 'info');
+    const res = await apiFetch('/api/tasks/delete', {
+        method: 'POST',
+        body: JSON.stringify({ id: id })
+    });
+    if (res && res.status === 'ok') {
+        showToast('✅ Deleted', 'success');
+        await renderTasks();
+    }
 };
 
 // ═══════════════════ CONTENT PIPELINE ═══════════════════
@@ -335,8 +360,9 @@ function handleImageUpload() {
 document.getElementById('btn-save-content').addEventListener('click', async function () {
     var title = document.getElementById('content-title').value.trim();
     if (!title) return;
-    var items = await Store.getContent();
+    
     var data = {
+        id: editingContentId || uid(),
         title: title,
         type: document.getElementById('content-type').value,
         stage: document.getElementById('content-stage').value,
@@ -344,16 +370,22 @@ document.getElementById('btn-save-content').addEventListener('click', async func
         script: document.getElementById('content-script').value.trim(),
         image: currentImageData || null,
     };
-    if (editingContentId) {
-        var idx = items.findIndex(function (c) { return c.id === editingContentId; });
-        if (idx !== -1) items[idx] = Object.assign({}, items[idx], data);
+
+    showToast('💾 Saving content...', 'info');
+    const res = await apiFetch('/api/content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+
+    if (res && res.status === 'ok') {
+        showToast('✅ Content saved!', 'success');
+        currentImageData = null;
+        closeModals();
+        await renderPipeline();
     } else {
-        items.push(Object.assign({ id: uid() }, data));
+        showToast('❌ Failed to save content', 'error');
     }
-    await Store.setContent(items);
-    currentImageData = null;
-    closeModals();
-    await renderPipeline();
 });
 
 async function renderPipeline() {
@@ -373,11 +405,14 @@ async function renderPipeline() {
         }).join('');
     });
     initDragDrop('content-card', 'stage-items', async function (cardId, newStage) {
-        var items = await Store.getContent();
-        var c = items.find(function (x) { return x.id === cardId; });
-        if (c) c.stage = newStage;
-        await Store.setContent(items);
-        await renderPipeline();
+        var items = await Store.getTasks(); // Just to find the item
+        const res = await apiFetch('/api/content', {
+            method: 'POST',
+            body: JSON.stringify({ id: cardId, stage: newStage })
+        });
+        if (res && res.status === 'ok') {
+            await renderPipeline();
+        }
     });
 }
 
@@ -399,14 +434,20 @@ window.editContent = async function (id) {
 };
 
 window.deleteContent = async function (id) {
-    const items = await Store.getContent();
-    await Store.setContent(items.filter(function (c) { return c.id !== id; }));
-    await renderPipeline();
+    if (!confirm('Are you sure you want to delete this content item?')) return;
+    showToast('🗑️ Deleting content...', 'info');
+    const res = await apiFetch('/api/content/delete', {
+        method: 'POST',
+        body: JSON.stringify({ id: id })
+    });
+    if (res && res.status === 'ok') {
+        showToast('✅ Deleted', 'success');
+        await renderPipeline();
+    }
 };
 
 // ═══════════════════ CALENDAR ═══════════════════
-var d = new Date();
-var calYear = d.getFullYear(), calMonth = d.getMonth();
+var calYear = 2026, calMonth = 1;
 
 document.getElementById('cal-prev').addEventListener('click', async function () { calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; } await renderCalendar(); });
 document.getElementById('cal-next').addEventListener('click', async function () { calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; } await renderCalendar(); });
@@ -550,9 +591,16 @@ async function renderMemories() {
 }
 
 window.deleteMemory = async function (id) {
-    const memories = await Store.getMemories();
-    await Store.setMemories(memories.filter(function (m) { return m.id !== id; }));
-    await renderMemories();
+    if (!confirm('Are you sure you want to delete this memory?')) return;
+    showToast('🗑️ Deleting memory...', 'info');
+    const res = await apiFetch('/api/memory/delete', {
+        method: 'POST',
+        body: JSON.stringify({ id: id })
+    });
+    if (res && res.status === 'ok') {
+        showToast('✅ Deleted', 'success');
+        await renderMemories();
+    }
 };
 
 // ═══════════════════ TEAM STRUCTURE ═══════════════════
@@ -584,7 +632,6 @@ function agentCard(a, isLeader) {
         + '<div class="agent-role">' + a.role + '</div>'
         + '<div class="agent-dept">' + a.dept + '</div>'
         + '<div class="agent-desc">' + a.desc + '</div>'
-        + '<div style="font-size: 11px; color: var(--accent); margin: 12px 0 8px 0; font-family: monospace;">🧠 ' + (a.model || 'Default LLM') + '</div>'
         + '<div class="agent-status-badge ' + a.status + '"><span class="status-dot ' + (a.status === 'working' ? 'online' : '') + '"></span>' + (a.status === 'working' ? 'Working' : 'Idle') + '</div>'
         + '</div>';
 }
@@ -1101,22 +1148,74 @@ async function loadWorkspaces() {
     try {
         const res = await fetch(API + '/api/clients'); 
         const data = await res.json();
-        if (data && data.clients) {
-            const select = document.getElementById('workspace-switcher');
-            if (select) {
-                select.innerHTML = '<option value="0">OROVA Internal (Lead Gen)</option>';
-                data.clients.forEach(c => {
-                    select.innerHTML += `<option value="${c.id}">${c.business_name} (${c.niche})</option>`;
-                });
-                select.value = currentClientId;
-            }
+        const select = document.getElementById('workspace-switcher');
+        if (select && data && data.clients) {
+            let html = '<option value="0">OROVA Internal (Lead Gen)</option>';
+            data.clients.forEach(c => {
+                html += `<option value="${c.id}">${c.name} (${c.niche})</option>`;
+            });
+            select.innerHTML = html;
+            select.value = currentClientId;
         }
     } catch(e) { console.error("Could not load workspaces", e); }
 }
 
-document.getElementById('workspace-switcher')?.addEventListener('change', (e) => {
-    currentClientId = e.target.value;
+// ─── MODAL LOGIC (Agency Hub) ───
+document.getElementById('add-client-btn')?.addEventListener('click', () => {
+    openModal('modal-add-client');
+});
+
+document.getElementById('save-client-btn')?.addEventListener('click', async () => {
+    const name = document.getElementById('client-name').value.trim();
+    const niche = document.getElementById('client-niche').value.trim();
+    const location = document.getElementById('client-location').value.trim();
+
+    if (!name) {
+        showToast('❌ Business Name is required', 'error');
+        return;
+    }
+
+    showToast('🚀 Creating workspace...', 'info');
+    
+    try {
+        const res = await fetch(API + '/api/clients', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, niche, location })
+        });
+        const data = await res.json();
+        
+        if (res.ok) {
+            showToast(`✅ Workspace '${name}' created!`, 'success');
+            closeModals();
+            // Reset fields
+            document.getElementById('client-name').value = '';
+            document.getElementById('client-niche').value = '';
+            document.getElementById('client-location').value = '';
+            await loadWorkspaces();
+        } else {
+            showToast('❌ Failed: ' + data.error, 'error');
+        }
+    } catch (err) {
+        showToast('❌ Network error', 'error');
+    }
+});
+
+document.getElementById('workspace-switcher')?.addEventListener('change', async (e) => {
+    currentClientId = parseInt(e.target.value);
     showToast('Switched Workspace context to ' + e.target.options[e.target.selectedIndex].text);
+    
+    // Force immediate refresh of all components
+    showToast('🔄 Synchronizing data...', 'info');
+    await Promise.all([
+        renderAnalytics(),
+        renderLeads(),
+        refreshAgents(),
+        refreshNotifications(),
+        refreshHealth(),
+        refreshLiveFeed()
+    ]);
+
     const activeScreen = document.querySelector('.nav-item.active');
     if (activeScreen) activeScreen.click();
 });

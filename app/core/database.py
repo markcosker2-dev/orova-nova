@@ -7,6 +7,7 @@ import threading
 import queue
 import atexit
 import asyncio
+import re
 from typing import Dict, List, Optional, Any
 
 # Canonical data/DB paths (importable by other modules)
@@ -221,7 +222,20 @@ class DatabaseManager:
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
-            return asyncio.run(coro)
+            # No running loop — we're in a sync thread. Schedule via the main app loop.
+            import concurrent.futures
+            logger.warning("[AsyncTask] _schedule_async_task called from sync context; using thread-safe schedule.")
+            future = concurrent.futures.Future()
+            def _run():
+                try:
+                    result = asyncio.run(coro)
+                    future.set_result(result)
+                except Exception as e:
+                    future.set_exception(e)
+            import threading
+            t = threading.Thread(target=_run, daemon=True)
+            t.start()
+            return future
 
         task = loop.create_task(coro)
 
@@ -240,6 +254,7 @@ class DatabaseManager:
     def _sqlite_query(cls, sql, params=(), fetchone=False, fetchall=False, return_lastrowid=False):
         import sqlite3
         conn = None
+        conn_errored = False
         try:
             conn = cls._get_conn()
             cursor = conn.cursor()
@@ -257,14 +272,16 @@ class DatabaseManager:
             logger.error(f"[SQLITE] Query error: {e} | SQL: {sql[:100]}")
             if conn:
                 try:
+                    conn_errored = True
                     conn.close()
                     with cls._pool_lock:
                         cls._active_connections -= 1
-                except:
+                    conn = None
+                except Exception:
                     pass
             raise
         finally:
-            if conn:
+            if conn and not conn_errored:
                 cls._release_conn(conn)
 
     @classmethod
@@ -303,7 +320,7 @@ class DatabaseManager:
             except Exception:
                 return default
         elif cls._sqlite_fallback:
-            row = cls._sqlite_query("SELECT value FROM state WHERE key = ?", (key,), fetchone=True)
+            row = await asyncio.to_thread(cls._sqlite_query, "SELECT value FROM state WHERE key = ?", (key,), True)
             if row:
                 try:
                     return json.loads(row["value"])
@@ -317,7 +334,8 @@ class DatabaseManager:
         if cls._use_redis and cls._redis_manager:
             cls._redis_manager._redis_op("hset", "state", key, stored)
         elif cls._sqlite_fallback:
-            cls._sqlite_query(
+            await asyncio.to_thread(
+                cls._sqlite_query,
                 "INSERT OR REPLACE INTO state (key, value) VALUES (?, ?)",
                 (key, stored)
             )
@@ -325,56 +343,16 @@ class DatabaseManager:
     @classmethod
     async def run_phase5_migrations(cls):
         if cls._sqlite_fallback:
-            await cls.query('''
-                CREATE TABLE IF NOT EXISTS clients (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    business_name TEXT,
-                    niche TEXT,
-                    target_location TEXT,
-                    workbook_name TEXT,
-                    is_active INTEGER DEFAULT 1,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            await cls.query('''
-                CREATE TABLE IF NOT EXISTS state (
-                    key TEXT PRIMARY KEY,
-                    value TEXT
-                )
-            ''')
-            await cls.query('''
-                CREATE TABLE IF NOT EXISTS email_tracking (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    lead_id INTEGER,
-                    subject TEXT,
-                    sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            await cls.query('''
-                CREATE TABLE IF NOT EXISTS learned_patterns (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    client_id INTEGER DEFAULT 0,
-                    task_type TEXT,
-                    winning_approach TEXT,
-                    success_metric REAL DEFAULT 0.0,
-                    decay_score REAL DEFAULT 1.0,
-                    last_used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            await cls.query('''
-                CREATE TABLE IF NOT EXISTS performance_logs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    client_id INTEGER DEFAULT 0,
-                    operation TEXT,
-                    latency REAL,
-                    cost REAL DEFAULT 0.0,
-                    status TEXT,
-                    error_msg TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            await cls.query("INSERT OR IGNORE INTO metrics (client_id) VALUES (0)")
+            # Phase 5 additive migrations — schema already exists from _init_sqlite_fallback.
+            # Add only NEW columns introduced in phase 5+:
+            for col_ddl in [
+                "ALTER TABLE leads ADD COLUMN enriched_at TIMESTAMP",
+                "ALTER TABLE leads ADD COLUMN enrichment_source TEXT",
+            ]:
+                try:
+                    await cls.query(col_ddl)
+                except Exception:
+                    pass  # Column already exists
         elif cls._use_redis and cls._redis_manager:
             pass
 
@@ -386,6 +364,12 @@ class DatabaseManager:
                 loop.stop()
             except Exception:
                 pass
+
+        import threading
+        if threading.current_thread() is not threading.main_thread():
+            logger.warning("[SIGTERM] Signal handler registration skipped: not on main thread. "
+                           "Uvicorn's own SIGTERM handler will fire instead.")
+            return
 
         try:
             signal.signal(signal.SIGINT, _signal_handler)
@@ -486,8 +470,7 @@ class DatabaseManager:
             logger.warning(f"[NUCLEAR SHIELD] Refused to save junk lead: {url}")
             return None
         # Block non-English business names
-        import re as _re
-        if business and _re.search(r'[^\x00-\x7F]', business):
+        if business and re.search(r'[^\x00-\x7F]', business):
             logger.warning(f"[NUCLEAR SHIELD] Refused non-English lead: {business}")
             return None
 
@@ -641,10 +624,24 @@ class DatabaseManager:
             if not keys:
                 return
             cls._sqlite_query("INSERT OR IGNORE INTO metrics (client_id) VALUES (?)", (int(client_id),))
-            set_clause = ", ".join([f"{k} = ?" for k in keys])
-            vals = [data[k] for k in keys]
+            
+            # Separate numeric accumulators from direct-set fields
+            ACCUMULATORS = {"leads_found", "emails_sent", "replies_received", "meetings_booked",
+                            "calls_made", "proposals_sent", "content_created", "t_in", "t_out", "reqs"}
+            DIRECT_SET   = {"cost"}  # cost is passed as absolute delta; SUM it too
+            set_parts = []
+            vals = []
+            for k in keys:
+                if k in ACCUMULATORS or k in DIRECT_SET:
+                    set_parts.append(f"{k} = {k} + ?")
+                else:
+                    set_parts.append(f"{k} = ?")
+                vals.append(data[k])
             vals.append(int(client_id))
-            cls._sqlite_query(f"UPDATE metrics SET {set_clause} WHERE client_id = ?", tuple(vals))
+            cls._sqlite_query(
+                f"UPDATE metrics SET {', '.join(set_parts)} WHERE client_id = ?",
+                tuple(vals)
+            )
 
     @classmethod
     def log_email_sent(cls, lead_id, subject):

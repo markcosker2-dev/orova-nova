@@ -8,13 +8,18 @@ AIDA, PAS, Before-After-Bridge, Story-Brand, 4Ps
 """
 
 import logging
+from typing import Optional
+from app.core.ai_client import UnifiedAIClient
 
 logger = logging.getLogger(__name__)
 
+_ai_client: Optional[UnifiedAIClient] = None
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# COPYWRITING FRAMEWORKS
-# ═══════════════════════════════════════════════════════════════════════════════
+def _get_ai() -> UnifiedAIClient:
+    global _ai_client
+    if _ai_client is None:
+        _ai_client = UnifiedAIClient()
+    return _ai_client
 
 FRAMEWORKS = {
     "aida": {
@@ -186,31 +191,14 @@ FRAMEWORKS = {
     }
 }
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# MAIN FUNCTIONS
-# ═══════════════════════════════════════════════════════════════════════════════
-
 async def write_cold_email(
     prospect: str,
     framework: str = "pas",
     industry: str = "business services",
     offer: str = "AI-powered lead generation"
 ) -> str:
-    """
-    Generate a cold email using a marketing psychology framework.
-
-    Args:
-        prospect: Company name or prospect name
-        framework: Framework to use (aida, pas, bab, story_brand, 4ps)
-        industry: Target industry
-        offer: What you're offering
-
-    Returns:
-        Formatted copy with framework annotations
-    """
+    """Generate a cold email using a marketing psychology framework."""
     fw = FRAMEWORKS.get(framework, FRAMEWORKS["pas"])
-
     logger.info(f"[COPYWRITING] Generating cold email via {fw['name']} for {prospect}")
 
     prompt = fw["prompt_template"].format(
@@ -221,11 +209,8 @@ async def write_cold_email(
         offer=offer
     )
 
-    # Generate using AI client
     try:
-        from app.core.ai_client import UnifiedAIClient
-        ai = UnifiedAIClient()
-        result = await ai.write(prompt)
+        result = await _get_ai().write(prompt)
 
         report = f"# ✍️ Cold Email — {fw['name']}\n"
         report += f"**Target:** {prospect} ({industry})\n"
@@ -233,14 +218,10 @@ async def write_cold_email(
         report += f"**Offer:** {offer}\n\n"
         report += f"---\n\n{result}\n\n---\n"
         report += f"📋 **Structure used:** {' → '.join(fw['structure'])}\n"
-
         return report
-
     except Exception as e:
         logger.error(f"[COPYWRITING] AI generation failed: {e}")
-        # Return template-based fallback
         return _template_fallback(fw, prospect, industry, offer)
-
 
 async def write_ad_copy(
     offer: str,
@@ -248,20 +229,8 @@ async def write_ad_copy(
     industry: str = "business services",
     framework: str = "aida"
 ) -> str:
-    """
-    Generate ad copy for a specific platform.
-
-    Args:
-        offer: The offer to advertise
-        platform: Target platform (facebook, google, linkedin, instagram)
-        industry: Target industry
-        framework: Framework (aida, pas, bab, 4ps)
-
-    Returns:
-        Platform-optimized ad copy
-    """
+    """Generate ad copy for a specific platform."""
     fw = FRAMEWORKS.get(framework, FRAMEWORKS["aida"])
-
     logger.info(f"[COPYWRITING] Generating {platform} ad via {fw['name']}")
 
     platform_rules = {
@@ -281,23 +250,17 @@ async def write_ad_copy(
     prompt += f"\n\nPLATFORM RULES ({platform.upper()}):\n{platform_rules.get(platform, 'Standard ad copy rules apply.')}"
 
     try:
-        from app.core.ai_client import UnifiedAIClient
-        ai = UnifiedAIClient()
-        result = await ai.write(prompt)
+        result = await _get_ai().write(prompt)
 
         report = f"# 📢 {platform.upper()} Ad Copy — {fw['name']}\n"
         report += f"**Offer:** {offer}\n"
         report += f"**Platform:** {platform}\n\n"
         report += f"---\n\n{result}\n"
-
         return report
-
     except Exception as e:
         return f"⚠️ Ad copy generation failed: {str(e)}"
 
-
 def _template_fallback(fw, prospect, industry, offer):
-    """Template-based fallback when AI is unavailable."""
     return (
         f"# ✍️ Cold Email Template — {fw['name']}\n"
         f"**Target:** {prospect} ({industry})\n\n"
@@ -312,25 +275,13 @@ def _template_fallback(fw, prospect, industry, offer):
         f"⚠️ AI unavailable — using template fallback\n"
     )
 
-
 async def list_frameworks() -> str:
-    """List available copywriting frameworks."""
     report = "# ✍️ Available Copywriting Frameworks\n\n"
     for key, fw in FRAMEWORKS.items():
         report += f"- **`{key}`** — {fw['name']}: {' → '.join(fw['structure'])}\n"
     return report
 
-async def handle_sales_objection(
-    objection: str,
-    prospect_name: str = "there"
-) -> str:
-    """
-    Generate responses for common sales objections based on the guide.
-    
-    Args:
-        objection: The objection or question (price, info, timing)
-        prospect_name: Name of the prospect
-    """
+async def handle_sales_objection(objection: str, prospect_name: str = "there") -> str:
     logger.info(f"[COPYWRITING] Handling objection: {objection}")
     
     prompt = (
@@ -344,9 +295,7 @@ async def handle_sales_objection(
     )
     
     try:
-        from app.core.ai_client import UnifiedAIClient
-        ai = UnifiedAIClient()
-        response = await ai.write(prompt)
+        response = await _get_ai().write(prompt)
         return f"Hi {prospect_name},\n\n{response}"
     except Exception as e:
         return f"Error generating response: {e}"

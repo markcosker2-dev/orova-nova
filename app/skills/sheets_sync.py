@@ -3,6 +3,8 @@ import base64
 import json
 import logging
 import os
+import random
+import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -12,10 +14,19 @@ from gspread.exceptions import WorksheetNotFound
 
 logger = logging.getLogger(__name__)
 
-import random
+# Global lock placeholder to prevent Google Sheets 429 Rate Limit errors when syncing multiple leads
+_sheets_lock: Optional[asyncio.Lock] = None
+_workbook_cache: dict = {"wb": None, "ts": 0.0, "key": None}
 
-# Global lock to prevent Google Sheets 429 Rate Limit errors when syncing multiple leads
-_sheets_lock = asyncio.Lock()
+WORKBOOK_CACHE_TTL = 300.0  # re-open every 5 minutes
+SHEETS_READ_TIMEOUT_S = 45.0  # read timeout
+
+async def _get_sheets_lock_async() -> asyncio.Lock:
+    """Guaranteed to create the lock on the currently running event loop."""
+    global _sheets_lock
+    if _sheets_lock is None:
+        _sheets_lock = asyncio.Lock()
+    return _sheets_lock
 
 async def _append_with_backoff(worksheet, row, retries=4):
     """Appends a row to a worksheet with exponential backoff for Google API 429 errors."""
@@ -37,7 +48,10 @@ async def _update_with_backoff(worksheet, target_row, row, retries=4):
     """Updates a row with exponential backoff for Google API 429 errors."""
     for attempt in range(retries):
         try:
-            await asyncio.to_thread(worksheet.update, f"A{target_row}:L{target_row}", [row])
+            try:
+                await asyncio.to_thread(worksheet.update, values=[row], range_name=f"A{target_row}:L{target_row}")
+            except TypeError:
+                await asyncio.to_thread(worksheet.update, f"A{target_row}:L{target_row}", [row])
             return {"ok": True, "updated": True, "row": target_row}
         except gspread.exceptions.APIError as e:
             if e.response.status_code == 429 and attempt < retries - 1:
@@ -81,20 +95,30 @@ async def get_sheets_client() -> Optional[gspread.Client]:
     return await asyncio.to_thread(_sync)
 
 async def _open_workbook(workbook_name: Optional[str] = None) -> Optional[gspread.Spreadsheet]:
+    global _workbook_cache
+    now = time.monotonic()
+    cache_key = workbook_name or SHEET_NAME
+
+    if (
+        _workbook_cache.get("wb") is not None
+        and _workbook_cache.get("key") == cache_key
+        and now - _workbook_cache["ts"] < WORKBOOK_CACHE_TTL
+    ):
+        return _workbook_cache["wb"]
+
     client = await get_sheets_client()
     if not client:
         return None
 
-    name = workbook_name or SHEET_NAME
     def _sync():
         try:
-            return client.open(name)
+            return client.open(cache_key)
         except Exception:
-            return client.create(name)
+            return client.create(cache_key)
 
     workbook = await asyncio.to_thread(_sync)
     if workbook is None:
-        logger.error(f"[SheetsSync] Could not open or create workbook '{SHEET_NAME}'")
+        logger.error(f"[SheetsSync] Could not open or create workbook '{cache_key}'")
         return None
 
     for title, headers in WORKSHEET_HEADERS.items():
@@ -104,7 +128,12 @@ async def _open_workbook(workbook_name: Optional[str] = None) -> Optional[gsprea
             worksheet = workbook.add_worksheet(title=title, rows=1000, cols=len(headers))
         values = worksheet.row_values(1)
         if not values or values != headers:
-            worksheet.update("A1", [headers])
+            try:
+                await asyncio.to_thread(worksheet.update, values=[headers], range_name="A1")
+            except TypeError:
+                await asyncio.to_thread(worksheet.update, "A1", [headers])
+
+    _workbook_cache = {"wb": workbook, "ts": now, "key": cache_key}
     return workbook
 
 async def _get_worksheet(tab_name: str, workbook_name: Optional[str] = None):
@@ -119,7 +148,17 @@ async def _get_worksheet(tab_name: str, workbook_name: Optional[str] = None):
 async def restore_leads_from_sheets() -> List[Dict[str, Any]]:
     try:
         worksheet = await _get_worksheet("Leads")
-        records = await asyncio.to_thread(worksheet.get_all_records)
+        try:
+            records = await asyncio.wait_for(
+                asyncio.to_thread(worksheet.get_all_records),
+                timeout=SHEETS_READ_TIMEOUT_S,
+            )
+        except asyncio.TimeoutError:
+            logger.error(
+                f"[SheetsSync] restore_leads_from_sheets timed out after "
+                f"{SHEETS_READ_TIMEOUT_S}s. Returning empty — DB will start fresh."
+            )
+            return []
         leads = []
         for row in records:
             if not row.get("Business") and not row.get("Email") and not row.get("URL"):
@@ -143,8 +182,6 @@ async def restore_leads_from_sheets() -> List[Dict[str, Any]]:
         return []
 
 async def sync_lead_to_sheets(lead: Dict[str, Any], workbook_name: Optional[str] = None) -> Dict[str, Any]:
-    # [P0] Rate Limit Protection: Wait to avoid Google 429 errors
-    await asyncio.sleep(2)
     try:
         worksheet = await _get_worksheet("Leads", workbook_name)
         row = [
@@ -168,7 +205,12 @@ async def sync_lead_to_sheets(lead: Dict[str, Any], workbook_name: Optional[str]
                 id_vals = await asyncio.to_thread(worksheet.col_values, 1)
                 search_id = str(lead["id"])
                 if search_id in id_vals:
-                    target_row = id_vals.index(search_id) + 1
+                    idx = id_vals.index(search_id) + 1
+                    if idx >= 2:
+                        target_row = idx
+                        logger.info(f"[SheetsSync] Found lead ID {search_id} at row {target_row}")
+                    else:
+                        logger.warning(f"[SheetsSync] Prevented header overwrite: ID '{search_id}' matched row {idx} (header zone)")
             except Exception as exc:
                 logger.warning(f"[SheetsSync] Find by ID failed: {exc}")
 
@@ -177,13 +219,18 @@ async def sync_lead_to_sheets(lead: Dict[str, Any], workbook_name: Optional[str]
                 url_vals = await asyncio.to_thread(worksheet.col_values, 7)
                 search_url = str(lead["url"])
                 if search_url in url_vals:
-                    target_row = url_vals.index(search_url) + 1
+                    idx = url_vals.index(search_url) + 1
+                    if idx >= 2:
+                        target_row = idx
+                        logger.info(f"[SheetsSync] Found lead URL {search_url} at row {target_row}")
+                    else:
+                        logger.warning(f"[SheetsSync] Prevented header overwrite: URL matched row {idx}")
             except Exception as exc:
                 logger.warning(f"[SheetsSync] Find by URL failed: {exc}")
 
-        async with _sheets_lock:
-            # Additional small delay inside the lock to ensure Google respects the rate limit
-            await asyncio.sleep(1.0)
+        async with await _get_sheets_lock_async():
+            # Jitter delay inside the lock to ensure Google respects the rate limit and smooths out throughput
+            await asyncio.sleep(random.uniform(0.2, 0.6))
             if target_row:
                 return await _update_with_backoff(worksheet, target_row, row)
 

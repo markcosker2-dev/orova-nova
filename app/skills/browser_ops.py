@@ -22,6 +22,29 @@ from urllib.parse import quote_plus
 # Timeout for browser operations
 BROWSE_TIMEOUT = 30  # seconds
 
+def _run_sync_coro(coro):
+    """
+    Safely runs an async coroutine from a synchronous context.
+    Handles existing event loops (with nest_asyncio) and thread-isolated loop contexts.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        try:
+            import nest_asyncio
+            nest_asyncio.apply()
+            return loop.run_until_complete(coro)
+        except Exception as e:
+            raise RuntimeError(
+                f"An event loop is already running, and nest_asyncio is not available to run synchronous wrappers. "
+                f"Please await the async version of this function instead. Error: {e}"
+            )
+    else:
+        return asyncio.run(coro)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # BROWSING AGENT CLASS
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -56,42 +79,54 @@ class BrowsingAgent:
         except ImportError:
             raise ImportError("Playwright not installed. Run: pip install playwright && playwright install chromium")
         
-        self._playwright = await async_playwright().start()
-        
-        # Try browserless container first, fall back to local
-        ws_url = os.environ.get("PUPPETEER_CONNECT_URL", "")
-        
-        if ws_url and "browser" in ws_url:
-            try:
-                self.browser = await self._playwright.chromium.connect_over_cdp(
-                    ws_url.replace("ws://", "http://"),
-                    timeout=10000
-                )
-            except Exception:
-                pass
-        
-        if self.browser is None:
-            from app.core.browser_utils import get_browser_launch_args
-            launch_options = get_browser_launch_args()
-            launch_options["headless"] = self.headless
-            self.browser = await self._playwright.chromium.launch(**launch_options)
-        
-        self.context = await self.browser.new_context(
-            viewport={'width': 1280, 'height': 720},
-            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        )
-        self.page = await self.context.new_page()
-        self.page.set_default_timeout(self.timeout * 1000)
+        try:
+            self._playwright = await async_playwright().start()
+            
+            # Try browserless container first, fall back to local
+            ws_url = os.environ.get("PUPPETEER_CONNECT_URL", "")
+            
+            if ws_url and "browser" in ws_url:
+                try:
+                    self.browser = await self._playwright.chromium.connect_over_cdp(
+                        ws_url.replace("ws://", "http://"),
+                        timeout=10000
+                    )
+                except Exception:
+                    pass
+            
+            if self.browser is None:
+                from app.core.browser_utils import get_browser_launch_args
+                launch_options = get_browser_launch_args()
+                launch_options["headless"] = self.headless
+                self.browser = await self._playwright.chromium.launch(**launch_options)
+            
+            self.context = await self.browser.new_context(
+                viewport={'width': 1280, 'height': 720},
+                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            )
+            self.page = await self.context.new_page()
+            self.page.set_default_timeout(self.timeout * 1000)
+        except Exception:
+            await self.close()
+            raise
     
     async def close(self):
         """Safely close browser - always call this"""
         try:
+            if self.context:
+                await self.context.close()
+        except Exception:
+            pass
+        try:
             if self.browser:
                 await self.browser.close()
+        except Exception:
+            pass
+        try:
             if self._playwright:
                 await self._playwright.stop()
         except Exception:
-            pass  # Ensure no crash on close
+            pass
         finally:
             self.browser = None
             self.context = None
@@ -261,21 +296,7 @@ def research_lead(url: str) -> Dict[str, Any]:
         finally:
             await agent.close()
     
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    
-    if loop.is_running():
-        try:
-            import nest_asyncio
-            nest_asyncio.apply()
-            return loop.run_until_complete(_research())
-        except ImportError:
-            return {"success": False, "url": url, "error": "Cannot run in async context"}
-    else:
-        return loop.run_until_complete(_research())
+    return _run_sync_coro(_research())
 
 
 async def browse_and_extract_async(url: str, goal: str = "extract page content") -> Dict[str, Any]:
@@ -307,6 +328,7 @@ async def browse_and_extract_async(url: str, goal: str = "extract page content")
     
     browser = None
     playwright = None
+    context = None
     
     try:
         playwright = await async_playwright().start()
@@ -343,14 +365,10 @@ async def browse_and_extract_async(url: str, goal: str = "extract page content")
         # Extract page data
         title = await page.title()
         
-        # Get main text content (cleaned)
+        # Get main text content (cleaned without mutating the DOM)
         content = await page.evaluate('''() => {
-            const scripts = document.querySelectorAll('script, style, noscript');
-            scripts.forEach(s => s.remove());
-            
             const main = document.querySelector('main, article, .content, #content, body');
-            if (!main) return document.body.innerText.slice(0, 5000);
-            return main.innerText.slice(0, 5000);
+            return (main || document.body).innerText.slice(0, 5000);
         }''')
         
         # Get links
@@ -420,10 +438,18 @@ async def browse_and_extract_async(url: str, goal: str = "extract page content")
     except Exception as e:
         result["error"] = str(e)
     finally:
-        # Always close browser
+        # Always close browser and context cleanly
+        try:
+            if context:
+                await context.close()
+        except Exception:
+            pass
         try:
             if browser:
                 await browser.close()
+        except Exception:
+            pass
+        try:
             if playwright:
                 await playwright.stop()
         except Exception:
@@ -437,24 +463,7 @@ def browse_and_extract(url: str, goal: str = "extract page content") -> Dict[str
     Synchronous wrapper for browse_and_extract_async.
     Safe to call from non-async code.
     """
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    
-    if loop.is_running():
-        try:
-            import nest_asyncio
-            nest_asyncio.apply()
-            return loop.run_until_complete(browse_and_extract_async(url, goal))
-        except ImportError:
-            return {
-                "success": False,
-                "error": "Cannot run in async context. Use browse_and_extract_async directly."
-            }
-    else:
-        return loop.run_until_complete(browse_and_extract_async(url, goal))
+    return _run_sync_coro(browse_and_extract_async(url, goal))
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -527,11 +536,13 @@ async def capture_screenshot_async(url: str, output_path: str = None) -> Dict[st
     
     browser = None
     playwright = None
+    context = None
     
     try:
         playwright = await async_playwright().start()
         browser = await playwright.chromium.launch(headless=True)
-        page = await browser.new_page(viewport={'width': 1280, 'height': 720})
+        context = await browser.new_context(viewport={'width': 1280, 'height': 720})
+        page = await context.new_page()
         await page.goto(url, wait_until='networkidle', timeout=BROWSE_TIMEOUT * 1000)
         await page.screenshot(path=output_path, full_page=False)
         
@@ -544,8 +555,16 @@ async def capture_screenshot_async(url: str, output_path: str = None) -> Dict[st
         return {"success": False, "url": url, "error": str(e)}
     finally:
         try:
+            if context:
+                await context.close()
+        except Exception:
+            pass
+        try:
             if browser:
                 await browser.close()
+        except Exception:
+            pass
+        try:
             if playwright:
                 await playwright.stop()
         except Exception:
@@ -554,13 +573,7 @@ async def capture_screenshot_async(url: str, output_path: str = None) -> Dict[st
 
 def capture_screenshot(url: str, output_path: str = None) -> Dict[str, Any]:
     """Synchronous wrapper for screenshot capture"""
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    
-    return loop.run_until_complete(capture_screenshot_async(url, output_path))
+    return _run_sync_coro(capture_screenshot_async(url, output_path))
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -642,8 +655,16 @@ async def capture_video_async(url: str, duration: int = 10, output_path: str = N
         return {"success": False, "url": url, "error": str(e)}
     finally:
         try:
+            if context:
+                await context.close()
+        except Exception:
+            pass
+        try:
             if browser:
                 await browser.close()
+        except Exception:
+            pass
+        try:
             if playwright:
                 await playwright.stop()
         except Exception:
@@ -651,13 +672,7 @@ async def capture_video_async(url: str, duration: int = 10, output_path: str = N
 
 def capture_video(url: str, duration: int = 10, output_path: str = None) -> Dict[str, Any]:
     """Synchronous wrapper for video capture"""
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-    return loop.run_until_complete(capture_video_async(url, duration, output_path))
+    return _run_sync_coro(capture_video_async(url, duration, output_path))
 
 
 
@@ -679,6 +694,7 @@ async def google_search_scrape_async(query: str, limit: int = 10) -> List[Dict[s
 
     browser = None
     playwright = None
+    context = None
 
     try:
         playwright = await async_playwright().start()
@@ -835,7 +851,12 @@ async def google_search_scrape_async(query: str, limit: int = 10) -> List[Dict[s
         print(f"Google Scraper Error: {e}")
     finally:
         try:
+            if context: await context.close()
+        except: pass
+        try:
             if browser: await browser.close()
+        except: pass
+        try:
             if playwright: await playwright.stop()
         except: pass
 
@@ -844,21 +865,7 @@ async def google_search_scrape_async(query: str, limit: int = 10) -> List[Dict[s
 
 def google_search_scrape(query: str, limit: int = 5):
     """Synchronous wrapper for google_search_scrape_async"""
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-    if loop.is_running():
-        try:
-            import nest_asyncio
-            nest_asyncio.apply()
-            return loop.run_until_complete(google_search_scrape_async(query, limit))
-        except ImportError:
-            return [] # Fail gracefully
-    else:
-        return loop.run_until_complete(google_search_scrape_async(query, limit))
+    return _run_sync_coro(google_search_scrape_async(query, limit))
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

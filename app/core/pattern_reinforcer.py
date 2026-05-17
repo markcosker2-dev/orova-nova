@@ -5,15 +5,14 @@ from app.core.database import DatabaseManager
 
 logger = logging.getLogger(__name__)
 
-DECAY_RATE        = 0.15    # Confidence loss per stale cycle
-SUCCESS_THRESHOLD = 0.6     # Min success rate to remain a "Winner"
-MIN_SAMPLE_SIZE   = 5       # Min data points before learning
+DECAY_RATE        = 0.15
+SUCCESS_THRESHOLD = 0.6
+MIN_SAMPLE_SIZE   = 5
 
 from app.core.sentinel import send_admin_message
 
-# ── [P5] Thresholds ──────────────────────────────────────────────────────────
-HIGH_CONFIDENCE_THRESHOLD = 0.80     # Score at which Nova surfaces the insight
-INSIGHT_NOTIFY_COOLDOWN = 86400      # 24h
+HIGH_CONFIDENCE_THRESHOLD = 0.80
+INSIGHT_NOTIFY_COOLDOWN = 86400
 
 _notified_patterns: dict[str, datetime] = {}
 
@@ -30,7 +29,12 @@ class PatternReinforcer:
             await self._decay_stale_patterns()
             winners = await self._identify_winners()
             for w in winners:
-                await self._upsert_pattern(w["task_type"], w["winning_approach"], w["score"])
+                await self._upsert_pattern(
+                    w["task_type"],
+                    w["winning_approach"],
+                    w["score"],
+                    client_id=int(w.get("client_id", 0))
+                )
             await self._prune_dead_patterns()
             logger.info(f"✅ [HERMES] Learning cycle complete. Winners reinforced: {len(winners)}")
         except Exception as e:
@@ -45,12 +49,12 @@ class PatternReinforcer:
         )
 
     async def _identify_winners(self) -> list:
-        """Finds high-performing approaches from recent metrics."""
+        """Finds high-performing approaches from recent metrics including client context."""
         return await DatabaseManager.fetchall("""
-            SELECT task_type, winning_approach, AVG(success_metric) as score
+            SELECT task_type, winning_approach, client_id, AVG(success_metric) as score
             FROM learned_patterns
             WHERE created_at > datetime('now', '-7 days')
-            GROUP BY task_type, winning_approach
+            GROUP BY task_type, winning_approach, client_id
             HAVING COUNT(*) >= ? AND score >= ?
         """, (MIN_SAMPLE_SIZE, SUCCESS_THRESHOLD))
 
@@ -81,5 +85,4 @@ class PatternReinforcer:
     async def _prune_dead_patterns(self):
         await DatabaseManager.query("DELETE FROM learned_patterns WHERE decay_score < 0.05")
 
-# Global instance
 reinforcer = PatternReinforcer()

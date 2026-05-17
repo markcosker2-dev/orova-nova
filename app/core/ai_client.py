@@ -16,6 +16,7 @@ class GroqLimpResponse:
     """[P0] Sentinel type so the planner knows tool calls are unavailable."""
     content: str
     tools_available: bool = False
+    tool_calls: Optional[List] = None
 
 # --- [P0] Circuit Breaker State ---
 _BREAKER: dict[str, dict] = defaultdict(lambda: {
@@ -37,9 +38,11 @@ def estimate_cost(model: str, t_in: int, t_out: int) -> float:
     rates = MODEL_COSTS.get(model, MODEL_COSTS["__default__"])
     return round((t_in / 1e6) * rates[0] + (t_out / 1e6) * rates[1], 8)
 
+def _provider(model_name: str) -> str:
+    return model_name
 
 def _is_open(model_name: str) -> bool:
-    provider = "openrouter" if "openrouter" in model_name or "/" in model_name else "groq"
+    provider = _provider(model_name)
     b = _BREAKER[provider]
     if b["open_until"] > time.monotonic():
         return True
@@ -49,7 +52,7 @@ def _is_open(model_name: str) -> bool:
     return False
 
 def _record_failure(model_name: str):
-    provider = "openrouter" if "openrouter" in model_name or "/" in model_name else "groq"
+    provider = _provider(model_name)
     b = _BREAKER[provider]
     b["failures"] += 1
     if b["failures"] >= _BREAKER_THRESHOLD:
@@ -57,7 +60,7 @@ def _record_failure(model_name: str):
         logger.warning(f"[BREAKER] {provider} circuit OPEN for {_BREAKER_COOLDOWN}s")
 
 def _record_success(model_name: str):
-    provider = "openrouter" if "openrouter" in model_name or "/" in model_name else "groq"
+    provider = _provider(model_name)
     _BREAKER[provider] = {"failures": 0, "open_until": 0.0}
 
 async def _backoff(attempt: int, base: float = 1.0, cap: float = 8.0):
@@ -86,7 +89,8 @@ class UnifiedAIClient:
     async def _set_flavor(self, flavor: str):
         try:
             await DatabaseManager.set_state("model_flavor", flavor)
-        except: pass
+        except Exception as e:
+            logger.warning(f"[AI] set_flavor failed: {e}")
 
     # ── Role-Based Model Map ─────────
     ROLE_MODELS = {
@@ -158,7 +162,7 @@ class UnifiedAIClient:
             return SimpleNamespace(content="[!!] No AI providers available.", tool_calls=None)
 
         # ─── TIER 1: Native Google Gemini 2.0 (Fast, Free, Block-proof) ───
-        if self.google_client:
+        if self.google_client and not tools:
             try:
                 logger.info(f"[*] AI ({role}): Querying Native Google Gemini (gemini-2.0-flash-lite)...")
                 # Format messages for the official google API

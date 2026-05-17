@@ -80,7 +80,9 @@ body {
     left: 0;
     width: var(--sidebar-w);
     height: 100vh;
-    background: var(--bg-surface);
+    background: var(--bg-glass);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border-right: 1px solid var(--border-subtle);
     display: flex;
     flex-direction: column;
@@ -93,6 +95,130 @@ body {
     display: flex;
     flex-direction: column;
     gap: 2px;
+}
+
+/* ─── WORKSPACE SELECTOR ─── */
+.workspace-container {
+    padding: 0 24px 20px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.workspace-dropdown {
+    flex: 1;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-dim);
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    cursor: pointer;
+    outline: none;
+    transition: var(--transition);
+}
+
+.workspace-dropdown:hover {
+    border-color: var(--accent);
+    color: var(--text);
+}
+
+.workspace-add {
+    width: 38px;
+    height: 38px;
+    background: var(--gradient);
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    transition: var(--transition);
+    box-shadow: var(--shadow);
+}
+
+.workspace-add:hover {
+    transform: translateY(-2px);
+    filter: brightness(1.1);
+}
+
+
+/* ─── MODALS ─── */
+.close-modal {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    font-size: 24px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.close-modal:hover {
+    color: var(--text);
+}
+
+.modal-header {
+    margin-bottom: 28px;
+}
+
+.modal-header h2 {
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 8px;
+}
+
+.modal-header p {
+    color: var(--text-dim);
+    font-size: 14px;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-dim);
+}
+
+.form-group input {
+    width: 100%;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    padding: 12px 16px;
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    outline: none;
+    transition: var(--transition);
+}
+
+.form-group input:focus {
+    border-color: var(--accent);
+    background: var(--bg-card-hover);
+}
+
+.submit-btn {
+    width: 100%;
+    background: var(--gradient);
+    color: white;
+    border: none;
+    padding: 14px;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+    box-shadow: var(--shadow);
+}
+
+.submit-btn:hover {
+    transform: translateY(-2px);
+    filter: brightness(1.1);
 }
 
 .brand-icon {
@@ -157,6 +283,67 @@ body {
     font-size: 18px;
     width: 24px;
     text-align: center;
+}
+
+/* ─── NOVA PULSE (AI-NATIVE) ─── */
+.nova-pulse {
+    margin: auto 16px 16px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.pulse-icon {
+    width: 32px;
+    height: 32px;
+    background: var(--accent-glow);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.pulse-ring {
+    width: 8px;
+    height: 8px;
+    background: var(--accent);
+    border-radius: 50%;
+    box-shadow: 0 0 10px var(--accent);
+    animation: novaHeartbeat 2s infinite ease-in-out;
+}
+
+@keyframes novaHeartbeat {
+    0% { transform: scale(1); opacity: 1; box-shadow: 0 0 5px var(--accent); }
+    50% { transform: scale(1.5); opacity: 0.6; box-shadow: 0 0 15px var(--accent); }
+    100% { transform: scale(1); opacity: 1; box-shadow: 0 0 5px var(--accent); }
+}
+
+.pulse-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.pulse-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--accent-light);
+}
+
+.pulse-status {
+    font-size: 12px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 140px;
 }
 
 .sidebar-footer {
@@ -330,7 +517,9 @@ body {
     left: var(--sidebar-w);
     right: 0;
     height: 60px;
-    background: var(--bg-surface);
+    background: var(--bg-glass);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border-subtle);
     display: flex;
     align-items: center;

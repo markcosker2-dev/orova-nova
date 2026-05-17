@@ -39,6 +39,16 @@ def _get_proxy():
     return random.choice(_PROXY_LIST)
 
 
+def _build_httpx_proxies() -> Optional[dict]:
+    p = _get_proxy()
+    if not p:
+        return None
+    # Normalise: ensure scheme present
+    if not p.startswith(("http://", "https://", "socks5://")):
+        p = "http://" + p
+    return {"all://": p}
+
+
 def _is_banned(url: str) -> bool:
     """Check if URL belongs to a non-business domain."""
     lower = url.lower()
@@ -69,7 +79,7 @@ async def stealth_search(query: str, count: int = 10) -> str:
         search_url = f"https://www.google.com/search?q={query.replace(' ', '+')}&num={count * 2}"
         proxy = _get_proxy()
 
-        page = await asyncio.get_event_loop().run_in_executor(
+        page = await asyncio.get_running_loop().run_in_executor(
             None,
             lambda: fetcher.fetch(
                 search_url,
@@ -160,7 +170,7 @@ async def _httpx_fallback_search(query: str, count: int) -> list:
             headers=headers,
             follow_redirects=True,
             timeout=20.0,
-            proxy=_get_proxy()
+            proxies=_build_httpx_proxies()
         ) as client:
             resp = await client.get(search_url)
 
@@ -219,7 +229,7 @@ async def stealth_extract(url: str, selectors: str = "") -> str:
         fetcher = StealthyFetcher()
         proxy = _get_proxy()
 
-        page = await asyncio.get_event_loop().run_in_executor(
+        page = await asyncio.get_running_loop().run_in_executor(
             None,
             lambda: fetcher.fetch(
                 url,

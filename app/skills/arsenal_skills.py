@@ -126,9 +126,15 @@ async def advanced_browser(url: str, objective: str) -> Dict[str, Any]:
     except Exception as e:
         result["error"] = str(e)
     finally:
-        if browser:
-            await browser.close()
-        if playwright:
-            await playwright.stop()
+        try:
+            if browser:
+                await browser.close()
+        except Exception:
+            pass
+        try:
+            if playwright:
+                await playwright.stop()
+        except Exception:
+            pass
             
     return result

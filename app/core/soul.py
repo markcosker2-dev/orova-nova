@@ -1,7 +1,7 @@
 """
 Nova — Core Persona Definition.
 Phase 5: Hardened negative constraints. AI-isms purged.
-Limp Mode inherits the same voice ceiling.
+Limp Mode inherits the same voice voice threshold.
 """
 
 import re
@@ -41,18 +41,32 @@ LIMP MODE ACTIVE. Constraints tighten:
 """
 
 BRAND_VOICE_BLOCK = "BRAND: OROVA. Voice: terse, high-status, zero filler. Never use 'certainly', 'absolutely', or 'as an AI'."
-# ── Voice QC Validator ────────────────────────────────────────────────────────
+
 AI_ISM_PATTERNS = [
-    r"\bgreat\b", r"\babsolutely\b", r"\bcertainly\b", r"\bsure\b",
-    r"\bof course\b", r"\bi apologize\b", r"\bi'm sorry\b", r"\bunfortunately\b",
-    r"\bas an ai\b", r"\blanguage model\b", r"\bi think\b", r"\bi believe\b",
+    r"\bof course\b",
+    r"\bi apologize\b",
+    r"\bi'm sorry\b",
+    r"\bunfortunately\b",
+    r"\bas an ai\b",
+    r"\blanguage model\b",
+    r"\bi think\b",
+    r"\bi believe\b",
+    r"\bcertainly\b",
+    r"\babsolutely\b",
 ]
 
-def voice_qc(text: str) -> str:
-    """Scan output for prohibited patterns and log violations."""
+def voice_audit(text: str, scrub: bool = False) -> str:
+    """
+    Audit output for prohibited AI-ism patterns.
+    If scrub=True, removes matched phrases (use with caution — may break sentences).
+    Returns original text; violations are logged as warnings.
+    """
     violations = [p for p in AI_ISM_PATTERNS if re.search(p, text, re.IGNORECASE)]
     if violations:
         logger.warning(f"[Soul.QC] Voice violations detected: {violations}")
+        if scrub:
+            for pattern in violations:
+                text = re.sub(pattern, "", text, flags=re.IGNORECASE)
     return text
 
 class AgentSoul:

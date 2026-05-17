@@ -9,13 +9,12 @@ import json
 import time
 from typing import Dict, List, Optional, Callable
 from datetime import datetime, timedelta
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, asdict
 import traceback
 
 logger = logging.getLogger(__name__)
 
-# ─────── [P8.1] PROMETHEUS METRICS ─────────
 @dataclass
 class Metric:
     """Base metric class for Prometheus-style metrics."""
@@ -38,7 +37,8 @@ class Metric:
         return f'{self.name} {self.value}'
 
 class MetricsCollector:
-    """Collect and export Prometheus-style metrics."""
+    """Collect and export Prometheus-style metrics with guardrails against cardinality explosion."""
+    MAX_LABEL_KEYS = 1000
     
     def __init__(self):
         self.counters: Dict[str, float] = defaultdict(float)
@@ -48,26 +48,32 @@ class MetricsCollector:
     
     def increment_counter(self, name: str, value: float = 1, labels: Dict = None):
         """Increment counter metric."""
-        key = f"{name}:{json.dumps(labels or {})}"
+        key = f"{name}:{json.dumps(labels or {}, sort_keys=True)}"
         self.counters[key] += value
         self.timestamps[key] = datetime.utcnow().isoformat()
     
     def set_gauge(self, name: str, value: float, labels: Dict = None):
         """Set gauge metric."""
-        key = f"{name}:{json.dumps(labels or {})}"
+        key = f"{name}:{json.dumps(labels or {}, sort_keys=True)}"
         self.gauges[key] = value
         self.timestamps[key] = datetime.utcnow().isoformat()
     
     def record_histogram(self, name: str, value: float, labels: Dict = None):
-        """Record histogram value."""
-        key = f"{name}:{json.dumps(labels or {})}"
+        """Record histogram value with maximum label cardinality protection."""
+        key = f"{name}:{json.dumps(labels or {}, sort_keys=True)}"
+        if key not in self.histograms and len(self.histograms) >= self.MAX_LABEL_KEYS:
+            logger.warning(
+                f"[Metrics] Histogram key cap ({self.MAX_LABEL_KEYS}) reached. "
+                f"Dropping high-cardinality key: {key[:80]}"
+            )
+            return
         self.histograms[key].append(value)
         if len(self.histograms[key]) > 1000:
             self.histograms[key] = self.histograms[key][-1000:]
     
     def get_histogram_stats(self, name: str, labels: Dict = None) -> Dict:
         """Get statistics for histogram."""
-        key = f"{name}:{json.dumps(labels or {})}"
+        key = f"{name}:{json.dumps(labels or {}, sort_keys=True)}"
         values = self.histograms.get(key, [])
         
         if not values:
@@ -104,7 +110,6 @@ class MetricsCollector:
         
         return "\n".join(lines)
 
-# ─────── [P8.2] ALERTING RULES ─────────
 @dataclass
 class Alert:
     """Alert rule and state."""
@@ -118,11 +123,12 @@ class Alert:
     notified: bool = False
 
 class AlertManager:
-    """Manage alert rules and trigger notifications."""
+    """Manage alert rules and trigger notifications using bounded history collections."""
+    MAX_HISTORY = 500
     
     def __init__(self):
         self.alerts: Dict[str, Alert] = {}
-        self.alert_history: List[Dict] = []
+        self.alert_history: deque = deque(maxlen=self.MAX_HISTORY)
     
     def register_alert(self, alert: Alert):
         """Register an alert rule."""
@@ -160,14 +166,14 @@ class AlertManager:
         
         return triggered
 
-# ─────── [P8.3] ERROR TRACKING (SENTRY-LIKE) ─────────
 class ErrorTracker:
-    """Lightweight error tracking and reporting."""
+    """Lightweight error tracking and reporting with memory boundaries."""
+    MAX_GROUPS = 200
     
     def __init__(self, max_errors: int = 1000):
         self.errors: List[Dict] = []
         self.max_errors = max_errors
-        self.error_groups: Dict[str, List[Dict]] = defaultdict(list)
+        self.error_groups: Dict[str, List[Dict]] = {}
     
     def capture_exception(self, exc: Exception, context: Dict = None, level: str = "error"):
         """Capture and log an exception."""
@@ -183,11 +189,18 @@ class ErrorTracker:
         
         self.errors.append(error_entry)
         
-        # Group errors by fingerprint (type + message)
         fingerprint = f"{error_entry['type']}:{error_entry['message'][:100]}"
+        
+        # Evict oldest group when cap is hit
+        if fingerprint not in self.error_groups and len(self.error_groups) >= self.MAX_GROUPS:
+            oldest_key = next(iter(self.error_groups))
+            del self.error_groups[oldest_key]
+            logger.debug(f"[ErrorTracker] Evicted oldest error group: {oldest_key}")
+            
+        if fingerprint not in self.error_groups:
+            self.error_groups[fingerprint] = []
         self.error_groups[fingerprint].append(error_entry)
         
-        # Keep only recent errors
         if len(self.errors) > self.max_errors:
             self.errors = self.errors[-self.max_errors:]
         
@@ -201,7 +214,6 @@ class ErrorTracker:
         if not self.errors:
             return {"total_errors": 0, "unique_errors": 0}
         
-        # Get errors from last 24h
         cutoff = datetime.utcnow() - timedelta(hours=24)
         recent_errors = [
             e for e in self.errors
@@ -218,12 +230,11 @@ class ErrorTracker:
             )[:5],
         }
 
-# ─────── [P8.4] PERFORMANCE PROFILER ─────────
 class PerformanceProfiler:
-    """Profile function execution times and identify bottlenecks."""
+    """Profile function execution times using fast O(1) deques to limit memory growth."""
     
     def __init__(self):
-        self.profiles: Dict[str, List[float]] = defaultdict(list)
+        self.profiles: Dict[str, deque] = defaultdict(lambda: deque(maxlen=1000))
     
     def profile_sync(self, func_name: str):
         """Decorator for synchronous function profiling."""
@@ -235,8 +246,6 @@ class PerformanceProfiler:
                 finally:
                     duration = time.time() - start
                     self.profiles[func_name].append(duration)
-                    if len(self.profiles[func_name]) > 1000:
-                        self.profiles[func_name] = self.profiles[func_name][-1000:]
             return wrapper
         return decorator
     
@@ -250,14 +259,12 @@ class PerformanceProfiler:
                 finally:
                     duration = time.time() - start
                     self.profiles[func_name].append(duration)
-                    if len(self.profiles[func_name]) > 1000:
-                        self.profiles[func_name] = self.profiles[func_name][-1000:]
             return wrapper
         return decorator
     
     def get_stats(self, func_name: str) -> Dict:
         """Get performance statistics for a function."""
-        times = self.profiles.get(func_name, [])
+        times = list(self.profiles.get(func_name, []))
         
         if not times:
             return {"function": func_name, "calls": 0}
@@ -278,26 +285,21 @@ class PerformanceProfiler:
         """Get stats for all profiled functions."""
         return [self.get_stats(name) for name in self.profiles.keys()]
 
-# ─────── [P8.5] AUTO-SCALING CONFIGURATION ─────────
 class AutoScalingConfig:
-    """
-    Auto-scaling configuration for deployment platforms (Render, AWS, etc).
-    Defines when and how to scale based on metrics.
-    """
+    """Auto-scaling configuration for deployment platforms."""
     
-    # For Render free tier: limited to 1 instance, but include config for future
     RENDER_CONFIG = {
         "service_name": "orova-nova",
-        "plan": "free",  # free, starter, standard, pro
+        "plan": "free",
         "scaling": {
             "min_instances": 1,
-            "max_instances": 1,  # Free tier: 1 only
+            "max_instances": 1,
             "cpu_threshold_percent": 80,
             "memory_threshold_percent": 80,
             "scale_up_delay_seconds": 60,
             "scale_down_delay_seconds": 300,
         },
-        "autoscaling_enabled": False,  # Disabled on free tier
+        "autoscaling_enabled": False,
     }
     
     @staticmethod
@@ -314,7 +316,6 @@ class AutoScalingConfig:
             ],
         }
 
-# ─────── [P8.6] RUNBOOKS ─────────
 class Runbook:
     """Runbook for operational procedures."""
     
@@ -392,12 +393,8 @@ class Runbook:
         ],
     }
 
-# ─────── [P8.7] DASHBOARD & OBSERVABILITY ─────────
 class ObservabilityDashboard:
-    """
-    Unified observability dashboard data.
-    Aggregates metrics, errors, alerts, and performance data.
-    """
+    """unified observability dashboard data."""
     
     def __init__(self, metrics: MetricsCollector, errors: ErrorTracker, 
                  profiler: PerformanceProfiler, alerts: AlertManager):
@@ -412,7 +409,7 @@ class ObservabilityDashboard:
             "timestamp": datetime.utcnow().isoformat(),
             "system": {
                 "status": "operational",
-                "uptime_hours": 0,  # TODO: track uptime
+                "uptime_hours": 0,
             },
             "metrics": {
                 "prometheus_export": self.metrics.export_prometheus(),
@@ -422,24 +419,28 @@ class ObservabilityDashboard:
             "performance": self.profiler.get_all_stats(),
             "alerts": {
                 "active": [a for a in self.alerts.alerts.values() if a.notified],
-                "history": self.alerts.alert_history[-100:],
+                "history": list(self.alerts.alert_history),
             },
         }
 
-# ─────── SINGLETON INSTANCES ─────────
 metrics_collector = MetricsCollector()
 alert_manager = AlertManager()
 error_tracker = ErrorTracker()
 profiler = PerformanceProfiler()
 observability = ObservabilityDashboard(metrics_collector, error_tracker, profiler, alert_manager)
 
-# Register default alerts
-def register_default_alerts():
+def _make_error_rate_condition(tracker: ErrorTracker, window: int = 100, threshold: int = 5):
+    """Explicitly binds closure scope parameter references for condition checking."""
+    def condition(m: MetricsCollector) -> bool:
+        return len(tracker.errors[-window:]) > threshold
+    return condition
+
+def register_default_alerts(tracker: ErrorTracker = error_tracker):
     """Register common alerts."""
     
     alert_manager.register_alert(Alert(
         name="high_error_rate",
-        condition=lambda m: len(error_tracker.errors[-100:]) > 5,  # 5+ errors in recent calls
+        condition=_make_error_rate_condition(tracker),
         severity="critical",
         message_template="Error rate is high. Check logs immediately.",
         duration_seconds=300,
@@ -447,7 +448,7 @@ def register_default_alerts():
     
     alert_manager.register_alert(Alert(
         name="circuit_breaker_open",
-        condition=lambda m: False,  # TODO: check AI client circuit breaker
+        condition=lambda m: False,
         severity="warning",
         message_template="AI provider circuit breaker is open. Service degraded.",
         duration_seconds=60,
