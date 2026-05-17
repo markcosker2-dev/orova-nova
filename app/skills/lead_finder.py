@@ -315,29 +315,92 @@ def _filter_and_deduplicate(leads: list, count: int) -> list:
 
 
 async def _source_bbb(query: str, count: int) -> list:
-    """Finds BBB profile pages for the query and extracts basic details."""
+    """
+    Finds BBB profile pages via DuckDuckGo and extracts business details.
+    Resilient to DDG A/B layout snippets and unwraps redirects.
+    """
+    import urllib.parse
     leads = []
     try:
-        # Search DuckDuckGo for BBB profiles
         bbb_query = f"site:bbb.org/profile {query}"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        search_url = f"https://html.duckduckgo.com/html/?q={bbb_query.replace(' ', '+')}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+        search_url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote_plus(bbb_query)}"
+
         async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=15.0) as client:
             resp = await client.get(search_url)
-            if resp.status_code == 200:
-                soup = BeautifulSoup(resp.text, "html.parser")
-                for r in soup.select("div.result"):
-                    a_tag = r.select_one("a.result__a")
-                    if a_tag and "bbb.org/local-bbb" not in a_tag.get("href", ""):
-                        leads.append({
-                            "title": a_tag.get_text(strip=True).replace(" | Better Business Bureau", "").replace(" | BBB", ""),
-                            "url": a_tag.get("href", ""),
-                            "snippet": r.select_one("a.result__snippet").get_text(strip=True) if r.select_one("a.result__snippet") else "",
-                            "source_type": "BBB.org"
-                        })
+
+        if resp.status_code != 200:
+            logger.warning(f"[BBB] DDG returned HTTP {resp.status_code}")
+            return leads
+
+        soup = BeautifulSoup(resp.text, "html.parser")
+
+        for r in soup.select("div.result"):
+            a_tag = r.select_one("a.result__a")
+            if not a_tag:
+                continue
+
+            raw_href = a_tag.get("href", "")
+            cleaned_url = _clean_ddg_url(raw_href)
+
+            if not cleaned_url or "bbb.org/local-bbb" in cleaned_url:
+                continue
+
+            snippet_el = (
+                r.select_one("div.result__snippet") or
+                r.select_one("a.result__snippet") or
+                r.select_one(".result__snippet")
+            )
+            snippet_text = snippet_el.get_text(strip=True) if snippet_el else ""
+
+            title_text = (
+                a_tag.get_text(strip=True)
+                .replace("| Better Business Bureau®", "")
+                .replace("| Better Business Bureau", "")
+                .replace("| BBB", "")
+                .strip()
+            )
+
+            if not title_text:
+                continue
+
+            leads.append({
+                "title": title_text,
+                "business": title_text,
+                "url": cleaned_url,
+                "snippet": snippet_text,
+                "source_type": "BBB.org",
+            })
+
+            if len(leads) >= count:
+                break
+
     except Exception as e:
         logger.error(f"[BBB] Error: {e}")
+
     return leads[:count]
+
+
+def _clean_ddg_url(href: str) -> str:
+    """Unwraps DDG's redirection links to retrieve the actual outbound business URL."""
+    import urllib.parse
+    if not href:
+        return ""
+    if href.startswith("//"):
+        href = "https:" + href
+    try:
+        parsed = urllib.parse.urlparse(href)
+        if "duckduckgo.com" in parsed.netloc and "uddg" in parsed.query:
+            qs = urllib.parse.parse_qs(parsed.query)
+            if "uddg" in qs:
+                return urllib.parse.unquote(qs["uddg"][0])
+    except Exception:
+        pass
+    return href
+
 
 
 async def research_lead(url: str) -> str:
