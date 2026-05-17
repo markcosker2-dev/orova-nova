@@ -473,6 +473,61 @@ async def _ddg_enrich_contact(biz_name: str, domain: str) -> Tuple[Optional[str]
     return found_owner, found_email
 
 
+async def _ai_extract_contacts(text: str, biz_name: str) -> Dict[str, Optional[str]]:
+    """
+    Leverages our 100% free UnifiedAIClient (Gemini/Groq) to intelligently read crawled page text
+    and extract: owner/CEO/founder name, corporate email, and phone number.
+    Returns: {"owner": ..., "email": ..., "phone": ...}
+    """
+    if not text or len(text) < 100:
+        return {}
+
+    # Strip HTML tags if any to reduce token usage and save bandwidth
+    soup = BeautifulSoup(text, "html.parser")
+    clean_text = soup.get_text(separator=" ", strip=True)
+
+    # Truncate text to 8000 characters to keep it snappy and light on tokens
+    clean_text = clean_text[:8000]
+
+    system_prompt = (
+        "You are 'Hawk', the B2B Lead Hunter subagent. "
+        "Your task is to analyze the text of a local business website and extract the contact information of the key decision-makers.\n"
+        "Specifically, identify:\n"
+        "1. The business owner, CEO, founder, president, or managing director's full name (2-3 words, properly capitalized, e.g., 'John Doe'). Avoid false positives like generic roles.\n"
+        "2. The primary corporate or contact email address.\n"
+        "3. The primary business phone number.\n\n"
+        "Return the result ONLY as a valid, flat JSON object with these EXACT keys: 'owner', 'email', 'phone'. "
+        "Do not include any other text, reasoning, markdown codeblocks, or extra keys. "
+        "If a field is not found, set its value to null."
+    )
+
+    user_prompt = f"Business Name: {biz_name}\n\nWebsite Content:\n{clean_text}"
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt}
+    ]
+
+    try:
+        from app.core.ai_client import UnifiedAIClient
+        ai = UnifiedAIClient()
+        response = await ai.chat(messages, role="hawk", temperature=0.1, max_tokens=200)
+        content = response.content or ""
+        
+        # Strip markdown json codeblock wrapping if returned
+        content = content.replace("```json", "").replace("```", "").strip()
+        
+        data = json.loads(content)
+        return {
+            "owner": data.get("owner") if data.get("owner") and len(data.get("owner")) > 3 else None,
+            "email": data.get("email") if data.get("email") and "@" in data.get("email") else None,
+            "phone": data.get("phone") if data.get("phone") else None
+        }
+    except Exception as e:
+        logger.warning(f"[HAWK AI] LLM extraction failed: {e}")
+        return {}
+
+
 async def enrich_lead_lite(lead: Dict[str, Any]) -> Dict[str, Any]:
     url = lead.get("url")
     if not url or not url.startswith("http"):
@@ -586,6 +641,23 @@ async def enrich_lead_lite(lead: Dict[str, Any]) -> Dict[str, Any]:
                 if owner:
                     lead["owner"] = owner
                     logger.info(f"[ENRICH] → Owner from {page_url}: {lead['owner']}")
+
+            # ─── STEP 2.5: Hawk AI LLM Extraction ─────────────────────
+            if not lead.get("owner") or not lead.get("email") or not lead.get("phone"):
+                logger.info(f"[ENRICH] Step 2.5: Running Hawk AI LLM extraction on {page_url}...")
+                ai_contacts = await _ai_extract_contacts(content_for_extraction, biz_name)
+                
+                if ai_contacts.get("owner") and not lead.get("owner") and _is_plausible_name(ai_contacts["owner"]):
+                    lead["owner"] = ai_contacts["owner"]
+                    logger.info(f"[HAWK AI] → Owner extracted: {lead['owner']}")
+                
+                if ai_contacts.get("email") and not lead.get("email"):
+                    lead["email"] = ai_contacts["email"]
+                    logger.info(f"[HAWK AI] → Email extracted: {lead['email']}")
+                
+                if ai_contacts.get("phone") and not lead.get("phone"):
+                    lead["phone"] = ai_contacts["phone"]
+                    logger.info(f"[HAWK AI] → Phone extracted: {lead['phone']}")
 
             if lead.get("email") and lead.get("phone") and lead.get("owner"):
                 break
