@@ -496,16 +496,47 @@ class DatabaseManager:
         elif cls._sqlite_fallback:
             business = lead_data.get("business") or lead_data.get("company") or lead_data.get("title")
             url = lead_data.get("url") or ""
+            
+            existing = None
             if url:
-                existing = cls._sqlite_query("SELECT id FROM leads WHERE url = ? LIMIT 1", (url,), fetchone=True)
-                if existing:
-                    logger.info(f"[SQLITE] Duplicate lead skipped (URL match): {url}")
-                    return
-            if business:
-                existing = cls._sqlite_query("SELECT id FROM leads WHERE LOWER(business) = LOWER(?) LIMIT 1", (business,), fetchone=True)
-                if existing:
-                    logger.info(f"[SQLITE] Duplicate lead skipped (name match): {business}")
-                    return
+                existing = cls._sqlite_query("SELECT * FROM leads WHERE url = ? LIMIT 1", (url,), fetchone=True)
+            if not existing and business:
+                existing = cls._sqlite_query("SELECT * FROM leads WHERE LOWER(business) = LOWER(?) LIMIT 1", (business,), fetchone=True)
+                
+            if existing:
+                lead_id = existing["id"]
+                logger.info(f"[SQLITE] Existing lead found (ID: {lead_id}). Updating details and syncing...")
+                
+                # Update SQLite with any new non-empty fields
+                updates = []
+                params = []
+                for field in ["owner", "website", "email", "phone", "notes"]:
+                    val = lead_data.get(field)
+                    # Use index lookup because row is sqlite3.Row
+                    if val and not existing[field]:
+                        updates.append(f"{field} = ?")
+                        params.append(val)
+                
+                if updates:
+                    params.append(lead_id)
+                    cls._sqlite_query(f"UPDATE leads SET {', '.join(updates)} WHERE id = ?", tuple(params))
+                    
+                # Always sync to sheets to handle cleared sheets
+                if sync_to_sheets:
+                    merged_lead = dict(existing)
+                    for k, v in lead_data.items():
+                        if v:
+                            merged_lead[k] = v
+                    merged_lead["id"] = lead_id
+                    try:
+                        config = cls.get_client_config(client_id)
+                        workbook = config.get("workbook")
+                        from app.skills.sheets_sync import sync_lead_to_sheets
+                        cls._schedule_async_task(sync_lead_to_sheets(merged_lead, workbook_name=workbook))
+                    except Exception as exc:
+                        logger.warning(f"[SQLITE] Sheet sync could not be scheduled on update: {exc}")
+                return lead_id
+
             sql = '''INSERT INTO leads (business, owner, url, website, email, phone, vertical, status, notes, icebreaker, score, client_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'''
             params = (
                 business, lead_data.get("owner"),
@@ -528,6 +559,7 @@ class DatabaseManager:
                     cls._schedule_async_task(sync_lead_to_sheets(lead_data, workbook_name=workbook))
                 except Exception as exc:
                     logger.warning(f"[SQLITE] Sheet sync could not be scheduled: {exc}")
+            return lead_id
 
     @classmethod
     def get_leads(cls, client_id=0):

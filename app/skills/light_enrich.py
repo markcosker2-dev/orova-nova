@@ -195,6 +195,35 @@ def _extract_website_from_yelp(html: str) -> Optional[str]:
                 continue
     return None
 
+def _extract_website_from_markdown(markdown: str) -> Optional[str]:
+    """Extract outbound business website URL from Firecrawl Markdown."""
+    if not markdown:
+        return None
+    # Look for markdown links: [text](url)
+    links = re.findall(r'\[([^\]]+)\]\((https?://[^\)]+)\)', markdown)
+    social = ["yelp.com", "facebook.com", "instagram.com", "twitter.com",
+              "linkedin.com", "youtube.com", "tiktok.com", "google.com", "apple.com"]
+              
+    for text, href in links:
+        href_lower = href.lower()
+        if "/biz_redir" in href_lower:
+            try:
+                parsed_qs = urllib.parse.parse_qs(urllib.parse.urlparse(href).query)
+                if 'url' in parsed_qs:
+                    target_url = parsed_qs['url'][0]
+                    if not any(s in target_url.lower() for s in social):
+                        return target_url
+            except Exception:
+                pass
+        else:
+            # Check if this outbound link is a clean business domain
+            if not any(s in href_lower for s in social):
+                # Reject typical CDN and media links
+                parsed = urllib.parse.urlparse(href)
+                if not any(parsed.path.lower().endswith(ext) for ext in MEDIA_EXTENSIONS) and not any(cdn in parsed.netloc.lower() for cdn in CDN_PATTERNS):
+                    return href
+    return None
+
 def _extract_owner_from_text(text: str) -> Optional[str]:
     """Try to find owner/founder/CEO name from plain text without BeautifulSoup."""
     for pattern in OWNER_PATTERNS:
@@ -273,9 +302,12 @@ async def enrich_lead_lite(lead: Dict[str, Any]) -> Dict[str, Any]:
                         lead["phone"] = phones[0]
                         logger.info(f"[ENRICH] → Phone from Yelp: {lead['phone']}")
 
-                # Extract real website
-                if not real_website and html:
-                    real_website = _extract_website_from_yelp(html)
+                # Extract real website with dual HTML + Markdown parser
+                if not real_website:
+                    if html:
+                        real_website = _extract_website_from_yelp(html)
+                    if not real_website and markdown:
+                        real_website = _extract_website_from_markdown(markdown)
                     if real_website:
                         lead["website"] = real_website
                         logger.info(f"[ENRICH] → Website from Yelp: {real_website}")
@@ -306,6 +338,39 @@ async def enrich_lead_lite(lead: Dict[str, Any]) -> Dict[str, Any]:
         for page_url in pages_to_crawl:
             html = await _fetch_page(page_url)
             if not html:
+                continue
+
+            # If the page is a BBB profile page, use a targeted BBB extractor!
+            if "bbb.org" in page_url:
+                soup = BeautifulSoup(html, "html.parser")
+                
+                # 1. Extract owner from BBB structured headers
+                if not lead.get("owner"):
+                    # Search using bs4 string search
+                    for management_header in soup.find_all(text=re.compile(r'Business Management|Key People', re.I)):
+                        parent = management_header.parent
+                        found_owner = False
+                        for _ in range(4): # bubble up to find names
+                            if not parent:
+                                break
+                            text_content = parent.get_text(separator=" ", strip=True)
+                            names = re.findall(r'([A-Z][a-zA-Z\'-]+\s+[A-Z][a-zA-Z\'-]+)', text_content)
+                            for name in names:
+                                if name not in ['Business Management', 'Key People', 'About Us', 'Contact Us']:
+                                    lead["owner"] = name
+                                    logger.info(f"[BBB] Extracted Owner from BBB Profile: {name}")
+                                    found_owner = True
+                                    break
+                            if found_owner:
+                                break
+                            parent = parent.parent
+                            
+                # 2. Extract phone from BBB profile
+                if not lead.get("phone"):
+                    phones = _extract_phones(html)
+                    if phones:
+                        lead["phone"] = phones[0]
+                        logger.info(f"[BBB] Phone from BBB: {lead['phone']}")
                 continue
 
             # Extract email
