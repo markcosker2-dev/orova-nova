@@ -43,29 +43,31 @@ async def find_leads(count: int = 5, query: str = "business leads"):
     logger.info(f"[LEAD FINDER V3] Searching for {count} leads: '{query}'")
     all_leads = []
 
-    # ─── SOURCE 1: DuckDuckGo — Broad Business Search ──────────
-    ddg_leads = await _source_duckduckgo(query, count * 2)
+    # ─── SOURCE 1: DuckDuckGo — Deep Business Search ──────────
+    # Search deeper (up to 40 results) to get past high-authority directories like Wikipedia/Yelp
+    ddg_leads = await _source_duckduckgo(query, max(40, count * 4))
     all_leads.extend(ddg_leads)
-    logger.info(f"[SOURCE 1: DDG] Found {len(ddg_leads)} leads")
+    logger.info(f"[SOURCE 1: DDG] Found {len(ddg_leads)} raw leads")
 
-    # ─── SOURCE 2: HTTPX Direct HTML Scrape ────────────────────
-    if len(all_leads) < count:
-        httpx_leads = await _source_httpx(query, count * 2)
+    # ─── SOURCE 2: BBB.org (Better Business Bureau) ────────
+    # ALWAYS include BBB leads in the main pool as they are highly curated real businesses
+    bbb_leads = await _source_bbb(query, count * 2)
+    all_leads.extend(bbb_leads)
+    logger.info(f"[SOURCE 2: BBB.org] Found {len(bbb_leads)} raw leads")
+
+    # ─── SOURCE 3: HTTPX Direct HTML Scrape ────────────────────
+    if len(all_leads) < count * 3:
+        httpx_leads = await _source_httpx(query, max(40, count * 4))
         all_leads.extend(httpx_leads)
-        logger.info(f"[SOURCE 2: HTTPX] Found {len(httpx_leads)} leads")
-
-    # ─── SOURCE 3: BBB.org (Better Business Bureau) ────────
-    if len(all_leads) < count:
-        bbb_leads = await _source_bbb(query, count)
-        all_leads.extend(bbb_leads)
-        logger.info(f"[SOURCE 3: BBB.org] Found {len(bbb_leads)} leads")
+        logger.info(f"[SOURCE 3: HTTPX] Found {len(httpx_leads)} raw leads")
 
     # ─── SOURCE 4: SerpAPI Google Maps (if key available) ──────
     serpapi_key = os.getenv("SERPAPI_KEY")
-    if serpapi_key and len(all_leads) < count:
-        maps_leads = await _source_google_maps(query, count, serpapi_key)
+    if serpapi_key and len(all_leads) < count * 3:
+        maps_leads = await _source_google_maps(query, count * 2, serpapi_key)
         all_leads.extend(maps_leads)
-        logger.info(f"[SOURCE 4: Google Maps] Found {len(maps_leads)} leads")
+        logger.info(f"[SOURCE 4: Google Maps] Found {len(maps_leads)} raw leads")
+
 
 
     # ─── DEDUP & FILTER ───────────────────────────────────────
