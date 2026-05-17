@@ -269,7 +269,8 @@ class DatabaseManager:
             conn.commit()
             return res
         except sqlite3.Error as e:
-            logger.error(f"[SQLITE] Query error: {e} | SQL: {sql[:100]}")
+            if "duplicate column name" not in str(e):
+                logger.error(f"[SQLITE] Query error: {e} | SQL: {sql[:100]}")
             if conn:
                 try:
                     conn_errored = True

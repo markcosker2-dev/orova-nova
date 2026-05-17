@@ -1170,6 +1170,37 @@ async function loadWorkspaces() {
     } catch(e) { console.error("Could not load workspaces", e); }
 }
 
+// ═══════════════════ QUICK ACTIONS ═══════════════════
+document.getElementById('btn-hunt-leads')?.addEventListener('click', async () => {
+    showToast('🚀 Initiating Lead Hunt...', 'info');
+    const res = await apiFetch('/api/actions/hunt-leads', { method: 'POST', body: '{}' });
+    if (res && res.status === 'ok') {
+        showToast('✅ ' + res.message, 'success');
+    } else {
+        showToast('❌ Failed to start lead hunt', 'error');
+    }
+});
+
+document.getElementById('btn-send-emails')?.addEventListener('click', async () => {
+    showToast('🚀 Initiating Email Send...', 'info');
+    const res = await apiFetch('/api/actions/send-emails', { method: 'POST', body: '{}' });
+    if (res && res.status === 'ok') {
+        showToast('✅ ' + res.message, 'success');
+    } else {
+        showToast('❌ Failed to send emails', 'error');
+    }
+});
+
+document.getElementById('btn-ceo-report')?.addEventListener('click', async () => {
+    showToast('🚀 Generating CEO Report...', 'info');
+    const res = await apiFetch('/api/actions/generate-report', { method: 'POST', body: '{}' });
+    if (res && res.status === 'ok') {
+        showToast('✅ ' + res.report, 'success');
+    } else {
+        showToast('❌ Failed to generate report', 'error');
+    }
+});
+
 // ─── MODAL LOGIC (Agency Hub) ───
 document.getElementById('add-client-btn')?.addEventListener('click', () => {
     openModal('modal-add-client');

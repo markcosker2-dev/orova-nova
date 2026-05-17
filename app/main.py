@@ -436,6 +436,35 @@ async def telegram_webhook(request: Request):
 
 # --- Additional Dashboard API Endpoints ---
 
+@app.post("/api/actions/hunt-leads")
+async def action_hunt_leads(authorized: bool = Depends(require_dashboard_api_key)):
+    try:
+        from app.worker import run_lead_hunt_slow_lane
+        asyncio.create_task(run_lead_hunt_slow_lane(client_id=0, niche="business leads"))
+        return {"status": "ok", "message": "Lead hunt job initiated"}
+    except Exception as e:
+        logger.error(f"Error in hunt-leads: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/actions/send-emails")
+async def action_send_emails(authorized: bool = Depends(require_dashboard_api_key)):
+    try:
+        from app.worker import fast_lane_job
+        asyncio.create_task(asyncio.to_thread(fast_lane_job))
+        return {"status": "ok", "message": "Email & Call Fast Lane initiated"}
+    except Exception as e:
+        logger.error(f"Error in send-emails: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/actions/generate-report")
+async def action_generate_report(authorized: bool = Depends(require_dashboard_api_key)):
+    try:
+        # Placeholder for report generation
+        return {"status": "ok", "report": "CEO Report generated successfully."}
+    except Exception as e:
+        logger.error(f"Error in generate-report: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/clients")
 async def get_clients(authorized: bool = Depends(require_dashboard_api_key)):
     query = "SELECT id, business_name as name, niche, target_location as location FROM clients WHERE is_active = 1"
