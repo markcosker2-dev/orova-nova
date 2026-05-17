@@ -33,27 +33,98 @@ JUNK_KEYWORDS = [
 JUNK_COMPILED = [re.compile(p, re.IGNORECASE) for p in JUNK_KEYWORDS]
 
 
+async def _source_tavily(query: str, count: int, api_key: str) -> list:
+    """Uses Tavily Search API (1,000 free searches/month) to find clean business leads."""
+    leads = []
+    try:
+        payload = {
+            "api_key": api_key,
+            "query": query,
+            "max_results": count,
+            "search_depth": "light"
+        }
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post("https://api.tavily.com/search", json=payload)
+            if resp.status_code == 200:
+                data = resp.json()
+                for res in data.get("results", []):
+                    leads.append({
+                        "title": res.get("title", "Untitled"),
+                        "url": res.get("url", ""),
+                        "snippet": res.get("content", ""),
+                        "source_type": "Tavily Search"
+                    })
+                logger.info(f"[TAVILY] Returned {len(leads)} leads")
+    except Exception as e:
+        logger.error(f"[TAVILY] Error: {e}")
+    return leads
+
+
+async def _source_firecrawl_search(query: str, count: int, api_key: str) -> list:
+    """Uses Firecrawl Search API to retrieve verified business websites."""
+    leads = []
+    try:
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "query": query,
+            "limit": count
+        }
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post("https://api.firecrawl.dev/v1/search", json=payload, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                for res in data.get("data", []):
+                    leads.append({
+                        "title": res.get("title", "Untitled"),
+                        "url": res.get("url", ""),
+                        "snippet": res.get("description", ""),
+                        "source_type": "Firecrawl Search"
+                    })
+                logger.info(f"[FIRECRAWL SEARCH] Returned {len(leads)} leads")
+    except Exception as e:
+        logger.error(f"[FIRECRAWL SEARCH] Error: {e}")
+    return leads
+
+
 async def find_leads(count: int = 5, query: str = "business leads"):
     """
     Multi-source lead discovery engine.
-    Sources leads from DuckDuckGo, BBB, and business directories.
+    Sources leads from Tavily, Firecrawl, SerpAPI, DuckDuckGo, BBB, and business directories.
     Strictly bypasses Yelp.
     """
     count = int(count)
     logger.info(f"[LEAD FINDER V3] Searching for {count} leads: '{query}'")
     all_leads = []
 
+    # ─── SOURCE 0.1: Tavily Search API (100% Block-Free, 1,000 free searches/month) ──
+    tavily_key = os.getenv("TAVILY_API_KEY")
+    if tavily_key:
+        tav_leads = await _source_tavily(query, count * 2, tavily_key)
+        all_leads.extend(tav_leads)
+        logger.info(f"[SOURCE 0.1: Tavily] Found {len(tav_leads)} raw leads")
+
+    # ─── SOURCE 0.2: Firecrawl Search API (Bypasses all Cloudflare) ─────────────────
+    firecrawl_key = os.getenv("FIRECRAWL_API_KEY")
+    if firecrawl_key and len(all_leads) < count:
+        fc_leads = await _source_firecrawl_search(query, count * 2, firecrawl_key)
+        all_leads.extend(fc_leads)
+        logger.info(f"[SOURCE 0.2: Firecrawl Search] Found {len(fc_leads)} raw leads")
+
     # ─── SOURCE 1: DuckDuckGo — Deep Business Search ──────────
-    # Search deeper (up to 40 results) to get past high-authority directories like Wikipedia/Yelp
-    ddg_leads = await _source_duckduckgo(query, max(40, count * 4))
-    all_leads.extend(ddg_leads)
-    logger.info(f"[SOURCE 1: DDG] Found {len(ddg_leads)} raw leads")
+    if len(all_leads) < count:
+        ddg_leads = await _source_duckduckgo(query, max(40, count * 4))
+        all_leads.extend(ddg_leads)
+        logger.info(f"[SOURCE 1: DDG] Found {len(ddg_leads)} raw leads")
 
     # ─── SOURCE 2: BBB.org (Better Business Bureau) ────────
-    # ALWAYS include BBB leads in the main pool as they are highly curated real businesses
-    bbb_leads = await _source_bbb(query, count * 2)
-    all_leads.extend(bbb_leads)
-    logger.info(f"[SOURCE 2: BBB.org] Found {len(bbb_leads)} raw leads")
+    # ALWAYS include BBB leads in the main pool if we don't have premium APIs active
+    if len(all_leads) < count * 2:
+        bbb_leads = await _source_bbb(query, count * 2)
+        all_leads.extend(bbb_leads)
+        logger.info(f"[SOURCE 2: BBB.org] Found {len(bbb_leads)} raw leads")
 
     # ─── SOURCE 3: HTTPX Direct HTML Scrape ────────────────────
     if len(all_leads) < count * 3:
@@ -67,8 +138,6 @@ async def find_leads(count: int = 5, query: str = "business leads"):
         maps_leads = await _source_google_maps(query, count * 2, serpapi_key)
         all_leads.extend(maps_leads)
         logger.info(f"[SOURCE 4: Google Maps] Found {len(maps_leads)} raw leads")
-
-
 
     # ─── DEDUP & FILTER ───────────────────────────────────────
     filtered = _filter_and_deduplicate(all_leads, count)
