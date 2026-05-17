@@ -12,14 +12,42 @@ from gspread.exceptions import WorksheetNotFound
 
 logger = logging.getLogger(__name__)
 
-# Global lock to prevent Google Sheets 429 Rate Limit errors when syncing multiple leads
-_sheets_lock = None
+import random
 
-async def _get_sheets_lock():
-    global _sheets_lock
-    if _sheets_lock is None:
-        _sheets_lock = asyncio.Lock()
-    return _sheets_lock
+# Global lock to prevent Google Sheets 429 Rate Limit errors when syncing multiple leads
+_sheets_lock = asyncio.Lock()
+
+async def _append_with_backoff(worksheet, row, retries=4):
+    """Appends a row to a worksheet with exponential backoff for Google API 429 errors."""
+    for attempt in range(retries):
+        try:
+            await asyncio.to_thread(worksheet.append_row, row)
+            return {"ok": True, "updated": False}
+        except gspread.exceptions.APIError as e:
+            if e.response.status_code == 429 and attempt < retries - 1:
+                wait = (2 ** attempt) + random.uniform(0, 1)
+                logger.warning(f"[SheetsSync] 429 rate limit hit, retrying in {wait:.1f}s")
+                await asyncio.sleep(wait)
+            else:
+                raise
+        except Exception:
+            raise
+
+async def _update_with_backoff(worksheet, target_row, row, retries=4):
+    """Updates a row with exponential backoff for Google API 429 errors."""
+    for attempt in range(retries):
+        try:
+            await asyncio.to_thread(worksheet.update, f"A{target_row}:L{target_row}", [row])
+            return {"ok": True, "updated": True, "row": target_row}
+        except gspread.exceptions.APIError as e:
+            if e.response.status_code == 429 and attempt < retries - 1:
+                wait = (2 ** attempt) + random.uniform(0, 1)
+                logger.warning(f"[SheetsSync] 429 rate limit hit, retrying in {wait:.1f}s")
+                await asyncio.sleep(wait)
+            else:
+                raise
+        except Exception:
+            raise
 
 SHEET_NAME = os.getenv("GOOGLE_SHEETS_WORKBOOK", "OROVA CRM")
 WORKSHEET_HEADERS = {
@@ -150,16 +178,13 @@ async def sync_lead_to_sheets(lead: Dict[str, Any], workbook_name: Optional[str]
             except Exception:
                 target_row = None
 
-        lock = await _get_sheets_lock()
-        async with lock:
+        async with _sheets_lock:
             # Additional small delay inside the lock to ensure Google respects the rate limit
-            await asyncio.sleep(1.5)
+            await asyncio.sleep(1.0)
             if target_row:
-                await asyncio.to_thread(worksheet.update, f"A{target_row}:L{target_row}", [row])
-                return {"ok": True, "updated": True, "row": target_row}
+                return await _update_with_backoff(worksheet, target_row, row)
 
-            await asyncio.to_thread(worksheet.append_row, row)
-            return {"ok": True, "updated": False}
+            return await _append_with_backoff(worksheet, row)
     except Exception as exc:
         logger.error(f"[SheetsSync] sync_lead_to_sheets failed: {exc}")
         return {"ok": False, "error": str(exc)}

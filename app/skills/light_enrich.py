@@ -46,6 +46,8 @@ async def _fetch_page(url: str) -> Optional[str]:
             resp = await client.get(url)
             if resp.status_code == 200:
                 return resp.text
+    except asyncio.CancelledError:
+        raise
     except Exception as e:
         logger.warning(f"[ENRICH] Failed to fetch {url}: {e}")
     return None
@@ -83,6 +85,9 @@ def _extract_owner_name(html: str) -> Optional[str]:
 
 import urllib.parse
 
+MEDIA_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp', '.ico', '.pdf', '.mp4'}
+CDN_PATTERNS = ['cloudinary', 'cloudfront', 'amazonaws', 'akamai', 'imgix', 'twimg', 'fbcdn', 'yelpcdn.com']
+
 def _extract_website_from_yelp(html: str) -> Optional[str]:
     """Extract the real business website URL from Yelp HTML via /biz_redir links."""
     if not html:
@@ -97,13 +102,43 @@ def _extract_website_from_yelp(html: str) -> Optional[str]:
         if '/biz_redir?url=' in href:
             try:
                 parsed_qs = urllib.parse.parse_qs(urllib.parse.urlparse(href).query)
-                if 'url' in parsed_qs:
-                    target_url = parsed_qs['url'][0]
-                    if not any(s in target_url.lower() for s in social):
-                        return target_url
+                if 'url' not in parsed_qs:
+                    continue
+                target_url = parsed_qs['url'][0]
+                parsed = urllib.parse.urlparse(target_url)
+                
+                # Reject social, media, CDN
+                if any(s in target_url.lower() for s in social):
+                    continue
+                if any(parsed.path.lower().endswith(ext) for ext in MEDIA_EXTENSIONS):
+                    continue
+                if any(cdn in parsed.netloc.lower() for cdn in CDN_PATTERNS):
+                    continue
+                if not parsed.scheme.startswith('http'):
+                    continue
+                    
+                return target_url
             except Exception:
                 continue
     return None
+
+def _extract_owner_from_text(text: str) -> Optional[str]:
+    """Try to find owner/founder/CEO name from plain text without BeautifulSoup."""
+    for pattern in OWNER_PATTERNS:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            name = match.group(1).strip()
+            parts = name.split()
+            if len(parts) == 2 and all(p[0].isupper() for p in parts):
+                false_positives = ['About Us', 'Contact Us', 'Read More', 'Learn More', 'Our Team', 'Get Started']
+                if name not in false_positives:
+                    return name
+    return None
+
+def _validate_email_domain(email: str, business_domain: str) -> bool:
+    """Validate that the extracted email domain matches or is a subdomain of the business domain."""
+    email_domain = email.split('@')[-1].lower()
+    return email_domain == business_domain or email_domain.endswith('.' + business_domain)
 
 
 def _firecrawl_scrape(url: str) -> Dict[str, str]:
@@ -151,7 +186,7 @@ async def enrich_lead_lite(lead: Dict[str, Any]) -> Dict[str, Any]:
             logger.info("[ENRICH] Lead already fully enriched. Skipping Yelp scrape.")
         else:
             logger.info(f"[ENRICH] Step 1: Scraping Yelp page for contact info...")
-            scrape_data = await asyncio.get_event_loop().run_in_executor(None, _firecrawl_scrape, url)
+            scrape_data = await asyncio.get_running_loop().run_in_executor(None, _firecrawl_scrape, url)
             markdown = scrape_data.get("markdown", "")
             html = scrape_data.get("html", "")
 
@@ -316,30 +351,43 @@ async def enrich_lead_lite(lead: Dict[str, Any]) -> Dict[str, Any]:
                     
                     return owner_results, email_results
                     
-            owner_res, email_res = await asyncio.get_event_loop().run_in_executor(None, _ddg_enrich)
+            owner_res, email_res = await asyncio.get_running_loop().run_in_executor(None, _ddg_enrich)
             
-            # Parse Owner
+            # Parse Owner using the optimized plain-text matcher
             if not lead.get("owner"):
                 for r in owner_res:
                     snippet = r.get("body", "")
                     title = r.get("title", "")
                     text_to_check = title + " " + snippet
-                    owner = _extract_owner_name(text_to_check)
+                    owner = _extract_owner_from_text(text_to_check)
                     if owner:
                         lead["owner"] = owner
                         logger.info(f"[ENRICH] → DDG Found Owner: {owner}")
                         break
 
-            # Parse Email
+            # Parse Email with domain validation protection
             if not lead.get("email"):
                 for r in email_res:
                     snippet = r.get("body", "")
                     title = r.get("title", "")
                     text_to_check = title + " " + snippet
                     emails = _extract_emails(text_to_check)
-                    if emails:
+                    
+                    # Try to find a domain-validated email first
+                    validated_email = None
+                    for email in emails:
+                        if _validate_email_domain(email, domain):
+                            validated_email = email
+                            break
+                            
+                    if validated_email:
+                        lead["email"] = validated_email
+                        logger.info(f"[ENRICH] → DDG Found Validated Email: {lead['email']}")
+                        break
+                    elif emails:
+                        # Fallback: accept the first email if no domain matches
                         lead["email"] = emails[0]
-                        logger.info(f"[ENRICH] → DDG Found Email: {lead['email']}")
+                        logger.info(f"[ENRICH] → DDG Found Email (fallback): {lead['email']}")
                         break
         except Exception as e:
             logger.warning(f"[ENRICH] DDG free enrichment failed: {e}")

@@ -30,6 +30,8 @@ JUNK_KEYWORDS = [
     r"\bporn\b", r"\bsex\b", r"\badult\b", r"\bxxx\b", r"\bnaked\b", r"\bescort\b", r"\bdictionary\b"
 ]
 
+JUNK_COMPILED = [re.compile(p, re.IGNORECASE) for p in JUNK_KEYWORDS]
+
 
 async def find_leads(count: int = 5, query: str = "business leads"):
     """
@@ -108,7 +110,7 @@ async def _source_duckduckgo(query: str, count: int) -> list:
             with DDGS() as ddgs:
                 return list(ddgs.text(query, max_results=count, safesearch="strict", region="us-en"))
 
-        results = await asyncio.get_event_loop().run_in_executor(None, _search)
+        results = await asyncio.get_running_loop().run_in_executor(None, _search)
         for res in results:
             url = res.get("href", res.get("link", ""))
             title = res.get("title", "Untitled")
@@ -164,7 +166,9 @@ async def _source_yelp_direct(topic: str, count: int) -> list:
         if firecrawl_key:
             app = FirecrawlApp(api_key=firecrawl_key)
             logger.info(f"[YELP DIRECT] Crawling: {yelp_url}")
-            scrape_res = app.scrape_url(yelp_url, params={'formats': ['markdown']})
+            scrape_res = await asyncio.get_running_loop().run_in_executor(
+                None, lambda: app.scrape_url(yelp_url, params={'formats': ['markdown']})
+            )
             
             # Handle different Firecrawl response formats
             content = ""
@@ -265,7 +269,7 @@ def _filter_and_deduplicate(leads: list, count: int) -> list:
             continue
 
         # Ban junk keywords
-        if any(re.search(k, title.lower()) or re.search(k, snippet) for k in JUNK_KEYWORDS):
+        if any(p.search(title + " " + snippet) for p in JUNK_COMPILED):
             continue
 
         # Ban info sites
