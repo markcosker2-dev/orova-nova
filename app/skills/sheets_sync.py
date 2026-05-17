@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 SHEET_NAME = os.getenv("GOOGLE_SHEETS_WORKBOOK", "OROVA CRM")
 WORKSHEET_HEADERS = {
-    "Leads": ["ID", "Business", "Owner", "Email", "Phone", "URL", "Status", "Score", "Source", "Date", "Notes"],
+    "Leads": ["ID", "Business", "Owner", "Email", "Phone", "Website", "URL", "Status", "Score", "Source", "Date", "Notes"],
     "Metrics": ["ClientID", "LeadsFound", "EmailsSent", "CallsMade", "Replies", "Meetings", "LastUpdated"],
     "CallLog": ["CallID", "LeadID", "Business", "Phone", "Outcome", "Duration", "Date"],
     "Meetings": ["MeetingID", "LeadID", "Business", "DateTime", "CalLink", "Status"]
@@ -116,6 +116,7 @@ async def sync_lead_to_sheets(lead: Dict[str, Any], workbook_name: Optional[str]
             lead.get("owner") or "",
             lead.get("email") or "",
             lead.get("phone") or "",
+            lead.get("website") or "",
             lead.get("url") or "",
             lead.get("status") or "New",
             lead.get("score") if lead.get("score") is not None else 0,

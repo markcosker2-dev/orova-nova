@@ -1,8 +1,9 @@
 import logging
 import asyncio
+import httpx
 from typing import Dict, Any
+from bs4 import BeautifulSoup
 from app.core.ai_client import UnifiedAIClient
-from app.skills.browser_ops import browse_and_extract
 
 logger = logging.getLogger(__name__)
 ai = UnifiedAIClient()
@@ -11,12 +12,26 @@ async def scan_opportunity(url: str, business_name: str) -> Dict[str, Any]:
     """
     Visits a business website and identifies 'Opportunity Gaps' 
     (e.g., slow load, no contact form, poor SEO, outdated design).
+    Uses httpx instead of Playwright for Render compatibility.
     """
     logger.info(f"[OPPORTUNITY SCANNER] Scanning {business_name} at {url}...")
     
     try:
-        # 1. Scrape the site for content
-        content = await browse_and_extract(url=url, objective="Identify marketing weaknesses and business goals")
+        # 1. Scrape the site using httpx (works on Render, no Playwright needed)
+        content = ""
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36",
+            }
+            async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=15.0) as client:
+                resp = await client.get(url)
+                if resp.status_code == 200:
+                    soup = BeautifulSoup(resp.text, "html.parser")
+                    content = soup.get_text(separator=" ", strip=True)[:4000]
+                else:
+                    content = f"HTTP {resp.status_code} — Could not load website."
+        except Exception as e:
+            content = f"Failed to load website: {e}"
         
         # 2. Ask AI to find the 'Gaps'
         prompt = f"""
@@ -28,7 +43,7 @@ async def scan_opportunity(url: str, business_name: str) -> Dict[str, Any]:
         - Outdated design
         
         Content:
-        {str(content)[:4000]}
+        {content}
         
         Format your response as a JSON object:
         {{
@@ -39,10 +54,8 @@ async def scan_opportunity(url: str, business_name: str) -> Dict[str, Any]:
         """
         
         res_raw = await ai.extract(prompt)
-        # Attempt to parse JSON from AI response
         import json
         try:
-            # Clean possible markdown code blocks
             clean_res = res_raw.strip().replace("```json", "").replace("```", "")
             data = json.loads(clean_res)
         except:

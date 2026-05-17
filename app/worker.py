@@ -231,17 +231,17 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
             # Save each lead to SQLite
             for lead in leads:
                 if isinstance(lead, dict):
-                    # [Enrichment] Find email/phone before saving
+                    # [Enrichment] Find owner, email, phone, website
                     lead = await enrich_lead_lite(lead)
                     
-                    # [NEW] Phase 2.1: Opportunity Scanner - ONLY for high-value leads or manual trigger
+                    # Scoring deferred to Approve step
                     lead["score"] = 0 
                     lead["icebreaker"] = "Pending review..."
                     
                     # Populate CRM Metadata
-                    lead["source"] = "Yelp Direct" if "yelp.com" in (lead.get("url") or "") else "Web Search"
+                    lead["source"] = lead.get("source_type", "Yelp Direct" if "yelp.com" in (lead.get("url") or "") else "Web Search")
                     lead["date"] = datetime.now().strftime("%Y-%m-%d")
-                    lead["vertical"] = niche # Use the actual search query as the vertical
+                    lead["vertical"] = niche
                     
                     DatabaseManager.save_lead(lead, default_vertical=niche, client_id=client_id)
 

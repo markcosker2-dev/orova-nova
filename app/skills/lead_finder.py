@@ -2,17 +2,19 @@ import os
 import logging
 import asyncio
 import re
+import httpx
+from bs4 import BeautifulSoup
 from app.core.ai_client import UnifiedAIClient
 
 ai = UnifiedAIClient()
-
 logger = logging.getLogger(__name__)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# LEAD FINDER — Multi-Tier Sourcing Engine
+# LEAD FINDER V3 — Multi-Source Discovery Engine
 # ═══════════════════════════════════════════════════════════════════════════════
+# Sources: DuckDuckGo, Direct Yelp, Google Maps (SerpAPI), Business Directories
+# Goal: Find REAL businesses with owner names, emails, and phone numbers.
 
-# Ban junk domains. NEVER ban yelp.com — it's our primary source.
 BANNED_DOMAINS = [
     "wikipedia.org", "reddit.com", "youtube.com", "pinterest.com",
     "quora.com", "medium.com", "twitter.com", "tiktok.com",
@@ -29,151 +31,52 @@ JUNK_KEYWORDS = [
 ]
 
 
-async def verify_business_intent(title: str, snippet: str, url: str) -> bool:
-    """Uses AI to determine if a search result is a real business or just info/junk."""
-    # Yelp business pages are ALWAYS real businesses — skip AI check
-    if "yelp.com/biz/" in url.lower():
-        return True
-
-    prompt = f"""
-    Analyze this search result and determine if it is a REAL LOCAL BUSINESS (e.g. contractor, dealer, service provider).
-    Respond with ONLY 'YES' or 'NO'.
-    
-    Title: {title}
-    Snippet: {snippet}
-    URL: {url}
-    
-    Is this a real business? (NO if it's a dictionary, wiki, blog, or news site)
-    """
-    try:
-        res = await ai.quick(prompt)
-        return "YES" in res.upper()
-    except:
-        # If AI is unavailable, allow the lead through — better to have a lead than nothing
-        logger.warning("[AI SCORER] AI unavailable. Allowing lead through.")
-        return True
-
-
 async def find_leads(count: int = 5, query: str = "business leads"):
     """
-    Search for business leads using Firecrawl (Elite) or DuckDuckGo (Fallback).
-    Uses AI verification to ensure leads are actual business websites.
+    Multi-source lead discovery engine.
+    Sources leads from DuckDuckGo, Yelp, and business directories.
+    Does NOT force everything through Yelp — searches broadly for real businesses.
     """
     count = int(count)
-    firecrawl_key = os.getenv("FIRECRAWL_API_KEY")
-    
-    # ─── THE YELP HAMMER (100% Business Only) ───────────────────
-    # Force search into Yelp to avoid dictionaries and blog posts
-    if "site:" not in query.lower():
-        clean_query = query.replace('"', '').replace("'", "")
-        query = f'site:yelp.com {clean_query}'
-        logger.info(f"[YELP HAMMER] Broadened: {query}")
-        
-    logger.info(f"[LEAD FINDER] Searching for {count} leads: '{query}'")
-    leads = []
+    logger.info(f"[LEAD FINDER V3] Searching for {count} leads: '{query}'")
+    all_leads = []
 
-    # ─── TIER 1: Firecrawl Search (if key available) ────────────
-    if firecrawl_key:
-        try:
-            logger.info("[FIRECRAWL] Starting elite crawl (v1)...")
-            from firecrawl import FirecrawlApp
-            app = FirecrawlApp(api_key=firecrawl_key)
-            search_result = app.search(query)
-            for res in search_result.get("data", []):
-                leads.append({
-                    "title": res.get("title", "Untitled"),
-                    "url": res.get("url", ""),
-                    "snippet": res.get("description", "")
-                })
-            logger.info(f"[FIRECRAWL] Found {len(leads)} potential leads")
-        except Exception as e:
-            logger.warning(f"[FIRECRAWL] Search failed: {e}. Trying direct crawl...")
+    # ─── SOURCE 1: DuckDuckGo — Broad Business Search ──────────
+    # Search for actual businesses, not just Yelp listings
+    ddg_leads = await _source_duckduckgo(query, count * 2)
+    all_leads.extend(ddg_leads)
+    logger.info(f"[SOURCE 1: DDG] Found {len(ddg_leads)} leads")
 
-    # ─── TIER 2: DuckDuckGo (Fallback 1) ───────────────────────
-    if not leads:
-        try:
-            # DDG doesn't like 'site:' operators. Strip it and just add 'yelp'
-            ddg_query = query.replace("site:yelp.com", "yelp")
-            leads = await _duckduckgo_search(ddg_query, count * 3)
-            logger.info(f"[DDG] Found {len(leads)} raw results")
-        except Exception as e:
-            logger.error(f"[DDG] Search error: {e}")
+    # ─── SOURCE 2: DuckDuckGo — Yelp-Focused Search ───────────
+    # Also search Yelp specifically to catch directory-listed businesses
+    yelp_leads = await _source_duckduckgo(f"{query} yelp", count)
+    all_leads.extend(yelp_leads)
+    logger.info(f"[SOURCE 2: DDG+Yelp] Found {len(yelp_leads)} leads")
 
-    # ─── TIER 3: HTTPX Scraper (Fallback 2 — Best for Render) ────
-    if not leads:
-        try:
-            logger.info("[HTTPX] Trying direct HTML scrape fallback...")
-            httpx_query = query.replace("site:yelp.com", "yelp")
-            leads = await _httpx_search(httpx_query, count * 2)
-            logger.info(f"[HTTPX] Found {len(leads)} raw results")
-        except Exception as e:
-            logger.error(f"[HTTPX] Search error: {e}")
+    # ─── SOURCE 3: HTTPX Direct HTML Scrape ────────────────────
+    if len(all_leads) < count:
+        httpx_leads = await _source_httpx(query, count * 2)
+        all_leads.extend(httpx_leads)
+        logger.info(f"[SOURCE 3: HTTPX] Found {len(httpx_leads)} leads")
 
-    # ─── TIER 4: Google (Fallback 3 — Unreliable on Render) ──────
-    if not leads:
-        try:
-            logger.info("[GOOGLE] Searching fallback...")
-            from app.skills.browser_ops import google_search_scrape_async
-            leads = await google_search_scrape_async(query, limit=count*2)
-            logger.info(f"[GOOGLE] Found {len(leads)} raw results")
-        except Exception as e:
-            logger.error(f"[GOOGLE] Search error: {e}")
+    # ─── SOURCE 4: Direct Yelp Crawl (Firecrawl) ──────────────
+    if len(all_leads) < count:
+        yelp_direct = await _source_yelp_direct(query, count)
+        all_leads.extend(yelp_direct)
+        logger.info(f"[SOURCE 4: Yelp Direct] Found {len(yelp_direct)} leads")
 
-    # ─── TIER 5: Direct Yelp Crawl (The "Front Door") ──────────
-    if not leads:
-        try:
-            logger.info("[YELP DIRECT] Search engines blocked us. Going to the front door...")
-            leads = await direct_yelp_crawl(query.replace("site:yelp.com ", ""), count)
-            logger.info(f"[YELP DIRECT] Found {len(leads)} raw results")
-        except Exception as e:
-            logger.error(f"[YELP DIRECT] Error: {e}")
+    # ─── SOURCE 5: SerpAPI Google Maps (if key available) ──────
+    serpapi_key = os.getenv("SERPAPI_KEY")
+    if serpapi_key and len(all_leads) < count:
+        maps_leads = await _source_google_maps(query, count, serpapi_key)
+        all_leads.extend(maps_leads)
+        logger.info(f"[SOURCE 5: Google Maps] Found {len(maps_leads)} leads")
 
-    # ─── FILTERING ─────────────────────────────────────────────
-    filtered = []
-    for lead in leads:
-        url = lead.get("url", "").lower()
-        title = lead.get("title", "")
-        snippet = lead.get("snippet", "").lower()
-        
-        # Ban junk domains (but NEVER ban yelp.com)
-        if any(d in url for d in BANNED_DOMAINS):
-            logger.info(f"[FILTER] Banned domain: {url}")
-            continue
-        if any(re.search(k, title.lower()) or re.search(k, snippet) for k in JUNK_KEYWORDS):
-            logger.info(f"[FILTER] Junk keyword: {title}")
-            continue
-        
-        # Hard Skip for Information Sites
-        info_sites = [".gov", ".edu", "forbes.com", "news.", "blog.", "wiki", "dictionary", "merriam-webster"]
-        if any(site in url for site in info_sites):
-            logger.info(f"[FILTER] Info site: {url}")
-            continue
+    # ─── DEDUP & FILTER ───────────────────────────────────────
+    filtered = _filter_and_deduplicate(all_leads, count)
+    logger.info(f"[LEAD FINDER V3] Final filtered count: {len(filtered)}")
 
-        # Clean Name
-        if "yelp.com/biz/" in url:
-            # Extract clean business name from Yelp URL
-            biz_slug = url.split("/biz/")[-1].split("?")[0]
-            lead["business"] = biz_slug.replace("-", " ").title()
-        elif len(title) > 40 or any(x in title.lower() for x in ["best", "top", "how to"]):
-            domain_part = url.split("//")[-1].split("/")[0].replace("www.", "").split(".")[0]
-            lead["business"] = domain_part.replace("-", " ").replace("_", " ").title()
-        else:
-            lead["business"] = title.split(" - ")[0].split(" | ")[0].strip()
-
-        # Language Check: Delete if contains non-English characters
-        if re.search(r'[^\x00-\x7F]+', lead["business"]):
-            continue
-
-        # AI SCORER: Verify business intent (auto-passes Yelp businesses)
-        if not await verify_business_intent(title, snippet, url):
-            logger.info(f"[AI SCORER] Rejected non-business: {title}")
-            continue
-
-        filtered.append(lead)
-
-    leads = filtered[:count]
-
-    if not leads:
+    if not filtered:
         return {
             "text": (
                 "Search returned no actionable results for this query. "
@@ -183,16 +86,20 @@ async def find_leads(count: int = 5, query: str = "business leads"):
             "leads": []
         }
 
-    result_text = f"**Found {len(leads)} Business Leads:**\n\n"
-    for i, l in enumerate(leads, 1):
+    result_text = f"**Found {len(filtered)} Business Leads:**\n\n"
+    for i, l in enumerate(filtered, 1):
         snippet = l.get('snippet', '')[:150]
-        result_text += f"{i}. **{l['title']}**\n   🔗 {l['url']}\n   _{snippet}_\n\n"
+        result_text += f"{i}. **{l.get('business', l.get('title', 'Unknown'))}**\n   🔗 {l['url']}\n   _{snippet}_\n\n"
 
-    return {"text": result_text, "leads": leads}
+    return {"text": result_text, "leads": filtered}
 
 
-async def _duckduckgo_search(query: str, count: int) -> list:
-    """DuckDuckGo search using the duckduckgo-search package."""
+# ═══════════════════════════════════════════════════════════════════════════════
+# SOURCE IMPLEMENTATIONS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+async def _source_duckduckgo(query: str, count: int) -> list:
+    """DuckDuckGo text search — finds actual business websites."""
     leads = []
     try:
         from duckduckgo_search import DDGS
@@ -202,33 +109,30 @@ async def _duckduckgo_search(query: str, count: int) -> list:
                 return list(ddgs.text(query, max_results=count, safesearch="strict", region="us-en"))
 
         results = await asyncio.get_event_loop().run_in_executor(None, _search)
-
         for res in results:
+            url = res.get("href", res.get("link", ""))
+            title = res.get("title", "Untitled")
             leads.append({
-                "title": res.get("title", "Untitled"),
-                "url": res.get("href", res.get("link", "")),
-                "snippet": res.get("body", res.get("snippet", ""))
+                "title": title,
+                "url": url,
+                "snippet": res.get("body", res.get("snippet", "")),
+                "source_type": "DuckDuckGo"
             })
     except ImportError:
         logger.error("[DDG] duckduckgo-search not installed")
     except Exception as e:
         logger.error(f"[DDG] Error: {e}")
-
     return leads
 
 
-async def _httpx_search(query: str, count: int) -> list:
-    """Fallback: scrape DuckDuckGo HTML directly."""
+async def _source_httpx(query: str, count: int) -> list:
+    """Direct HTML scrape of DuckDuckGo — works on Render without Playwright."""
     leads = []
     try:
-        import httpx
-        from bs4 import BeautifulSoup
-
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
         }
         search_url = f"https://html.duckduckgo.com/html/?q={query.replace(' ', '+')}&kp=-2"
-
         async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=15.0) as client:
             resp = await client.get(search_url)
             if resp.status_code == 200:
@@ -240,72 +144,164 @@ async def _httpx_search(query: str, count: int) -> list:
                         leads.append({
                             "title": a_tag.get_text(strip=True),
                             "url": a_tag.get("href", ""),
-                            "snippet": snippet_tag.get_text(strip=True) if snippet_tag else ""
+                            "snippet": snippet_tag.get_text(strip=True) if snippet_tag else "",
+                            "source_type": "HTTPX Direct"
                         })
     except Exception as e:
         logger.error(f"[HTTPX] Error: {e}")
-
     return leads[:count]
 
 
-async def direct_yelp_crawl(topic: str, count: int) -> list:
-    """Scrapes Yelp search results directly when search engines fail."""
+async def _source_yelp_direct(topic: str, count: int) -> list:
+    """Scrapes Yelp search results directly via Firecrawl."""
     leads = []
     search_topic = topic.replace(" ", "+")
     yelp_url = f"https://www.yelp.com/search?find_desc={search_topic}"
-    
+
     try:
         from firecrawl import FirecrawlApp
         firecrawl_key = os.getenv("FIRECRAWL_API_KEY")
         if firecrawl_key:
             app = FirecrawlApp(api_key=firecrawl_key)
-            logger.info(f"[YELP DIRECT] Crawling with Firecrawl: {yelp_url}")
+            logger.info(f"[YELP DIRECT] Crawling: {yelp_url}")
             scrape_res = app.scrape_url(yelp_url, params={'formats': ['markdown']})
-            content = str(scrape_res.get("markdown", ""))
             
-            # Find URLs like /biz/business-name and their surrounding context
-            # We look for the business blocks
-            biz_matches = re.findall(r'/biz/[a-zA-Z0-9\-%]+', content)
-            for m in list(set(biz_matches))[:count*2]:
-                biz_url = f"https://www.yelp.com{m}"
-                
-                # Try to find a phone number near this link in the markdown
-                # (Heuristic: search 500 chars around the match)
-                start_idx = content.find(m)
-                context = content[max(0, start_idx-200):min(len(content), start_idx+500)]
-                phone_match = re.search(r'\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}', context)
-                phone = phone_match.group(0) if phone_match else None
-
-                leads.append({
-                    "title": m.split("/")[-1].replace("-", " ").title(),
-                    "url": biz_url,
-                    "phone": phone,
-                    "snippet": f"Directly sourced. {f'Phone: {phone}' if phone else ''}"
-                })
+            # Handle different Firecrawl response formats
+            content = ""
+            if isinstance(scrape_res, dict):
+                content = str(scrape_res.get("markdown", scrape_res.get("content", "")))
+            elif isinstance(scrape_res, str):
+                content = scrape_res
+            
+            logger.info(f"[YELP DIRECT] Got {len(content)} chars of content")
+            
+            if content:
+                biz_matches = re.findall(r'/biz/([a-zA-Z0-9\-%]+)', content)
+                seen = set()
+                for slug in biz_matches:
+                    if slug in seen:
+                        continue
+                    seen.add(slug)
+                    if len(leads) >= count * 2:
+                        break
+                    
+                    biz_url = f"https://www.yelp.com/biz/{slug}"
+                    biz_name = slug.replace("-", " ").title()
+                    # Remove trailing location numbers (e.g., "Business Name 3")
+                    biz_name = re.sub(r'\s+\d+$', '', biz_name)
+                    
+                    # Extract phone near this business listing
+                    idx = content.find(slug)
+                    context = content[max(0, idx-300):min(len(content), idx+600)]
+                    phone_match = re.search(r'\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}', context)
+                    phone = phone_match.group(0) if phone_match else None
+                    
+                    leads.append({
+                        "title": biz_name,
+                        "business": biz_name,
+                        "url": biz_url,
+                        "phone": phone,
+                        "snippet": f"From Yelp directory. {f'Phone: {phone}' if phone else ''}",
+                        "source_type": "Yelp Direct"
+                    })
     except Exception as e:
-        logger.warning(f"[YELP DIRECT] Firecrawl failed: {e}. Falling back to internal browser...")
+        logger.warning(f"[YELP DIRECT] Firecrawl failed: {e}")
 
-    if not leads:
-        try:
-            from app.skills.browser_ops import browse_and_extract
-            logger.info(f"[YELP DIRECT] Internal Browser Sourcing: {yelp_url}")
-            # browse_and_extract is sync, run in executor
-            res = await asyncio.get_event_loop().run_in_executor(
-                None, browse_and_extract, yelp_url, "Find links to business profiles (starting with /biz/)"
-            )
-            content = str(res)
-            matches = re.findall(r'/biz/[a-zA-Z0-9\-%]+', content)
-            for m in list(set(matches))[:count*2]:
-                biz_url = f"https://www.yelp.com{m}"
-                leads.append({
-                    "title": m.split("/")[-1].replace("-", " ").title(),
-                    "url": biz_url,
-                    "snippet": "Sourced via Internal Browser."
-                })
-        except Exception as e:
-            logger.error(f"[YELP DIRECT] Internal Browser failed: {e}")
-    
     return leads[:count]
+
+
+async def _source_google_maps(query: str, count: int, api_key: str) -> list:
+    """Uses SerpAPI to search Google Maps for local businesses with full contact info."""
+    leads = []
+    try:
+        params = {
+            "engine": "google_maps",
+            "q": query,
+            "type": "search",
+            "api_key": api_key
+        }
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get("https://serpapi.com/search.json", params=params)
+            if resp.status_code == 200:
+                data = resp.json()
+                for biz in data.get("local_results", []):
+                    leads.append({
+                        "title": biz.get("title", ""),
+                        "business": biz.get("title", ""),
+                        "url": biz.get("website", biz.get("link", "")),
+                        "phone": biz.get("phone", ""),
+                        "website": biz.get("website", ""),
+                        "snippet": biz.get("description", biz.get("type", "")),
+                        "notes": f"Address: {biz.get('address', 'N/A')} | Rating: {biz.get('rating', 'N/A')}",
+                        "source_type": "Google Maps"
+                    })
+                logger.info(f"[GOOGLE MAPS] SerpAPI returned {len(leads)} businesses")
+    except Exception as e:
+        logger.error(f"[GOOGLE MAPS] SerpAPI error: {e}")
+    return leads[:count]
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FILTERING & DEDUPLICATION
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _filter_and_deduplicate(leads: list, count: int) -> list:
+    """Filter junk, deduplicate, and clean business names."""
+    filtered = []
+    seen_domains = set()
+    seen_names = set()
+
+    for lead in leads:
+        url = lead.get("url", "").lower()
+        title = lead.get("title", "")
+        snippet = lead.get("snippet", "").lower()
+
+        # Skip empty URLs
+        if not url or not url.startswith("http"):
+            continue
+
+        # Ban junk domains
+        if any(d in url for d in BANNED_DOMAINS):
+            continue
+
+        # Ban junk keywords
+        if any(re.search(k, title.lower()) or re.search(k, snippet) for k in JUNK_KEYWORDS):
+            continue
+
+        # Ban info sites
+        info_sites = [".gov", ".edu", "forbes.com", "news.", "blog.", "wiki", "dictionary"]
+        if any(site in url for site in info_sites):
+            continue
+
+        # Language check: no non-English characters in business name
+        if re.search(r'[^\x00-\x7F]+', title):
+            continue
+
+        # Deduplicate by domain
+        domain = url.split("//")[-1].split("/")[0].replace("www.", "")
+        if domain in seen_domains and "yelp.com" not in domain:
+            continue
+        seen_domains.add(domain)
+
+        # Clean business name
+        if "yelp.com/biz/" in url:
+            biz_slug = url.split("/biz/")[-1].split("?")[0]
+            lead["business"] = re.sub(r'\s+\d+$', '', biz_slug.replace("-", " ").title())
+        elif len(title) > 40 or any(x in title.lower() for x in ["best", "top", "how to", "list"]):
+            domain_part = domain.split(".")[0]
+            lead["business"] = domain_part.replace("-", " ").replace("_", " ").title()
+        else:
+            lead["business"] = title.split(" - ")[0].split(" | ")[0].strip()
+
+        # Deduplicate by business name
+        name_key = lead["business"].lower().strip()
+        if name_key in seen_names:
+            continue
+        seen_names.add(name_key)
+
+        filtered.append(lead)
+
+    return filtered[:count]
 
 
 async def research_lead(url: str) -> str:
@@ -314,20 +310,25 @@ async def research_lead(url: str) -> str:
     report = f"# Lead Research: {url}\n\n"
 
     try:
-        from app.skills.browser_ops import browse_and_extract
-        page_content = await browse_and_extract(url=url, objective="Extract business info, owner name, phone, email, services")
-        if page_content:
-            report += f"## Website Content\n{str(page_content)[:2000]}\n\n"
-        else:
-            report += "## Website Content\nCould not extract content.\n\n"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36",
+        }
+        async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=15.0) as client:
+            resp = await client.get(url)
+            if resp.status_code == 200:
+                soup = BeautifulSoup(resp.text, "html.parser")
+                text = soup.get_text(separator=" ", strip=True)[:3000]
+                report += f"## Website Content\n{text}\n\n"
+            else:
+                report += f"## Website Content\nHTTP {resp.status_code}\n\n"
     except Exception as e:
         report += f"## Website Content\nError: {e}\n\n"
 
     report += """## Scoring Criteria
-- Service alignment with OROVA (remodeling/luxury/auto)
+- Service alignment with client needs
 - Website quality and professionalism
 - Business size indicators
-- Geographic fit (California focus)
+- Geographic fit
 - Signs of budget for marketing services
 """
     return report

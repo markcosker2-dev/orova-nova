@@ -263,12 +263,15 @@ async def get_request_trace(request_id: str, authorized: bool = Depends(require_
 async def get_leads(limit: int = 100, authorized: bool = Depends(require_dashboard_api_key)):
     query = """
         SELECT 
-            id, business, url, 
+            id, business, 
+            COALESCE(owner, '') as owner,
+            url, 
+            COALESCE(website, '') as website,
             COALESCE(email, '') as email, 
             COALESCE(phone, '') as phone, 
             vertical, status, 
             COALESCE(notes, '') as notes, 
-            COALESCE(icebreaker, 'No hook generated') as icebreaker, 
+            COALESCE(icebreaker, 'Pending...') as icebreaker, 
             COALESCE(score, 0) as score, 
             client_id, created_at
         FROM leads 

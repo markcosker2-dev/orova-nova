@@ -66,7 +66,9 @@ class DatabaseManager:
             CREATE TABLE IF NOT EXISTS leads (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 business TEXT,
+                owner TEXT,
                 url TEXT,
+                website TEXT,
                 email TEXT,
                 phone TEXT,
                 vertical TEXT,
@@ -78,6 +80,16 @@ class DatabaseManager:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+
+        # Migration: add owner and website columns if they don't exist
+        try:
+            cursor.execute("ALTER TABLE leads ADD COLUMN owner TEXT")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE leads ADD COLUMN website TEXT")
+        except Exception:
+            pass
 
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS blacklist (
@@ -494,9 +506,11 @@ class DatabaseManager:
                 if existing:
                     logger.info(f"[SQLITE] Duplicate lead skipped (name match): {business}")
                     return
-            sql = '''INSERT INTO leads (business, url, email, phone, vertical, status, notes, icebreaker, score, client_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'''
+            sql = '''INSERT INTO leads (business, owner, url, website, email, phone, vertical, status, notes, icebreaker, score, client_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'''
             params = (
-                business, url, lead_data.get("email"), lead_data.get("phone"),
+                business, lead_data.get("owner"),
+                url, lead_data.get("website"),
+                lead_data.get("email"), lead_data.get("phone"),
                 lead_data.get("vertical") or default_vertical,
                 lead_data.get("status", "New"),
                 lead_data.get("notes") or lead_data.get("snippet", ""),

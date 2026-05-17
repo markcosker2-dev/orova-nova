@@ -219,7 +219,9 @@
             <thead>
                 <tr>
                     <th>Business</th>
-                    <th>Contact</th>
+                    <th>Owner</th>
+                    <th>Email</th>
+                    <th>Phone</th>
                     <th>Score</th>
                     <th>Status</th>
                     <th>Action</th>
@@ -264,22 +266,30 @@
                 document.getElementById('f-approved').innerText = approvedCount;
 
                 if (!leads.length) {
-                    table.innerHTML = '<tr><td colspan="5" style="color: var(--text-dim); text-align: center;">Waiting for first hunt...</td></tr>';
+                    table.innerHTML = '<tr><td colspan="7" style="color: var(--text-dim); text-align: center;">Waiting for first hunt...</td></tr>';
                 } else {
-                    table.innerHTML = leads.slice(0, 20).map(l => `
+                    table.innerHTML = leads.slice(0, 30).map(l => {
+                        const hasOwner = l.owner && l.owner.trim();
+                        const hasEmail = l.email && l.email.trim();
+                        const hasPhone = l.phone && l.phone.trim();
+                        const websiteUrl = l.website || l.url || '';
+                        const bizDisplay = websiteUrl && !websiteUrl.includes('yelp.com') 
+                            ? `<a href="${websiteUrl}" target="_blank" style="color: var(--accent); text-decoration: none;">${l.business || 'Unknown'}</a>`
+                            : (l.business || 'Unknown');
+                        
+                        return `
                         <tr>
-                            <td style="font-weight: 600;">${l.business || 'Unknown'}</td>
-                            <td style="color: var(--text-dim); font-size: 13px;">
-                                <div style="color: var(--accent);">${l.email || '—'}</div>
-                                <div style="opacity: 0.7;">${l.phone || '—'}</div>
-                            </td>
+                            <td style="font-weight: 600;">${bizDisplay}</td>
+                            <td style="font-size: 13px;">${hasOwner ? `<span style="color: var(--success);">${l.owner}</span>` : '<span style="color: var(--text-dim);">—</span>'}</td>
+                            <td style="font-size: 13px;">${hasEmail ? `<span style="color: var(--accent);">${l.email}</span>` : '<span style="color: var(--text-dim);">—</span>'}</td>
+                            <td style="font-size: 13px;">${hasPhone ? l.phone : '<span style="color: var(--text-dim);">—</span>'}</td>
                             <td><span class="score-badge">${l.score || 0}</span></td>
                             <td><span class="status-pill status-${(l.status || 'new').toLowerCase()}">${l.status || 'New'}</span></td>
                             <td>
                                 ${l.status === 'New' ? `<button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;" onclick="approve(${l.id})">Approve</button>` : '✓'}
                             </td>
                         </tr>
-                    `).join('');
+                    `}).join('');
                 }
 
                 // 3. Logs
