@@ -367,7 +367,7 @@ def _is_plausible_name(text: str) -> bool:
 
 
 async def _ddg_enrich_contact(biz_name: str, domain: str) -> Tuple[Optional[str], Optional[str]]:
-    """DuckDuckGo snippet mining for owner name + email."""
+    """Block-free snippet mining for owner name + email using Tavily (first choice) or Bing scraper."""
     found_owner = None
     found_email = None
 
@@ -383,92 +383,139 @@ async def _ddg_enrich_contact(biz_name: str, domain: str) -> Tuple[Optional[str]
         ],
     }
 
-    try:
-        from duckduckgo_search import DDGS
+    tavily_key = os.getenv("TAVILY_API_KEY")
+    results = {"owner": [], "email": []}
 
-        def _run_queries():
-            results = {"owner": [], "email": []}
-            with DDGS() as ddgs:
-                for q in queries["owner"]:
+    # 🚀 Try Tavily First (If Key Present)
+    if tavily_key:
+        logger.info(f"[ENRICH] Using Tavily for contact enrichment of {biz_name}...")
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                for q in queries["owner"][:2]:
+                    payload = {"api_key": tavily_key, "query": q, "max_results": 3, "search_depth": "light"}
+                    resp = await client.post("https://api.tavily.com/search", json=payload)
+                    if resp.status_code == 200:
+                        for res in resp.json().get("results", []):
+                            results["owner"].append({
+                                "title": res.get("title", ""),
+                                "snippet": res.get("content", ""),
+                            })
+                for q in queries["email"][:2]:
+                    payload = {"api_key": tavily_key, "query": q, "max_results": 2, "search_depth": "light"}
+                    resp = await client.post("https://api.tavily.com/search", json=payload)
+                    if resp.status_code == 200:
+                        for res in resp.json().get("results", []):
+                            results["email"].append({
+                                "title": res.get("title", ""),
+                                "snippet": res.get("content", ""),
+                            })
+        except Exception as e:
+            logger.warning(f"[ENRICH] Tavily contact search failed: {e}")
+
+    # 🌐 Fallback to Direct Bing Scraper (100% Free, Bypasses Datacenter Blocks)
+    if not results["owner"] and not results["email"]:
+        logger.info(f"[ENRICH] Using free block-proof Bing scraper for {biz_name}...")
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+        import urllib.parse
+        try:
+            async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=15.0) as client:
+                for q in queries["owner"][:2]:
                     try:
-                        hits = list(ddgs.text(q, max_results=4, safesearch="moderate"))
-                        results["owner"].extend(hits)
-                        if len(results["owner"]) >= 8:
-                            break
+                        search_url = f"https://www.bing.com/search?q={urllib.parse.quote_plus(q)}"
+                        resp = await client.get(search_url)
+                        if resp.status_code == 200:
+                            soup = BeautifulSoup(resp.text, "html.parser")
+                            for item in soup.select("li.b_algo"):
+                                title_el = item.select_one("h2 a")
+                                snippet_el = item.select_one("div.b_caption p, p")
+                                results["owner"].append({
+                                    "title": title_el.get_text(strip=True) if title_el else "",
+                                    "snippet": snippet_el.get_text(strip=True) if snippet_el else "",
+                                })
                     except Exception:
                         pass
-                for q in queries["email"]:
+                    await asyncio.sleep(0.5)
+
+                for q in queries["email"][:2]:
                     try:
-                        hits = list(ddgs.text(q, max_results=3, safesearch="moderate"))
-                        results["email"].extend(hits)
-                        if len(results["email"]) >= 5:
-                            break
+                        search_url = f"https://www.bing.com/search?q={urllib.parse.quote_plus(q)}"
+                        resp = await client.get(search_url)
+                        if resp.status_code == 200:
+                            soup = BeautifulSoup(resp.text, "html.parser")
+                            for item in soup.select("li.b_algo"):
+                                title_el = item.select_one("h2 a")
+                                snippet_el = item.select_one("div.b_caption p, p")
+                                results["email"].append({
+                                    "title": title_el.get_text(strip=True) if title_el else "",
+                                    "snippet": snippet_el.get_text(strip=True) if snippet_el else "",
+                                })
                     except Exception:
                         pass
-            return results
+                    await asyncio.sleep(0.5)
+        except Exception as e:
+            logger.warning(f"[ENRICH] Bing scrape failed: {e}")
 
-        results = await asyncio.get_running_loop().run_in_executor(None, _run_queries)
+    # --- PARSE OWNER ---
+    for r in results["owner"]:
+        text_to_check = " ".join(filter(None, [
+            r.get("title", ""),
+            r.get("snippet", ""),
+        ]))
 
-        for r in results["owner"]:
-            text_to_check = " ".join(filter(None, [
-                r.get("title", ""),
-                r.get("body", ""),
-                r.get("snippet", ""),
-            ]))
+        for pattern in OWNER_PATTERNS:
+            m = re.search(pattern, text_to_check, re.IGNORECASE)
+            if m:
+                raw = m.group(1).strip()
+                name = " ".join(w.capitalize() for w in raw.split())
+                if _is_plausible_name(name) and name not in FALSE_POSITIVE_NAMES:
+                    found_owner = name
+                    logger.info(f"[ENRICH] Owner via regex: {found_owner}")
+                    break
 
-            for pattern in OWNER_PATTERNS:
-                m = re.search(pattern, text_to_check, re.IGNORECASE)
-                if m:
-                    raw = m.group(1).strip()
-                    name = " ".join(w.capitalize() for w in raw.split())
-                    if _is_plausible_name(name) and name not in FALSE_POSITIVE_NAMES:
-                        found_owner = name
-                        logger.info(f"[DDG ENRICH] Owner via regex: {found_owner}")
-                        break
+        if not found_owner:
+            title_field = r.get("title", "")
+            for sep in ["|", "–", "-", "·"]:
+                if sep in title_field:
+                    parts = [p.strip() for p in title_field.split(sep)]
+                    for i, part in enumerate(parts):
+                        if any(kw in part.lower() for kw in TITLE_KEYWORDS):
+                            for j in [i - 1, i + 1]:
+                                if 0 <= j < len(parts):
+                                    candidate = parts[j]
+                                    if _is_plausible_name(candidate):
+                                        found_owner = candidate
+                                        logger.info(f"[ENRICH] Owner via title split: {found_owner}")
+                                        break
+                        if found_owner:
+                            break
+                if found_owner:
+                    break
 
-            if not found_owner:
-                title_field = r.get("title", "")
-                for sep in ["|", "–", "-", "·"]:
-                    if sep in title_field:
-                        parts = [p.strip() for p in title_field.split(sep)]
-                        for i, part in enumerate(parts):
-                            if any(kw in part.lower() for kw in TITLE_KEYWORDS):
-                                for j in [i - 1, i + 1]:
-                                    if 0 <= j < len(parts):
-                                        candidate = parts[j]
-                                        if _is_plausible_name(candidate):
-                                            found_owner = candidate
-                                            logger.info(f"[DDG ENRICH] Owner via title split: {found_owner}")
-                                            break
-                            if found_owner:
-                                break
-                    if found_owner:
-                        break
+        if found_owner:
+            break
 
-            if found_owner:
-                break
+    # --- PARSE EMAIL ---
+    for r in results["email"]:
+        text_to_check = " ".join(filter(None, [
+            r.get("title", ""),
+            r.get("snippet", ""),
+        ]))
+        emails = [e for e in re.findall(EMAIL_REGEX, text_to_check)
+                  if not any(j in e.lower() for j in JUNK_EMAIL_PATTERNS)]
 
-        for r in results["email"]:
-            text_to_check = " ".join(filter(None, [
-                r.get("title", ""),
-                r.get("body", ""),
-                r.get("snippet", ""),
-            ]))
-            emails = [e for e in re.findall(EMAIL_REGEX, text_to_check)
-                      if not any(j in e.lower() for j in JUNK_EMAIL_PATTERNS)]
-
-            domain_match = next((e for e in emails if domain in e.lower()), None)
-            if domain_match:
-                found_email = domain_match
-                logger.info(f"[DDG ENRICH] Validated email: {found_email}")
-                break
-            elif emails:
-                found_email = emails[0]
-                logger.info(f"[DDG ENRICH] Fallback email: {found_email}")
-                break
-
-    except Exception as e:
-        logger.warning(f"[DDG ENRICH] Failed: {e}")
+        domain_match = next((e for e in emails if domain in e.lower()), None)
+        if domain_match:
+            found_email = domain_match
+            logger.info(f"[ENRICH] Validated email: {found_email}")
+            break
+        elif emails:
+            found_email = emails[0]
+            logger.info(f"[ENRICH] Fallback email: {found_email}")
+            break
 
     return found_owner, found_email
 
