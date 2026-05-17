@@ -200,11 +200,17 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
     import random
     if not niche:
         niches = [
-            'luxury car dealer california',
-            'home remodeling california',
+            'exotic car dealer california',
+            'luxury car dealership california',
+            'high end car tuning california',
+            'exotic car rental california',
+            'custom vehicle wrapping california',
+            'hypercar dealer california',
+            'luxury car storage california',
+            'high end car restoration california',
             'custom home builder california',
             'private jet california',
-            'helicopter charter california'
+            'yacht charter california'
         ]
         query = random.choice(niches)
     else:
