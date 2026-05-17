@@ -67,6 +67,12 @@ async def find_leads(count: int = 5, query: str = "business leads"):
         all_leads.extend(yelp_direct)
         logger.info(f"[SOURCE 4: Yelp Direct] Found {len(yelp_direct)} leads")
 
+    # ─── SOURCE 4.5: BBB.org (Better Business Bureau) ────────
+    if len(all_leads) < count:
+        bbb_leads = await _source_bbb(query, count)
+        all_leads.extend(bbb_leads)
+        logger.info(f"[SOURCE 4.5: BBB.org] Found {len(bbb_leads)} leads")
+
     # ─── SOURCE 5: SerpAPI Google Maps (if key available) ──────
     serpapi_key = os.getenv("SERPAPI_KEY")
     if serpapi_key and len(all_leads) < count:
@@ -306,6 +312,32 @@ def _filter_and_deduplicate(leads: list, count: int) -> list:
         filtered.append(lead)
 
     return filtered[:count]
+
+
+async def _source_bbb(query: str, count: int) -> list:
+    """Finds BBB profile pages for the query and extracts basic details."""
+    leads = []
+    try:
+        # Search DuckDuckGo for BBB profiles
+        bbb_query = f"site:bbb.org/profile {query}"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        search_url = f"https://html.duckduckgo.com/html/?q={bbb_query.replace(' ', '+')}"
+        async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=15.0) as client:
+            resp = await client.get(search_url)
+            if resp.status_code == 200:
+                soup = BeautifulSoup(resp.text, "html.parser")
+                for r in soup.select("div.result"):
+                    a_tag = r.select_one("a.result__a")
+                    if a_tag and "bbb.org/local-bbb" not in a_tag.get("href", ""):
+                        leads.append({
+                            "title": a_tag.get_text(strip=True).replace(" | Better Business Bureau", "").replace(" | BBB", ""),
+                            "url": a_tag.get("href", ""),
+                            "snippet": r.select_one("a.result__snippet").get_text(strip=True) if r.select_one("a.result__snippet") else "",
+                            "source_type": "BBB.org"
+                        })
+    except Exception as e:
+        logger.error(f"[BBB] Error: {e}")
+    return leads[:count]
 
 
 async def research_lead(url: str) -> str:

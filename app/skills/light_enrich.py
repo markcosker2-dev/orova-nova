@@ -26,16 +26,31 @@ JUNK_EMAIL_PATTERNS = [
     'support@', 'no-reply', '.svg', '.webp', '.css', '.js'
 ]
 
-# Common owner/founder title patterns to find on websites
 OWNER_PATTERNS = [
-    r'(?:owner|founder|ceo|president|principal|director|managing\s+partner)[:\s]*([A-Z][a-z]+\s+[A-Z][a-z]+)',
-    r'([A-Z][a-z]+\s+[A-Z][a-z]+)[,\s]*(?:owner|founder|ceo|president|principal)',
-    r'(?:meet|about)\s+([A-Z][a-z]+\s+[A-Z][a-z]+)',
+    # "Owner: John Doe" or "CEO John Doe"
+    r'(?:owner|founder|ceo|president|principal|operator)[:\s,\-]+([A-Z][a-zA-Z\'-]+(?:\s+[A-Z][a-zA-Z\'-]+){1,2})',
+    # "John Doe, Owner" or "John Doe - Founder"
+    r'([A-Z][a-zA-Z\'-]+(?:\s+[A-Z][a-zA-Z\'-]+){1,2})[,\s\-–]+(?:owner|founder|ceo|president|principal|operator)',
+    # "I'm John Doe, owner" / "I am Jane Smith, founder"
+    r"I(?:'m| am)\s+([A-Z][a-zA-Z\'-]+\s+[A-Z][a-zA-Z\'-]+),?\s*(?:owner|founder|ceo)",
+    # "Founded by John Doe"
+    r'(?:founded|owned|run|operated)\s+by\s+([A-Z][a-zA-Z\'-]+\s+[A-Z][a-zA-Z\'-]+)',
 ]
 
+BLOCK_SIGNALS = [
+    "cf-browser-verification", "challenge-form", 
+    "checking your browser", "enable javascript",
+    "ddos-guard", "just a moment"
+]
+
+def _is_blocked(html: str) -> bool:
+    lower = html.lower()
+    return any(signal in lower for signal in BLOCK_SIGNALS)
 
 async def _fetch_page(url: str) -> Optional[str]:
-    """Fetch a page's HTML with proper headers."""
+    """Fetch a page's HTML. Try fast HTTPX first; if it looks blank or has Cloudflare, fallback to Firecrawl's cloud JS-renderer."""
+    # 1. Try fast local HTTPX fetch
+    html = None
     try:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
@@ -45,41 +60,99 @@ async def _fetch_page(url: str) -> Optional[str]:
         async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=15.0) as client:
             resp = await client.get(url)
             if resp.status_code == 200:
-                return resp.text
+                html = resp.text
     except asyncio.CancelledError:
         raise
     except Exception as e:
-        logger.warning(f"[ENRICH] Failed to fetch {url}: {e}")
-    return None
+        logger.warning(f"[ENRICH] HTTPX fetch failed for {url}: {e}")
 
+    # 2. Check if content looks empty or blocked by Cloudflare
+    if html and len(html) > 5000 and not _is_blocked(html):
+        return html
 
-def _extract_emails(text: str) -> list:
-    """Extract valid emails from text, filtering out junk."""
-    emails = re.findall(EMAIL_REGEX, text)
-    return [e for e in emails if not any(j in e.lower() for j in JUNK_EMAIL_PATTERNS)]
+    # 3. Fallback to Cloud Firecrawl JS-rendering (bypasses Render dependency limitations)
+    try:
+        logger.info(f"[ENRICH] Local HTTPX blank or blocked by CF for {url}. Falling back to cloud Firecrawl JS rendering...")
+        scrape_data = await asyncio.get_running_loop().run_in_executor(None, _firecrawl_scrape, url)
+        fc_html = scrape_data.get("html") or scrape_data.get("markdown")
+        if fc_html and len(fc_html) > 100 and not _is_blocked(fc_html):
+            return fc_html
+    except Exception as e:
+        logger.warning(f"[ENRICH] Firecrawl fallback failed for {url}: {e}")
 
+    return html  # Return the original html as a last resort
+
+def _extract_emails(html: str) -> list:
+    """Extract valid emails from HTML: checks mailto links, raw text regex, and obfuscations."""
+    if not html:
+        return []
+    soup = BeautifulSoup(html, "html.parser")
+    found = set()
+    
+    # 1. mailto: href attributes — most reliable
+    for tag in soup.find_all("a", href=True):
+        href = tag["href"]
+        if href.startswith("mailto:"):
+            email = href[7:].split("?")[0].strip()
+            if email:
+                found.add(email)
+    
+    # 2. Raw text regex
+    text = soup.get_text(separator=" ")
+    for e in re.findall(EMAIL_REGEX, text):
+        found.add(e)
+    
+    # 3. Obfuscated: "user [at] domain [dot] com"
+    obfuscated = re.findall(
+        r'([a-zA-Z0-9._%+-]+)\s*[\[\(]?at[\]\)]?\s*([a-zA-Z0-9.-]+)\s*[\[\(]?dot[\]\)]?\s*([a-zA-Z]{2,})',
+        text, re.IGNORECASE
+    )
+    for u, d, tld in obfuscated:
+        found.add(f"{u}@{d}.{tld}")
+    
+    return [
+        e for e in found
+        if not any(j in e.lower() for j in JUNK_EMAIL_PATTERNS)
+    ]
 
 def _extract_phones(text: str) -> list:
     """Extract US phone numbers from text."""
     return re.findall(PHONE_REGEX, text)
 
-
 def _extract_owner_name(html: str) -> Optional[str]:
-    """Try to find owner/founder/CEO name from HTML text."""
+    """Try to find owner/founder/CEO name from HTML structure and text patterns."""
+    if not html:
+        return None
     soup = BeautifulSoup(html, "html.parser")
-    text = soup.get_text(separator=" ", strip=True)
-
+    
+    # Strategy 1: Name in one tag, title in adjacent sibling/child
+    for tag in soup.find_all(['h1','h2','h3','h4','p','span','div']):
+        text = tag.get_text(strip=True)
+        next_text = ""
+        sibling = tag.find_next_sibling()
+        if sibling:
+            next_text = sibling.get_text(strip=True).lower()
+        child = tag.find()
+        if child:
+            next_text += " " + child.get_text(strip=True).lower()
+        
+        if any(title in next_text for title in ['owner','founder','ceo','president','principal']):
+            name_match = re.match(r'^([A-Z][a-zA-Z\'-]+(?:\s+[A-Z][a-zA-Z\'-]+){1,2})$', text)
+            if name_match:
+                parts = name_match.group(1).split()
+                if len(parts) >= 2:
+                    return name_match.group(1)
+    
+    # Strategy 2: Regex on full text
+    full_text = soup.get_text(separator=" ", strip=True)
     for pattern in OWNER_PATTERNS:
-        match = re.search(pattern, text, re.IGNORECASE)
+        match = re.search(pattern, full_text, re.IGNORECASE)
         if match:
             name = match.group(1).strip()
-            # Validate: must be 2 words, both capitalized, no junk
             parts = name.split()
-            if len(parts) == 2 and all(p[0].isupper() for p in parts):
-                # Filter out common false positives
-                false_positives = ['About Us', 'Contact Us', 'Read More', 'Learn More', 'Our Team', 'Get Started']
-                if name not in false_positives:
-                    return name
+            FALSE_POSITIVES = {'About Us','Contact Us','Read More','Learn More','Our Team','Get Started','Meet Our','Our Story'}
+            if len(parts) >= 2 and name not in FALSE_POSITIVES:
+                return name
     return None
 
 
