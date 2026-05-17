@@ -367,7 +367,7 @@ def _is_plausible_name(text: str) -> bool:
 
 
 async def _ddg_enrich_contact(biz_name: str, domain: str) -> Tuple[Optional[str], Optional[str]]:
-    """Block-free snippet mining for owner name + email using Tavily (first choice) or Bing scraper."""
+    """Block-free snippet mining for owner name + email using Tavily (first choice) or Bing scraper, parsed via Gemini 2.0 LLM or regex fallback."""
     found_owner = None
     found_email = None
 
@@ -459,63 +459,108 @@ async def _ddg_enrich_contact(biz_name: str, domain: str) -> Tuple[Optional[str]
         except Exception as e:
             logger.warning(f"[ENRICH] Bing scrape failed: {e}")
 
-    # --- PARSE OWNER ---
-    for r in results["owner"]:
-        text_to_check = " ".join(filter(None, [
-            r.get("title", ""),
-            r.get("snippet", ""),
-        ]))
+    # 🤖 1. HAWK AI LLM Extraction (Super Accurate, Free Gemini-2.0-flash-lite)
+    if results["owner"] or results["email"]:
+        logger.info(f"[ENRICH] Running Hawk AI LLM parsing on search snippets for {biz_name}...")
+        combined_snippets = []
+        for i, r in enumerate(results["owner"] + results["email"], 1):
+            combined_snippets.append(
+                f"Result {i}:\nTitle: {r.get('title')}\nSnippet: {r.get('snippet')}\n"
+            )
+        
+        snippets_text = "\n".join(combined_snippets)
+        
+        system_prompt = (
+            "You are 'Hawk', the B2B lead enrichment subagent.\n"
+            "Your task is to analyze the provided search engine results for a local business and extract:\n"
+            "1. The full name of the owner, founder, CEO, president, or top executive (2-3 words, properly capitalized, e.g., 'John Doe'). Avoid false positives.\n"
+            "2. The primary corporate or personal B2B contact email address.\n\n"
+            "Return the result ONLY as a valid, flat JSON object with these EXACT keys: 'owner', 'email'. "
+            "Do not include any other text, reasoning, markdown codeblocks, or extra keys. "
+            "If a field is not found, set its value to null."
+        )
+        
+        user_prompt = f"Business Name: {biz_name}\nDomain: {domain}\n\nSearch Results:\n{snippets_text}"
+        
+        try:
+            from app.core.ai_client import UnifiedAIClient
+            ai = UnifiedAIClient()
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
+            response = await ai.chat(messages, role="hawk", temperature=0.1, max_tokens=150)
+            content = response.content or ""
+            content = content.replace("```json", "").replace("```", "").strip()
+            data = json.loads(content)
+            
+            extracted_owner = data.get("owner")
+            extracted_email = data.get("email")
+            
+            if extracted_owner and len(extracted_owner) > 3 and _is_plausible_name(extracted_owner):
+                found_owner = extracted_owner
+                logger.info(f"[HAWK AI ENRICH] Owner extracted via LLM: {found_owner}")
+                
+            if extracted_email and "@" in extracted_email:
+                if not any(j in extracted_email.lower() for j in JUNK_EMAIL_PATTERNS):
+                    found_email = extracted_email
+                    logger.info(f"[HAWK AI ENRICH] Email extracted via LLM: {found_email}")
+                    
+        except Exception as e:
+            logger.warning(f"[HAWK AI ENRICH] LLM snippet parsing failed: {e}")
 
-        for pattern in OWNER_PATTERNS:
-            m = re.search(pattern, text_to_check, re.IGNORECASE)
-            if m:
-                raw = m.group(1).strip()
-                name = " ".join(w.capitalize() for w in raw.split())
-                if _is_plausible_name(name) and name not in FALSE_POSITIVE_NAMES:
-                    found_owner = name
-                    logger.info(f"[ENRICH] Owner via regex: {found_owner}")
-                    break
+    # 📝 2. Legacy Regex Fallback (Only if LLM didn't extract one of the fields)
+    if not found_owner:
+        for r in results["owner"]:
+            text_to_check = " ".join(filter(None, [r.get("title", ""), r.get("snippet", "")]))
 
-        if not found_owner:
-            title_field = r.get("title", "")
-            for sep in ["|", "–", "-", "·"]:
-                if sep in title_field:
-                    parts = [p.strip() for p in title_field.split(sep)]
-                    for i, part in enumerate(parts):
-                        if any(kw in part.lower() for kw in TITLE_KEYWORDS):
-                            for j in [i - 1, i + 1]:
-                                if 0 <= j < len(parts):
-                                    candidate = parts[j]
-                                    if _is_plausible_name(candidate):
-                                        found_owner = candidate
-                                        logger.info(f"[ENRICH] Owner via title split: {found_owner}")
-                                        break
-                        if found_owner:
-                            break
-                if found_owner:
-                    break
+            for pattern in OWNER_PATTERNS:
+                m = re.search(pattern, text_to_check, re.IGNORECASE)
+                if m:
+                    raw = m.group(1).strip()
+                    name = " ".join(w.capitalize() for w in raw.split())
+                    if _is_plausible_name(name) and name not in FALSE_POSITIVE_NAMES:
+                        found_owner = name
+                        logger.info(f"[ENRICH Fallback] Owner via regex: {found_owner}")
+                        break
 
-        if found_owner:
-            break
+            if not found_owner:
+                title_field = r.get("title", "")
+                for sep in ["|", "–", "-", "·"]:
+                    if sep in title_field:
+                        parts = [p.strip() for p in title_field.split(sep)]
+                        for i, part in enumerate(parts):
+                            if any(kw in part.lower() for kw in TITLE_KEYWORDS):
+                                for j in [i - 1, i + 1]:
+                                    if 0 <= j < len(parts):
+                                        candidate = parts[j]
+                                        if _is_plausible_name(candidate):
+                                            found_owner = candidate
+                                            logger.info(f"[ENRICH Fallback] Owner via title split: {found_owner}")
+                                            break
+                            if found_owner:
+                                break
+                    if found_owner:
+                        break
 
-    # --- PARSE EMAIL ---
-    for r in results["email"]:
-        text_to_check = " ".join(filter(None, [
-            r.get("title", ""),
-            r.get("snippet", ""),
-        ]))
-        emails = [e for e in re.findall(EMAIL_REGEX, text_to_check)
-                  if not any(j in e.lower() for j in JUNK_EMAIL_PATTERNS)]
+            if found_owner:
+                break
 
-        domain_match = next((e for e in emails if domain in e.lower()), None)
-        if domain_match:
-            found_email = domain_match
-            logger.info(f"[ENRICH] Validated email: {found_email}")
-            break
-        elif emails:
-            found_email = emails[0]
-            logger.info(f"[ENRICH] Fallback email: {found_email}")
-            break
+    if not found_email:
+        for r in results["email"]:
+            text_to_check = " ".join(filter(None, [r.get("title", ""), r.get("snippet", "")]))
+            emails = [e for e in re.findall(EMAIL_REGEX, text_to_check)
+                      if not any(j in e.lower() for j in JUNK_EMAIL_PATTERNS)]
+
+            domain_match = next((e for e in emails if domain in e.lower()), None)
+            if domain_match:
+                found_email = domain_match
+                logger.info(f"[ENRICH Fallback] Validated email: {found_email}")
+                break
+            elif emails:
+                found_email = emails[0]
+                logger.info(f"[ENRICH Fallback] Fallback email: {found_email}")
+                break
 
     return found_owner, found_email
 
@@ -631,8 +676,47 @@ async def enrich_lead_lite(lead: Dict[str, Any]) -> Dict[str, Any]:
         logger.info(f"[ENRICH] Step 2: Crawling business website: {real_website}")
 
         pages_to_crawl = [real_website]
-        for path in ["/contact", "/contact-us", "/about", "/about-us", "/team", "/our-team"]:
-            pages_to_crawl.append(real_website.rstrip("/") + path)
+        
+        # Intelligently discover team and contact pages from the homepage
+        homepage_data = await _fetch_page(real_website)
+        if homepage_data and homepage_data.get("html"):
+            soup = BeautifulSoup(homepage_data["html"], "html.parser")
+            domain_part = _get_domain(real_website)
+            discovered_paths = set()
+            
+            for a_tag in soup.find_all("a", href=True):
+                href = a_tag["href"].strip()
+                if not href or href.startswith(("#", "javascript:", "mailto:", "tel:")):
+                    continue
+                
+                # Resolve relative links
+                resolved_url = urllib.parse.urljoin(real_website, href)
+                resolved_domain = _get_domain(resolved_url)
+                
+                # Ensure it belongs to the same business domain
+                if resolved_domain != domain_part:
+                    continue
+                    
+                path_lower = resolved_url.lower()
+                # Check for B2B contact page keywords
+                keywords = ["about", "team", "staff", "meet", "leader", "people", "management", "contact", "profile"]
+                if any(kw in path_lower for kw in keywords):
+                    discovered_paths.add(resolved_url)
+            
+            # Sort paths to prioritize 'team' and 'leadership'
+            prioritized_paths = sorted(
+                list(discovered_paths),
+                key=lambda u: any(k in u.lower() for k in ["team", "leader", "staff", "people"]),
+                reverse=True
+            )
+            
+            # Add discovered pages to crawl list
+            pages_to_crawl.extend(prioritized_paths[:4])
+            logger.info(f"[CRAWLER] Discovered B2B pages to crawl: {pages_to_crawl}")
+        else:
+            # Fallback to hardcoded list if homepage fetch failed
+            for path in ["/contact", "/contact-us", "/about", "/about-us", "/team", "/our-team"]:
+                pages_to_crawl.append(real_website.rstrip("/") + path)
 
         for page_url in pages_to_crawl:
             page_data = await _fetch_page(page_url)
