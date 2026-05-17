@@ -84,7 +84,8 @@ def _extract_owner_name(html: str) -> Optional[str]:
 def _extract_website_from_yelp(markdown: str) -> Optional[str]:
     """Extract the real business website URL from Yelp page markdown."""
     social = ["yelp.com", "facebook.com", "instagram.com", "twitter.com",
-              "linkedin.com", "youtube.com", "tiktok.com", "google.com"]
+              "linkedin.com", "youtube.com", "tiktok.com", "google.com",
+              "yelpcdn.com", ".jpg", ".jpeg", ".png", ".gif", ".svg", "schema.org", "w3.org"]
 
     # Method 1: Look for explicit website label
     patterns = [
@@ -298,6 +299,51 @@ async def enrich_lead_lite(lead: Dict[str, Any]) -> Dict[str, Any]:
                             logger.info(f"[ENRICH] → Apollo: {lead.get('owner')} ({lead.get('email')})")
             except Exception as e:
                 logger.warning(f"[ENRICH] Apollo failed: {e}")
+
+    # ─── STEP 4.5: Free DuckDuckGo Snippet Search ─────────────
+    if (not lead.get("owner") or not lead.get("email")) and domain and "yelp.com" not in domain:
+        logger.info(f"[ENRICH] Step 4.5: Free DDG search for {biz_name} contact info...")
+        try:
+            from duckduckgo_search import DDGS
+            def _ddg_enrich():
+                with DDGS() as ddgs:
+                    # Search for owner/founder
+                    owner_query = f'"{biz_name}" ("owner" OR "founder" OR "ceo")'
+                    owner_results = list(ddgs.text(owner_query, max_results=3))
+                    
+                    # Search for email
+                    email_query = f'"{biz_name}" "{domain}" "@" email contact'
+                    email_results = list(ddgs.text(email_query, max_results=3))
+                    
+                    return owner_results, email_results
+                    
+            owner_res, email_res = await asyncio.get_event_loop().run_in_executor(None, _ddg_enrich)
+            
+            # Parse Owner
+            if not lead.get("owner"):
+                for r in owner_res:
+                    snippet = r.get("body", "")
+                    title = r.get("title", "")
+                    text_to_check = title + " " + snippet
+                    owner = _extract_owner_name(text_to_check)
+                    if owner:
+                        lead["owner"] = owner
+                        logger.info(f"[ENRICH] → DDG Found Owner: {owner}")
+                        break
+
+            # Parse Email
+            if not lead.get("email"):
+                for r in email_res:
+                    snippet = r.get("body", "")
+                    title = r.get("title", "")
+                    text_to_check = title + " " + snippet
+                    emails = _extract_emails(text_to_check)
+                    if emails:
+                        lead["email"] = emails[0]
+                        logger.info(f"[ENRICH] → DDG Found Email: {lead['email']}")
+                        break
+        except Exception as e:
+            logger.warning(f"[ENRICH] DDG free enrichment failed: {e}")
 
     # ─── STEP 5: Email Guess (Last Resort) ────────────────────
     if not lead.get("email") and lead.get("owner") and domain and "yelp.com" not in domain:
