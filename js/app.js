@@ -11,6 +11,12 @@ const Store = {
         const res = await apiFetch('/api/tasks');
         return res ? res.tasks : []; 
     },
+    async setTasks(tasks) {
+        return await apiFetch('/api/tasks', {
+            method: 'POST',
+            body: JSON.stringify(tasks)
+        });
+    },
     async getContent() { 
         const res = await apiFetch('/api/content');
         return res ? res.content : []; 
@@ -69,7 +75,7 @@ const CRON_EVENTS = [
 // [REMOVED] seedTasks is now handled by backend SQLite migrations.
 
 // ═══════════════════ API HELPER ═══════════════════
-const NOVA_API_KEY = localStorage.getItem('NOVA_API_KEY') || 'nova-default-change-me';
+const NOVA_API_KEY = localStorage.getItem('NOVA_API_KEY') || 'nova_admin_2026';
 
 async function apiFetch(path, opts) {
     try {
@@ -79,6 +85,11 @@ async function apiFetch(path, opts) {
         
         // Add API Key
         opts.headers['X-API-Key'] = NOVA_API_KEY;
+
+        // Set Content-Type automatically for JSON requests
+        if (opts.body && typeof opts.body === 'string') {
+            opts.headers['Content-Type'] = 'application/json';
+        }
 
         // Ensure client_id is present
         const separator = fetchPath.includes('?') ? '&' : '?';
@@ -1146,12 +1157,11 @@ window.triggerPipeline = async function (name) {
 // ═══════════════════ WORKSPACE SWITCHER ═══════════════════
 async function loadWorkspaces() {
     try {
-        const res = await fetch(API + '/api/clients'); 
-        const data = await res.json();
+        const res = await apiFetch('/api/clients'); 
         const select = document.getElementById('workspace-switcher');
-        if (select && data && data.clients) {
+        if (select && res && res.clients) {
             let html = '<option value="0">OROVA Internal (Lead Gen)</option>';
-            data.clients.forEach(c => {
+            res.clients.forEach(c => {
                 html += `<option value="${c.id}">${c.name} (${c.niche})</option>`;
             });
             select.innerHTML = html;
@@ -1178,14 +1188,12 @@ document.getElementById('save-client-btn')?.addEventListener('click', async () =
     showToast('🚀 Creating workspace...', 'info');
     
     try {
-        const res = await fetch(API + '/api/clients', {
+        const res = await apiFetch('/api/clients', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, niche, location })
         });
-        const data = await res.json();
         
-        if (res.ok) {
+        if (res && res.status === 'ok') {
             showToast(`✅ Workspace '${name}' created!`, 'success');
             closeModals();
             // Reset fields
@@ -1194,7 +1202,7 @@ document.getElementById('save-client-btn')?.addEventListener('click', async () =
             document.getElementById('client-location').value = '';
             await loadWorkspaces();
         } else {
-            showToast('❌ Failed: ' + data.error, 'error');
+            showToast('❌ Failed to create workspace', 'error');
         }
     } catch (err) {
         showToast('❌ Network error', 'error');

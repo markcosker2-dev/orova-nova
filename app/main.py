@@ -436,6 +436,36 @@ async def telegram_webhook(request: Request):
 
 # --- Additional Dashboard API Endpoints ---
 
+@app.get("/api/clients")
+async def get_clients(authorized: bool = Depends(require_dashboard_api_key)):
+    query = "SELECT id, business_name as name, niche, target_location as location FROM clients WHERE is_active = 1"
+    try:
+        rows = await DatabaseManager.query(query, fetchall=True)
+        return {"status": "ok", "clients": [dict(r) for r in rows]}
+    except Exception as e:
+        logger.error(f"Error fetching clients: {e}")
+        return {"status": "ok", "clients": []}
+
+@app.post("/api/clients")
+async def create_client(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
+    data = await request.json()
+    name = data.get("name")
+    niche = data.get("niche")
+    location = data.get("location")
+    if not name:
+        raise HTTPException(status_code=400, detail="Missing client name")
+        
+    query = "INSERT INTO clients (business_name, niche, target_location) VALUES (?, ?, ?)"
+    try:
+        await DatabaseManager.query(query, (name, niche, location))
+        # Get the inserted client ID
+        row = await DatabaseManager.query("SELECT last_insert_rowid() as id", fetchone=True)
+        new_id = row["id"] if row else 0
+        return {"status": "ok", "client": {"id": new_id, "name": name, "niche": niche, "location": location}}
+    except Exception as e:
+        logger.error(f"Error creating client: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/tasks")
 async def get_tasks(authorized: bool = Depends(require_dashboard_api_key)):
     tasks_file = os.path.join(root_path, "tasks.json")

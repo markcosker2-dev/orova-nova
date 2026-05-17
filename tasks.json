@@ -9,15 +9,6 @@
     "due": "2026-03-20"
   },
   {
-    "id": "t2",
-    "title": "Design Instagram content batch (5 posts)",
-    "desc": "B&W luxury aesthetic. Enforce brand guidelines.",
-    "assignee": "Nova",
-    "priority": "medium",
-    "status": "backlog",
-    "due": "2026-03-22"
-  },
-  {
     "id": "t3",
     "title": "Review outreach email templates",
     "desc": "Ensure Hormozi Grand Slam Offer framework is applied.",
@@ -25,5 +16,14 @@
     "priority": "high",
     "status": "review",
     "due": "2026-03-21"
+  },
+  {
+    "id": "mp9rt4uqjfnur",
+    "title": "Test Task",
+    "description": "",
+    "assignee": "Nova",
+    "priority": "medium",
+    "status": "backlog",
+    "due": ""
   }
 ]
