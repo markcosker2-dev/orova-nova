@@ -115,6 +115,18 @@ class UnifiedAIClient:
         self.admin_chat_id = os.getenv("ADMIN_CHAT_ID")
         self.tg_token = os.getenv("TELEGRAM_BOT_TOKEN")
 
+        # ─── NATIVE GEMINI CLIENT (100% Free, High Limit B2B engine) ───
+        self.google_client = None
+        google_key = os.getenv("GOOGLE_API_KEY")
+        if google_key:
+            try:
+                import google.generativeai as genai
+                genai.configure(api_key=google_key)
+                self.google_client = genai
+                logger.info("[+] Native Google Gemini Client — READY")
+            except Exception as e:
+                logger.warning(f"[-] Gemini native init failed: {e}")
+
         self.primary_client = None
         api_key = os.getenv("OPENROUTER_API_KEY")
         base_url = os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1")
@@ -142,8 +154,47 @@ class UnifiedAIClient:
         if isinstance(messages, str):
             messages = [{"role": "user", "content": messages}]
 
-        if not self.primary_client and not self.groq_client:
+        if not self.google_client and not self.primary_client and not self.groq_client:
             return SimpleNamespace(content="[!!] No AI providers available.", tool_calls=None)
+
+        # ─── TIER 1: Native Google Gemini 2.0 (Fast, Free, Block-proof) ───
+        if self.google_client:
+            try:
+                logger.info(f"[*] AI ({role}): Querying Native Google Gemini (gemini-2.0-flash-lite)...")
+                # Format messages for the official google API
+                system_instruction = ""
+                contents = []
+                for msg in messages:
+                    if msg.get("role") == "system":
+                        system_instruction = msg.get("content", "")
+                    else:
+                        contents.append({
+                            "role": "user" if msg.get("role") == "user" else "model",
+                            "parts": [msg.get("content", "")]
+                        })
+
+                config = {
+                    "temperature": temperature,
+                    "max_output_tokens": max_tokens
+                }
+
+                model = self.google_client.GenerativeModel(
+                    model_name="gemini-2.0-flash-lite",
+                    system_instruction=system_instruction if system_instruction else None
+                )
+
+                # Execute Google API in executor thread to maintain async flow
+                loop = asyncio.get_running_loop()
+                response = await loop.run_in_executor(
+                    None,
+                    lambda: model.generate_content(contents=contents, generation_config=config)
+                )
+
+                if response and response.text:
+                    logger.info(f"[+] AI ({role}): Direct Gemini OK")
+                    return SimpleNamespace(content=response.text, tool_calls=None)
+            except Exception as e:
+                logger.warning(f"[!] Direct Gemini API call failed: {e}. Falling back to other providers...")
 
         flavor = await self._get_flavor()
         primary_model = self.FLAVORS[flavor] if flavor in self.FLAVORS else self.ROLE_MODELS.get(role, self.ROLE_MODELS["default"])

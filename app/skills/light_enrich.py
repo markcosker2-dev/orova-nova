@@ -412,9 +412,9 @@ async def _ddg_enrich_contact(biz_name: str, domain: str) -> Tuple[Optional[str]
         except Exception as e:
             logger.warning(f"[ENRICH] Tavily contact search failed: {e}")
 
-    # 🌐 Fallback to Direct Bing Scraper (100% Free, Bypasses Datacenter Blocks)
+    # 🌐 Fallback to Direct Bing & DuckDuckGo Scrapers (100% Free, Block-proof)
     if not results["owner"] and not results["email"]:
-        logger.info(f"[ENRICH] Using free block-proof Bing scraper for {biz_name}...")
+        logger.info(f"[ENRICH] Using free block-proof search scrapers for {biz_name}...")
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -424,12 +424,32 @@ async def _ddg_enrich_contact(biz_name: str, domain: str) -> Tuple[Optional[str]
         try:
             async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=15.0) as client:
                 for q in queries["owner"][:2]:
+                    # 1. Try DuckDuckGo HTML Search
+                    try:
+                        ddg_url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote_plus(q)}"
+                        resp = await client.get(ddg_url)
+                        if resp.status_code == 200:
+                            soup = BeautifulSoup(resp.text, "html.parser")
+                            items = soup.select("div.result, div.web-result")
+                            for item in items:
+                                a_tag = item.select_one("a.result__a, a.result__url")
+                                snippet_tag = item.select_one("a.result__snippet, div.result__snippet")
+                                if a_tag:
+                                    results["owner"].append({
+                                        "title": a_tag.get_text(strip=True),
+                                        "snippet": snippet_tag.get_text(strip=True) if snippet_tag else "",
+                                    })
+                    except Exception as e:
+                        logger.debug(f"[ENRICH] DDG owner search error: {e}")
+
+                    # 2. Try Bing Search
                     try:
                         search_url = f"https://www.bing.com/search?q={urllib.parse.quote_plus(q)}"
                         resp = await client.get(search_url)
                         if resp.status_code == 200:
                             soup = BeautifulSoup(resp.text, "html.parser")
-                            for item in soup.select("li.b_algo"):
+                            items = soup.select("li.b_algo")
+                            for item in items:
                                 title_el = item.select_one("h2 a")
                                 snippet_el = item.select_one("div.b_caption p, p")
                                 results["owner"].append({
@@ -441,12 +461,32 @@ async def _ddg_enrich_contact(biz_name: str, domain: str) -> Tuple[Optional[str]
                     await asyncio.sleep(0.5)
 
                 for q in queries["email"][:2]:
+                    # 1. Try DuckDuckGo HTML Search
+                    try:
+                        ddg_url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote_plus(q)}"
+                        resp = await client.get(ddg_url)
+                        if resp.status_code == 200:
+                            soup = BeautifulSoup(resp.text, "html.parser")
+                            items = soup.select("div.result, div.web-result")
+                            for item in items:
+                                a_tag = item.select_one("a.result__a, a.result__url")
+                                snippet_tag = item.select_one("a.result__snippet, div.result__snippet")
+                                if a_tag:
+                                    results["email"].append({
+                                        "title": a_tag.get_text(strip=True),
+                                        "snippet": snippet_tag.get_text(strip=True) if snippet_tag else "",
+                                    })
+                    except Exception as e:
+                        logger.debug(f"[ENRICH] DDG email search error: {e}")
+
+                    # 2. Try Bing Search
                     try:
                         search_url = f"https://www.bing.com/search?q={urllib.parse.quote_plus(q)}"
                         resp = await client.get(search_url)
                         if resp.status_code == 200:
                             soup = BeautifulSoup(resp.text, "html.parser")
-                            for item in soup.select("li.b_algo"):
+                            items = soup.select("li.b_algo")
+                            for item in items:
                                 title_el = item.select_one("h2 a")
                                 snippet_el = item.select_one("div.b_caption p, p")
                                 results["email"].append({
@@ -457,7 +497,7 @@ async def _ddg_enrich_contact(biz_name: str, domain: str) -> Tuple[Optional[str]
                         pass
                     await asyncio.sleep(0.5)
         except Exception as e:
-            logger.warning(f"[ENRICH] Bing scrape failed: {e}")
+            logger.warning(f"[ENRICH] Direct search scrapers failed: {e}")
 
     # 🤖 1. HAWK AI LLM Extraction (Super Accurate, Free Gemini-2.0-flash-lite)
     if results["owner"] or results["email"]:
@@ -491,8 +531,20 @@ async def _ddg_enrich_contact(biz_name: str, domain: str) -> Tuple[Optional[str]
             ]
             response = await ai.chat(messages, role="hawk", temperature=0.1, max_tokens=150)
             content = response.content or ""
-            content = content.replace("```json", "").replace("```", "").strip()
-            data = json.loads(content)
+            
+            # Robust JSON extraction from brackets
+            start_idx = content.find("{")
+            end_idx = content.rfind("}")
+            if start_idx != -1 and end_idx != -1:
+                json_str = content[start_idx:end_idx+1]
+                try:
+                    # Clean potential trailing commas
+                    json_str = re.sub(r',\s*([\]}])', r'\1', json_str)
+                    data = json.loads(json_str)
+                except Exception:
+                    data = {}
+            else:
+                data = {}
             
             extracted_owner = data.get("owner")
             extracted_email = data.get("email")
@@ -606,10 +658,20 @@ async def _ai_extract_contacts(text: str, biz_name: str) -> Dict[str, Optional[s
         response = await ai.chat(messages, role="hawk", temperature=0.1, max_tokens=200)
         content = response.content or ""
         
-        # Strip markdown json codeblock wrapping if returned
-        content = content.replace("```json", "").replace("```", "").strip()
-        
-        data = json.loads(content)
+        # Robust JSON extraction from brackets
+        start_idx = content.find("{")
+        end_idx = content.rfind("}")
+        if start_idx != -1 and end_idx != -1:
+            json_str = content[start_idx:end_idx+1]
+            try:
+                # Clean potential trailing commas
+                json_str = re.sub(r',\s*([\]}])', r'\1', json_str)
+                data = json.loads(json_str)
+            except Exception:
+                data = {}
+        else:
+            data = {}
+
         return {
             "owner": data.get("owner") if data.get("owner") and len(data.get("owner")) > 3 else None,
             "email": data.get("email") if data.get("email") and "@" in data.get("email") else None,
