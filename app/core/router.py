@@ -79,7 +79,7 @@ class Router:
         return "Use the /reset command to wipe memory."
 
     async def _greet(self):
-        return "👋 NOVA (CLOUD V2.3 — PATCHED). Ready, Mark."
+        return "👋 I'm Nova, your OROVA AI. Ready to work."
 
     async def _health_check(self):
         return "✅ System Status: ONLINE"

@@ -204,8 +204,17 @@ async def _source_httpx(query: str, count: int) -> list:
             resp = await client.get(search_url)
             if resp.status_code == 200:
                 soup = BeautifulSoup(resp.text, "html.parser")
-                for r in soup.select("div.result"):
-                    a_tag = r.select_one("a.result__a")
+                container_selectors = ["div.result", ".result", "li.result", "article"]
+                containers = []
+                for sel in container_selectors:
+                    containers = soup.select(sel)
+                    if containers:
+                        break
+                if not containers:
+                    logger.warning("[HTTPX] Zero DDG result containers matched; selectors may have changed")
+                    containers = []
+                for r in containers:
+                    a_tag = r.select_one("a.result__url__link") or r.select_one("a.result__a") or r.select_one("a")
                     snippet_tag = r.select_one("a.result__snippet")
                     if a_tag:
                         leads.append({

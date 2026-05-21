@@ -137,7 +137,14 @@ class UnifiedAIClient:
         if api_key:
             try:
                 from openai import AsyncOpenAI
-                self.primary_client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+                self.primary_client = AsyncOpenAI(
+                    api_key=api_key,
+                    base_url=base_url,
+                    default_headers={
+                        "HTTP-Referer": "https://orova.ai",
+                        "X-Title": "OROVA",
+                    }
+                )
                 logger.info(f"[+] Primary AI Client (OpenRouter) — READY")
             except Exception as e:
                 logger.warning(f"[-] Primary AI init failed: {e}")

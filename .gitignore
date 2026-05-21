@@ -53,3 +53,9 @@ aws_credentials
 
 # Docker
 .dockerignore
+
+# Old instance snapshots (contains neutralized secrets)
+openclaw_instance/openclaw-aws.pem
+openclaw_instance/service_account.json
+openclaw_instance/*.db
+openclaw_instance/**/*.pem

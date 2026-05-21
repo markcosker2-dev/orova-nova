@@ -29,6 +29,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def _run_async(coro_func):
+    """Run an async coroutine safely even if an event loop is already running."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop and loop.is_running():
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(asyncio.run, coro_func()).result()
+    return asyncio.run(coro_func())
+
+
 # ─── SHEETS COLUMNS CONFIGURATION ─────────────────────────────
 # 0-indexed Python row list indices
 COL_IDX_ID = 0
@@ -438,7 +451,7 @@ def fast_lane_job():
     async def run_all():
         tasks = [run_ceo_fast_lane(client_id=c.get("id", 0)) for c in client_list]
         await asyncio.gather(*tasks, return_exceptions=True)
-    asyncio.run(run_all())
+    _run_async(run_all())
 
 def slow_lane_job():
     clients = DatabaseManager.get_clients()
@@ -450,7 +463,7 @@ def slow_lane_job():
             location=c.get("target_location")
         ) for c in client_list]
         await asyncio.gather(*tasks, return_exceptions=True)
-    asyncio.run(run_all())
+    _run_async(run_all())
 
 def reply_monitor_job():
     clients = DatabaseManager.get_clients()
@@ -458,7 +471,7 @@ def reply_monitor_job():
     async def run_all():
         tasks = [run_reply_monitor(client_id=c.get("id", 0)) for c in client_list]
         await asyncio.gather(*tasks, return_exceptions=True)
-    asyncio.run(run_all())
+    _run_async(run_all())
 
 def cold_escalation_job():
     clients = DatabaseManager.get_clients()
@@ -466,7 +479,7 @@ def cold_escalation_job():
     async def run_all():
         tasks = [run_cold_lead_escalation(client_id=c.get("id", 0)) for c in client_list]
         await asyncio.gather(*tasks, return_exceptions=True)
-    asyncio.run(run_all())
+    _run_async(run_all())
 
 def cloud_backup_job():
     logger.info("☁️ [LANE 5] Triggering Google Drive Database Backup...")
