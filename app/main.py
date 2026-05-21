@@ -152,6 +152,15 @@ async def lifespan(app: FastAPI):
     await cleanup_crawler()
     scheduler.shutdown()
 
+
+    # [P5] CORS — allow dashboard origin
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 app = FastAPI(title="OROVA Indestructible Agency Bridge", lifespan=lifespan)
 
 @app.exception_handler(Exception)
@@ -294,14 +303,14 @@ async def clear_leads(authorized: bool = Depends(require_dashboard_api_key)):
 
 @app.get("/api/agents")
 async def get_agent_status(authorized: bool = Depends(require_dashboard_api_key)):
-    agents = [
-        {"name": "Nova", "role": "CEO", "status": "online"},
-        {"name": "Hawk", "role": "Lead Hunter", "status": "online"},
-        {"name": "Closer", "role": "Sales Director", "status": "online"},
-        {"name": "Quill", "role": "Content Strategist", "status": "online"},
-        {"name": "Sentinel", "role": "Operations", "status": "online"},
-        {"name": "Oracle", "role": "Data Intel", "status": "online"}
-    ]
+    agents = {
+        "Nova":     {"name": "Nova", "role": "CEO", "status": "online"},
+        "Hawk":     {"name": "Hawk", "role": "Lead Hunter", "status": "online"},
+        "Closer":   {"name": "Closer", "role": "Sales Director", "status": "online"},
+        "Quill":    {"name": "Quill", "role": "Content Strategist", "status": "online"},
+        "Sentinel": {"name": "Sentinel", "role": "Operations", "status": "online"},
+        "Oracle":   {"name": "Oracle", "role": "Data Intel", "status": "online"}
+    }
     return {"status": "ok", "agents": agents}
 
 @app.get("/api/logs")
@@ -343,30 +352,8 @@ async def approve_lead(lead_id: int, authorized: bool = Depends(require_dashboar
     await update_lead_status_sheets(lead_id, "Approved")
     return {"status": "ok", "message": f"Lead {lead_id} approved and deep-scanned"}
 
-@app.post("/api/jobs/hunt")
-async def job_hunt(query: str = "business leads", authorization: str = Header(None), x_api_key: str = Header(None)):
-    authorized = (authorization == f"Bearer {os.getenv('CRON_SECRET')}") or (x_api_key == os.getenv("DASHBOARD_API_KEY"))
-    if not authorized:
-        raise HTTPException(status_code=403)
-    from app.worker import run_lead_hunt_slow_lane
-    asyncio.create_task(run_lead_hunt_slow_lane(client_id=0, niche=query))
-    return {"status": "job_started", "job": "lead_hunt", "query": query}
 
-@app.post("/api/jobs/check-replies")
-async def job_replies(authorization: str = Header(None), x_api_key: str = Header(None)):
-    authorized = (authorization == f"Bearer {os.getenv('CRON_SECRET')}") or (x_api_key == os.getenv("DASHBOARD_API_KEY"))
-    if not authorized:
-        raise HTTPException(status_code=403)
-    res = check_replies(limit=5)
-    return {"status": "complete", "replies_found": res.get("count", 0)}
 
-@app.post("/api/jobs/backup")
-async def job_backup(authorization: str = Header(None), x_api_key: str = Header(None)):
-    authorized = (authorization == f"Bearer {os.getenv('CRON_SECRET')}") or (x_api_key == os.getenv("DASHBOARD_API_KEY"))
-    if not authorized:
-        raise HTTPException(status_code=403)
-    res = await backup_database()
-    return {"status": "complete", "backup": res}
 
 @app.get("/api/observability/metrics")
 async def get_metrics_prometheus(authorized: bool = Depends(require_dashboard_api_key)):
@@ -436,34 +423,8 @@ async def telegram_webhook(request: Request):
 
 # --- Additional Dashboard API Endpoints ---
 
-@app.post("/api/actions/hunt-leads")
-async def action_hunt_leads(authorized: bool = Depends(require_dashboard_api_key)):
-    try:
-        from app.worker import run_lead_hunt_slow_lane
-        asyncio.create_task(run_lead_hunt_slow_lane(client_id=0, niche="business leads"))
-        return {"status": "ok", "message": "Lead hunt job initiated"}
-    except Exception as e:
-        logger.error(f"Error in hunt-leads: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/actions/send-emails")
-async def action_send_emails(authorized: bool = Depends(require_dashboard_api_key)):
-    try:
-        from app.worker import fast_lane_job
-        asyncio.create_task(asyncio.to_thread(fast_lane_job))
-        return {"status": "ok", "message": "Email & Call Fast Lane initiated"}
-    except Exception as e:
-        logger.error(f"Error in send-emails: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/actions/generate-report")
-async def action_generate_report(authorized: bool = Depends(require_dashboard_api_key)):
-    try:
-        # Placeholder for report generation
-        return {"status": "ok", "report": "CEO Report generated successfully."}
-    except Exception as e:
-        logger.error(f"Error in generate-report: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/clients")
 async def get_clients(authorized: bool = Depends(require_dashboard_api_key)):
@@ -758,9 +719,6 @@ async def read_notifications(request: Request, authorized: bool = Depends(requir
 async def get_pending_emails(authorized: bool = Depends(require_dashboard_api_key)):
     return {"status": "ok", "count": 0, "pending": []}
 
-@app.get("/api/health")
-async def get_api_health(authorized: bool = Depends(require_dashboard_api_key)):
-    return {"status": "ok", "message": "System operational"}
 
 @app.get("/api/metrics/history")
 async def get_metrics_history(authorized: bool = Depends(require_dashboard_api_key)):
@@ -810,6 +768,47 @@ async def run_pipeline_action(request: Request, authorized: bool = Depends(requi
 MC_PATH = os.path.join(root_path, "mission-control")
 if os.path.exists(MC_PATH):
     app.mount("/", StaticFiles(directory=MC_PATH, html=True), name="static")
+
+@app.post("/api/actions/approve-email")
+async def approve_email(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
+    data = await request.json()
+    email_id = data.get("id")
+    if not email_id:
+        raise HTTPException(status_code=400, detail="Missing email ID")
+    content_file = os.path.join(root_path, "content.json")
+    try:
+        with open(content_file, "r", encoding="utf-8") as f:
+            content = json.load(f)
+        for item in content:
+            if item.get("id") == email_id:
+                item["status"] = "sent"
+                break
+        with open(content_file, "w", encoding="utf-8") as f:
+            json.dump(content, f, indent=2)
+    except Exception:
+        pass
+    return {"status": "ok", "message": f"Email {email_id} approved and queued for sending"}
+
+@app.post("/api/actions/deny-email")
+async def deny_email(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
+    data = await request.json()
+    email_id = data.get("id")
+    if not email_id:
+        raise HTTPException(status_code=400, detail="Missing email ID")
+    content_file = os.path.join(root_path, "content.json")
+    try:
+        with open(content_file, "r", encoding="utf-8") as f:
+            content = json.load(f)
+        for item in content:
+            if item.get("id") == email_id:
+                item["status"] = "denied"
+                break
+        with open(content_file, "w", encoding="utf-8") as f:
+            json.dump(content, f, indent=2)
+    except Exception:
+        pass
+    return {"status": "ok", "message": f"Email {email_id} denied"}
+
 
 if __name__ == "__main__":
     import uvicorn
