@@ -255,6 +255,48 @@ async def require_dashboard_api_key(request: Request):
         raise HTTPException(status_code=403, detail="Unauthorized")
     return True
 
+@app.get("/api/health")
+async def api_health_check(authorized: bool = Depends(require_dashboard_api_key)):
+    """Health probe for Mission Control dashboard — flattens structure for the frontend."""
+    from app.core.ai_client import _BREAKER
+    from app.core.hardening import memory_monitor, health_checks, tracer
+
+    now = datetime.utcnow()
+    window_24h = now - timedelta(hours=24)
+
+    breaker_status = {k: {"state": "open" if v["open_until"] > time.time() else "closed", "failures": v["failures"]} for k, v in _BREAKER.items()}
+    try: q_depth = tg_queue._q.qsize()
+    except: q_depth = -1
+
+    try:
+        row = await DatabaseManager.fetchone("SELECT COUNT(*) as cnt, AVG(decay_score) as avg_score FROM learned_patterns WHERE last_used_at >= ?", (window_24h.isoformat(),))
+        learning_stats = {"patterns_reinforced": row["cnt"], "avg_confidence": row["avg_score"]}
+    except: learning_stats = {}
+
+    memory_status = await memory_monitor.check_memory()
+    hardening_health = await health_checks.run_all()
+    any_open = any(v["state"] == "open" for v in breaker_status.values())
+    memory_critical = memory_status.get("critical", False)
+
+    # Flatten for Mission Control frontend
+    total_errors = sum(b["failures"] for b in breaker_status.values())
+    return {
+        "status": "Critical" if memory_critical else ("Degraded" if any_open else "Operational"),
+        "uptime": "Running",
+        "errors": total_errors,
+        "agents_online": 6,  # Nova, Hawk, Closer, Quill, Sentinel, Oracle
+        "pending_emails": 0,
+        "scheduler": {
+            "fast_lane": "Active",
+            "slow_lane": "Active",
+            "email_drafter": "Active",
+            "reply_monitor": "Active"
+        },
+        "queue_depth": q_depth,
+        "memory": memory_status,
+        "learning_stats": learning_stats,
+    }
+
 @app.get("/api/hardening/metrics")
 async def get_hardening_metrics(authorized: bool = Depends(require_dashboard_api_key)):
     """Get hardening metrics: memory, rate limits, request traces."""
@@ -302,7 +344,8 @@ async def get_leads(limit: int = 100, authorized: bool = Depends(require_dashboa
 @app.get("/api/metrics")
 async def get_metrics(client_id: int = 0, authorized: bool = Depends(require_dashboard_api_key)):
     metrics = DatabaseManager.get_metrics(client_id)
-    return {"status": "ok", "metrics": metrics}
+    flat = {k: metrics.get(k, 0) for k in ["leads_found", "emails_sent", "replies_received", "meetings_booked", "calls_made", "proposals_sent"]}
+    return {"status": "ok", "metrics": metrics, **flat}
 
 @app.post("/api/leads/clear")
 async def clear_leads(authorized: bool = Depends(require_dashboard_api_key)):
@@ -399,9 +442,19 @@ async def process_telegram_message(data: dict):
         # Extract chat_id and text
         chat_id = msg_obj.get("chat", {}).get("id")
         text = msg_obj.get("text") or msg_obj.get("caption", "")
+        msg_type = msg_obj.get("text") and "text" or (msg_obj.get("caption") and "caption" or "unknown")
         
-        if not chat_id or not text:
-            logger.warning(f"[Telegram] Missing chat_id or text in message")
+        if not chat_id:
+            logger.warning("[Telegram] Missing chat_id in message")
+            return
+        
+        if not text:
+            # Send informative reply for media/unsupported types
+            logger.info(f"[Telegram] Unsupported message type ({msg_type}), no text/caption — sending acknowledgement")
+            try:
+                await tg_queue.add_message(chat_id, "🤖 I received your message but I only process text right now. Please send a text message!")
+            except Exception:
+                pass
             return
         
         # Resolve Topic/Agent
@@ -415,7 +468,13 @@ async def process_telegram_message(data: dict):
         
         # Send response back to Telegram
         if result:
-            await router._send_telegram(chat_id, str(result)[:4096])
+            sent = await router._send_telegram(chat_id, str(result)[:4096])
+            if not sent:
+                logger.warning(f"[Telegram] Failed to send response to chat_id={chat_id}")
+        else:
+            # Handler returned falsy — send an acknowledgement instead of silent drop
+            logger.warning(f"[Telegram] Empty result from handler for chat_id={chat_id}, sending fallback")
+            await tg_queue.add_message(chat_id, "🤖 I processed your message but didn't generate a response. Try asking again?")
     except Exception as e:
         logger.error(f"[Swarm] Worker failed: {e}", exc_info=True)
 

@@ -1,6 +1,9 @@
+import asyncio
+import os
 import re
 import logging
 import uuid
+import httpx
 from typing import Optional, Union
 from app.core.hardening import rate_limiter, sanitizer, tracer, RequestSanitizer
 from app.core.guardrails import Guardrails
@@ -99,10 +102,25 @@ class Router:
         return "Processed."
 
     async def _send_telegram(self, chat_id: int, text: str, parse_mode: Optional[str] = None) -> bool:
-        try:
-            from app.core.telegram_queue import tg_queue
-            await tg_queue.add_message(chat_id, text, parse_mode=parse_mode)
-            return True
-        except Exception as e:
-            logger.error(f"[Router] Telegram send failed: {e}")
+        """Send a Telegram message with one retry on failure."""
+        token = os.getenv("TELEGRAM_BOT_TOKEN")
+        if not token:
+            logger.error("[Router] Cannot send Telegram: TELEGRAM_BOT_TOKEN missing")
             return False
+        for attempt in range(2):
+            try:
+                payload = {"chat_id": chat_id, "text": text[:4096]}
+                if parse_mode:
+                    payload["parse_mode"] = parse_mode
+                async with httpx.AsyncClient(timeout=15) as client:
+                    res = await client.post(
+                        f"https://api.telegram.org/bot{token}/sendMessage",
+                        json=payload,
+                    )
+                if res.status_code == 200:
+                    return True
+                logger.error(f"[Router] Telegram send failed (attempt {attempt+1}): {res.status_code} {res.text}")
+            except Exception as e:
+                logger.error(f"[Router] Telegram send exception (attempt {attempt+1}): {e}")
+            await asyncio.sleep(1)
+        return False

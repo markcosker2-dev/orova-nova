@@ -24,32 +24,30 @@ class TelegramQueue:
         logger.info(f"📥 Telegram Bounded Queue started (maxsize={self._q.maxsize})")
 
     async def add_message(self, chat_id: int, text: str, parse_mode: Optional[str] = None) -> bool:
-        """Send an outgoing Telegram message via the Bot API."""
+        """Send an outgoing Telegram message via the Bot API. Retries once."""
         token = os.getenv("TELEGRAM_BOT_TOKEN")
         if not token:
             logger.error("[TelegramQueue] Cannot send message: TELEGRAM_BOT_TOKEN missing.")
             return False
 
-        payload = {
-            "chat_id": chat_id,
-            "text": text,
-        }
+        payload = {"chat_id": chat_id, "text": text[:4096]}
         if parse_mode:
             payload["parse_mode"] = parse_mode
 
-        try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                res = await client.post(
-                    f"https://api.telegram.org/bot{token}/sendMessage",
-                    json=payload,
-                )
-            if res.status_code == 200:
-                return True
-            logger.error(f"[TelegramQueue] Failed to send message: {res.status_code} {res.text}")
-            return False
-        except Exception as e:
-            logger.error(f"[TelegramQueue] Exception sending Telegram message: {e}")
-            return False
+        for attempt in range(2):
+            try:
+                async with httpx.AsyncClient(timeout=15) as client:
+                    res = await client.post(
+                        f"https://api.telegram.org/bot{token}/sendMessage",
+                        json=payload,
+                    )
+                if res.status_code == 200:
+                    return True
+                logger.error(f"[TelegramQueue] Send failed (attempt {attempt+1}): {res.status_code} {res.text}")
+            except Exception as e:
+                logger.error(f"[TelegramQueue] Send exception (attempt {attempt+1}): {e}")
+            await asyncio.sleep(1)
+        return False
 
     async def stop(self):
         await self._q.join()

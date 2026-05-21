@@ -460,26 +460,32 @@ async function renderCalendar() {
 // ═══════════════════ ANALYTICS ═══════════════════
 async function renderAnalytics() {
     var data = await apiFetch('/api/metrics');
-    if (!data) data = { leads_found: 0, emails_sent: 0, replies_received: 0, meetings_booked: 0, calls_made: 0, proposals_sent: 0 };
-    
+    if (!data) data = { metrics: {}, leads_found: 0, emails_sent: 0, replies_received: 0, meetings_booked: 0, calls_made: 0, proposals_sent: 0 };
+    // Unwrap metrics from data.metrics (backend wraps them)
+    var m = data.metrics || {};
+    var leads_found = data.leads_found != null ? data.leads_found : (m.leads_found || 0);
+    var emails_sent = data.emails_sent != null ? data.emails_sent : (m.emails_sent || 0);
+    var replies_received = data.replies_received != null ? data.replies_received : (m.replies_received || 0);
+    var meetings_booked = data.meetings_booked != null ? data.meetings_booked : (m.meetings_booked || 0);
+    var calls_made = data.calls_made != null ? data.calls_made : (m.calls_made || 0);
+    var proposals_sent = data.proposals_sent != null ? data.proposals_sent : (m.proposals_sent || 0);
     var el = (id) => document.getElementById(id);
-    if(el('stat-leads')) el('stat-leads').textContent = data.leads_found || 0;
-    if(el('stat-emails')) el('stat-emails').textContent = data.emails_sent || 0;
-    if(el('stat-replies')) el('stat-replies').textContent = data.replies_received || 0;
-    if(el('stat-meetings')) el('stat-meetings').textContent = data.meetings_booked || 0;
-    if(el('stat-calls')) el('stat-calls').textContent = data.calls_made || 0;
-    if(el('stat-proposals')) el('stat-proposals').textContent = data.proposals_sent || 0;
+    if(el('stat-leads')) el('stat-leads').textContent = leads_found || 0;
+    if(el('stat-emails')) el('stat-emails').textContent = emails_sent || 0;
+    if(el('stat-replies')) el('stat-replies').textContent = replies_received || 0;
+    if(el('stat-meetings')) el('stat-meetings').textContent = meetings_booked || 0;
+    if(el('stat-calls')) el('stat-calls').textContent = calls_made || 0;
+    if(el('stat-proposals')) el('stat-proposals').textContent = proposals_sent || 0;
 
     // Funnel
-    var leads = data.leads_found || 1;
-    var contacted = data.emails_sent || 0;
-    var replied = data.replies_received || 0;
-    var booked = data.meetings_booked || 0;
+    var contacted = emails_sent || 0;
+    var replied = replies_received || 0;
+    var booked = meetings_booked || 0;
     if(el('funnel-leads')) el('funnel-leads').style.width = '100%';
-    if(el('funnel-contacted')) el('funnel-contacted').style.width = Math.min(100, (contacted / Math.max(leads, 1)) * 100) + '%';
-    if(el('funnel-replied')) el('funnel-replied').style.width = Math.min(100, (replied / Math.max(leads, 1)) * 100) + '%';
-    if(el('funnel-booked')) el('funnel-booked').style.width = Math.min(100, (booked / Math.max(leads, 1)) * 100) + '%';
-    if(el('fv-leads')) el('fv-leads').textContent = leads;
+    if(el('funnel-contacted')) el('funnel-contacted').style.width = Math.min(100, (contacted / Math.max(leads_found, 1)) * 100) + '%';
+    if(el('funnel-replied')) el('funnel-replied').style.width = Math.min(100, (replied / Math.max(leads_found, 1)) * 100) + '%';
+    if(el('funnel-booked')) el('funnel-booked').style.width = Math.min(100, (booked / Math.max(leads_found, 1)) * 100) + '%';
+    if(el('fv-leads')) el('fv-leads').textContent = leads_found;
     if(el('fv-contacted')) el('fv-contacted').textContent = contacted;
     if(el('fv-replied')) el('fv-replied').textContent = replied;
     if(el('fv-booked')) el('fv-booked').textContent = booked;
@@ -608,20 +614,28 @@ async function refreshAgents() {
     var data = await apiFetch('/api/agents');
     if (!data) return;
 
-    var mapping = {
-        "Support Nova": "nova",
-        "Lead Hunter": "hawk",
-        "Outreach Agent": "closer",
-        "CEO Reporter": "sentinel"
+    // Map backend agent_key -> frontend agent_id
+    var keyToId = {
+        "Nova":     "nova",
+        "Hawk":     "hawk",
+        "Closer":   "closer",
+        "Quill":    "quill",
+        "Sentinel": "sentinel",
+        "Oracle":   "oracle"
     };
 
+    var agentData = {};
+    Object.keys(data).forEach(function (k) {
+        var id = keyToId[k];
+        if (id) agentData[id] = data[k];
+    });
+
     AGENTS.forEach(function (agent) {
-        var backendKey = Object.keys(mapping).find(function (key) { return mapping[key] === agent.id; });
-        if (backendKey && data[backendKey]) {
-            var bData = data[backendKey];
-            agent.status = bData.status === 'active' || bData.status === 'online' ? 'working' : 'idle';
-            if (bData.last_action && bData.last_action !== 'Never') {
-                agent.task = bData.last_action;
+        var bd = agentData[agent.id];
+        if (bd) {
+            agent.status = (bd.status === 'active' || bd.status === 'online') ? 'working' : 'idle';
+            if (bd.last_action && bd.last_action !== 'Never') {
+                agent.task = bd.last_action;
             }
         }
     });
@@ -847,17 +861,17 @@ async function refreshPendingDrafts() {
     }).join('');
 }
 
-async function approveDraft(requestId) {
-    showToast('✅ Processing approval...', 'info');
+async function approveDraft(draftId) {
+    showToast('✅ Sending email...', 'info');
     try {
-        var res = await fetch(API + '/api/approvals', {
+        var res = await fetch(API + '/api/actions/approve-email', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: requestId, decision: 'approve' })
+            body: JSON.stringify({ id: draftId })
         });
         var data = await res.json();
-        if (data.status === 'success') {
-            showToast('📤 Approval processed!', 'success');
+        if (data.status === 'ok') {
+            showToast('📤 ' + data.message, 'success');
             refreshPendingDrafts();
         } else {
             showToast('❌ ' + (data.error || 'Failed'), 'error');
@@ -867,16 +881,16 @@ async function approveDraft(requestId) {
     }
 }
 
-async function denyDraft(requestId) {
+async function denyDraft(draftId) {
     try {
-        var res = await fetch(API + '/api/approvals', {
+        var res = await fetch(API + '/api/actions/deny-email', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: requestId, decision: 'reject' })
+            body: JSON.stringify({ id: draftId })
         });
         var data = await res.json();
-        if (data.status === 'success') {
-            showToast('🚫 Request Denied', 'info');
+        if (data.status === 'ok') {
+            showToast('🚫 ' + data.message, 'info');
             refreshPendingDrafts();
         } else {
             showToast('❌ ' + (data.error || 'Failed'), 'error');
@@ -891,28 +905,21 @@ async function refreshHealth() {
     var data = await apiFetch('/api/health');
     if (!data) return;
 
-    var el = (id) => document.getElementById(id);
+    var el = function (id) { return document.getElementById(id); };
 
-    // Update Sentinel Status Lights
-    if (data.groq_status) {
-        let groqEl = el('health-groq');
-        if (groqEl) {
-            groqEl.textContent = data.groq_status.toUpperCase();
-            groqEl.style.color = (data.groq_status === 'online') ? '#10b981' : '#ef4444';
-        }
-    }
-    if (data.gemini_status) {
-        let gemEl = el('health-gemini');
-        if (gemEl) {
-            gemEl.textContent = data.gemini_status.toUpperCase();
-            gemEl.style.color = (data.gemini_status === 'online') ? '#10b981' : '#ef4444';
-        }
-    }
-
-    if (el('health-uptime')) el('health-uptime').textContent = data.last_updated ? data.last_updated.split('T')[1].split('.')[0] : '—';
+    if (el('health-uptime')) el('health-uptime').textContent = data.uptime || '—';
     if (el('health-errors')) {
         el('health-errors').textContent = data.errors || 0;
         el('health-errors').className = 'health-value ' + (data.errors > 0 ? 'health-error' : 'health-ok');
+    }
+    if (el('health-agents')) el('health-agents').textContent = (data.agents_online || 0) + '/4';
+    if (el('health-pending')) el('health-pending').textContent = data.pending_emails || 0;
+
+    if (data.scheduler) {
+        if (el('health-fast')) el('health-fast').textContent = data.scheduler.fast_lane || '—';
+        if (el('health-slow')) el('health-slow').textContent = data.scheduler.slow_lane || '—';
+        if (el('health-email')) el('health-email').textContent = data.scheduler.email_drafter || '—';
+        if (el('health-reply')) el('health-reply').textContent = data.scheduler.reply_monitor || '—';
     }
 }
 

@@ -505,29 +505,34 @@ async function renderCalendar() {
 // ═══════════════════ ANALYTICS ═══════════════════
 async function renderAnalytics() {
     var data = await apiFetch('/api/metrics');
-    if (!data) data = { leads_found: 0, emails_sent: 0, replies_received: 0, meetings_booked: 0, calls_made: 0, proposals_sent: 0 };
-    document.getElementById('stat-leads').textContent = data.leads_found || 0;
-    document.getElementById('stat-emails').textContent = data.emails_sent || 0;
-    document.getElementById('stat-replies').textContent = data.replies_received || 0;
-    document.getElementById('stat-meetings').textContent = data.meetings_booked || 0;
-    document.getElementById('stat-calls').textContent = data.calls_made || 0;
-    document.getElementById('stat-proposals').textContent = data.proposals_sent || 0;
+    if (!data) data = { metrics: {}, leads_found: 0, emails_sent: 0, replies_received: 0, meetings_booked: 0, calls_made: 0, proposals_sent: 0 };
+    // Unwrap metrics from data.metrics (backend wraps them)
+    var m = data.metrics || {};
+    var leads_found = data.leads_found != null ? data.leads_found : (m.leads_found || 0);
+    var emails_sent = data.emails_sent != null ? data.emails_sent : (m.emails_sent || 0);
+    var replies_received = data.replies_received != null ? data.replies_received : (m.replies_received || 0);
+    var meetings_booked = data.meetings_booked != null ? data.meetings_booked : (m.meetings_booked || 0);
+    var calls_made = data.calls_made != null ? data.calls_made : (m.calls_made || 0);
+    var proposals_sent = data.proposals_sent != null ? data.proposals_sent : (m.proposals_sent || 0);
+    document.getElementById('stat-leads').textContent = leads_found || 0;
+    document.getElementById('stat-emails').textContent = emails_sent || 0;
+    document.getElementById('stat-replies').textContent = replies_received || 0;
+    document.getElementById('stat-meetings').textContent = meetings_booked || 0;
+    document.getElementById('stat-calls').textContent = calls_made || 0;
+    document.getElementById('stat-proposals').textContent = proposals_sent || 0;
 
-    // Funnel
-    var leads = data.leads_found || 1;
-    var contacted = data.emails_sent || 0;
-    var replied = data.replies_received || 0;
-    var booked = data.meetings_booked || 0;
+    var contacted = emails_sent || 0;
+    var replied = replies_received || 0;
+    var booked = meetings_booked || 0;
     document.getElementById('funnel-leads').style.width = '100%';
-    document.getElementById('funnel-contacted').style.width = Math.min(100, (contacted / Math.max(leads, 1)) * 100) + '%';
-    document.getElementById('funnel-replied').style.width = Math.min(100, (replied / Math.max(leads, 1)) * 100) + '%';
-    document.getElementById('funnel-booked').style.width = Math.min(100, (booked / Math.max(leads, 1)) * 100) + '%';
-    document.getElementById('fv-leads').textContent = leads;
+    document.getElementById('funnel-contacted').style.width = Math.min(100, (contacted / Math.max(leads_found, 1)) * 100) + '%';
+    document.getElementById('funnel-replied').style.width = Math.min(100, (replied / Math.max(leads_found, 1)) * 100) + '%';
+    document.getElementById('funnel-booked').style.width = Math.min(100, (booked / Math.max(leads_found, 1)) * 100) + '%';
+    document.getElementById('fv-leads').textContent = leads_found;
     document.getElementById('fv-contacted').textContent = contacted;
     document.getElementById('fv-replied').textContent = replied;
     document.getElementById('fv-booked').textContent = booked;
 
-    // Live Feed
     refreshLiveFeed();
 }
 
@@ -653,22 +658,28 @@ async function refreshAgents() {
     var data = await apiFetch('/api/agents');
     if (!data) return;
 
-    // Map Backend Keys -> UI IDs
-    var mapping = {
-        "Support Nova": "nova",
-        "Lead Hunter": "hawk",
-        "Outreach Agent": "closer",
-        "CEO Reporter": "sentinel"
+    // Map backend agent_key -> frontend agent_id
+    var keyToId = {
+        "Nova":     "nova",
+        "Hawk":     "hawk",
+        "Closer":   "closer",
+        "Quill":    "quill",
+        "Sentinel": "sentinel",
+        "Oracle":   "oracle"
     };
 
+    var agentData = {};
+    Object.keys(data).forEach(function (k) {
+        var id = keyToId[k];
+        if (id) agentData[id] = data[k];
+    });
+
     AGENTS.forEach(function (agent) {
-        // Find matching backend data
-        var backendKey = Object.keys(mapping).find(function (key) { return mapping[key] === agent.id; });
-        if (backendKey && data[backendKey]) {
-            var bData = data[backendKey];
-            agent.status = bData.status === 'active' || bData.status === 'online' ? 'working' : 'idle';
-            if (bData.last_action && bData.last_action !== 'Never') {
-                agent.task = bData.last_action;
+        var bd = agentData[agent.id];
+        if (bd) {
+            agent.status = (bd.status === 'active' || bd.status === 'online') ? 'working' : 'idle';
+            if (bd.last_action && bd.last_action !== 'Never') {
+                agent.task = bd.last_action;
             }
         }
     });
@@ -873,7 +884,7 @@ async function approveDraft(draftId) {
         var res = await fetch(API + '/api/actions/approve-email', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ draft_id: draftId })
+            body: JSON.stringify({ id: draftId })
         });
         var data = await res.json();
         if (data.status === 'ok') {
@@ -892,7 +903,7 @@ async function denyDraft(draftId) {
         var res = await fetch(API + '/api/actions/deny-email', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ draft_id: draftId })
+            body: JSON.stringify({ id: draftId })
         });
         var data = await res.json();
         if (data.status === 'ok') {
@@ -1169,37 +1180,6 @@ async function loadWorkspaces() {
         }
     } catch(e) { console.error("Could not load workspaces", e); }
 }
-
-// ═══════════════════ QUICK ACTIONS ═══════════════════
-document.getElementById('btn-hunt-leads')?.addEventListener('click', async () => {
-    showToast('🚀 Initiating Lead Hunt...', 'info');
-    const res = await apiFetch('/api/actions/hunt-leads', { method: 'POST', body: '{}' });
-    if (res && res.status === 'ok') {
-        showToast('✅ ' + res.message, 'success');
-    } else {
-        showToast('❌ Failed to start lead hunt', 'error');
-    }
-});
-
-document.getElementById('btn-send-emails')?.addEventListener('click', async () => {
-    showToast('🚀 Initiating Email Send...', 'info');
-    const res = await apiFetch('/api/actions/send-emails', { method: 'POST', body: '{}' });
-    if (res && res.status === 'ok') {
-        showToast('✅ ' + res.message, 'success');
-    } else {
-        showToast('❌ Failed to send emails', 'error');
-    }
-});
-
-document.getElementById('btn-ceo-report')?.addEventListener('click', async () => {
-    showToast('🚀 Generating CEO Report...', 'info');
-    const res = await apiFetch('/api/actions/generate-report', { method: 'POST', body: '{}' });
-    if (res && res.status === 'ok') {
-        showToast('✅ ' + res.report, 'success');
-    } else {
-        showToast('❌ Failed to generate report', 'error');
-    }
-});
 
 // ─── MODAL LOGIC (Agency Hub) ───
 document.getElementById('add-client-btn')?.addEventListener('click', () => {
