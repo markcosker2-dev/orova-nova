@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import sys
+import threading
 import time
 from datetime import datetime
 import pytz
@@ -499,6 +500,26 @@ schedule.every(REPLY_CHECK_MINUTES).minutes.do(reply_monitor_job)     # Lane 3: 
 schedule.every(COLD_CALL_CHECK_MINUTES).minutes.do(cold_escalation_job) # Lane 4: Cold lead → call
 schedule.every(HUNT_INTERVAL_MINUTES).minutes.do(slow_lane_job)       # Lane 2: Lead hunting
 schedule.every(6).hours.do(cloud_backup_job)                          # Lane 5: Google Drive Backup
+
+
+def start_worker_scheduler() -> threading.Thread:
+    """Start the schedule loop in a daemon thread. Safe to call from FastAPI lifespan."""
+    th = threading.Thread(target=_scheduler_loop, daemon=True)
+    th.start()
+    return th
+
+
+def _scheduler_loop():
+    """Background loop — calls schedule.run_pending() every second."""
+    import schedule
+    logger.info("⏱️ Worker scheduler loop started.")
+    while True:
+        try:
+            schedule.run_pending()
+        except Exception as e:
+            logger.error(f"[SCHED] Scheduler error: {e}")
+        time.sleep(1)
+
 
 if __name__ == "__main__":
     logger.info("🚀 OROVA Autonomous Worker Initiated.")

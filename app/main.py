@@ -76,6 +76,10 @@ from app.skills.sheets_sync import restore_leads_from_sheets, update_lead_status
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # [WORKER] Start autonomous scheduler thread (FastAPI lifespan bootstraps all lanes)
+    from app.worker import start_worker_scheduler
+    start_worker_scheduler()
+
     # [P5/P6] Run migrations and optimizations
     DatabaseManager.init_db()
     await DatabaseManager.run_phase5_migrations()
@@ -129,6 +133,9 @@ async def lifespan(app: FastAPI):
     # [P2] Start Bounded Telegram Queue
     await tg_queue.start(process_telegram_message)
     
+    # ⏱️ Start task execution loop
+    asyncio.create_task(_task_execution_loop())
+    
     # [P2] Start Autonomous Learning Loop
     scheduler = AsyncIOScheduler()
     scheduler.add_job(reinforcer.run_cycle, "interval", hours=6)
@@ -149,6 +156,8 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 NOVA Gateway Online | Swarm Survivability Layer Active")
     yield
     await tg_queue.stop()
+    global _task_loop_running
+    _task_loop_running = False
     await cleanup_crawler()
     scheduler.shutdown()
 
@@ -734,7 +743,7 @@ async def chat_with_agent(request: Request, authorized: bool = Depends(require_d
 
 @app.post("/api/actions/hunt-leads")
 async def action_hunt_leads(authorized: bool = Depends(require_dashboard_api_key)):
-    from app.worker import run_lead_hunt_slow_lane
+    from app.worker import run_lead_hunt_slow_lane, start_worker_scheduler
     import asyncio as _asyncio
     task = _asyncio.create_task(
         run_lead_hunt_slow_lane(client_id=0, niche=None, location=None)
@@ -890,6 +899,69 @@ async def deny_email(request: Request, authorized: bool = Depends(require_dashbo
     except Exception:
         pass
     return {"status": "ok", "message": f"Email {email_id} denied"}
+
+
+# ═══════════════════════════════════════════════════════
+# TASK EXECUTION LOOP — Background worker for `/api/tasks`
+# ═══════════════════════════════════════════════════════
+
+_task_loop_running = False
+
+async def _task_execution_loop():
+    """Background loop — polls tasks.json every 30 s and runs tasks."""
+    global _task_loop_running
+    _task_loop_running = True
+    logger.info("⏱️ Task execution loop started (poll interval: 30s)")
+    while _task_loop_running:
+        try:
+            tasks_file = os.path.join(root_path, "tasks.json")
+            if not os.path.exists(tasks_file):
+                await asyncio.sleep(30)
+                continue
+            try:
+                with open(tasks_file, "r", encoding="utf-8") as f:
+                    all_tasks = json.load(f)
+            except Exception:
+                await asyncio.sleep(30)
+                continue
+
+            changed = False
+            for task in all_tasks:
+                if task.get("status") not in ("todo", "backlog"):
+                    continue
+                task_id = task.get("id") or task.get("task_id")
+                if not task_id:
+                    continue
+                description = task.get("title", "") + "\n" + task.get("description", "")
+                assignee = task.get("assignee", "Nova")
+                assignee_id = ("nova" if "nova" in str(assignee).lower() else
+                               "hawk" if "hawk" in str(assignee).lower() else
+                               "closer" if "closer" in str(assignee).lower() else
+                               "nova")
+                logger.info(f"[TASK LOOP] Executing task {task_id}: {description[:80]}... (agent={assignee_id})")
+                try:
+                    prompt = (
+                        f"You are a task executor agent. "
+                        f"Complete this task concisely and return the result as a plain-text summary:\n"
+                        f"{description}"
+                    )
+                    result = await router.handle_message(prompt, chat_id=0, history=None)
+                    task["status"] = "done"
+                    task["result"] = str(result)[:1000]
+                    changed = True
+                    logger.info(f"[TASK LOOP] Task {task_id} marked done.")
+                except Exception as exc:
+                    task["status"] = "blocked"
+                    task["result"] = str(exc)[:500]
+                    changed = True
+                    logger.error(f"[TASK LOOP] Task {task_id} blocked: {exc}")
+
+            if changed:
+                with open(tasks_file, "w", encoding="utf-8") as f:
+                    json.dump(all_tasks, f, indent=2)
+        except Exception as e:
+            logger.error(f"[TASK LOOP] Loop error: {e}")
+        await asyncio.sleep(30)
 
 
 if __name__ == "__main__":

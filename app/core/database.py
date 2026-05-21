@@ -91,6 +91,10 @@ class DatabaseManager:
             cursor.execute("ALTER TABLE leads ADD COLUMN website TEXT")
         except Exception:
             pass
+        try:
+            cursor.execute("ALTER TABLE leads ADD COLUMN last_contacted_at TIMESTAMP")
+        except Exception:
+            pass
 
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS blacklist (
