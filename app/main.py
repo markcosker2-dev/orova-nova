@@ -241,8 +241,10 @@ async def health_check():
         "active_traces": len(tracer.traces),
     }
 
-async def require_dashboard_api_key(x_api_key: Optional[str] = Header(None)):
+async def require_dashboard_api_key(request: Request):
+    """Accept dashboard API key via either X-API-Key (frontend) or X-Api-Key (FastAPI default header)."""
     expected = os.getenv("DASHBOARD_API_KEY", "nova_admin_2026")
+    x_api_key = request.headers.get("X-API-Key") or request.headers.get("X-Api-Key")
     if x_api_key != expected:
         raise HTTPException(status_code=403, detail="Unauthorized")
     return True
