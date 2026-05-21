@@ -747,13 +747,21 @@ async def action_hunt_leads(authorized: bool = Depends(require_dashboard_api_key
 
 @app.post("/api/actions/send-emails")
 async def action_send_emails(authorized: bool = Depends(require_dashboard_api_key)):
-    res = check_replies(limit=5)
-    return {"status": "ok", "message": f"Outreach process checked. Found {res.get('count', 0)} replies."}
+    try:
+        res = check_replies(limit=5)
+        if res.get("status") == "error":
+            return {"status": "error", "message": res.get("message", "AgentMail check failed")}
+        return {"status": "ok", "message": res.get("message", f"Outreach process checked. Found {res.get('count', 0)} replies.")}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 @app.post("/api/actions/generate-report")
 async def action_generate_report(authorized: bool = Depends(require_dashboard_api_key)):
-    res = await backup_database()
-    return {"status": "ok", "report": f"CEO report and vault snapshot complete: {res.get('filename', 'orova.db')}"}
+    try:
+        res = await backup_database()
+        return {"status": "ok", "report": res.get("message", f"CEO report and vault snapshot complete: {res.get('filename', 'orova.db')}")}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 @app.get("/api/notifications")
 async def get_notifications(authorized: bool = Depends(require_dashboard_api_key)):

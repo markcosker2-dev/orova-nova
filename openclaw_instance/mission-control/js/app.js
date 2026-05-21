@@ -688,7 +688,7 @@ if (btnHunt) {
         if (data && data.status === 'ok') {
             showToast('✅ Lead hunt complete!', 'success');
         } else {
-            showToast('❌ Lead hunt failed: ' + (data ? data.error : 'Network error'), 'error');
+            showToast('❌ ' + (data ? (data.detail || data.message || 'Lead hunt failed') : 'Network error'), 'error');
         }
     });
 }
@@ -701,7 +701,7 @@ if (btnSendEmails) {
         showToast('📧 Sending email batch...', 'info');
         var data = await apiFetch('/api/actions/send-emails', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
         btn.classList.remove('loading');
-        showToast(data && data.message ? data.message : '✅ Done', 'success');
+        showToast((data && data.status === 'ok') ? (data.message || '✅ Outreach check complete') : '❌ Outreach check failed', 'error');
     });
 }
 
@@ -716,7 +716,7 @@ if (btnReport) {
         if (data && data.report) {
             showToast('✅ Report generated! Check Telegram.', 'success');
         } else {
-            showToast('❌ Report failed: ' + (data ? data.error : 'Network error'), 'error');
+            showToast('❌ ' + (data ? (data.detail || data.message || 'Report failed') : 'Network error'), 'error');
         }
     });
 }
@@ -874,7 +874,7 @@ async function approveDraft(draftId) {
             showToast('📤 ' + data.message, 'success');
             refreshPendingDrafts();
         } else {
-            showToast('❌ ' + (data.error || 'Failed'), 'error');
+            showToast('❌ ' + (data.detail || data.message || 'Failed'), 'error');
         }
     } catch (e) {
         showToast('❌ Network error', 'error');
@@ -893,7 +893,7 @@ async function denyDraft(draftId) {
             showToast('🚫 ' + data.message, 'info');
             refreshPendingDrafts();
         } else {
-            showToast('❌ ' + (data.error || 'Failed'), 'error');
+            showToast('❌ ' + (data.detail || data.message || 'Failed'), 'error');
         }
     } catch (e) {
         showToast('❌ Network error', 'error');
@@ -1126,7 +1126,7 @@ window.triggerPipeline = async function (name) {
     if (data && data.status === 'ok') {
         showToast('✅ Pipeline started! Check Telegram for results.', 'success');
     } else {
-        showToast('❌ Pipeline failed: ' + (data ? data.error : 'Network error'), 'error');
+        showToast('❌ ' + (data ? (data.detail || data.message || 'Pipeline failed') : 'Network error'), 'error');
     }
 };
 
