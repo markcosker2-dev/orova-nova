@@ -165,6 +165,12 @@ app = FastAPI(title="OROVA Indestructible Agency Bridge", lifespan=lifespan)
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    if isinstance(exc, HTTPException):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"status": "error", "detail": exc.detail},
+            headers=getattr(exc, 'headers', None),
+        )
     error_msg = f"GLOBAL ERROR: {str(exc)}"
     logger.error(error_msg)
     if '_append_log' in globals():
@@ -670,7 +676,14 @@ async def chat_with_agent(request: Request, authorized: bool = Depends(require_d
 @app.post("/api/actions/hunt-leads")
 async def action_hunt_leads(authorized: bool = Depends(require_dashboard_api_key)):
     from app.worker import run_lead_hunt_slow_lane
-    asyncio.create_task(run_lead_hunt_slow_lane(client_id=0, niche="business leads"))
+    import asyncio as _asyncio
+    task = _asyncio.create_task(
+        run_lead_hunt_slow_lane(client_id=0, niche=None, location=None)
+    )
+    task.add_done_callback(
+        lambda t: logger.error(f"[HUNT] Background task failed: {t.exception()!r}")
+        if not t.cancelled() and t.exception() else None
+    )
     return {"status": "ok", "message": "Lead hunt job initiated"}
 
 @app.post("/api/actions/send-emails")
