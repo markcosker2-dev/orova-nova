@@ -152,16 +152,16 @@ async def lifespan(app: FastAPI):
     await cleanup_crawler()
     scheduler.shutdown()
 
-
-    # [P5] CORS — allow dashboard origin
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
 app = FastAPI(title="OROVA Indestructible Agency Bridge", lifespan=lifespan)
+
+# [P5] CORS — allow dashboard origin
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
