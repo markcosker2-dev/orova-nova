@@ -32,6 +32,8 @@ JUNK_KEYWORDS = [
 
 JUNK_COMPILED = [re.compile(p, re.IGNORECASE) for p in JUNK_KEYWORDS]
 
+PHONE_RE = re.compile(r"\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}")
+
 
 async def _source_tavily(query: str, count: int, api_key: str) -> list:
     """Uses Tavily Search API (1,000 free searches/month) to find clean business leads."""
@@ -177,12 +179,25 @@ async def _source_duckduckgo(query: str, count: int) -> list:
 
         results = await asyncio.get_running_loop().run_in_executor(None, _search)
         for res in results:
+            body = res.get("body", "")
+            # Owner extraction from DDG body (e.g. "John Smith owns ABC Tinting")
+            owner = ""
+            if "owner" in body.lower() or "founded by" in body.lower():
+                owner_pat = re.search(r"([A-Z][a-z]+ [A-Z][a-z]+),?\s*(?:owns|founded|owner|ceo|president|proprietor)", body, re.IGNORECASE)
+                if owner_pat:
+                    owner = owner_pat.group(1).strip()
+            # Phone from DDG body
+            phone_m = PHONE_RE.search(body)
+            phone = phone_m.group(0) if phone_m else ""
             url = res.get("href", res.get("link", ""))
             title = res.get("title", "Untitled")
             leads.append({
                 "title": title,
+                "body": body,
                 "url": url,
-                "snippet": res.get("body", res.get("snippet", "")),
+                "snippet": body,
+                "owner": owner,
+                "phone": phone,
                 "source_type": "DuckDuckGo"
             })
     except ImportError:
@@ -217,10 +232,24 @@ async def _source_httpx(query: str, count: int) -> list:
                     a_tag = r.select_one("a.result__url__link") or r.select_one("a.result__a") or r.select_one("a")
                     snippet_tag = r.select_one("a.result__snippet")
                     if a_tag:
+                        title = a_tag.get_text(strip=True)
+                        url = a_tag.get("href", "")
+                        snippet_val = snippet_tag.get_text(strip=True) if snippet_tag else ""
+                        page_text = r.get_text(separator=" ", strip=True)
+                        combined = page_text + " " + title
+                        owner = ""
+                        owner_pat = re.search(r"([A-Z][a-z]+ [A-Z][a-z]+),?\s*(?:owns|founded|owner|ceo|president|proprietor|principal)", combined, re.IGNORECASE)
+                        if owner_pat:
+                            owner = owner_pat.group(1).strip()
+                        phone_m = PHONE_RE.search(page_text)
+                        phone = phone_m.group(0) if phone_m else ""
                         leads.append({
-                            "title": a_tag.get_text(strip=True),
-                            "url": a_tag.get("href", ""),
-                            "snippet": snippet_tag.get_text(strip=True) if snippet_tag else "",
+                            "title": title,
+                            "body": page_text[:500],
+                            "url": url,
+                            "snippet": snippet_val,
+                            "owner": owner,
+                            "phone": phone,
                             "source_type": "HTTPX Direct"
                         })
     except Exception as e:
@@ -365,7 +394,7 @@ def _filter_and_deduplicate(leads: list, count: int) -> list:
         if "yelp.com/biz/" in url:
             biz_slug = url.split("/biz/")[-1].split("?")[0]
             lead["business"] = re.sub(r'\s+\d+$', '', biz_slug.replace("-", " ").title())
-        elif len(title) > 40 or any(x in title.lower() for x in ["best", "top", "how to", "list"]):
+        elif any(x in title.lower() for x in ["best", "top", "how to", "list of", "list:", "ultimate guide"]):
             domain_part = domain.split(".")[0]
             lead["business"] = domain_part.replace("-", " ").replace("_", " ").title()
         else:
@@ -376,6 +405,19 @@ def _filter_and_deduplicate(leads: list, count: int) -> list:
         if name_key in seen_names:
             continue
         seen_names.add(name_key)
+
+        # Try to extract owner name from title+snippet+body
+        if not lead.get("owner"):
+            scan_text = (lead.get("title", "") + " " + lead.get("snippet", "") + " " + lead.get("body", "")).strip()
+            for pattern in [
+                r'([A-Z][a-z]+ [A-Z][a-z]+),?\s*(?:owns|founded|owner|ceo|president|proprietor)',
+                r'(?:owned|run|founded) by\s+([A-Z][a-z]+ [A-Z][a-z]+)',
+                r'([A-Z][a-z]+ [A-Z][a-z]+)\s*[–\-]\s*(?:Owner|CEO|President|Founder)',
+            ]:
+                m = re.search(pattern, scan_text, re.IGNORECASE)
+                if m:
+                    lead["owner"] = m.group(1).strip()
+                    break
 
         filtered.append(lead)
 
