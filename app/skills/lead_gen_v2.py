@@ -35,6 +35,28 @@ JUNK_KEYWORDS = [
 
 JUNK_COMPILED = [re.compile(p, re.IGNORECASE) for p in JUNK_KEYWORDS]
 
+FALSE_POSITIVE_NAMES = frozenset({
+    "About Us", "Contact Us", "Read More", "Learn More", "Our Team",
+    "Get Started", "Meet Our", "Our Story", "Click Here", "Sign Up",
+    "Log In", "View More", "See All", "Find Out", "Call Now",
+    "Free Quote", "Get Quote", "Request Quote", "Schedule Now",
+    "Book Now", "In Silver Lake",
+})
+
+def _is_plausible_name(text: str) -> bool:
+    if not text or len(text) < 4 or len(text) > 50:
+        return False
+    parts = text.split()
+    if len(parts) < 2 or len(parts) > 4:
+        return False
+    if not all(re.match(r"^[A-Za-z\'\-]+$", p) for p in parts):
+        return False
+    if not parts[0][0].isupper():
+        return False
+    if text in FALSE_POSITIVE_NAMES:
+        return False
+    return True
+
 # Regex patterns
 PHONE_RE = re.compile(r'\(?\d{3}\)?[\s.\-]\d{3}[\s.\-]\d{4}')
 EMAIL_RE = re.compile(
@@ -421,8 +443,7 @@ def _find_owner_in_text(text: str) -> str:
         m = pat.search(clean)
         if m:
             candidate = m.group(1).strip()
-            # Basic sanity: 2-3 words, all alpha
-            if 2 <= len(candidate.split()) <= 4 and re.match(r'^[A-Za-z\s\-]+$', candidate):
+            if _is_plausible_name(candidate):
                 return candidate
     return ""
 

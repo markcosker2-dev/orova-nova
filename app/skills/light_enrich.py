@@ -70,13 +70,34 @@ def _normalize_phone_to_e164(phone: str) -> str:
     if not phone:
         return ""
     digits = _NON_DIGIT_RE.sub('', phone)
+    if len(digits) < 10:
+        return ""
+    
+    # Detect fake/placeholder numbers
+    raw_number = digits[-10:]  # Get last 10 digits for validation
+    
+    # Check for repeated digits (e.g., 1111111111)
+    if len(set(raw_number)) == 1:
+        logger.warning(f"[PHONE] Rejecting fake number with repeated digits: '{phone}'")
+        return ""
+    
+    # Check for sequential patterns (1234567890, 9876543210, 0123456789)
+    sequential_patterns = ["1234567890", "9876543210", "0123456789", "2345678901", "0987654321"]
+    if raw_number in sequential_patterns:
+        logger.warning(f"[PHONE] Rejecting fake sequential number: '{phone}'")
+        return ""
+    
+    # Check for numbers starting with 999 (like +19999999999)
+    if raw_number.startswith("999"):
+        logger.warning(f"[PHONE] Rejecting fake number starting with 999: '{phone}'")
+        return ""
+    
     if len(digits) == 10:
         return f"+1{digits}"
     elif len(digits) == 11 and digits.startswith("1"):
         return f"+{digits}"
     elif len(digits) > 10:
         return f"+{digits}"
-    logger.warning(f"[PHONE] Could not normalize to E.164: '{phone}' ({len(digits)} digits). Discarding.")
     return ""
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -125,6 +146,10 @@ FALSE_POSITIVE_NAMES = frozenset({
     'Log In', 'View More', 'See All', 'Find Out', 'Call Now',
     'Free Quote', 'Get Quote', 'Request Quote', 'Schedule Now',
     'Book Now', 'Learn More', 'See More',
+})
+
+LOCATION_BLACKLIST = frozenset({
+    "Silver Lake", "Los Angeles", "New York", "Brooklyn", "Chicago", "San Francisco", "Seattle", "Portland", "Austin", "Denver", "Miami", "Boston", "Santa Monica", "Beverly Hills", "Hollywood", "Pasadena", "Long Beach", "Anaheim", "Irvine", "San Diego", "Oakland", "Berkeley", "Sacramento", "Fresno", "Kansas City", "Phoenix", "Las Vegas", "Atlanta", "Dallas", "Houston", "Nashville", "Phoenix", "Philadelphia", "Pittsburgh", "Cincinnati", "Columbus", "Charlotte", "Raleigh", "Orlando", "Tampa", "St. Louis", "Minneapolis", "Detroit", "Cleveland", "Indianapolis", "Jacksonville", "Memphis", "Baltimore", "Milwaukee", "Albuquerque", "Tucson", "Omaha", "Tulsa", "Arlington", "Tallahassee", "Baton Rouge", "Richmond", "Des Moines", "Little Rock", "Jackson", "Frankfort", "Montgomery", "Juneau", "Honolulu", "Anchorage",
 })
 
 MEDIA_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp', '.ico', '.pdf', '.mp4', '.mov'}
@@ -302,7 +327,7 @@ def _extract_owner_name(html: str) -> Optional[str]:
         try:
             data = json.loads(script.string or "")
             name = _walk_json_for_person(data)
-            if name:
+            if name and name not in FALSE_POSITIVE_NAMES:
                 return name
         except Exception:
             pass
@@ -339,9 +364,10 @@ def _extract_owner_name(html: str) -> Optional[str]:
         combined_context = " ".join(context_parts)
         if any(kw in combined_context for kw in TITLE_KEYWORDS):
             name = direct_text.strip()
-            if name not in FALSE_POSITIVE_NAMES:
+            if name not in FALSE_POSITIVE_NAMES and _is_plausible_name(name):
                 logger.debug(f"[OWNER] DOM adjacency hit: {name}")
                 return name
+            # Skip false positives like "About Us" — keep scanning
 
         tag_lower = direct_text.lower()
         if any(kw in tag_lower for kw in TITLE_KEYWORDS):
@@ -353,6 +379,7 @@ def _extract_owner_name(html: str) -> Optional[str]:
                 if _is_plausible_name(prev_text) and prev_text not in FALSE_POSITIVE_NAMES:
                     logger.debug(f"[OWNER] Reverse DOM hit: {prev_text}")
                     return prev_text
+        # END — do NOT fall through to Strategy 4 with garbage from TITLE_KEYWORD headings
 
     # 4. Full-text regex (case-insensitive)
     full_text = soup.get_text(separator=" ", strip=True)
@@ -371,7 +398,7 @@ def _extract_owner_name(html: str) -> Optional[str]:
         if section:
             for heading in section.find_all(["h2", "h3", "h4", "strong", "b"]):
                 text = heading.get_text(strip=True)
-                if _is_plausible_name(text):
+                if text not in FALSE_POSITIVE_NAMES and _is_plausible_name(text):
                     surrounding = heading.find_parent().get_text(separator=" ", strip=True).lower()
                     if any(kw in surrounding for kw in TITLE_KEYWORDS):
                         return text
@@ -425,6 +452,9 @@ def _is_plausible_name(text: str) -> bool:
         return False
     stop_words = {"and", "the", "for", "with", "from", "our", "your", "their"}
     if any(p.lower() in stop_words for p in parts):
+        return False
+    # Reject names that are purely location names
+    if text in LOCATION_BLACKLIST:
         return False
     return True
 
@@ -762,8 +792,10 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
                 if not lead.get("phone"):
                     phones = _extract_phones(markdown)
                     if phones:
-                        lead["phone"] = _normalize_phone_to_e164(phones[0])
-                        logger.info(f"[ENRICH] → Phone from Yelp: {lead['phone']}")
+                        normalized = _normalize_phone_to_e164(phones[0])
+                        if normalized:
+                            lead["phone"] = normalized
+                            logger.info(f"[ENRICH] → Phone from Yelp: {lead['phone']}")
 
                 # Extract website using dual HTML + Markdown parser
                 if not real_website:
@@ -786,7 +818,8 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
                 logger.warning("[ENRICH] Firecrawl returned nothing for Yelp page")
     else:
         real_website = url
-        lead["website"] = url
+        if not lead.get("website"):
+            lead["website"] = url
 
     # ─── STEP 2: Website Crawl ────────────────────────────────
     if real_website and "yelp.com" not in real_website:
@@ -867,7 +900,7 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
                             text_content = parent.get_text(separator=" ", strip=True)
                             names = re.findall(r'([A-Z][a-zA-Z\'-]+\s+[A-Z][a-zA-Z\'-]+)', text_content)
                             for name in names:
-                                if name not in ['Business Management', 'Key People', 'About Us', 'Contact Us']:
+                                if name not in ['Business Management', 'Key People', 'About Us', 'Contact Us'] and _is_plausible_name(name):
                                     lead["owner"] = name
                                     logger.info(f"[BBB] Extracted Owner from BBB Profile: {name}")
                                     found_owner = True
@@ -879,8 +912,10 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
                 if not lead.get("phone"):
                     phones = _extract_phones(content_for_extraction)
                     if phones:
-                        lead["phone"] = _normalize_phone_to_e164(phones[0])
-                        logger.info(f"[BBB] Phone from BBB: {lead['phone']}")
+                        normalized_phone = _normalize_phone_to_e164(phones[0])
+                        if normalized_phone:
+                            lead["phone"] = normalized_phone
+                            logger.info(f"[BBB] Phone from BBB: {lead['phone']}")
                 continue
 
             if not lead.get("email"):
@@ -893,13 +928,15 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
             if not lead.get("phone"):
                 phones = _extract_phones(content_for_extraction)
                 if phones:
-                    lead["phone"] = _normalize_phone_to_e164(phones[0])
-                    logger.info(f"[ENRICH] → Phone from {page_url}: {lead['phone']}")
+                    normalized_phone = _normalize_phone_to_e164(phones[0])
+                    if normalized_phone:
+                        lead["phone"] = normalized_phone
+                        logger.info(f"[ENRICH] → Phone from {page_url}: {lead['phone']}")
 
             if not lead.get("owner"):
                 owner = _extract_owner_name(content_for_extraction)
-                if owner:
-                    lead["owner"] = owner
+                if owner and _is_plausible_name(owner):
+lead["owner"] = owner
                     logger.info(f"[ENRICH] → Owner from {page_url}: {lead['owner']}")
 
             # ─── STEP 2.5: Hawk AI LLM Extraction ─────────────────────
@@ -916,8 +953,10 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
                     logger.info(f"[HAWK AI] → Email extracted: {lead['email']}")
                 
                 if ai_contacts.get("phone") and not lead.get("phone"):
-                    lead["phone"] = _normalize_phone_to_e164(ai_contacts["phone"])
-                    logger.info(f"[HAWK AI] → Phone extracted: {lead['phone']}")
+                    normalized = _normalize_phone_to_e164(ai_contacts["phone"])
+                    if normalized:
+                        lead["phone"] = normalized
+                        logger.info(f"[HAWK AI] → Phone extracted: {lead['phone']}")
 
             if lead.get("email") and lead.get("phone") and lead.get("owner"):
                 break

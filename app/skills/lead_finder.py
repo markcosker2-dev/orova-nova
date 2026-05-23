@@ -34,6 +34,55 @@ JUNK_COMPILED = [re.compile(p, re.IGNORECASE) for p in JUNK_KEYWORDS]
 
 PHONE_RE = re.compile(r"\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}")
 
+# False positive names to reject as owner names
+FALSE_POSITIVE_NAMES = frozenset({
+    'About Us', 'Contact Us', 'Read More', 'Learn More', 'Our Team',
+    'Get Started', 'Meet Our', 'Our Story', 'Click Here', 'Sign Up',
+    'Log In', 'View More', 'See All', 'Find Out', 'Call Now',
+    'Free Quote', 'Get Quote', 'Request Quote', 'Schedule Now',
+    'Book Now', 'Learn More', 'See More',
+})
+
+_NON_DIGIT_RE = re.compile(r'\D')
+
+def _is_plausible_owner_name(name: str) -> bool:
+    if not name or len(name) < 4 or len(name) > 50:
+        return False
+    parts = name.split()
+    if len(parts) < 2 or len(parts) > 3:
+        return False
+    if not all(re.match(r"^[A-Za-z'\-]+$", p) for p in parts):
+        return False
+    if not parts[0][0].isupper():
+        return False
+    stop_words = {"and", "the", "for", "with", "from", "our", "your", "their"}
+    if any(p.lower() in stop_words for p in parts):
+        return False
+    return True
+
+def _normalize_phone(phone: str) -> str:
+    if not phone:
+        return ""
+    digits = _NON_DIGIT_RE.sub('', phone)
+    if len(digits) < 10:
+        return ""
+    raw_number = digits[-10:]
+    # Reject fake/placeholder numbers
+    if len(set(raw_number)) == 1:
+        return ""
+    sequential_patterns = ["1234567890", "9876543210", "0123456789", "2345678901", "0987654321"]
+    if raw_number in sequential_patterns:
+        return ""
+    if raw_number.startswith("999"):
+        return ""
+    if len(digits) == 10:
+        return f"+1{digits}"
+    elif len(digits) == 11 and digits.startswith("1"):
+        return f"+{digits}"
+    elif len(digits) > 10:
+        return f"+{digits}"
+    return ""
+
 
 async def _source_tavily(query: str, count: int, api_key: str) -> list:
     """Uses Tavily Search API (1,000 free searches/month) to find clean business leads."""
@@ -192,10 +241,12 @@ async def _source_duckduckgo(query: str, count: int) -> list:
             if "owner" in body.lower() or "founded by" in body.lower():
                 owner_pat = re.search(r"([A-Z][a-z]+ [A-Z][a-z]+),?\s*(?:owns|founded|owner|ceo|president|proprietor)", body, re.IGNORECASE)
                 if owner_pat:
-                    owner = owner_pat.group(1).strip()
-            # Phone from DDG body
+                    candidate = owner_pat.group(1).strip()
+                    if candidate not in FALSE_POSITIVE_NAMES and _is_plausible_owner_name(candidate):
+                        owner = candidate
+            # Phone from DDG body (normalized to reject fake numbers)
             phone_m = PHONE_RE.search(body)
-            phone = phone_m.group(0) if phone_m else ""
+            phone = _normalize_phone(phone_m.group(0)) if phone_m else ""
             url = res.get("href", res.get("link", ""))
             title = res.get("title", "Untitled")
             leads.append({
@@ -239,17 +290,21 @@ async def _source_httpx(query: str, count: int) -> list:
                     a_tag = r.select_one("a.result__url__link") or r.select_one("a.result__a") or r.select_one("a")
                     snippet_tag = r.select_one("a.result__snippet")
                     if a_tag:
+                        url = _clean_ddg_url(a_tag.get("href", ""))
+                        if not url:
+                            continue
                         title = a_tag.get_text(strip=True)
-                        url = a_tag.get("href", "")
                         snippet_val = snippet_tag.get_text(strip=True) if snippet_tag else ""
                         page_text = r.get_text(separator=" ", strip=True)
                         combined = page_text + " " + title
                         owner = ""
                         owner_pat = re.search(r"([A-Z][a-z]+ [A-Z][a-z]+),?\s*(?:owns|founded|owner|ceo|president|proprietor|principal)", combined, re.IGNORECASE)
                         if owner_pat:
-                            owner = owner_pat.group(1).strip()
+                            candidate = owner_pat.group(1).strip()
+                            if candidate not in FALSE_POSITIVE_NAMES and _is_plausible_owner_name(candidate):
+                                owner = candidate
                         phone_m = PHONE_RE.search(page_text)
-                        phone = phone_m.group(0) if phone_m else ""
+                        phone = _normalize_phone(phone_m.group(0)) if phone_m else ""
                         leads.append({
                             "title": title,
                             "body": page_text[:500],
@@ -308,7 +363,7 @@ async def _source_yelp_direct(topic: str, count: int) -> list:
                     idx = content.find(slug)
                     context = content[max(0, idx-300):min(len(content), idx+600)]
                     phone_match = re.search(r'\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}', context)
-                    phone = phone_match.group(0) if phone_match else None
+                    phone = _normalize_phone(phone_match.group(0)) if phone_match else None
                     
                     leads.append({
                         "title": biz_name,
@@ -423,8 +478,10 @@ def _filter_and_deduplicate(leads: list, count: int) -> list:
             ]:
                 m = re.search(pattern, scan_text, re.IGNORECASE)
                 if m:
-                    lead["owner"] = m.group(1).strip()
-                    break
+                    candidate = m.group(1).strip()
+                    if candidate not in FALSE_POSITIVE_NAMES and _is_plausible_owner_name(candidate):
+                        lead["owner"] = candidate
+                        break
 
         filtered.append(lead)
 
