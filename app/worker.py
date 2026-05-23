@@ -31,7 +31,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def _run_async(coro_func):
+def _run_async(coro):
     """Run an async coroutine safely even if an event loop is already running."""
     try:
         loop = asyncio.get_running_loop()
@@ -40,8 +40,8 @@ def _run_async(coro_func):
     if loop and loop.is_running():
         import concurrent.futures
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            return pool.submit(asyncio.run, coro_func()).result()
-    return asyncio.run(coro_func())
+            return pool.submit(asyncio.run, coro).result()
+    return asyncio.run(coro)
 
 
 # ─── SHEETS COLUMNS CONFIGURATION ─────────────────────────────

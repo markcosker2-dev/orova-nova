@@ -4,6 +4,7 @@ import asyncio
 import re
 import json
 import httpx
+from urllib.parse import quote
 from typing import Optional
 from duckduckgo_search import DDGS
 
@@ -129,7 +130,7 @@ async def _source_google_maps(query: str, count: int) -> list:
             ),
             "Accept-Language": "en-US,en;q=0.9",
         }
-        search_url = f"https://www.google.com/maps/search/{httpx.utils.quote(query)}"
+        search_url = f"https://www.google.com/maps/search/{quote(query)}"
 
         async with httpx.AsyncClient(
             headers=headers, follow_redirects=True, timeout=20.0
