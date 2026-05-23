@@ -21,6 +21,7 @@ from app.skills.outbound_dialer import trigger_retell_call
 from app.skills.agentmail_skill import check_replies
 from app.core.database import DatabaseManager
 from app.skills.light_enrich import enrich_lead_lite
+from app.skills.lead_validator import score_lead
 from app.skills.opportunity_scanner import scan_opportunity
 
 # Logging
@@ -292,13 +293,39 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
             # Save each lead to SQLite
             for lead in leads:
                 if isinstance(lead, dict):
+                    # ── [NEW] Yelp URL owner name from slug (pre-enrichment) ──
+                    # Example yelp.com/biz/casey-martin → owner "Casey Martin"
+                    yelp_url = lead.get("url", "").lower()
+                    if "yelp.com/biz/" in yelp_url and not lead.get("owner"):
+                        biz_slug = yelp_url.split("/biz/")[-1].split("?")[0].split("#")[0]
+                        slug_parts = [p for p in biz_slug.split("-") if p]
+                        words = [w for w in slug_parts if w and not w.isdigit()]
+                        if 2 <= len(words) <= 4 and not any(kw in biz_slug.lower() for kw in ["auto", "tint", "wrap", "detail", "pro"]):
+                            candidate = " ".join(w.title() for w in words[:2])
+                            lead["owner"] = candidate
+                            logger.info(f"[ENRICH] → Owner from Yelp slug: {candidate}")
+                    # ─────────────────────────────────────────────────────────
+
                     # [Enrichment] Find owner, email, phone, website
                     lead = await enrich_lead_lite(lead)
-                    
-                    # Scoring deferred to Approve step
-                    lead["score"] = 0 
+
+                    # ── [NEW] Run actual AI scoring ──
+                    try:
+                        score_result = score_lead(
+                            company_name=lead.get("business", ""),
+                            company_size="unknown",
+                            industry=lead.get("vertical", niche) or "unknown",
+                            contact_type="unknown",
+                            response_signals=None,
+                        )
+                        lead["score"] = score_result.get("score", 0)
+                    except Exception as e:
+                        logger.warning(f"[SCORE] Lead scoring failed: {e}")
+                        lead["score"] = 0
+                    # ──────────────────────────────────────────
+
                     lead["icebreaker"] = "Pending review..."
-                    
+
                     # Populate CRM Metadata
                     lead["source"] = lead.get("source_type", "Yelp Direct" if "yelp.com" in (lead.get("url") or "") else "Web Search")
                     lead["date"] = datetime.now().strftime("%Y-%m-%d")
