@@ -140,7 +140,11 @@ async def lifespan(app: FastAPI):
     
     # [P2] Start Autonomous Learning Loop
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(reinforcer.run_cycle, "interval", hours=6)
+    
+    def _run_reinforcer_cycle_sync():
+        asyncio.create_task(reinforcer.run_cycle())
+    
+    scheduler.add_job(_run_reinforcer_cycle_sync, "interval", hours=6, max_instances=1)
     scheduler.start()
     # Keep-alive ping for Render free tier
     keep_alive_url = os.getenv("RENDER_EXTERNAL_URL")
