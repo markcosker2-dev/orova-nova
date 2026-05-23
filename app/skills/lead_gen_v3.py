@@ -206,36 +206,28 @@ async def _whois_lookup(domain: str) -> dict:
         return result
     
     try:
-        import aiohttp
-        from urllib.parse import quote
-        
-        # Use a public WHOIS API (whois.iana.org or similar)
         whois_api = f"https://whois.domain.tools/{domain}"
-        
         headers = {
             "User-Agent": "Mozilla/5.0 (compatible; KiloBot/1.0)",
             "Accept": "application/json"
         }
         
-        async with aiohttp.ClientSession() as session:
+        async with httpx.AsyncClient(headers=headers, timeout=8.0) as client:
             try:
-                async with session.get(whois_api, headers=headers, timeout=aiohttp.ClientTimeout(total=8)) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        
-                        # Extract registrant name
-                        if data.get("registrant"):
-                            result["owner_name"] = data["registrant"]
-                        elif data.get("registrant_name"):
-                            result["owner_name"] = data["registrant_name"]
-                        
-                        # Extract email
-                        if data.get("registrant_email"):
-                            result["email"] = data["registrant_email"]
-                        
-                        # Extract phone
-                        if data.get("registrant_phone"):
-                            result["phone"] = data["registrant_phone"]
+                resp = await client.get(whois_api)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    
+                    if data.get("registrant"):
+                        result["owner_name"] = data["registrant"]
+                    elif data.get("registrant_name"):
+                        result["owner_name"] = data["registrant_name"]
+                    
+                    if data.get("registrant_email"):
+                        result["email"] = data["registrant_email"]
+                    
+                    if data.get("registrant_phone"):
+                        result["phone"] = data["registrant_phone"]
             except Exception:
                 pass
     except Exception as e:
@@ -245,14 +237,14 @@ async def _whois_lookup(domain: str) -> dict:
     if not result["owner_name"]:
         try:
             alt_url = f"https://api.whois.vu/?q={domain}"
-            async with aiohttp.ClientSession() as session:
-                async with session.get(alt_url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        if data.get("registrant"):
-                            result["owner_name"] = data["registrant"]
-                        if data.get("email"):
-                            result["email"] = data["email"]
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(alt_url)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data.get("registrant"):
+                        result["owner_name"] = data["registrant"]
+                    if data.get("email"):
+                        result["email"] = data["email"]
         except Exception:
             pass
     
@@ -286,8 +278,6 @@ async def _state_registry_lookup(business_name: str, state: str = "") -> dict:
         return result
     
     try:
-        import aiohttp
-        
         registry_url = STATE_REGISTRY_URLS[state]
         
         headers = {
@@ -296,23 +286,20 @@ async def _state_registry_lookup(business_name: str, state: str = "") -> dict:
         
         params = {"q": business_name}
         
-        async with aiohttp.ClientSession() as session:
-            async with session.get(registry_url, params=params, headers=headers, 
-                                    timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                if resp.status == 200:
-                    text = await resp.text()
-                    
-                    # Try to extract owner info from response
-                    if "registered agent" in text.lower() or "agent" in text.lower():
-                        agent_match = re.search(r'(?:Registered\s+)?Agent[:\s]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)', text, re.IGNORECASE)
-                        if agent_match:
-                            result["owner_name"] = agent_match.group(1)
-                    
-                    # Look for contact email
-                    if not result["email"]:
-                        email_match = EMAIL_RE.search(text)
-                        if email_match:
-                            result["email"] = email_match.group(0)
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(registry_url, params=params, headers=headers)
+            if resp.status_code == 200:
+                text = resp.text
+                
+                if "registered agent" in text.lower() or "agent" in text.lower():
+                    agent_match = re.search(r'(?:Registered\s+)?Agent[:\s]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)', text, re.IGNORECASE)
+                    if agent_match:
+                        result["owner_name"] = agent_match.group(1)
+                
+                if not result["email"]:
+                    email_match = EMAIL_RE.search(text)
+                    if email_match:
+                        result["email"] = email_match.group(0)
     except Exception as e:
         logger.debug(f"[REGISTRY] Error for {business_name}: {e}")
     

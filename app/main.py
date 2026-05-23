@@ -54,6 +54,8 @@ def _append_log(msg: str):
     LOG_BUFFER.append({"ts": datetime.now().strftime("%H:%M:%S"), "msg": msg})
     if len(LOG_BUFFER) > 100: LOG_BUFFER.pop(0)
 
+_task_loop_running = False
+
 
 
 from app.core.telegram_queue import tg_queue
