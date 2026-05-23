@@ -180,6 +180,13 @@ async def _source_duckduckgo(query: str, count: int) -> list:
         results = await asyncio.get_running_loop().run_in_executor(None, _search)
         for res in results:
             body = res.get("body", "")
+            # EMAIL from DDG body
+            email_m = re.search(r'\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b', body)
+            email = ""
+            if email_m:
+                candidate = email_m.group(0).lower()
+                if not any(g in candidate for g in ["info@", "contact@", "hello@", "support@", "noreply"]):
+                    email = candidate
             # Owner extraction from DDG body (e.g. "John Smith owns ABC Tinting")
             owner = ""
             if "owner" in body.lower() or "founded by" in body.lower():
@@ -194,10 +201,10 @@ async def _source_duckduckgo(query: str, count: int) -> list:
             leads.append({
                 "title": title,
                 "body": body,
-                "url": url,
                 "snippet": body,
                 "owner": owner,
                 "phone": phone,
+                "email": email,
                 "source_type": "DuckDuckGo"
             })
     except ImportError:
