@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 # Add app path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.skills.lead_finder import find_leads
+from app.skills.lead_gen_v3 import find_leads
 from app.skills.outbound_dialer import trigger_retell_call
 from app.skills.agentmail_skill import check_replies
 from app.core.database import DatabaseManager
@@ -290,20 +290,28 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
             count = len(leads)
             logger.info(f"   -> Found {count} leads. Saving to SQLite...")
 
+            # Map new field names from lead_gen_v3 to expected field names
+            for lead in leads:
+                if isinstance(lead, dict):
+                    if lead.get("owner_name") and not lead.get("owner"):
+                        lead["owner"] = lead["owner_name"]
+
             # Save each lead to SQLite
             for lead in leads:
                 if isinstance(lead, dict):
                     # ── [NEW] Yelp URL owner name from slug (pre-enrichment) ──
                     # Example yelp.com/biz/casey-martin → owner "Casey Martin"
                     yelp_url = lead.get("url", "").lower()
-                    if "yelp.com/biz/" in yelp_url and not lead.get("owner"):
+                    if "yelp.com/biz/" in yelp_url and not lead.get("owner_name"):
                         biz_slug = yelp_url.split("/biz/")[-1].split("?")[0].split("#")[0]
                         slug_parts = [p for p in biz_slug.split("-") if p]
                         words = [w for w in slug_parts if w and not w.isdigit()]
                         if 2 <= len(words) <= 4 and not any(kw in biz_slug.lower() for kw in ["auto", "tint", "wrap", "detail", "pro"]):
                             candidate = " ".join(w.title() for w in words[:2])
-                            lead["owner"] = candidate
+                            lead["owner_name"] = candidate
                             logger.info(f"[ENRICH] → Owner from Yelp slug: {candidate}")
+                            # Map to owner for enrich_lead_lite compatibility
+                            lead["owner"] = candidate
                     # ─────────────────────────────────────────────────────────
 
                     # [Enrichment] Find owner, email, phone, website
