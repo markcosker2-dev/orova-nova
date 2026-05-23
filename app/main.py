@@ -276,6 +276,31 @@ async def require_dashboard_api_key(request: Request):
 
     return True
 
+
+@app.get("/_auth-debug")
+async def auth_debug(request: Request):
+    """Diagnostic — reveals key length mismatch without exposing the actual value."""
+    expected = os.getenv("DASHBOARD_API_KEY", "nova_admin_2026")
+    x_api_key = request.headers.get("X-API-Key") or request.headers.get("X-Api-Key")
+
+    _exp = (expected or "").strip()
+    _prv = (x_api_key or "").strip()
+
+    matched = (_prv == _exp)
+    logger.warning(
+        f"[AUTH-DEBUG] expected={len(_exp)}chars prv={_prv!r}({len(_prv)}chars) "
+        f"match={matched} via_header={'X-API-Key' if request.headers.get('X-API-Key') else ('X-Api-Key' if request.headers.get('X-Api-Key') else 'NONE')}"
+    )
+    return {
+        "env_set": bool(expected),
+        "expected_len": len(_exp),
+        "expected_hex": _exp.encode().hex() if _exp else None,
+        "provided": _prv if matched else f"<{len(_prv)} chars>",
+        "provided_len": len(_prv),
+        "match": matched,
+    }
+
+
 @app.get("/api/health")
 async def api_health_check(authorized: bool = Depends(require_dashboard_api_key)):
     """Health probe for Mission Control dashboard — flattens structure for the frontend."""

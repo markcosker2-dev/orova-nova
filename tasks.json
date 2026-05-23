@@ -23,7 +23,8 @@
     "description": "",
     "assignee": "Nova",
     "priority": "medium",
-    "status": "backlog",
-    "due": ""
+    "status": "done",
+    "due": "",
+    "result": "[!!] All AI providers failed for role 'default'. Last error: Error code: 401 - {'error': {'message': 'Invalid API Key', 'type': 'invalid_request_error', 'code': "
   }
 ]
