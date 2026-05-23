@@ -563,7 +563,10 @@ async def save_tasks(request: Request, authorized: bool = Depends(require_dashbo
         found = False
         for i, t in enumerate(current_tasks):
             if t.get("id") == task_id:
-                current_tasks[i] = data
+                if isinstance(current_tasks[i], dict):
+                    current_tasks[i].update(data)
+                else:
+                    current_tasks[i] = data
                 found = True
                 break
         if not found:
@@ -627,7 +630,10 @@ async def save_content(request: Request, authorized: bool = Depends(require_dash
         found = False
         for i, c in enumerate(current_content):
             if c.get("id") == content_id:
-                current_content[i] = data
+                if isinstance(current_content[i], dict):
+                    current_content[i].update(data)
+                else:
+                    current_content[i] = data
                 found = True
                 break
         if not found:
@@ -691,7 +697,10 @@ async def save_memory(request: Request, authorized: bool = Depends(require_dashb
         found = False
         for i, m in enumerate(current_memories):
             if m.get("id") == mem_id:
-                current_memories[i] = data
+                if isinstance(current_memories[i], dict):
+                    current_memories[i].update(data)
+                else:
+                    current_memories[i] = data
                 found = True
                 break
         if not found:

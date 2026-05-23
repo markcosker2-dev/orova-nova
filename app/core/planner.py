@@ -30,6 +30,7 @@ from app.skills.perf_dashboard import generate_weekly_report, track_metric
 from app.core.agent_router import dispatch_task, get_all_statuses
 from app.skills.definitions import TOOLS
 from app.core.guardrails import Guardrails
+from app.core.memory import MemoryDistiller
 from app.skills.smart_scraper import sgai_search_and_extract, sgai_deep_extract
 from app.skills.email_sequence_skill import create_drip_campaign
 from app.skills.copywriting_skill import write_cold_email, write_ad_copy
@@ -146,6 +147,8 @@ class TaskPlanner:
     def __init__(self, ai_client: UnifiedAIClient, config: dict = None):
         self.ai = ai_client
         self.config = config or {}
+        self.distiller = MemoryDistiller(self.ai)
+        logger.info("[PLANNER] MemoryDistiller integrated.")
         self.available_functions = {
             "elite_scrape": elite_scrape or make_disabled_tool_fallback("elite_scrape", "crawl4ai dependency is not installed"),
             "vision_browse": vision_browse or make_disabled_tool_fallback("vision_browse", "browser_use dependency is not installed"),
@@ -201,9 +204,28 @@ class TaskPlanner:
         last_call_hash = ""
         history = list(conversation_history or [])
 
+        # ── [NEW] Tiered Memory Compression ──────────────────────────────
+        # Compress long histories before building the prompt window
+        try:
+            history = await self.distiller.distill(history, client_id=client_id)
+        except Exception as e:
+            logger.warning(f"[PLANNER] History distillation failed: {e}")
+
+        # Retrieve relevant long-term facts from the SQLite wiki and inject into system prompt
+        try:
+            relevant_facts = await self.distiller.retrieve_context(goal, client_id=client_id)
+        except Exception as e:
+            logger.warning(f"[PLANNER] Context retrieval failed: {e}")
+            relevant_facts = ""
+        # ────────────────────────────────────────────────────────────────
+
         tools = self._scope_tools(goal)
         tool_names = [t["function"]["name"] for t in tools]
-        messages = [{"role": "system", "content": _PERSONA_LOCK + f"You are Nova. Available tools: {tool_names}"}]
+        system_content = _PERSONA_LOCK
+        if relevant_facts:
+            system_content += "\n" + relevant_facts
+        system_content += f"\nYou are Nova. Available tools: {tool_names}"
+        messages = [{"role": "system", "content": system_content}]
         if history:
             safe_history = _sanitise_history(history, n=6)
             if safe_history:

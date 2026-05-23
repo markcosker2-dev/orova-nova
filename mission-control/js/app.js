@@ -2,7 +2,9 @@
    OROVA Mission Control — Application Engine v2
    ───────────────────────────────────────────── */
 
-const API = window.location.origin;
+const API = (window.location.origin === 'null' || window.location.protocol === 'file:') 
+    ? 'http://localhost:18789' 
+    : window.location.origin;
 let currentClientId = 0; // 0 = OROVA Internal
 
 // ═══════════════════ DATA LAYER ═══════════════════
@@ -96,7 +98,7 @@ async function apiFetch(path, opts) {
         fetchPath += `${separator}client_id=${currentClientId}`;
         
         const res = await fetch(API + fetchPath, opts);
-        if (res.status === 401) {
+        if (res.status === 401 || res.status === 403) {
             const newKey = prompt("Unauthorized. Please enter your NOVA_API_KEY:");
             if (newKey) {
                 localStorage.setItem('NOVA_API_KEY', newKey);
@@ -416,7 +418,6 @@ async function renderPipeline() {
         }).join('');
     });
     initDragDrop('content-card', 'stage-items', async function (cardId, newStage) {
-        var items = await Store.getTasks(); // Just to find the item
         const res = await apiFetch('/api/content', {
             method: 'POST',
             body: JSON.stringify({ id: cardId, stage: newStage })
@@ -881,17 +882,15 @@ async function refreshPendingDrafts() {
 async function approveDraft(draftId) {
     showToast('✅ Sending email...', 'info');
     try {
-        var res = await fetch(API + '/api/actions/approve-email', {
+        var data = await apiFetch('/api/actions/approve-email', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: draftId })
         });
-        var data = await res.json();
-        if (data.status === 'ok') {
+        if (data && data.status === 'ok') {
             showToast('📤 ' + data.message, 'success');
             refreshPendingDrafts();
         } else {
-            showToast('❌ ' + (data.detail || data.message || 'Failed'), 'error');
+            showToast('❌ ' + (data ? (data.detail || data.message || 'Failed') : 'Network error'), 'error');
         }
     } catch (e) {
         showToast('❌ Network error', 'error');
@@ -900,17 +899,15 @@ async function approveDraft(draftId) {
 
 async function denyDraft(draftId) {
     try {
-        var res = await fetch(API + '/api/actions/deny-email', {
+        var data = await apiFetch('/api/actions/deny-email', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: draftId })
         });
-        var data = await res.json();
-        if (data.status === 'ok') {
+        if (data && data.status === 'ok') {
             showToast('🚫 ' + data.message, 'info');
             refreshPendingDrafts();
         } else {
-            showToast('❌ ' + (data.detail || data.message || 'Failed'), 'error');
+            showToast('❌ ' + (data ? (data.detail || data.message || 'Failed') : 'Network error'), 'error');
         }
     } catch (e) {
         showToast('❌ Network error', 'error');
@@ -929,7 +926,7 @@ async function refreshHealth() {
         el('health-errors').textContent = data.errors || 0;
         el('health-errors').className = 'health-value ' + (data.errors > 0 ? 'health-error' : 'health-ok');
     }
-    if (el('health-agents')) el('health-agents').textContent = (data.agents_online || 0) + '/4';
+    if (el('health-agents')) el('health-agents').textContent = (data.agents_online || 0) + '/6';
     if (el('health-pending')) el('health-pending').textContent = data.pending_emails || 0;
 
     if (data.scheduler) {
@@ -1038,6 +1035,8 @@ function initDragDrop(cardClass, containerClass, onDrop) {
         card.addEventListener('dragend', function () { card.classList.remove('dragging'); });
     });
     containers.forEach(function (container) {
+        if (container.dataset.dragInitialized) return;
+        container.dataset.dragInitialized = 'true';
         container.addEventListener('dragover', function (e) { e.preventDefault(); container.classList.add('drag-over'); });
         container.addEventListener('dragleave', function () { container.classList.remove('drag-over'); });
         container.addEventListener('drop', function (e) {
@@ -1222,7 +1221,14 @@ document.getElementById('save-client-btn')?.addEventListener('click', async () =
 
 document.getElementById('workspace-switcher')?.addEventListener('change', async (e) => {
     currentClientId = parseInt(e.target.value);
-    showToast('Switched Workspace context to ' + e.target.options[e.target.selectedIndex].text);
+    const selectedText = e.target.options[e.target.selectedIndex].text;
+    showToast('Switched Workspace context to ' + selectedText);
+    
+    // Update active workspace label on the top bar
+    const activeLabel = document.getElementById('active-workspace-name');
+    if (activeLabel) {
+        activeLabel.textContent = selectedText;
+    }
     
     // Force immediate refresh of all components
     showToast('🔄 Synchronizing data...', 'info');
