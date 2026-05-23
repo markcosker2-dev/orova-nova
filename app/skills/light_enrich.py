@@ -936,7 +936,7 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
             if not lead.get("owner"):
                 owner = _extract_owner_name(content_for_extraction)
                 if owner and _is_plausible_name(owner):
-lead["owner"] = owner
+                    lead["owner"] = owner
                     logger.info(f"[ENRICH] → Owner from {page_url}: {lead['owner']}")
 
             # ─── STEP 2.5: Hawk AI LLM Extraction ─────────────────────
