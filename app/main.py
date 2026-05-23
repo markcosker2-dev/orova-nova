@@ -28,7 +28,7 @@ from app.core.planner import TaskPlanner
 from app.core.router import Router
 from app.core.database import DatabaseManager
 from app.core.soul import AgentSoul
-from app.skills.lead_finder import find_leads
+from app.skills.lead_gen_v3 import find_leads
 
 class BufferHandler(logging.Handler):
     def emit(self, record):

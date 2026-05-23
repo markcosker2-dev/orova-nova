@@ -52,6 +52,31 @@ def _is_plausible_name(text: str) -> bool:
         return False
     return True
 
+def _normalize_phone_to_e164(phone: str) -> str:
+    if not phone:
+        return ""
+    digits = re.sub(r'\D', '', phone)
+    if len(digits) < 10:
+        return ""
+    raw_number = digits[-10:]
+    # Reject repeated digits
+    if len(set(raw_number)) == 1:
+        return ""
+    # Reject sequential patterns
+    sequential_patterns = ["1234567890", "9876543210", "0123456789"]
+    if raw_number in sequential_patterns:
+        return ""
+    # Reject numbers starting with 999
+    if raw_number.startswith("999"):
+        return ""
+    if len(digits) == 10:
+        return f"+1{digits}"
+    elif len(digits) == 11 and digits.startswith("1"):
+        return f"+{digits}"
+    else:
+        return f"+{digits}"
+
+
 # Regex patterns
 PHONE_RE = re.compile(r'\(?\d{3}\)?[\s.\-]\d{3}[\s.\-]\d{4}')
 EMAIL_RE = re.compile(
@@ -134,7 +159,7 @@ async def _scrape_website(url: str) -> dict:
                     if not result["phone"]:
                         phone_match = PHONE_RE.search(text)
                         if phone_match:
-                            result["phone"] = phone_match.group(0)
+                            result["phone"] = _normalize_phone_to_e164(phone_match.group(0))
                     
                     # Extract emails
                     if not result["email"]:
@@ -413,6 +438,9 @@ async def enrich_lead_4step(url: str, business_name: str = "") -> dict:
         if res.get("owner_name") and not final["owner_name"]:
             final["owner_name"] = res["owner_name"]
     
+    # Validate final phone
+    final["phone"] = _normalize_phone_to_e164(final["phone"])
+    
     return final
 
 
@@ -613,3 +641,5 @@ if __name__ == "__main__":
             print(f"  {lead}")
     
     asyncio.run(_run_test())
+
+find_leads = find_leads_v3
