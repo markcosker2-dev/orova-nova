@@ -260,8 +260,20 @@ async def require_dashboard_api_key(request: Request):
     """Accept dashboard API key via either X-API-Key (frontend) or X-Api-Key (FastAPI default header)."""
     expected = os.getenv("DASHBOARD_API_KEY", "nova_admin_2026")
     x_api_key = request.headers.get("X-API-Key") or request.headers.get("X-Api-Key")
-    if x_api_key != expected:
+
+    # Diagnose key mismatch
+    _provided = x_api_key or "<missing>"
+    _exp_trimmed = (expected or "").strip()
+    _prv_trimmed = (_provided or "").strip()
+
+    if _prv_trimmed != _exp_trimmed:
+        logger.warning(
+            f"[AUTH] Dashboard API key mismatch — "
+            f"expected has {len(_exp_trimmed)} chars, "
+            f"provided {_prv_trimmed!r} ({len(_prv_trimmed)} chars)"
+        )
         raise HTTPException(status_code=403, detail="Unauthorized")
+
     return True
 
 @app.get("/api/health")

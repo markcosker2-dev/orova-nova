@@ -5,6 +5,8 @@ services:
     plan: free
     region: ohio
     envVars:
+      - key: DASHBOARD_API_KEY
+        value: nova_admin_2026
       - key: DATABASE_URL
         value: sqlite+aiosqlite:///app/app/data/orova_v5.db
       - fromContext: OLLAMA_AUTH_TOKEN
