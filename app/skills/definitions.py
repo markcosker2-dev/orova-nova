@@ -82,6 +82,21 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "find_leads_v2",
+            "description": "Search Google Maps and the web for business leads with owner names, phone numbers, and email addresses. Returns scored, enriched leads ready to act on.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "The search query (e.g., 'auto detailing in Los Angeles' or 'luxury car dealers Beverly Hills')"},
+                    "count": {"type": "integer", "description": "Number of leads to return (default 5)"}
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "find_leads",
             "description": "Search the web for business leads. Returns a list of titles, URLs, and snippets.",
             "parameters": {
