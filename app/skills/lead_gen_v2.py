@@ -644,9 +644,9 @@ def _normalize_raw_lead(raw: dict) -> dict:
     }
 
 
-async def find_leads(count: int = 5, query: str = "business leads") -> dict:
+async def find_leads_v2(count: int = 5, query: str = "business leads") -> dict:
     """
-    Main entry point — same interface as lead_finder.find_leads().
+    Main entry point — same interface as find_leads_v2().
     Returns {"text": str, "leads": list[dict]}.
 
     Sources: Google Maps (HTTPX), DuckDuckGo, Yelp slug parse.
@@ -766,7 +766,7 @@ if __name__ == "__main__":
     async def _run_test():
         test_query = sys.argv[1] if len(sys.argv) > 1 else "roofing contractors Austin"
         test_count = int(sys.argv[2]) if len(sys.argv) > 2 else 5
-        result = await find_leads(count=test_count, query=test_query)
+        result = await find_leads_v2(count=test_count, query=test_query)
         text = result.get("text", "No results")
         leads = result.get("leads", [])
         print("\n" + "=" * 60)
