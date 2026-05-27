@@ -1,0 +1,200 @@
+{
+    "steps": {
+        "welcome": {
+            "title": "Willkommen bei HermesClaw",
+            "description": "Ihr KI-Assistent ist bereit für die Konfiguration"
+        },
+        "runtime": {
+            "title": "Umgebungsprüfung",
+            "description": "Systemanforderungen werden überprüft"
+        },
+        "provider": {
+            "title": "KI-Anbieter",
+            "description": "KI-Dienst konfigurieren"
+        },
+        "channel": {
+            "title": "Kanal verbinden",
+            "description": "Eine Messaging-Plattform verbinden (optional)"
+        },
+        "installing": {
+            "title": "Einrichtung",
+            "description": "Essenzielle Komponenten werden installiert"
+        },
+        "complete": {
+            "title": "Alles bereit!",
+            "description": "HermesClaw ist einsatzbereit"
+        }
+    },
+    "welcome": {
+        "title": "Willkommen bei HermesClaw",
+        "description": "HermesClaw ist ein Desktop-Workspace zum Ausführen und Verwalten von KI-Agenten. Konfigurieren Sie Modellanbieter, installieren Sie Skills, verbinden Sie Messaging-Kanäle und steuern Sie Agent-Workflows – alles in einer lokalen Anwendung.",
+        "features": {
+            "noCommand": "Keine Kommandozeile erforderlich",
+            "modernUI": "Moderne, ansprechende Benutzeroberfläche",
+            "bundles": "Vorinstallierte Skill-Bundles",
+            "crossPlatform": "Plattformübergreifende Unterstützung"
+        }
+    },
+    "runtime": {
+        "title": "Umgebung wird geprüft",
+        "viewLogs": "Protokolle anzeigen",
+        "recheck": "Erneut prüfen",
+        "installChoiceLabel": "Runtime installieren",
+        "installChoiceHint": "Wählen Sie aus, welche Runtime während der Einrichtung vorbereitet werden soll. Im 'Beide'-Modus bleibt OpenClaw primär und Hermes wird als OpenClaw-Agent konfiguriert.",
+        "nodejs": "Node.js Runtime",
+        "openclaw": "OpenClaw Paket",
+        "gateway": "Gateway-Dienst",
+        "startGateway": "Gateway starten",
+        "installChoice": {
+            "openclaw": {
+                "title": "OpenClaw",
+                "description": "OpenClaw als primäre Runtime verwenden."
+            },
+            "hermes": {
+                "title": "Hermes",
+                "description": "Nur Hermes-Modus vorbereiten, ohne OpenClaw-Start in der Einrichtung."
+            },
+            "both": {
+                "title": "OpenClaw + Hermes",
+                "description": "OpenClaw als primäre Runtime beibehalten und Hermes als OpenClaw-Agent anbinden."
+            }
+        },
+        "windowsWsl": {
+            "title": "Windows Hermes Verfügbarkeit",
+            "description": "Unter Windows kann Hermes einen experimentellen nativen Pfad oder eine konfigurierte WSL2-Distro verwenden. Solange keine davon verfügbar ist, kann die Einrichtung nur mit OpenClaw fortgesetzt werden.",
+            "missing": "Hermes und OpenClaw + Hermes sind vorübergehend nicht verfügbar, da noch kein nativer Hermes-Pfad oder keine WSL2-Distro konfiguriert wurde.",
+            "ready": "WSL2 ist bereit mit Distro: {{distro}}. Nur-Hermes und OpenClaw + Hermes sind verfügbar.",
+            "nativeReady": "Nativer Hermes-Pfad für experimentelle Windows-Unterstützung konfiguriert.",
+            "nativeAndWslReady": "Nativer Hermes-Pfad konfiguriert; WSL-Distro {{distro}} ist ebenfalls verfügbar."
+        },
+        "status": {
+            "checking": "Wird geprüft...",
+            "success": "Node.js ist verfügbar",
+            "error": "Fehlgeschlagen",
+            "gatewayRunning": "Läuft auf Port {{port}}",
+            "packageReady": "OpenClaw-Paket bereit"
+        },
+        "issue": {
+            "title": "Umgebungsproblem erkannt",
+            "desc": "Bitte stellen Sie sicher, dass OpenClaw ordnungsgemäß installiert ist. Prüfen Sie die Protokolle für Details."
+        },
+        "logs": {
+            "title": "Anwendungs-Protokolle",
+            "openFolder": "Protokoll-Ordner öffnen",
+            "close": "Schließen",
+            "noLogs": "(Noch keine Protokolle verfügbar)"
+        }
+    },
+    "provider": {
+        "label": "Modell-Anbieter",
+        "selectPlaceholder": "Anbieter wählen...",
+        "baseUrl": "Basis-URL",
+        "modelId": "Modell-ID",
+        "modelIdDesc": "Die Modell-ID Ihres Anbieters (z.B. deepseek-ai/DeepSeek-V3)",
+        "codePlanPreset": "Code Plan Preset",
+        "codePlanMode": "Code Plan",
+        "useCodePlanPreset": "Ark Code Plan Preset verwenden",
+        "codePlanPresetDesc": "Code Plan verwendet https://ark.cn-beijing.volces.com/api/coding/v3 und das Modell ark-code-latest. Verwenden Sie /api/v3 nicht für Code Plan Traffic.",
+        "codePlanDoc": "Code Plan Dokumentation",
+        "protocol": "Protokoll",
+        "protocols": {
+            "openaiCompletions": "OpenAI Completions",
+            "openaiResponses": "OpenAI Responses",
+            "anthropic": "Anthropic kompatibel"
+        },
+        "apiKey": "API Key",
+        "save": "Speichern",
+        "validateSave": "Validieren & Speichern",
+        "valid": "Anbieter erfolgreich konfiguriert",
+        "invalid": "Ungültiger API Key",
+        "storedLocally": "Ihr API Key wird lokal auf Ihrem Gerät gespeichert."
+    },
+    "channel": {
+        "title": "Messaging-Kanal verbinden",
+        "subtitle": "Wählen Sie eine Plattform, um Ihren KI-Assistenten zu verbinden. Sie können später in den Einstellungen weitere Kanäle hinzufügen.",
+        "configure": "{{name}} konfigurieren",
+        "howTo": "Verbindung herstellen:",
+        "viewDocs": "Dokumentation anzeigen",
+        "validationError": "Validierung fehlgeschlagen",
+        "connected": "{{name}} verbunden",
+        "connectedDesc": "Ihr Kanal wurde konfiguriert. Er wird verbunden, sobald das Gateway startet.",
+        "configureAnother": "Weiteren Kanal konfigurieren"
+    },
+    "installing": {
+        "title": "Essenzielle Komponenten werden installiert",
+        "subtitle": "Die Werkzeuge für Ihren KI-Assistenten werden eingerichtet",
+        "progress": "Fortschritt",
+        "summary": "{{count}} Installationsphase(n) für diese Runtime-Wahl werden vorbereitet.",
+        "steps": {
+            "openclaw": "OpenClaw Runtime",
+            "hermes": "Hermes Runtime",
+            "bridge": "Hermes Bridge"
+        },
+        "stepHint": {
+            "openclaw": "Bereitet die primäre OpenClaw Runtime vor, die von der App und dem Gateway genutzt wird.",
+            "hermes": "Bereitet die Hermes Runtime für den eigenständigen Betrieb oder als OpenClaw-Agent-Backend vor.",
+            "bridge": "Richtet die Hermes-als-Agent Bridge für den OpenClaw-Primärmodus ein."
+        },
+        "status": {
+            "pending": "Ausstehend",
+            "installing": "Wird installiert...",
+            "installed": "Installiert",
+            "failed": "Fehlgeschlagen"
+        },
+        "error": "Einrichtungsfehler:",
+        "retry": "Installation erneut versuchen",
+        "restart": "App-Neustart versuchen",
+        "failureSource": {
+            "openclaw": "Der Fehler trat während der Vorbereitung der OpenClaw Runtime auf.",
+            "hermes": "Der Fehler trat während der Vorbereitung der Hermes Runtime auf.",
+            "bridge": "Der Fehler trat während der Einrichtung der Hermes-als-OpenClaw-Agent Bridge auf.",
+            "generic": "Die Fehlerquelle konnte aus dem aktuellen Backend-Ergebnis nicht ermittelt werden."
+        },
+        "retryGuidance": {
+            "openclaw": "Überprüfen Sie den OpenClaw Paket-/Build-Status sowie die Gateway-Voraussetzungen und versuchen Sie es erneut.",
+            "hermes": "Überprüfen Sie die Hermes-Installationsvoraussetzungen (einschließlich nativem Pfad oder WSL unter Windows) und versuchen Sie es erneut.",
+            "bridge": "Überprüfen Sie die Bridge-Voraussetzungen und versuchen Sie es erneut, sobald die Runtimes verfügbar sind.",
+            "generic": "Versuchen Sie es nach Prüfung der Fehlerdetails erneut. Sollte es weiterhin fehlschlagen, prüfen Sie die Einrichtungsprotokolle."
+        },
+        "wait": "Dies kann einen Moment dauern...",
+        "skip": "Diesen Schritt überspringen"
+    },
+    "complete": {
+        "title": "Einrichtung abgeschlossen!",
+        "subtitle": "HermesClaw ist konfiguriert und einsatzbereit. Sie können nun mit Ihrem KI-Assistenten chatten.",
+        "provider": "KI-Anbieter",
+        "components": "Komponenten",
+        "gateway": "Gateway",
+        "running": "Läuft",
+        "footer": "Skills und Kanäle können in den Einstellungen angepasst werden"
+    },
+    "nav": {
+        "next": "Weiter",
+        "back": "Zurück",
+        "skipStep": "Diesen Schritt überspringen",
+        "skipSetup": "Einrichtung überspringen",
+        "getStarted": "Loslegen"
+    },
+    "defaultSkills": {
+        "opencode": {
+            "name": "OpenCode",
+            "description": "Backend für KI-Coding-Assistenten"
+        },
+        "python-env": {
+            "name": "Python Umgebung",
+            "description": "Python-Runtime für Skills"
+        },
+        "code-assist": {
+            "name": "Code Assist",
+            "description": "Code-Analyse und Vorschläge"
+        },
+        "file-tools": {
+            "name": "Datei-Tools",
+            "description": "Dateioperationen und Verwaltung"
+        },
+        "terminal": {
+            "name": "Terminal",
+            "description": "Ausführung von Shell-Befehlen"
+        }
+    }
+}

@@ -1,0 +1,63 @@
+{
+    "gatewayNotRunning": "البوابة غير مشغلة",
+    "gatewayRequired": "يجب تشغيل بوابة OpenClaw Gateway لاستخدام الدردشة. ستعمل تلقائياً، أو يمكنك تشغيلها من الإعدادات.",
+    "welcome": {
+        "title": "دردشة HermesClaw",
+        "subtitle": "ماذا يمكنني أن أفعل لك؟",
+        "askQuestions": "التعامل مع المهام",
+        "askQuestionsDesc": "العمل على الطلبات الموجهة للمهام",
+        "creativeTasks": "التنفيذ المستمر",
+        "creativeTasksDesc": "الاستمرار في العمل من خلال خطوات متعددة",
+        "brainstorming": "وكلاء متعددون بالتوازي"
+    },
+    "noLogs": "(لا توجد سجلات متاحة بعد)",
+    "toolbar": {
+        "refresh": "تحديث الدردشة",
+        "currentAgent": "تتحدث إلى {{agent}}"
+    },
+    "taskPanel": {
+        "eyebrow": "عرض التشغيل",
+        "title": "مخطط المهمة",
+        "emptyTitle": "لا توجد خطوات منظمة بعد",
+        "emptyBody": "بمجرد بدء التشغيل، سيظهر HermesClaw التفكير، ونداءات الأدوات، وحالات التسليم هنا.",
+        "status": {
+            "idle": "خامل",
+            "running_one": "خطوة واحدة نشطة",
+            "running_other": "{{count}} خطوات نشطة"
+        },
+        "stepStatus": {
+            "running": "قيد التشغيل",
+            "completed": "تم",
+            "error": "خطأ"
+        }
+    },
+    "executionGraph": {
+        "title": "رسم بياني للتنفيذ",
+        "branchLabel": "فرع",
+        "thinkingLabel": "تفكير",
+        "agentRun": "تنفيذ {{agent}}",
+        "collapsedSummary": "{{toolCount}} نداءات أدوات · {{processCount}} رسائل معالجة",
+        "collapseAction": "طي الرسم البياني للتنفيذ"
+    },
+    "composer": {
+        "attachFiles": "إرفاق ملفات",
+        "pickAgent": "اختر وكيلاً",
+        "clearTarget": "مسح الوكيل المستهدف",
+        "targetChip": "@{{agent}}",
+        "agentPickerTitle": "توجيه الرسالة التالية إلى وكيل آخر",
+        "gatewayDisconnectedPlaceholder": "البوابة غير متصلة...",
+        "send": "إرسال",
+        "stop": "إيقاف",
+        "gatewayConnected": "متصل",
+        "gatewayStatus": "gateway {{state}} | port: {{port}} {{pid}}",
+        "retryFailedAttachments": "إعادة محاولة المرفقات الفاشلة"
+    },
+    "historyBuckets": {
+        "today": "اليوم",
+        "yesterday": "أمس",
+        "withinWeek": "خلال أسبوع",
+        "withinTwoWeeks": "خلال أسبوعين",
+        "withinMonth": "خلال شهر",
+        "older": "أقدم من شهر"
+    }
+}

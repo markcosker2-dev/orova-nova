@@ -1,0 +1,63 @@
+{
+    "gatewayNotRunning": "Gateway नहीं चल रहा है",
+    "gatewayRequired": "चैट का उपयोग करने के लिए OpenClaw Gateway का चलना आवश्यक है। यह स्वचालित रूप से शुरू हो जाएगा, या आप इसे सेटिंग्स से शुरू कर सकते हैं।",
+    "welcome": {
+        "title": "HermesClaw चैट",
+        "subtitle": "मैं आपके लिए क्या कर सकता हूँ?",
+        "askQuestions": "कार्यों को संभालें",
+        "askQuestionsDesc": "कार्य-उन्मुख अनुरोधों पर काम करें",
+        "creativeTasks": "निरंतर निष्पादन",
+        "creativeTasksDesc": "बहु-चरणीय कार्य के माध्यम से चलते रहें",
+        "brainstorming": "मल्टी-एजेंट समानांतर"
+    },
+    "noLogs": "(अभी तक कोई लॉग उपलब्ध नहीं है)",
+    "toolbar": {
+        "refresh": "चैट रीफ्रेश करें",
+        "currentAgent": "{{agent}} से बात हो रही है"
+    },
+    "taskPanel": {
+        "eyebrow": "रन व्यू (Run View)",
+        "title": "कार्य की रूपरेखा",
+        "emptyTitle": "अभी तक कोई संरचित चरण नहीं हैं",
+        "emptyBody": "एक बार रन शुरू होने के बाद, HermesClaw यहाँ विचार प्रक्रिया (thinking), टूल कॉल और हैंडऑफ़ स्थितियों को प्रदर्शित करेगा।",
+        "status": {
+            "idle": "विश्राम",
+            "running_one": "1 सक्रिय चरण",
+            "running_other": "{{count}} सक्रिय चरण"
+        },
+        "stepStatus": {
+            "running": "चल रहा है",
+            "completed": "पूर्ण",
+            "error": "त्रुटि"
+        }
+    },
+    "executionGraph": {
+        "title": "निष्पादन ग्राफ (Execution Graph)",
+        "branchLabel": "ब्रांच (branch)",
+        "thinkingLabel": "सोच (Thinking)",
+        "agentRun": "{{agent}} निष्पादन",
+        "collapsedSummary": "{{toolCount}} टूल कॉल · {{processCount}} प्रक्रिया संदेश",
+        "collapseAction": "निष्पादन ग्राफ को सिकोड़ें"
+    },
+    "composer": {
+        "attachFiles": "फ़ाइलें संलग्न करें",
+        "pickAgent": "एजेंट चुनें",
+        "clearTarget": "लक्षित एजेंट को हटाएँ",
+        "targetChip": "@{{agent}}",
+        "agentPickerTitle": "अगले संदेश को दूसरे एजेंट को भेजें",
+        "gatewayDisconnectedPlaceholder": "Gateway कनेक्ट नहीं है...",
+        "send": "भेजें",
+        "stop": "रोकें",
+        "gatewayConnected": "कनेक्टेड",
+        "gatewayStatus": "gateway {{state}} | port: {{port}} {{pid}}",
+        "retryFailedAttachments": "विफल अनुलग्नकों को पुनः प्रयास करें"
+    },
+    "historyBuckets": {
+        "today": "आज",
+        "yesterday": "कल",
+        "withinWeek": "1 सप्ताह के भीतर",
+        "withinTwoWeeks": "2 सप्ताह के भीतर",
+        "withinMonth": "1 महीने के भीतर",
+        "older": "1 महीने से पुराना"
+    }
+}

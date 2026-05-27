@@ -1,0 +1,404 @@
+{
+    "title": "قنوات المراسلة",
+    "subtitle": "إدارة قنوات المراسلة، الحسابات، ربط الحسابات بالوكلاء، والحساب الافتراضي لكل قناة.",
+    "refresh": "تحديث",
+    "addChannel": "إضافة قناة",
+    "stats": {
+        "total": "إجمالي القنوات",
+        "connected": "متصل",
+        "disconnected": "غير متصل"
+    },
+    "gatewayWarning": "خدمة الـ Gateway لا تعمل. لا يمكن للقنوات الاتصال.",
+    "availableChannels": "القنوات المتاحة",
+    "supportedChannels": "القنوات المدعومة",
+    "available": "القنوات المتاحة",
+    "availableDesc": "ربط قناة جديدة",
+    "configured": "القنوات المكونة",
+    "configuredDesc": "إدارة القنوات المكونة بالفعل",
+    "configuredBadge": "مكونة",
+    "deleteConfirm": "هل أنت متأكد أنك تريد حذف هذه القناة؟",
+    "showAll": "إظهار الكل",
+    "pluginBadge": "Plugin",
+    "toast": {
+        "whatsappConnected": "تم توصيل WhatsApp بنجاح",
+        "whatsappFailed": "فشل اتصال WhatsApp: {{error}}",
+        "qrConnected": "تم توصيل {{name}} بنجاح",
+        "qrFailed": "فشل اتصال {{name}}: {{error}}",
+        "channelSaved": "تم حفظ القناة {{name}}",
+        "channelConnecting": "جارٍ الاتصال بـ {{name}}...",
+        "savedButRefreshFailed": "تم حفظ التكوين، ولكن فشل تحديث بيانات الصفحة. يرجى التحديث يدويًا.",
+        "restartManual": "يرجى إعادة تشغيل الـ gateway يدويًا",
+        "configFailed": "فشل التكوين: {{error}}",
+        "bindingUpdated": "تم تحديث ربط الحساب",
+        "defaultUpdated": "تم تحديث الحساب الافتراضي",
+        "accountDeleted": "تم حذف الحساب",
+        "channelDeleted": "تم حذف القناة"
+    },
+    "account": {
+        "add": "إضافة حساب",
+        "edit": "تعديل",
+        "delete": "حذف الحساب",
+        "deleteChannel": "حذف القناة",
+        "deleteConfirm": "هل أنت متأكد أنك تريد حذف هذا الحساب؟",
+        "default": "الافتراضي الحالي",
+        "setDefault": "تعيين كافتراضي للقناة",
+        "bindAgentLabel": "الوكيل المربوط",
+        "unassigned": "غير معين",
+        "mainAccount": "الحساب الأساسي",
+        "customIdLabel": "معرف الحساب (Account ID)",
+        "customIdPlaceholder": "مثال: feishu-sales-bot",
+        "customIdHint": "استخدم معرف حساب بأحرف صغيرة (أحرف، أرقام، شرطة، شرطة سفلية) للتمييز بين حسابات متعددة تحت قناة واحدة.",
+        "invalidId": "لا يمكن أن يكون معرف الحساب فارغًا",
+        "invalidCanonicalId": "يجب أن يتكون معرف الحساب من أحرف صغيرة أو أرقام أو شرطات أو شرطات سفلية، ويبدأ بحرف أو رقم، وألا يتجاوز 64 حرفًا.",
+        "idLabel": "المعرف: {{id}}",
+        "boundTo": "مربوط بـ: {{agent}}",
+        "handledBy": "يتم التعامل معه بواسطة {{agent}}",
+        "bindingStatusLabel": "الربط: {{status}}",
+        "connectionStatusLabel": "الاتصال: {{status}}",
+        "bindingStatus": {
+            "bound": "مربوط",
+            "unbound": "غير مربوط"
+        },
+        "connectionStatus": {
+            "connected": "متصل",
+            "connecting": "جارٍ الاتصال",
+            "degraded": "متدهور",
+            "disconnected": "غير متصل",
+            "error": "خطأ"
+        },
+        "accountIdPrompt": "أدخل معرف حساب جديد لهذه القناة",
+        "accountIdExists": "معرف الحساب {{accountId}} موجود بالفعل"
+    },
+    "dialog": {
+        "updateTitle": "تحديث {{name}}",
+        "configureTitle": "تكوين {{name}}",
+        "addTitle": "إضافة قناة",
+        "existingDesc": "تحديث التكوين الحالي الخاص بك",
+        "selectDesc": "اختر نوع القناة لتكوينها",
+        "qrCode": "رمز الاستجابة السريعة (QRCode)",
+        "token": "الرمز (Token)",
+        "scanQR": "امسح رمز الاستجابة السريعة هذا باستخدام {{name}}",
+        "refreshCode": "تحديث الرمز",
+        "loadingConfig": "جارٍ تحميل التكوين...",
+        "existingHint": "لديك تكوين موجود لهذه القناة",
+        "howToConnect": "كيفية الاتصال",
+        "viewDocs": "عرض الوثائق",
+        "channelName": "اسم القناة",
+        "channelNamePlaceholder": "قناتي {{name}}",
+        "enableChannel": "تفعيل القناة",
+        "enableChannelDesc": "عند إيقافه، سيتم حفظ التكوين ولكن ستبقى القناة معطلة",
+        "credentialsVerified": "تم التحقق من بيانات الاعتماد",
+        "validationFailed": "فشل التحقق",
+        "warnings": "تحذيرات",
+        "back": "رجوع",
+        "validating": "جارٍ التحقق...",
+        "validateConfig": "التحقق من التكوين",
+        "generatingQR": "جارٍ إنشاء رمز QR...",
+        "validatingAndSaving": "جارٍ التحقق والحفظ...",
+        "generateQRCode": "إنشاء رمز الاستجابة السريعة",
+        "updateAndReconnect": "التحديث وإعادة الاتصال",
+        "saveAndConnect": "الحفظ والاتصال",
+        "envVar": "متغير البيئة: {{var}}"
+    },
+    "health": {
+        "state": {
+            "degraded": "Gateway متدهور",
+            "unresponsive": "Gateway غير مستجيب"
+        },
+        "reasons": {
+            "gateway_degraded": "تدهور نبضات قلب الـ Gateway مؤخرًا.",
+            "gateway_unresponsive": "يبدو أن مستوى التحكم في الـ Gateway غير مستجيب.",
+            "channels_status_timeout": "انتهت مهلة فحص حالة بيئة تشغيل القناة.",
+            "rpc_timeout": "انتهت مهلة استدعاءات Gateway RPC الأخيرة.",
+            "gateway_not_running": "الـ Gateway لا يعمل.",
+            "gateway_error": "الـ Gateway في حالة خطأ.",
+            "runtime_error": "أبلغت بيئة تشغيل القناة عن خطأ."
+        },
+        "restartGateway": "إعادة تشغيل Gateway",
+        "copyDiagnostics": "نسخ التشخيصات",
+        "viewDiagnostics": "عرض التشخيصات",
+        "hideDiagnostics": "إخفاء التشخيصات",
+        "diagnosticsTitle": "لقطة تشخيصات الـ Gateway",
+        "diagnosticsCopied": "تم نسخ التشخيصات إلى الحافظة",
+        "diagnosticsCopyFailed": "فشل جمع التشخيصات: {{error}}",
+        "restartTriggered": "تم طلب إعادة تشغيل الـ Gateway",
+        "restartFailed": "فشل إعادة تشغيل الـ Gateway: {{error}}"
+    },
+    "meta": {
+        "telegram": {
+            "description": "قم بتوصيل Telegram باستخدام رمز بوت من @BotFather",
+            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/TjiGwxsMWi7hpDkDAQBc0ydMnEf#MEkKdqXP1orZU2x4SrFcdUHgnl1",
+            "fields": {
+                "botToken": {
+                    "label": "Bot Token",
+                    "placeholder": "123456:ABC-DEF..."
+                },
+                "allowedUsers": {
+                    "label": "معرفات المستخدمين المسموح لهم",
+                    "placeholder": "مثال: 123456789, 987654321",
+                    "description": "قائمة بمعرفات المستخدمين المسموح لهم باستخدام البوت، مفصولة بفاصلة. مطلوب للأمان."
+                }
+            },
+            "instructions": [
+                "افتح Telegram وابحث عن @BotFather",
+                "أرسل /newbot واتبع التعليمات",
+                "انسخ رمز البوت المقدم",
+                "الصق الرمز أدناه",
+                "احصل على معرف المستخدم الخاص بك من @userinfobot وألصقه أدناه"
+            ]
+        },
+        "discord": {
+            "description": "قم بتوصيل Discord باستخدام رمز بوت من Developer Portal",
+            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/BkOywJYCAiYRN9k4KTTceKPMnxg#QS6LdxnA2oNtfcxtFc8cgabnnNd",
+            "fields": {
+                "token": {
+                    "label": "Bot Token",
+                    "placeholder": "رمز بوت Discord الخاص بك"
+                },
+                "guildId": {
+                    "label": "Guild/Server ID",
+                    "placeholder": "مثال: 123456789012345678",
+                    "description": "حصر البوت في خادم معين. انقر بزر الماوس الأيمن على الخادم ← نسخ معرف الخادم (Copy Server ID)."
+                },
+                "channelId": {
+                    "label": "معرف القناة (Channel ID) (اختياري)",
+                    "placeholder": "مثال: 123456789012345678",
+                    "description": "حصر البوت في قناة معينة. انقر بزر الماوس الأيمن على القناة ← نسخ معرف القناة (Copy Channel ID)."
+                }
+            },
+            "instructions": [
+                "اذهب إلى Discord Developer Portal ← Applications ← New Application",
+                "في قسم Bot: انقر على Add Bot، ثم انسخ الـ Bot Token",
+                "قم بتفعيل Message Content Intent + Server Members Intent في Bot ← Privileged Gateway Intents",
+                "في OAuth2 ← URL Generator: اختر \"bot\" + \"applications.commands\"، وأضف أذونات الرسائل",
+                "قم بدعوة البوت إلى خادمك باستخدام الرابط الذي تم إنشاؤه",
+                "الصق رمز البوت أدناه"
+            ]
+        },
+        "whatsapp": {
+            "description": "قم بتوصيل WhatsApp عن طريق مسح رمز الاستجابة السريعة (لا يلزم وجود رقم هاتف)",
+            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/ES7fwUfH8iGl8FkHYfFcyWB3n4d#doxcnUElomBZLi0NnKLUzn6zLbd",
+            "instructions": [
+                "افتح WhatsApp على هاتفك",
+                "اذهب إلى الإعدادات > الأجهزة المرتبطة > ربط جهاز",
+                "امسح رمز الاستجابة السريعة الموضح أدناه",
+                "سيقوم النظام تلقائيًا بالتعرف على رقم هاتفك"
+            ]
+        },
+        "wechat": {
+            "description": "قم بتوصيل WeChat الشخصي باستخدام ملحق OpenClaw الرسمي من Tencent عن طريق مسح رمز الاستجابة السريعة",
+            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/GHYZwuPCriF0gWkXwkFcJ9zon3b",
+            "instructions": [
+                "انقر على إنشاء رمز QR لتثبيت وتفعيل ملحق WeChat الرسمي داخل OpenClaw",
+                "امسح رمز الاستجابة السريعة أدناه باستخدام WeChat وأكد الاتصال على هاتفك",
+                "بعد نجاح الربط، ستظهر دردشة WeChat ClawBot جديدة في WeChat تلقائيًا",
+                "يمكنك تكرار تدفق QR لاحقًا لإضافة حساب WeChat آخر أو إعادة توصيل حساب موجود"
+            ]
+        },
+        "dingtalk": {
+            "description": "قم بتوصيل DingTalk عبر ملحق قناة OpenClaw (وضع الـ Stream)",
+            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/Y5eNwiSiZidkLskrwtJc1rUln0b#doxcnDgA78n43DbkiQjI1OqUA7b",
+            "fields": {
+                "clientId": {
+                    "label": "Client ID (AppKey)",
+                    "placeholder": "dingxxxxxx"
+                },
+                "clientSecret": {
+                    "label": "Client Secret (AppSecret)",
+                    "placeholder": "سر التطبيق الخاص بك"
+                }
+            },
+            "instructions": [
+                "قم بتثبيت وتفعيل ملحق dingtalk في OpenClaw",
+                "أنشئ تطبيق DingTalk داخليًا وقم بتفعيل وضع الـ Stream",
+                "املأ معرف العميل Client ID (AppKey) وسر العميل Client Secret (AppSecret)"
+            ]
+        },
+        "signal": {
+            "description": "قم بتوصيل Signal باستخدام signal-cli",
+            "docsUrl": "https://docs.openclaw.ai/channels/signal",
+            "fields": {
+                "phoneNumber": {
+                    "label": "رقم الهاتف",
+                    "placeholder": "+1234567890"
+                }
+            },
+            "instructions": [
+                "قم بتثبيت signal-cli على نظامك",
+                "قم بتسجيل أو ربط رقم هاتفك",
+                "أدخل رقم هاتفك أدناه"
+            ]
+        },
+        "feishu": {
+            "description": "قم بتوصيل بوت Feishu/Lark عبر WebSocket",
+            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/GKn8wOvHnibpPNkNkPzcAvGlnzK#GdHUdp9t9oqyegxwV8ScLvVGn1c",
+            "fields": {
+                "appId": {
+                    "label": "App ID",
+                    "placeholder": "cli_xxxxxx"
+                },
+                "appSecret": {
+                    "label": "App Secret",
+                    "placeholder": "سر التطبيق الخاص بك"
+                }
+            },
+            "instructions": [
+                "اقرأ الوثائق، ثم اذهب إلى منصة Feishu Open Platform",
+                "أنشئ تطبيقًا جديدًا",
+                "احصل على App ID و App Secret",
+                "قم بتكوين اشتراك الأحداث"
+            ]
+        },
+        "wecom": {
+            "description": "قم بتوصيل بوت WeCom عبر الملحق",
+            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/JTGnwoV0RixKPtkr4w7c7gpAnDc",
+            "fields": {
+                "botId": {
+                    "label": "Bot ID",
+                    "placeholder": "ww_xxxxxx"
+                },
+                "secret": {
+                    "label": "App Secret",
+                    "placeholder": "سر بوت WeCom الخاص بك"
+                }
+            },
+            "instructions": [
+                "أنشئ تطبيقًا في WeCom Admin Console للحصول على معلومات التكوين",
+                "تأكد من تفعيل تكوين خادم استقبال الرسائل",
+                "أدخل معرف البوت (أو معرف الشركة Corp ID) والسر لإنشاء الاتصال"
+            ]
+        },
+        "imessage": {
+            "description": "قم بتوصيل iMessage عبر BlueBubbles (macOS)",
+            "docsUrl": "https://docs.openclaw.ai/channels/bluebubbles",
+            "fields": {
+                "serverUrl": {
+                    "label": "رابط خادم BlueBubbles",
+                    "placeholder": "http://localhost:1234"
+                },
+                "password": {
+                    "label": "كلمة سر الخادم",
+                    "placeholder": "كلمة سر الخادم الخاصة بك"
+                }
+            },
+            "instructions": [
+                "قم بتثبيت خادم BlueBubbles على جهاز الماك الخاص بك",
+                "لاحظ رابط الخادم وكلمة السر",
+                "أدخل تفاصيل الاتصال أدناه"
+            ]
+        },
+        "matrix": {
+            "description": "الاتصال ببروتوكول Matrix",
+            "docsUrl": "https://docs.openclaw.ai/channels/matrix",
+            "fields": {
+                "homeserver": {
+                    "label": "Homeserver URL",
+                    "placeholder": "https://matrix.org"
+                },
+                "accessToken": {
+                    "label": "Access Token",
+                    "placeholder": "رمز الوصول الخاص بك"
+                }
+            },
+            "instructions": [
+                "أنشئ حساب Matrix أو استخدم حسابًا موجودًا",
+                "احصل على رمز وصول من عميلك",
+                "أدخل الـ homeserver والرمز أدناه"
+            ]
+        },
+        "line": {
+            "description": "توصيل LINE Messaging API",
+            "docsUrl": "https://docs.openclaw.ai/channels/line",
+            "fields": {
+                "channelAccessToken": {
+                    "label": "Channel Access Token",
+                    "placeholder": "رمز وصول قناة LINE الخاص بك"
+                },
+                "channelSecret": {
+                    "label": "Channel Secret",
+                    "placeholder": "سر قناة LINE الخاص بك"
+                }
+            },
+            "instructions": [
+                "اذهب إلى LINE Developers Console",
+                "أنشئ قناة Messaging API",
+                "احصل على Channel Access Token والـ Secret"
+            ]
+        },
+        "msteams": {
+            "description": "توصيل Microsoft Teams عبر Bot Framework",
+            "docsUrl": "https://docs.openclaw.ai/channels/msteams",
+            "fields": {
+                "appId": {
+                    "label": "App ID",
+                    "placeholder": "معرف تطبيق Microsoft الخاص بك"
+                },
+                "appPassword": {
+                    "label": "App Password",
+                    "placeholder": "كلمة سر تطبيق Microsoft الخاص بك"
+                }
+            },
+            "instructions": [
+                "اذهب إلى Azure Portal",
+                "قم بتسجيل تطبيق بوت جديد",
+                "احصل على App ID وقم بإنشاء كلمة سر",
+                "قم بتكوين قناة Teams"
+            ]
+        },
+        "googlechat": {
+            "description": "توصيل Google Chat عبر الويب هوك",
+            "docsUrl": "https://docs.openclaw.ai/channels/googlechat",
+            "fields": {
+                "serviceAccountKey": {
+                    "label": "Service Account JSON Path",
+                    "placeholder": "/path/to/service-account.json"
+                }
+            },
+            "instructions": [
+                "أنشئ مشروعًا في Google Cloud",
+                "قم بتفعيل Google Chat API",
+                "أنشئ حساب خدمة (service account)",
+                "قم بتنزيل ملف مفتاح JSON"
+            ]
+        },
+        "mattermost": {
+            "description": "توصيل Mattermost عبر Bot API",
+            "docsUrl": "https://docs.openclaw.ai/channels/mattermost",
+            "fields": {
+                "serverUrl": {
+                    "label": "رابط الخادم",
+                    "placeholder": "https://your-mattermost.com"
+                },
+                "botToken": {
+                    "label": "Bot Access Token",
+                    "placeholder": "رمز وصول البوت الخاص بك"
+                }
+            },
+            "instructions": [
+                "اذهب إلى Mattermost Integrations",
+                "أنشئ حساب بوت جديد",
+                "انسخ رمز الوصول"
+            ]
+        },
+        "qqbot": {
+            "description": "توصيل قناة QQ Bot (مدمجة منذ الإصدار OpenClaw 3.31)",
+            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/KPIJwlyiGiupMrkiS9ice39Zn2c",
+            "fields": {
+                "appId": {
+                    "label": "App ID",
+                    "placeholder": "معرف تطبيق QQ Bot الخاص بك"
+                },
+                "clientSecret": {
+                    "label": "Client Secret",
+                    "placeholder": "سر عميل QQ Bot الخاص بك"
+                }
+            },
+            "instructions": [
+                "سجل تطبيقًا في QQ Bot Open Platform",
+                "احصل على App ID و Client Secret",
+                "املأ بيانات الاعتماد الخاصة بك أدناه"
+            ]
+        }
+    },
+    "viewDocs": "عرض الوثائق"
+}

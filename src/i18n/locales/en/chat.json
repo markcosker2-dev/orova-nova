@@ -1,0 +1,63 @@
+{
+    "gatewayNotRunning": "Gateway Not Running",
+    "gatewayRequired": "The OpenClaw Gateway needs to be running to use chat. It will start automatically, or you can start it from Settings.",
+    "welcome": {
+  "title": "HermesClaw Chat",
+        "subtitle": "What can I do for you?",
+        "askQuestions": "Handle Tasks",
+        "askQuestionsDesc": "Work on task-oriented requests",
+        "creativeTasks": "Continuous Execution",
+        "creativeTasksDesc": "Keep running through multi-step work",
+        "brainstorming": "Multi-Agent Parallel"
+    },
+    "noLogs": "(No logs available yet)",
+    "toolbar": {
+        "refresh": "Refresh chat",
+        "currentAgent": "Talking to {{agent}}"
+    },
+    "taskPanel": {
+        "eyebrow": "Run View",
+        "title": "Task Outline",
+        "emptyTitle": "No structured steps yet",
+  "emptyBody": "Once a run starts, HermesClaw will surface thinking, tool calls, and handoff states here.",
+        "status": {
+            "idle": "Idle",
+            "running_one": "1 active step",
+            "running_other": "{{count}} active steps"
+        },
+        "stepStatus": {
+            "running": "Running",
+            "completed": "Done",
+            "error": "Error"
+        }
+    },
+    "executionGraph": {
+        "title": "Execution Graph",
+        "branchLabel": "branch",
+        "thinkingLabel": "Thinking",
+        "agentRun": "{{agent}} execution",
+        "collapsedSummary": "{{toolCount}} tool calls · {{processCount}} process messages",
+        "collapseAction": "Collapse execution graph"
+    },
+    "composer": {
+        "attachFiles": "Attach files",
+        "pickAgent": "Choose agent",
+        "clearTarget": "Clear target agent",
+        "targetChip": "@{{agent}}",
+        "agentPickerTitle": "Route the next message to another agent",
+        "gatewayDisconnectedPlaceholder": "Gateway not connected...",
+        "send": "Send",
+        "stop": "Stop",
+        "gatewayConnected": "connected",
+        "gatewayStatus": "gateway {{state}} | port: {{port}} {{pid}}",
+        "retryFailedAttachments": "Retry failed attachments"
+    },
+    "historyBuckets": {
+        "today": "Today",
+        "yesterday": "Yesterday",
+        "withinWeek": "Within 1 Week",
+        "withinTwoWeeks": "Within 2 Weeks",
+        "withinMonth": "Within 1 Month",
+        "older": "Older than 1 Month"
+    }
+}

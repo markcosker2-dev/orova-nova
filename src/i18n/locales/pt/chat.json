@@ -1,0 +1,63 @@
+{
+    "gatewayNotRunning": "Gateway não está executando",
+    "gatewayRequired": "O Gateway OpenClaw precisa estar em execução para usar o chat. Ele iniciará automaticamente ou você pode iniciá-lo nas Configurações.",
+    "welcome": {
+        "title": "Chat HermesClaw",
+        "subtitle": "O que posso fazer por você?",
+        "askQuestions": "Gerenciar tarefas",
+        "askQuestionsDesc": "Trabalhar em solicitações orientadas a tarefas",
+        "creativeTasks": "Execução contínua",
+        "creativeTasksDesc": "Continuar executando trabalhos em várias etapas",
+        "brainstorming": "Multiagente paralelo"
+    },
+    "noLogs": "(Ainda não há logs disponíveis)",
+    "toolbar": {
+        "refresh": "Atualizar chat",
+        "currentAgent": "Falando com {{agent}}"
+    },
+    "taskPanel": {
+        "eyebrow": "Visualização de execução",
+        "title": "Esboço da tarefa",
+        "emptyTitle": "Ainda não há etapas estruturadas",
+        "emptyBody": "Assim que uma execução começar, o HermesClaw exibirá o pensamento, chamadas de ferramentas e estados de transferência aqui.",
+        "status": {
+            "idle": "Inativo",
+            "running_one": "1 etapa ativa",
+            "running_other": "{{count}} etapas ativas"
+        },
+        "stepStatus": {
+            "running": "Executando",
+            "completed": "Concluído",
+            "error": "Erro"
+        }
+    },
+    "executionGraph": {
+        "title": "Gráfico de execução",
+        "branchLabel": "ramo",
+        "thinkingLabel": "Pensamento",
+        "agentRun": "Execução de {{agent}}",
+        "collapsedSummary": "{{toolCount}} chamadas de ferramentas · {{processCount}} mensagens de processo",
+        "collapseAction": "Recolher gráfico de execução"
+    },
+    "composer": {
+        "attachFiles": "Anexar arquivos",
+        "pickAgent": "Escolher agente",
+        "clearTarget": "Limpar agente de destino",
+        "targetChip": "@{{agent}}",
+        "agentPickerTitle": "Encaminhar a próxima mensagem para outro agente",
+        "gatewayDisconnectedPlaceholder": "Gateway não conectado...",
+        "send": "Enviar",
+        "stop": "Parar",
+        "gatewayConnected": "conectado",
+        "gatewayStatus": "gateway {{state}} | porta: {{port}} {{pid}}",
+        "retryFailedAttachments": "Repetir anexos com falha"
+    },
+    "historyBuckets": {
+        "today": "Hoje",
+        "yesterday": "Ontem",
+        "withinWeek": "Dentro de 1 semana",
+        "withinTwoWeeks": "Dentro de 2 semanas",
+        "withinMonth": "Dentro de 1 mês",
+        "older": "Mais de 1 mês"
+    }
+}

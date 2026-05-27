@@ -1,0 +1,200 @@
+{
+    "steps": {
+        "welcome": {
+      "title": "HermesClawへようこそ",
+            "description": "AIアシスタントの設定準備が整いました"
+        },
+        "runtime": {
+            "title": "環境チェック",
+            "description": "システム要件を確認中"
+        },
+        "provider": {
+            "title": "AIプロバイダー",
+            "description": "AIサービスを構成"
+        },
+        "channel": {
+            "title": "チャンネル接続",
+            "description": "メッセージングプラットフォームを接続（オプション）"
+        },
+        "installing": {
+            "title": "セットアップ中",
+            "description": "必須コンポーネントをインストール中"
+        },
+        "complete": {
+            "title": "完了！",
+      "description": "HermesClawを使用する準備が整いました"
+        }
+    },
+    "welcome": {
+    "title": "HermesClawへようこそ",
+    "description": "HermesClawはAIエージェントの実行と管理を行うデスクトップワークスペースです。モデルプロバイダーの設定、スキルのインストール、メッセージングチャンネルの接続、エージェントワークフローの管理をひとつのローカルファーストアプリケーションから行えます。",
+        "features": {
+            "noCommand": "コマンドライン不要",
+            "modernUI": "モダンで美しいインターフェース",
+            "bundles": "プリインストールされたスキルバンドル",
+            "crossPlatform": "クロスプラットフォーム対応"
+        }
+    },
+    "runtime": {
+        "title": "環境をチェック中",
+        "viewLogs": "ログを表示",
+        "recheck": "再チェック",
+        "windowsWsl": {
+            "title": "Windows での Hermes 利用状況",
+            "description": "Windows では、Hermes は実験的なネイティブホームパスまたは設定済みの WSL2 ディストリビューションを利用できます。どちらも利用できない場合、セットアップは OpenClaw のみ続行できます。",
+            "missing": "ネイティブ Hermes ホームパスまたは WSL2 ディストリビューションが設定されていないため、Hermes と OpenClaw + Hermes は一時的に利用できません。",
+            "ready": "WSL2 のディストリビューション {{distro}} が利用可能です。Hermes 単独と OpenClaw + Hermes を選択できます。",
+            "nativeReady": "実験的な Windows ネイティブ Hermes パスが設定されています。",
+            "nativeAndWslReady": "ネイティブ Hermes パスが設定されており、WSL ディストリビューション {{distro}} も利用可能です。"
+        },
+        "installChoiceLabel": "インストールするランタイム",
+        "installChoiceHint": "セットアップで準備するランタイムを選択します。Both モードでは OpenClaw が主ランタイムのまま、Hermes は OpenClaw の Agent として構成されます。",
+        "nodejs": "Node.js ランタイム",
+        "openclaw": "OpenClaw パッケージ",
+        "gateway": "ゲートウェイサービス",
+        "startGateway": "ゲートウェイを起動",
+        "installChoice": {
+            "openclaw": {
+                "title": "OpenClaw",
+                "description": "OpenClaw を主ランタイムとして使用します。"
+            },
+            "hermes": {
+                "title": "Hermes",
+                "description": "セットアップ時に OpenClaw 起動を必須にせず、Hermes-only モードを準備します。"
+            },
+            "both": {
+                "title": "OpenClaw + Hermes",
+                "description": "OpenClaw を主ランタイムのまま維持し、Hermes を OpenClaw Agent として接続します。"
+            }
+        },
+        "status": {
+            "checking": "確認中...",
+            "success": "Node.js は利用可能です",
+            "error": "失敗",
+            "gatewayRunning": "ポート {{port}} で実行中",
+            "packageReady": "OpenClaw パッケージ準備完了"
+        },
+        "issue": {
+            "title": "環境の問題が検出されました",
+            "desc": "OpenClawが正しくインストールされていることを確認してください。詳細はログを確認してください。"
+        },
+        "logs": {
+            "title": "アプリケーションログ",
+            "openFolder": "ログフォルダを開く",
+            "close": "閉じる",
+            "noLogs": "（ログはまだありません）"
+        }
+    },
+    "provider": {
+        "label": "モデルプロバイダー",
+        "selectPlaceholder": "プロバイダーを選択...",
+        "baseUrl": "ベース URL",
+        "modelId": "モデル ID",
+        "modelIdDesc": "プロバイダーのモデル識別子（例：deepseek-ai/DeepSeek-V3）",
+        "codePlanPreset": "Code Plan プリセット",
+        "codePlanMode": "Code Plan",
+        "useCodePlanPreset": "Ark Code Plan プリセットを使用",
+        "codePlanPresetDesc": "Code Plan は https://ark.cn-beijing.volces.com/api/coding/v3 と model ark-code-latest を使います。Code Plan 通信に /api/v3 を使わないでください。",
+        "codePlanDoc": "Code Plan ドキュメント",
+        "protocol": "プロトコル",
+        "protocols": {
+            "openaiCompletions": "OpenAI Completions",
+            "openaiResponses": "OpenAI Responses",
+            "anthropic": "Anthropic 互換"
+        },
+        "apiKey": "API キー",
+        "save": "保存",
+        "validateSave": "検証して保存",
+        "valid": "プロバイダーが正常に構成されました",
+        "invalid": "無効な API キー",
+        "storedLocally": "API キーはローカルマシンに保存されます。"
+    },
+    "channel": {
+        "title": "メッセージングチャンネルを接続",
+        "subtitle": "AIアシスタントを接続するプラットフォームを選択してください。チャンネルは後で設定で追加できます。",
+        "configure": "{{name}} を構成",
+        "howTo": "接続方法：",
+        "viewDocs": "ドキュメントを表示",
+        "validationError": "検証に失敗しました",
+        "connected": "{{name}} 接続済み",
+        "connectedDesc": "チャンネルが構成されました。ゲートウェイ起動時に接続されます。",
+        "configureAnother": "別のチャンネルを構成"
+    },
+    "installing": {
+        "title": "必須コンポーネントをインストール中",
+        "subtitle": "AIアシスタントに必要なツールをセットアップしています",
+        "progress": "進捗",
+        "summary": "このランタイム選択では {{count}} 個のインストール段階を準備します。",
+        "steps": {
+            "openclaw": "OpenClaw ランタイム",
+            "hermes": "Hermes ランタイム",
+            "bridge": "Hermes ブリッジ"
+        },
+        "stepHint": {
+            "openclaw": "アプリとゲートウェイで使う主要な OpenClaw ランタイムを準備します。",
+            "hermes": "単体利用または OpenClaw エージェントバックエンドとして使う Hermes ランタイムを準備します。",
+            "bridge": "OpenClaw を主ランタイムにしたまま Hermes エージェントブリッジを適用します。"
+        },
+        "status": {
+            "pending": "待機中",
+            "installing": "インストール中...",
+            "installed": "インストール済み",
+            "failed": "失敗"
+        },
+        "error": "セットアップエラー：",
+        "retry": "このインストールを再試行",
+        "restart": "アプリを再起動してください",
+        "failureSource": {
+            "openclaw": "失敗は OpenClaw ランタイムの準備中に発生しました。",
+            "hermes": "失敗は Hermes ランタイムの準備中に発生しました。",
+            "bridge": "失敗は Hermes を OpenClaw エージェントブリッジとして構成中に発生しました。",
+            "generic": "現在のバックエンド結果からは失敗箇所を特定できませんでした。"
+        },
+        "retryGuidance": {
+            "openclaw": "OpenClaw パッケージ/ビルド状態とゲートウェイ前提条件を確認してから再試行してください。",
+            "hermes": "Hermes の前提条件（Windows ではネイティブパスまたは WSL を含む）を確認してから再試行してください。",
+            "bridge": "ブリッジ前提条件を確認し、ランタイム準備後に再試行してください。",
+            "generic": "まずエラー詳細を確認して再試行し、それでも失敗する場合は Setup ログを確認してください。"
+        },
+        "wait": "これには少し時間がかかる場合があります...",
+        "skip": "この手順をスキップ"
+    },
+    "complete": {
+        "title": "セットアップ完了！",
+    "subtitle": "HermesClawの構成が完了し、使用準備が整いました。AIアシスタントとのチャットを開始できます。",
+        "provider": "AI プロバイダー",
+        "components": "コンポーネント",
+        "gateway": "ゲートウェイ",
+        "running": "実行中",
+        "footer": "設定でスキルをカスタマイズしたり、チャンネルを接続したりできます"
+    },
+    "nav": {
+        "next": "次へ",
+        "back": "戻る",
+        "skipStep": "この手順をスキップ",
+        "skipSetup": "セットアップをスキップ",
+        "getStarted": "始める"
+    },
+    "defaultSkills": {
+        "opencode": {
+            "name": "OpenCode",
+            "description": "AI コーディングアシスタントのバックエンド"
+        },
+        "python-env": {
+            "name": "Python 環境",
+            "description": "スキルのための Python ランタイム"
+        },
+        "code-assist": {
+            "name": "コードアシスト",
+            "description": "コードの分析と提案"
+        },
+        "file-tools": {
+            "name": "ファイルツール",
+            "description": "ファイルの操作と管理"
+        },
+        "terminal": {
+            "name": "ターミナル",
+            "description": "シェルコマンドの実行"
+        }
+    }
+}

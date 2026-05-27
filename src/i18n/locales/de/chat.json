@@ -1,0 +1,63 @@
+{
+    "gatewayNotRunning": "Gateway läuft nicht",
+    "gatewayRequired": "Das OpenClaw-Gateway muss laufen, um den Chat zu nutzen. Es startet automatisch, oder Sie können es in den Einstellungen starten.",
+    "welcome": {
+        "title": "HermesClaw Chat",
+        "subtitle": "Was kann ich für Sie tun?",
+        "askQuestions": "Aufgaben bearbeiten",
+        "askQuestionsDesc": "An aufgabenorientierten Anfragen arbeiten",
+        "creativeTasks": "Kontinuierliche Ausführung",
+        "creativeTasksDesc": "Mehrstufige Arbeit durchlaufen",
+        "brainstorming": "Multi-Agenten-Parallelbetrieb"
+    },
+    "noLogs": "(Noch keine Protokolle verfügbar)",
+    "toolbar": {
+        "refresh": "Chat aktualisieren",
+        "currentAgent": "Gespräch mit {{agent}}"
+    },
+    "taskPanel": {
+        "eyebrow": "Ausführungsansicht",
+        "title": "Aufgabenübersicht",
+        "emptyTitle": "Noch keine strukturierten Schritte",
+        "emptyBody": "Sobald eine Ausführung startet, zeigt HermesClaw hier Überlegungen, Tool-Aufrufe und Übergabezustände an.",
+        "status": {
+            "idle": "Inaktiv",
+            "running_one": "1 aktiver Schritt",
+            "running_other": "{{count}} aktive Schritte"
+        },
+        "stepStatus": {
+            "running": "Läuft",
+            "completed": "Fertig",
+            "error": "Fehler"
+        }
+    },
+    "executionGraph": {
+        "title": "Ausführungsgraph",
+        "branchLabel": "Zweig",
+        "thinkingLabel": "Überlegung",
+        "agentRun": "Ausführung durch {{agent}}",
+        "collapsedSummary": "{{toolCount}} Tool-Aufrufe · {{processCount}} Prozessnachrichten",
+        "collapseAction": "Ausführungsgraph einklappen"
+    },
+    "composer": {
+        "attachFiles": "Dateien anhängen",
+        "pickAgent": "Agent wählen",
+        "clearTarget": "Zielagent löschen",
+        "targetChip": "@{{agent}}",
+        "agentPickerTitle": "Nächste Nachricht an einen anderen Agenten leiten",
+        "gatewayDisconnectedPlaceholder": "Gateway nicht verbunden...",
+        "send": "Senden",
+        "stop": "Stopp",
+        "gatewayConnected": "verbunden",
+        "gatewayStatus": "Gateway {{state}} | Port: {{port}} {{pid}}",
+        "retryFailedAttachments": "Fehlgeschlagene Anhänge erneut versuchen"
+    },
+    "historyBuckets": {
+        "today": "Heute",
+        "yesterday": "Gestern",
+        "withinWeek": "Innerhalb einer Woche",
+        "withinTwoWeeks": "Innerhalb von 2 Wochen",
+        "withinMonth": "Innerhalb eines Monats",
+        "older": "Älter als ein Monat"
+    }
+}

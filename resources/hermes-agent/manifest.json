@@ -1,0 +1,9 @@
+{
+  "packageName": "hermes-agent",
+  "version": "0.11.0",
+  "releaseTag": "v2026.4.23",
+  "source": "https://github.com/NousResearch/hermes-agent",
+  "installSpec": "hermes-agent @ https://github.com/NousResearch/hermes-agent/archive/refs/tags/v2026.4.23.tar.gz",
+  "pythonVersion": "3.11.10",
+  "entrypoints": ["hermes", "hermes-agent", "hermes-acp"]
+}

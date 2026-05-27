@@ -1,0 +1,200 @@
+{
+    "steps": {
+        "welcome": {
+            "title": "مرحباً بك في HermesClaw",
+            "description": "مساعد الذكاء الاصطناعي الخاص بك جاهز للتكوين"
+        },
+        "runtime": {
+            "title": "فحص البيئة",
+            "description": "التحقق من متطلبات النظام"
+        },
+        "provider": {
+            "title": "مزود الذكاء الاصطناعي",
+            "description": "تكوين خدمة الذكاء الاصطناعي الخاصة بك"
+        },
+        "channel": {
+            "title": "توصيل قناة",
+            "description": "توصيل منصة رسائل (اختياري)"
+        },
+        "installing": {
+            "title": "جاري الإعداد",
+            "description": "تثبيت المكونات الأساسية"
+        },
+        "complete": {
+            "title": "كل شيء جاهز!",
+            "description": "HermesClaw جاهز للاستخدام"
+        }
+    },
+    "welcome": {
+        "title": "مرحباً بك في HermesClaw",
+        "description": "HermesClaw هي مساحة عمل مكتبية لتشغيل وإدارة وكلاء الذكاء الاصطناعي. قم بتكوين مزودي النماذج، وتثبيت المهارات، وتوصيل قنوات المراسلة، وتشغيل سير عمل الوكلاء - كل ذلك من تطبيق محلي واحد.",
+        "features": {
+            "noCommand": "لا يلزم استخدام سطر الأوامر",
+            "modernUI": "واجهة حديثة وجميلة",
+            "bundles": "حزم مهارات مثبتة مسبقاً",
+            "crossPlatform": "دعم متعدد المنصات"
+        }
+    },
+    "runtime": {
+        "title": "فحص البيئة",
+        "viewLogs": "عرض السجلات",
+        "recheck": "إعادة الفحص",
+        "installChoiceLabel": "تثبيت وقت التشغيل (Runtime)",
+        "installChoiceHint": "اختر وقت التشغيل الذي تريد تحضيره أثناء الإعداد. في وضع 'كلاهما'، يظل OpenClaw أساسياً ويتم تكوين Hermes كوكيل لـ OpenClaw.",
+        "nodejs": "وقت تشغيل Node.js",
+        "openclaw": "حزمة OpenClaw",
+        "gateway": "خدمة البوابة",
+        "startGateway": "بدء البوابة",
+        "installChoice": {
+            "openclaw": {
+                "title": "OpenClaw",
+                "description": "استخدم OpenClaw كوقت تشغيل أساسي."
+            },
+            "hermes": {
+                "title": "Hermes",
+                "description": "تحضير وضع Hermes فقط دون الحاجة لتشغيل OpenClaw في الإعداد."
+            },
+            "both": {
+                "title": "OpenClaw + Hermes",
+                "description": "الحفاظ على OpenClaw كأداة أساسية وربط Hermes كوكيل لـ OpenClaw."
+            }
+        },
+        "windowsWsl": {
+            "title": "توفر Hermes على Windows",
+            "description": "على Windows، يمكن لـ Hermes استخدام مسار منزلي محلي تجريبي أو توزيعة WSL2 مكونة. حتى يتوفر أحدهما، يمكن للإعداد الاستمرار فقط مع OpenClaw.",
+            "missing": "Hermes و OpenClaw + Hermes غير متاحين مؤقتاً لأنه لم يتم تكوين مسار منزلي محلي لـ Hermes أو توزيعة WSL2 بعد.",
+            "ready": "WSL2 جاهز بالتوزيعة: {{distro}}. وضع Hermes فقط و OpenClaw + Hermes متاحان.",
+            "nativeReady": "تم تكوين مسار Hermes المحلي لدعم Windows التجريبي.",
+            "nativeAndWslReady": "تم تكوين مسار Hermes المحلي؛ وتوزيعة WSL {{distro}} متاحة أيضاً."
+        },
+        "status": {
+            "checking": "جاري الفحص...",
+            "success": "Node.js متاح",
+            "error": "فشل",
+            "gatewayRunning": "يعمل على المنفذ {{port}}",
+            "packageReady": "حزمة OpenClaw جاهزة"
+        },
+        "issue": {
+            "title": "تم اكتشاف مشكلة في البيئة",
+            "desc": "يرجى التأكد من تثبيت OpenClaw بشكل صحيح. تحقق من السجلات للحصول على التفاصيل."
+        },
+        "logs": {
+            "title": "سجلات التطبيق",
+            "openFolder": "فتح مجلد السجلات",
+            "close": "إغلاق",
+            "noLogs": "(لا توجد سجلات متاحة بعد)"
+        }
+    },
+    "provider": {
+        "label": "مزود النموذج",
+        "selectPlaceholder": "اختر مزوداً...",
+        "baseUrl": "URL الأساسي",
+        "modelId": "معرف النموذج",
+        "modelIdDesc": "معرف النموذج من مزودك (مثلاً deepseek-ai/DeepSeek-V3)",
+        "codePlanPreset": "قالب Code Plan",
+        "codePlanMode": "Code Plan",
+        "useCodePlanPreset": "استخدم قالب Ark Code Plan",
+        "codePlanPresetDesc": "يستخدم Code Plan الرابط https://ark.cn-beijing.volces.com/api/coding/v3 والنموذج ark-code-latest. لا تستخدم /api/v3 لحركة مرور Code Plan.",
+        "codePlanDoc": "وثائق Code Plan",
+        "protocol": "البروتوكول",
+        "protocols": {
+            "openaiCompletions": "OpenAI Completions",
+            "openaiResponses": "OpenAI Responses",
+            "anthropic": "متوافق مع Anthropic"
+        },
+        "apiKey": "مفتاح API",
+        "save": "حفظ",
+        "validateSave": "التحقق والحفظ",
+        "valid": "تم تكوين المزود بنجاح",
+        "invalid": "مفتاح API غير صالح",
+        "storedLocally": "يتم تخزين مفتاح API الخاص بك محلياً على جهازك."
+    },
+    "channel": {
+        "title": "توصيل قناة مراسلة",
+        "subtitle": "اختر منصة لتوصيل مساعد الذكاء الاصطناعي الخاص بك بها. يمكنك إضافة المزيد من القنوات لاحقاً في الإعدادات.",
+        "configure": "تكوين {{name}}",
+        "howTo": "كيفية التوصيل:",
+        "viewDocs": "عرض الوثائق",
+        "validationError": "فشل التحقق",
+        "connected": "تم توصيل {{name}}",
+        "connectedDesc": "تم تكوين قناتك. سيتم التوصيل عند بدء البوابة.",
+        "configureAnother": "تكوين قناة أخرى"
+    },
+    "installing": {
+        "title": "تثبيت المكونات الأساسية",
+        "subtitle": "إعداد الأدوات اللازمة لتشغيل مساعد الذكاء الاصطناعي الخاص بك",
+        "progress": "التقدم",
+        "summary": "تحضير {{count}} مرحلة (مراحل) تثبيت لهذا الخيار من وقت التشغيل.",
+        "steps": {
+            "openclaw": "وقت تشغيل OpenClaw",
+            "hermes": "وقت تشغيل Hermes",
+            "bridge": "جسر Hermes"
+        },
+        "stepHint": {
+            "openclaw": "تحضير وقت تشغيل OpenClaw الأساسي المستخدم من قبل التطبيق والبوابة.",
+            "hermes": "تحضير وقت تشغيل Hermes للاستخدام المستقل أو كخلفية لوكيل OpenClaw.",
+            "bridge": "تطبيق توصيلات جسر Hermes-كوكيل لوضع OpenClaw الأساسي."
+        },
+        "status": {
+            "pending": "قيد الانتظار",
+            "installing": "جاري التثبيت...",
+            "installed": "مثبت",
+            "failed": "فشل"
+        },
+        "error": "خطأ في الإعداد:",
+        "retry": "إعادة محاولة هذا التثبيت",
+        "restart": "حاول إعادة تشغيل التطبيق",
+        "failureSource": {
+            "openclaw": "حدث الفشل أثناء تحضير وقت تشغيل OpenClaw.",
+            "hermes": "حدث الفشل أثناء تحضير وقت تشغيل Hermes.",
+            "bridge": "حدث الفشل أثناء ربط Hermes كجسر لوكيل OpenClaw.",
+            "generic": "تعذر تحديد مصدر الفشل من نتيجة الخلفية الحالية."
+        },
+        "retryGuidance": {
+            "openclaw": "تحقق من حالة حزمة/بناء OpenClaw ومتطلبات البوابة، ثم أعد المحاولة.",
+            "hermes": "تحقق من متطلبات تثبيت Hermes (بما في ذلك المسار المحلي أو WSL على Windows) وأعد المحاولة.",
+            "bridge": "تحقق من متطلبات الجسر وأعد المحاولة بعد توفر أوقات التشغيل.",
+            "generic": "أعد المحاولة مرة واحدة بعد مراجعة تفاصيل الخطأ. إذا استمر الفشل، فراجع سجلات الإعداد."
+        },
+        "wait": "قد يستغرق هذا بضع لحظات...",
+        "skip": "تخطي هذه الخطوة"
+    },
+    "complete": {
+        "title": "اكتمل الإعداد!",
+        "subtitle": "تم تكوين HermesClaw وهو جاهز للاستخدام. يمكنك الآن البدء في الدردشة مع مساعد الذكاء الاصطناعي الخاص بك.",
+        "provider": "مزود الذكاء الاصطناعي",
+        "components": "المكونات",
+        "gateway": "البوابة",
+        "running": "قيد التشغيل",
+        "footer": "يمكنك تخصيص المهارات وتوصيل القنوات في الإعدادات"
+    },
+    "nav": {
+        "next": "التالي",
+        "back": "رجوع",
+        "skipStep": "تخطي هذه الخطوة",
+        "skipSetup": "تخطي الإعداد",
+        "getStarted": "ابدأ الآن"
+    },
+    "defaultSkills": {
+        "opencode": {
+            "name": "OpenCode",
+            "description": "خلفية مساعد البرمجة بالذكاء الاصطناعي"
+        },
+        "python-env": {
+            "name": "بيئة Python",
+            "description": "وقت تشغيل Python للمهارات"
+        },
+        "code-assist": {
+            "name": "مساعد الكود",
+            "description": "تحليل الكود والاقتراحات"
+        },
+        "file-tools": {
+            "name": "أدوات الملفات",
+            "description": "عمليات الملفات وإدارتها"
+        },
+        "terminal": {
+            "name": "الطرفية (Terminal)",
+            "description": "تنفيذ أوامر الشل"
+        }
+    }
+}

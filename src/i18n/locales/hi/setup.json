@@ -1,0 +1,200 @@
+﻿{
+    "steps": {
+        "welcome": {
+            "title": "HermesClaw में आपका स्वागत है",
+            "description": "आपका AI सहायक कॉन्फ़िगर किए जाने के लिए तैयार है"
+        },
+        "runtime": {
+            "title": "पर्यावरण जांच",
+            "description": "सिस्टम आवश्यकताओं की पुष्टि की जा रही है"
+        },
+        "provider": {
+            "title": "AI प्रदाता",
+            "description": "अपनी AI सेवा को कॉन्फ़िग़र करें"
+        },
+        "channel": {
+            "title": "एक चैनल कनेक्ट करें",
+            "description": "एक मैसेजिंग प्लेटफॉर्म कनेक्ट करें (वैकल्पिक)"
+        },
+        "installing": {
+            "title": "सेटअप हो रहा है",
+            "description": "आवश्यक घटक इंस्टॉल किए जा रहे हैं"
+        },
+        "complete": {
+            "title": "सब तैयार है!",
+            "description": "HermesClaw उपयोग के लिए तैयार है"
+        }
+    },
+    "welcome": {
+        "title": "HermesClaw में आपका स्वागत है",
+        "description": "HermesClaw AI एजेंटों को चलाने और प्रबंधित करने के लिए एक डेस्कटॉप कार्यक्षेत्र है। मॉडल प्रदाताओं को कॉन्फ़िगर करें, कौशल इंस्टॉल करें, मैसेजिंग चैनल कनेक्ट करें, और एजेंट वर्कफ़्लो संचालित करें — सब कुछ एक स्थानीय-प्रथम एप्लिकेशन से।",
+        "features": {
+            "noCommand": "जीरो कमांड-लाइन की आवश्यकता",
+            "modernUI": "आधुनिक, सुंदर इंटरफ़ेस",
+            "bundles": "प्री-इन्स्टॉल्ड स्किल बंडल",
+            "crossPlatform": "क्रॉस-प्लेटफ़ॉर्म समर्थन"
+        }
+    },
+    "runtime": {
+        "title": "पर्यावरण की जाँच",
+        "viewLogs": "लॉग देखें",
+        "recheck": "फिर से जाँच करें",
+        "installChoiceLabel": "रनटाइम इंस्टॉल करें",
+        "installChoiceHint": "चुनें कि सेटअप के दौरान कौन सा रनटाइम तैयार करना है। 'दोनों' मोड में, OpenClaw प्राथमिक रहता है और Hermes को OpenClaw एजेंट के रूप में कॉन्फ़िगर किया जाता है।",
+        "nodejs": "Node.js रनटाइम",
+        "openclaw": "OpenClaw पैकेज",
+        "gateway": "Gateway सेवा",
+        "startGateway": "Gateway शुरू करें",
+        "installChoice": {
+            "openclaw": {
+                "title": "OpenClaw",
+                "description": "OpenClaw को प्राथमिक रनटाइम के रूप में उपयोग करें।"
+            },
+            "hermes": {
+                "title": "Hermes",
+                "description": "सेटअप में OpenClaw स्टार्टअप की आवश्यकता के बिना केवल-Hermes मोड तैयार करें।"
+            },
+            "both": {
+                "title": "OpenClaw + Hermes",
+                "description": "OpenClaw को प्राथमिक रखें और Hermes को OpenClaw एजेंट के रूप में जोड़ें।"
+            }
+        },
+        "windowsWsl": {
+            "title": "Windows Hermes उपलब्धता",
+            "description": "Windows पर, Hermes एक प्रयोगात्मक देशी होम पाथ या कॉन्फ़िगर किए गए WSL2 डिस्ट्रो का उपयोग कर सकता है। जब तक उनमें से एक उपलब्ध नहीं हो जाता, सेटअप केवल OpenClaw के साथ जारी रह सकता है।",
+            "missing": "Hermes और OpenClaw + Hermes अस्थायी रूप से अनुपलब्ध हैं क्योंकि अभी तक कोई देशी Hermes होम पाथ या WSL2 डिस्ट्रो कॉन्फ़िगर नहीं किया गया है।",
+            "ready": "distro: {{distro}} के साथ WSL2 तैयार है। केवल-Hermes और OpenClaw + Hermes उपलब्ध हैं।",
+            "nativeReady": "प्रयोगात्मक Windows समर्थन के लिए देशी Hermes पाथ कॉन्फ़िगर किया गया है।",
+            "nativeAndWslReady": "देशी Hermes पाथ कॉन्फ़िगर किया गया; WSL डिस्ट्रो {{distro}} भी उपलब्ध है।"
+        },
+        "status": {
+            "checking": "जाँच की जा रही है...",
+            "success": "Node.js उपलब्ध है",
+            "error": "विफल",
+            "gatewayRunning": "पोर्ट {{port}} पर चल रहा है",
+            "packageReady": "OpenClaw पैकेज तैयार है"
+        },
+        "issue": {
+            "title": "पर्यावरण समस्या का पता चला",
+            "desc": "कृपया सुनिश्चित करें कि OpenClaw ठीक से इंस्टॉल है। विवरण के लिए लॉग देखें।"
+        },
+        "logs": {
+            "title": "एप्लिकेशन लॉग",
+            "openFolder": "लॉग फ़ोल्डर खोलें",
+            "close": "बंद करें",
+            "noLogs": "(अभी तक कोई लॉग उपलब्ध नहीं है)"
+        }
+    },
+    "provider": {
+        "label": "मॉडल प्रदाता",
+        "selectPlaceholder": "एक प्रदाता चुनें...",
+        "baseUrl": "बेस URL",
+        "modelId": "मॉडल ID",
+        "modelIdDesc": "आपके प्रदाता से मॉडल पहचानकर्ता (जैसे deepseek-ai/DeepSeek-V3)",
+        "codePlanPreset": "कोड प्लान प्रीसेट",
+        "codePlanMode": "कोड प्लान",
+        "useCodePlanPreset": "Ark कोड प्लान प्रीसेट का उपयोग करें",
+        "codePlanPresetDesc": "कोड प्लान https://ark.cn-beijing.volces.com/api/coding/v3 और मॉडल ark-code-latest का उपयोग करता है। कोड प्लान ट्रैफ़िक के लिए /api/v3 का उपयोग न करें।",
+        "codePlanDoc": "कोड प्लान दस्तावेज़",
+        "protocol": "प्रोटोकॉल",
+        "protocols": {
+            "openaiCompletions": "OpenAI Completions",
+            "openaiResponses": "OpenAI Responses",
+            "anthropic": "Anthropic Compatible"
+        },
+        "apiKey": "API कुंजी",
+        "save": "सहेजें",
+        "validateSave": "पुष्टि करें और सहेजें",
+        "valid": "प्रदाता सफलतापूर्वक कॉन्फ़िगर किया गया",
+        "invalid": "अमान्य API कुंजी",
+        "storedLocally": "आपकी API कुंजी आपकी मशीन पर स्थानीय रूप से संग्रहीत है।"
+    },
+    "channel": {
+        "title": "एक मैसेजिंग चैनल कनेक्ट करें",
+        "subtitle": "अपने AI सहायक को जोड़ने के लिए एक प्लेटफ़ॉर्म चुनें। आप बाद में सेटिंग्स में और चैनल जोड़ सकते हैं।",
+        "configure": "{{name}} कॉन्फ़िगर करें",
+        "howTo": "कैसे कनेक्ट करें:",
+        "viewDocs": "दस्तावेज़ देखें",
+        "validationError": "सत्यापन विफल रहा",
+        "connected": "{{name}} कनेक्टेड",
+        "connectedDesc": "आपका चैनल कॉन्फ़िगर कर दिया गया है। Gateway शुरू होने पर यह कनेक्ट हो जाएगा।",
+        "configureAnother": "एक और चैनल कॉन्फ़िगर करें"
+    },
+    "installing": {
+        "title": "आवश्यक घटक इंस्टॉल किए जा रहे हैं",
+        "subtitle": "आपके AI सहायक को शक्ति देने के लिए आवश्यक उपकरण सेटअप करना",
+        "progress": "प्रगति",
+        "summary": "इस रनटाइम विकल्प के लिए {{count}} इंस्टॉलेशन चरणों की तैयारी की जा रही है।",
+        "steps": {
+            "openclaw": "OpenClaw रनटाइम",
+            "hermes": "Hermes रनटाइम",
+            "bridge": "Hermes ब्रिज"
+        },
+        "stepHint": {
+            "openclaw": "ऐप और गेटवे द्वारा उपयोग किए जाने वाले प्राथमिक OpenClaw रनटाइम को तैयार करें।",
+            "hermes": "स्टैंडअलोन उपयोग के लिए या OpenClaw एजेंट बैकएंड के रूप में Hermes रनटाइम तैयार करें।",
+            "bridge": "OpenClaw प्राथमिक मोड के लिए Hermes-एजेंट ब्रिज वायरिंग लागू करें।"
+        },
+        "status": {
+            "pending": "लंबित",
+            "installing": "इंस्टॉल हो रहा है...",
+            "installed": "इंस्टॉल किया गया",
+            "failed": "विफल"
+        },
+        "error": "सेटअप त्रुटि:",
+        "retry": "इस इंस्टॉलेशन का पुनः प्रयास करें",
+        "restart": "ऐप को पुनरारंभ करने का प्रयास करें",
+        "failureSource": {
+            "openclaw": "OpenClaw रनटाइम तैयार करते समय विफलता हुई।",
+            "hermes": "Hermes रनटाइम तैयार करते समय विफलता हुई।",
+            "bridge": "Hermes को OpenClaw एजेंट ब्रिज के रूप में जोड़ते समय विफलता हुई।",
+            "generic": "वर्तमान बैकएंड परिणाम से विफलता के स्रोत का निर्धारण नहीं किया जा सकता।"
+        },
+        "retryGuidance": {
+            "openclaw": "OpenClaw पैकेज/बिल्ड स्थिति और गेटवे पूर्वापेक्षाओं की जाँच करें, फिर पुनः प्रयास करें।",
+            "hermes": "Hermes इंस्टॉलेशन पूर्वापेक्षाओं (देशी पाथ या Windows पर WSL सहित) की जाँच करें और पुनः प्रयास करें।",
+            "bridge": "ब्रिज पूर्वापेक्षाओं की जाँच करें और रनटाइम उपलब्ध होने के बाद पुनः प्रयास करें।",
+            "generic": "त्रुटि विवरणों की समीक्षा करने के बाद एक बार पुनः प्रयास करें। यदि यह विफल रहता है, तो सेटअप लॉग की समीक्षा करें।"
+        },
+        "wait": "इसमें कुछ क्षण लग सकते हैं...",
+        "skip": "इस चरण को छोड़ें"
+    },
+    "complete": {
+        "title": "सेटअप पूर्ण!",
+        "subtitle": "HermesClaw कॉन्फ़िगर किया गया है और उपयोग के लिए तैयार है। अब आप अपने AI सहायक के साथ चैट करना शुरू कर सकते हैं।",
+        "provider": "AI प्रदाता",
+        "components": "घटक",
+        "gateway": "Gateway",
+        "running": "चल रहा है",
+        "footer": "आप सेटिंग्स में कौशल को अनुकूलित कर सकते हैं और चैनलों को कनेक्ट कर सकते हैं"
+    },
+    "nav": {
+        "next": "आगे",
+        "back": "पीछे",
+        "skipStep": "इस चरण को छोड़ें",
+        "skipSetup": "सेटअप छोड़ें",
+        "getStarted": "शुरू करें"
+    },
+    "defaultSkills": {
+        "opencode": {
+            "name": "OpenCode",
+            "description": "AI कोडिंग सहायक बैकएंड"
+        },
+        "python-env": {
+            "name": "Python पर्यावरण",
+            "description": "कौशल के लिए Python रनटाइम"
+        },
+        "code-assist": {
+            "name": "Code Assist",
+            "description": "कोड विश्लेषण और सुझाव"
+        },
+        "file-tools": {
+            "name": "File Tools",
+            "description": "फ़ाइल संचालन और प्रबंधन"
+        },
+        "terminal": {
+            "name": "Terminal",
+            "description": "शेल कमांड निष्पादन"
+        }
+    }
+}

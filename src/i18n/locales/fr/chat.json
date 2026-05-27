@@ -1,0 +1,63 @@
+{
+    "gatewayNotRunning": "Gateway non lancée",
+    "gatewayRequired": "La Gateway OpenClaw doit être lancée pour utiliser le chat. Elle démarrera automatiquement, ou vous pouvez la démarrer depuis les Paramètres.",
+    "welcome": {
+        "title": "Chat HermesClaw",
+        "subtitle": "Que puis-je faire pour vous ?",
+        "askQuestions": "Gérer les Tâches",
+        "askQuestionsDesc": "Travailler sur des requêtes orientées tâches",
+        "creativeTasks": "Exécution Continue",
+        "creativeTasksDesc": "Continuer à travers un travail en plusieurs étapes",
+        "brainstorming": "Multi-Agent Parallèle"
+    },
+    "noLogs": "(Aucun log disponible pour le moment)",
+    "toolbar": {
+        "refresh": "Actualiser le chat",
+        "currentAgent": "Parler à {{agent}}"
+    },
+    "taskPanel": {
+        "eyebrow": "Vue d'Exécution",
+        "title": "Aperçu de la Tâche",
+        "emptyTitle": "Pas encore d'étapes structurées",
+        "emptyBody": "Une fois qu'une exécution commence, HermesClaw affichera ici la réflexion, les appels d'outils et les états de transfert.",
+        "status": {
+            "idle": "Inactif",
+            "running_one": "1 étape active",
+            "running_other": "{{count}} étapes actives"
+        },
+        "stepStatus": {
+            "running": "En cours",
+            "completed": "Terminé",
+            "error": "Erreur"
+        }
+    },
+    "executionGraph": {
+        "title": "Graphe d'Exécution",
+        "branchLabel": "branche",
+        "thinkingLabel": "Réflexion",
+        "agentRun": "Exécution de {{agent}}",
+        "collapsedSummary": "{{toolCount}} appels d'outils · {{processCount}} messages de processus",
+        "collapseAction": "Réduire le graphe d'exécution"
+    },
+    "composer": {
+        "attachFiles": "Joindre des fichiers",
+        "pickAgent": "Choisir un agent",
+        "clearTarget": "Effacer l'agent cible",
+        "targetChip": "@{{agent}}",
+        "agentPickerTitle": "Acheminer le prochain message vers un autre agent",
+        "gatewayDisconnectedPlaceholder": "Gateway non connectée...",
+        "send": "Envoyer",
+        "stop": "Arrêter",
+        "gatewayConnected": "connectée",
+        "gatewayStatus": "gateway {{state}} | port : {{port}} {{pid}}",
+        "retryFailedAttachments": "Réessayer les pièces jointes échouées"
+    },
+    "historyBuckets": {
+        "today": "Aujourd'hui",
+        "yesterday": "Hier",
+        "withinWeek": "Moins d'une semaine",
+        "withinTwoWeeks": "Moins de deux semaines",
+        "withinMonth": "Moins d'un mois",
+        "older": "Plus d'un mois"
+    }
+}

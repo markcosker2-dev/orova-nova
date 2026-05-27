@@ -1,0 +1,404 @@
+{
+    "title": "मैसेजिंग चैनल",
+    "subtitle": "मैसेजिंग चैनल, खाते, खाता-से-एजेंट बाइंडिंग और प्रत्येक चैनल के डिफ़ॉल्ट खाते को प्रबंधित करें।",
+    "refresh": "रीफ्रेश करें",
+    "addChannel": "चैनल जोड़ें",
+    "stats": {
+        "total": "कुल चैनल",
+        "connected": "कनेक्टेड",
+        "disconnected": "डिस्कनेक्ट"
+    },
+    "gatewayWarning": "Gateway सेवा नहीं चल रही है। चैनल कनेक्ट नहीं हो सकते।",
+    "availableChannels": "उपलब्ध चैनल",
+    "supportedChannels": "समर्थित चैनल",
+    "available": "उपलब्ध चैनल",
+    "availableDesc": "एक नया चैनल कनेक्ट करें",
+    "configured": "कॉन्फ़िगर किए गए चैनल",
+    "configuredDesc": "उन चैनलों को प्रबंधित करें जो पहले से ही कॉन्फ़िगर किए गए हैं",
+    "configuredBadge": "कॉन्फ़िगर किया गया",
+    "deleteConfirm": "क्या आप वाकई इस चैनल को हटाना चाहते हैं?",
+    "showAll": "सभी दिखाएं",
+    "pluginBadge": "प्लगइन",
+    "toast": {
+        "whatsappConnected": "WhatsApp सफलतापूर्वक कनेक्ट हुआ",
+        "whatsappFailed": "WhatsApp कनेक्शन विफल: {{error}}",
+        "qrConnected": "{{name}} सफलतापूर्वक कनेक्ट हुआ",
+        "qrFailed": "{{name}} कनेक्शन विफल: {{error}}",
+        "channelSaved": "चैनल {{name}} सहेजा गया",
+        "channelConnecting": "{{name}} से कनेक्ट किया जा रहा है...",
+        "savedButRefreshFailed": "कॉन्फ़िगरेशन सहेजा गया था, लेकिन पेज डेटा रीफ्रेश करना विफल रहा। कृपया मैन्युअल रूप से रीफ्रेश करें।",
+        "restartManual": "कृपया गेटवे को मैन्युअल रूप से पुनरारंभ करें",
+        "configFailed": "कॉन्फ़िगरेशन विफल: {{error}}",
+        "bindingUpdated": "खाता बाइंडिंग अपडेट की गई",
+        "defaultUpdated": "डिफ़ॉल्ट खाता अपडेट किया गया",
+        "accountDeleted": "खाता हटा दिया गया",
+        "channelDeleted": "चैनल हटा दिया गया"
+    },
+    "account": {
+        "add": "खाता जोड़ें",
+        "edit": "संपादित करें",
+        "delete": "खाता हटाएं",
+        "deleteChannel": "चैनल हटाएं",
+        "deleteConfirm": "क्या आप वाकई इस खाते को हटाना चाहते हैं?",
+        "default": "वर्तमान डिफ़ॉल्ट",
+        "setDefault": "चैनल डिफ़ॉल्ट के रूप में सेट करें",
+        "bindAgentLabel": "बाउंड एजेंट (Bound Agent)",
+        "unassigned": "अनिर्दिष्ट",
+        "mainAccount": "प्राथमिक खाता",
+        "customIdLabel": "खाता ID",
+        "customIdPlaceholder": "जैसे, feishu-sales-bot",
+        "customIdHint": "एक चैनल के तहत कई खातों में अंतर करने के लिए लोअरकेस खाता ID (अक्षर, संख्या, हाइफ़न, अंडरस्कोर) का उपयोग करें।",
+        "invalidId": "खाता ID खाली नहीं हो सकती",
+        "invalidCanonicalId": "खाता ID में लोअरकेस अक्षर, संख्या, हाइफ़न या अंडरस्कोर होने चाहिए, अक्षर/संख्या से शुरू होना चाहिए और अधिकतम 64 वर्णों का होना चाहिए।",
+        "idLabel": "ID: {{id}}",
+        "boundTo": "इससे जुड़ा है: {{agent}}",
+        "handledBy": "{{agent}} द्वारा संचालित",
+        "bindingStatusLabel": "बाइंडिंग: {{status}}",
+        "connectionStatusLabel": "कनेक्शन: {{status}}",
+        "bindingStatus": {
+            "bound": "बाउंड",
+            "unbound": "अनबाउंड"
+        },
+        "connectionStatus": {
+            "connected": "कनेक्टेड",
+            "connecting": "कनेक्ट किया जा रहा है",
+            "degraded": "निम्न स्तर",
+            "disconnected": "डिस्कनेक्ट",
+            "error": "त्रुटि"
+        },
+        "accountIdPrompt": "इस चैनल के लिए एक नई खाता ID दर्ज करें",
+        "accountIdExists": "खाता ID {{accountId}} पहले से मौजूद है"
+    },
+    "dialog": {
+        "updateTitle": "{{name}} अपडेट करें",
+        "configureTitle": "{{name}} कॉन्फ़िगर करें",
+        "addTitle": "चैनल जोड़ें",
+        "existingDesc": "अपने मौजूदा कॉन्फ़िगरेशन को अपडेट करें",
+        "selectDesc": "कॉन्फ़िगर करने के लिए चैनल प्रकार चुनें",
+        "qrCode": "QRCode",
+        "token": "टोकन",
+        "scanQR": "इस QR कोड को {{name}} से स्कैन करें",
+        "refreshCode": "कोड रीफ्रेश करें",
+        "loadingConfig": "कॉन्फ़िगरेशन लोड हो रहा है...",
+        "existingHint": "आपके पास इस चैनल के लिए पहले से ही एक कॉन्फ़िगरेशन मौजूद है",
+        "howToConnect": "कनेक्ट कैसे करें",
+        "viewDocs": "दस्तावेज़ देखें",
+        "channelName": "चैनल का नाम",
+        "channelNamePlaceholder": "मेरा {{name}}",
+        "enableChannel": "चैनल सक्षम करें",
+        "enableChannelDesc": "बंद होने पर, कॉन्फ़िगरेशन सहेजा जाता है लेकिन चैनल अक्षम रहता है",
+        "credentialsVerified": "क्रेडेंशियल सत्यापित",
+        "validationFailed": "सत्यापन विफल रहा",
+        "warnings": "चेतावनियाँ",
+        "back": "पीछे",
+        "validating": "सत्यापित किया जा रहा है...",
+        "validateConfig": "कॉन्फ़िगरेशन सत्यापित करें",
+        "generatingQR": "QR जनरेट किया जा रहा है...",
+        "validatingAndSaving": "सत्यापित और सहेजा जा रहा है...",
+        "generateQRCode": "QR कोड जनरेट करें",
+        "updateAndReconnect": "अपडेट और दोबारा कनेक्ट करें",
+        "saveAndConnect": "सहेजें और कनेक्ट करें",
+        "envVar": "पर्यावरण चर: {{var}}"
+    },
+    "health": {
+        "state": {
+            "degraded": "Gateway निम्न स्तर (degraded)",
+            "unresponsive": "Gateway अनुत्तरदायी (unresponsive)"
+        },
+        "reasons": {
+            "gateway_degraded": "गेटवे की धड़कन (heartbeat) हाल ही में निम्न स्तर पर आ गई है।",
+            "gateway_unresponsive": "गेटवे कंट्रोल प्लेन अनुत्तरदायी प्रतीत होता है।",
+            "channels_status_timeout": "चैनल रनटाइम स्थिति जांच का समय समाप्त हो गया।",
+            "rpc_timeout": "हाल ही के गेटवे RPC कॉल का समय समाप्त हो गया।",
+            "gateway_not_running": "Gateway नहीं चल रहा है।",
+            "gateway_error": "Gateway त्रुटि स्थिति में है।",
+            "runtime_error": "चैनल रनटाइम ने एक त्रुटि की सूचना दी।"
+        },
+        "restartGateway": "Gateway पुनरारंभ करें",
+        "copyDiagnostics": "डायग्नोस्टिक्स कॉपी करें",
+        "viewDiagnostics": "डायग्नोस्टिक्स देखें",
+        "hideDiagnostics": "डायग्नोस्टिक्स छिपाएं",
+        "diagnosticsTitle": "Gateway डायग्नोस्टिक्स स्नैपशॉट",
+        "diagnosticsCopied": "डायग्नोस्टिक्स क्लिपबोर्ड पर कॉपी किया गया",
+        "diagnosticsCopyFailed": "डायग्नोस्टिक्स एकत्र करने में विफल: {{error}}",
+        "restartTriggered": "Gateway पुनरारंभ करने का अनुरोध किया गया",
+        "restartFailed": "Gateway पुनरारंभ करने में विफल: {{error}}"
+    },
+    "meta": {
+        "telegram": {
+            "description": "@BotFather से बॉट टोकन का उपयोग करके Telegram कनेक्ट करें",
+            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/TjiGwxsMWi7hpDkDAQBc0ydMnEf#MEkKdqXP1orZU2x4SrFcdUHgnl1",
+            "fields": {
+                "botToken": {
+                    "label": "बॉट टोकन",
+                    "placeholder": "123456:ABC-DEF..."
+                },
+                "allowedUsers": {
+                    "label": "अनुमत उपयोगकर्ता ID",
+                    "placeholder": "जैसे 123456789, 987654321",
+                    "description": "बॉट का उपयोग करने के लिए अनुमत उपयोगकर्ता ID की अल्पविराम से अलग की गई सूची। सुरक्षा के लिए आवश्यक।"
+                }
+            },
+            "instructions": [
+                "Telegram खोलें और @BotFather खोजें",
+                "Send /newbot भेजें और निर्देशों का पालन करें",
+                "दिए गए बॉट टोकन को कॉपी करें",
+                "टोकन नीचे पेस्ट करें",
+                "@userinfobot से अपनी यूजर ID प्राप्त करें और उसे नीचे पेस्ट करें"
+            ]
+        },
+        "discord": {
+            "description": "Developer Portal से बॉट टोकन का उपयोग करके Discord कनेक्ट करें",
+            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/BkOywJYCAiYRN9k4KTTceKPMnxg#QS6LdxnA2oNtfcxtFc8cgabnnNd",
+            "fields": {
+                "token": {
+                    "label": "बॉट टोकन",
+                    "placeholder": "आपका Discord बॉट टोकन"
+                },
+                "guildId": {
+                    "label": "Guild/Server ID",
+                    "placeholder": "जैसे, 123456789012345678",
+                    "description": "बॉट को एक विशिष्ट सर्वर तक सीमित करें। सर्वर पर राइट-क्लिक करें → सर्वर ID कॉपी करें।"
+                },
+                "channelId": {
+                    "label": "चैनल ID (वैकल्पिक)",
+                    "placeholder": "जैसे, 123456789012345678",
+                    "description": "बॉट को किसी विशेष चैनल तक सीमित करें। चैनल पर राइट-क्लिक करें → चैनल ID कॉपी करें।"
+                }
+            },
+            "instructions": [
+                "Discord Developer Portal → Applications → New Application पर जाएं",
+                "Bot अनुभाग में: Add Bot, फिर Bot Token कॉपी करें",
+                "Bot → Privileged Gateway Intents में Message Content Intent + Server Members Intent सक्षम करें",
+                "OAuth2 → URL Generator में: \"bot\" + \"applications.commands\" चुनें, मैसेज परमिशन जोड़ें",
+                "जनरेट किए गए URL का उपयोग करके बॉट को अपने सर्वर पर आमंत्रित करें",
+                "बॉट टोकन नीचे पेस्ट करें"
+            ]
+        },
+        "whatsapp": {
+            "description": "QR कोड स्कैन करके WhatsApp कनेक्ट करें (किसी फ़ोन नंबर की आवश्यकता नहीं)",
+            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/ES7fwUfH8iGl8FkHYfFcyWB3n4d#doxcnUElomBZLi0NnKLUzn6zLbd",
+            "instructions": [
+                "अपने फ़ोन पर WhatsApp खोलें",
+                "Settings > Linked Devices > Link a Device पर जाएं",
+                "नीचे दिखाया गया QR कोड स्कैन करें",
+                "सिस्टम स्वचालित रूप से आपके फ़ोन नंबर की पहचान कर लेगा"
+            ]
+        },
+        "wechat": {
+            "description": "QR कोड स्कैन करके Tencent के आधिकारिक OpenClaw प्लगइन के साथ व्यक्तिगत WeChat कनेक्ट करें",
+            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/GHYZwuPCriF0gWkXwkFcJ9zon3b",
+            "instructions": [
+                "OpenClaw के अंदर आधिकारिक WeChat प्लगइन इंस्टॉल और सक्षम करने के लिए Generate QR Code पर क्लिक करें",
+                "WeChat के साथ नीचे दिए गए QR कोड को स्कैन करें और अपने फ़ोन पर कनेक्शन की पुष्टि करें",
+                "लिंकिंग सफल होने के बाद, WeChat में स्वचालित रूप से एक नया WeChat ClawBot चैट दिखाई देगा",
+                "आप बाद में एक और WeChat खाता जोड़ने या किसी मौजूदा खाते को दोबारा जोड़ने के लिए QR प्रक्रिया दोहरा सकते हैं"
+            ]
+        },
+        "dingtalk": {
+            "description": "OpenClaw चैनल प्लगइन (Stream mode) के माध्यम से DingTalk कनेक्ट करें",
+            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/Y5eNwiSiZidkLskrwtJc1rUln0b#doxcnDgA78n43DbkiQjI1OqUA7b",
+            "fields": {
+                "clientId": {
+                    "label": "क्लाइंट ID (AppKey)",
+                    "placeholder": "dingxxxxxx"
+                },
+                "clientSecret": {
+                    "label": "क्लाइंट सीक्रेट (AppSecret)",
+                    "placeholder": "आपका ऐप सीक्रेट"
+                }
+            },
+            "instructions": [
+                "OpenClaw में dingtalk प्लगइन इंस्टॉल और सक्षम करें",
+                "एक DingTalk इंटरनल ऐप बनाएं और Stream मोड सक्षम करें",
+                "क्लाइंट ID (AppKey) और क्लाइंट सीक्रेट (AppSecret) भरें"
+            ]
+        },
+        "signal": {
+            "description": "signal-cli का उपयोग करके Signal कनेक्ट करें",
+            "docsUrl": "https://docs.openclaw.ai/channels/signal",
+            "fields": {
+                "phoneNumber": {
+                    "label": "फ़ोन नंबर",
+                    "placeholder": "+1234567890"
+                }
+            },
+            "instructions": [
+                "अपने सिस्टम पर signal-cli इंस्टॉल करें",
+                "अपना फ़ोन नंबर रजिस्टर या लिंक करें",
+                "नीचे अपना फ़ोन नंबर दर्ज करें"
+            ]
+        },
+        "feishu": {
+            "description": "WebSocket के माध्यम से Feishu/Lark बॉट कनेक्ट करें",
+            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/GKn8wOvHnibpPNkNkPzcAvGlnzK#GdHUdp9t9oqyegxwV8ScLvVGn1c",
+            "fields": {
+                "appId": {
+                    "label": "ऐप ID",
+                    "placeholder": "cli_xxxxxx"
+                },
+                "appSecret": {
+                    "label": "ऐप सीक्रेट",
+                    "placeholder": "आपका ऐप सीक्रेट"
+                }
+            },
+            "instructions": [
+                "दस्तावेज़ पढ़ें, फिर Feishu Open Platform पर जाएं",
+                "एक नया एप्लिकेशन बनाएं",
+                "ऐप ID और ऐप सीक्रेट प्राप्त करें",
+                "ईवेंट सब्सक्रिप्शन कॉन्फ़िगर करें"
+            ]
+        },
+        "wecom": {
+            "description": "प्लगइन के माध्यम से WeCom बॉट कनेक्ट करें",
+            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/JTGnwoV0RixKPtkr4w7c7gpAnDc",
+            "fields": {
+                "botId": {
+                    "label": "बॉट ID",
+                    "placeholder": "ww_xxxxxx"
+                },
+                "secret": {
+                    "label": "ऐप सीक्रेट",
+                    "placeholder": "आपका WeCom बॉट सीक्रेट"
+                }
+            },
+            "instructions": [
+                "कॉन्फ़िगरेशन जानकारी प्राप्त करने के लिए WeCom Admin Console में एक एप्लिकेशन बनाएं",
+                "सुनिश्चित करें कि प्राप्त संदेश सर्वर कॉन्फ़िगरेशन सक्षम है",
+                "कनेक्शन स्थापित करने के लिए अपना बॉट ID (या Corp ID) और सीक्रेट दर्ज करें"
+            ]
+        },
+        "imessage": {
+            "description": "BlueBubbles (macOS) के माध्यम से iMessage कनेक्ट करें",
+            "docsUrl": "https://docs.openclaw.ai/channels/bluebubbles",
+            "fields": {
+                "serverUrl": {
+                    "label": "BlueBubbles सर्वर URL",
+                    "placeholder": "http://localhost:1234"
+                },
+                "password": {
+                    "label": "सर्वर पासवर्ड",
+                    "placeholder": "आपका सर्वर पासवर्ड"
+                }
+            },
+            "instructions": [
+                "अपने Mac पर BlueBubbles सर्वर इंस्टॉल करें",
+                "सर्वर URL और पासवर्ड नोट करें",
+                "नीचे कनेक्शन विवरण दर्ज करें"
+            ]
+        },
+        "matrix": {
+            "description": "Matrix प्रोटोकॉल से कनेक्ट करें",
+            "docsUrl": "https://docs.openclaw.ai/channels/matrix",
+            "fields": {
+                "homeserver": {
+                    "label": "Homeserver URL",
+                    "placeholder": "https://matrix.org"
+                },
+                "accessToken": {
+                    "label": "एक्सेस टोकन",
+                    "placeholder": "आपका एक्सेस टोकन"
+                }
+            },
+            "instructions": [
+                "एक Matrix खाता बनाएँ या मौजूदा उपयोग करें",
+                "अपने क्लाइंट से एक्सेस टोकन प्राप्त करें",
+                "नीचे homeserver और टोकन दर्ज करें"
+            ]
+        },
+        "line": {
+            "description": "LINE Messaging API कनेक्ट करें",
+            "docsUrl": "https://docs.openclaw.ai/channels/line",
+            "fields": {
+                "channelAccessToken": {
+                    "label": "चैनल एक्सेस टोकन",
+                    "placeholder": "आपका LINE चैनल एक्सेस टोकन"
+                },
+                "channelSecret": {
+                    "label": "चैनल सीक्रेट",
+                    "placeholder": "आपका LINE चैनल सीक्रेट"
+                }
+            },
+            "instructions": [
+                "LINE Developers Console पर जाएं",
+                "एक Messaging API चैनल बनाएं",
+                "चैनल एक्सेस टोकन और सीक्रेट प्राप्त करें"
+            ]
+        },
+        "msteams": {
+            "description": "Bot Framework के माध्यम से Microsoft Teams कनेक्ट करें",
+            "docsUrl": "https://docs.openclaw.ai/channels/msteams",
+            "fields": {
+                "appId": {
+                    "label": "ऐप ID",
+                    "placeholder": "आपकी Microsoft ऐप ID"
+                },
+                "appPassword": {
+                    "label": "ऐप पासवर्ड",
+                    "placeholder": "आपकी Microsoft ऐप पासवर्ड"
+                }
+            },
+            "instructions": [
+                "Azure Portal पर जाएं",
+                "एक नया बॉट एप्लिकेशन रजिस्टर करें",
+                "ऐप ID प्राप्त करें और पासवर्ड बनाएं",
+                "Teams चैनल कॉन्फ़िगर करें"
+            ]
+        },
+        "googlechat": {
+            "description": "वेबहुक के माध्यम से Google Chat कनेक्ट करें",
+            "docsUrl": "https://docs.openclaw.ai/channels/googlechat",
+            "fields": {
+                "serviceAccountKey": {
+                    "label": "Service Account JSON Path",
+                    "placeholder": "/path/to/service-account.json"
+                }
+            },
+            "instructions": [
+                "एक Google Cloud प्रोजेक्ट बनाएं",
+                "Google Chat API सक्षम करें",
+                "एक सर्विस अकाउंट बनाएं",
+                "JSON कुंजी फ़ाइल डाउनलोड करें"
+            ]
+        },
+        "mattermost": {
+            "description": "बॉट API के माध्यम से Mattermost कनेक्ट करें",
+            "docsUrl": "https://docs.openclaw.ai/channels/mattermost",
+            "fields": {
+                "serverUrl": {
+                    "label": "सर्वर URL",
+                    "placeholder": "https://your-mattermost.com"
+                },
+                "botToken": {
+                    "label": "बॉट एक्सेस टोकन",
+                    "placeholder": "आपका बॉट एक्सेस टोकन"
+                }
+            },
+            "instructions": [
+                "Mattermost Integrations पर जाएं",
+                "एक नया बॉट अकाउंट बनाएं",
+                "एक्सेस टोकन कॉपी करें"
+            ]
+        },
+        "qqbot": {
+            "description": "QQ Bot चैनल कनेक्ट करें (OpenClaw 3.31 से इन-बिल्ट)",
+            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/KPIJwlyiGiupMrkiS9ice39Zn2c",
+            "fields": {
+                "appId": {
+                    "label": "ऐप ID",
+                    "placeholder": "आपकी QQ Bot ऐप ID"
+                },
+                "clientSecret": {
+                    "label": "क्लाइंट सीक्रेट",
+                    "placeholder": "आपका QQ Bot क्लाइंट सीक्रेट"
+                }
+            },
+            "instructions": [
+                "QQ Bot Open Platform पर एक ऐप रजिस्टर करें",
+                "ऐप ID और क्लाइंट सीक्रेट प्राप्त करें",
+                "नीचे अपने क्रेडेंशियल भरें"
+            ]
+        }
+    },
+    "viewDocs": "दस्तावेज़ देखें"
+}

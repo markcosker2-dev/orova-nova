@@ -1,0 +1,300 @@
+/**
+ * Root Application Component
+ * Handles routing and global providers
+ */
+import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { Component, useEffect } from 'react';
+import type { ErrorInfo, ReactNode } from 'react';
+import { Toaster, toast } from 'sonner';
+import i18n from './i18n';
+import { MainLayout } from './components/layout/MainLayout';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { Models } from './pages/Models';
+import { Chat } from './pages/Chat';
+import { Agents } from './pages/Agents';
+import { Channels } from './pages/Channels';
+import { Skills } from './pages/Skills';
+import { Cron } from './pages/Cron';
+import { Settings } from './pages/Settings';
+import { Setup } from './pages/Setup';
+import OrovaDashboard from './pages/OrovaDashboard';
+import Leads from './pages/Leads';
+import OrovaOffice from './pages/OrovaOffice';
+import { useSettingsStore } from './stores/settings';
+import { useGatewayStore } from './stores/gateway';
+import { useProviderStore } from './stores/providers';
+import { applyGatewayTransportPreference } from './lib/api-client';
+import {
+  applyHermesClawUpdate,
+  applyOpenClawUpdate,
+  checkHermesClawUpdate,
+  checkOpenClawUpdate,
+  type HermesClawUpdateCheckResult,
+  type OpenClawRuntimeUpdateResult,
+} from './lib/host-api';
+import { rendererExtensionRegistry } from './extensions/registry';
+import { loadExternalRendererExtensions } from './extensions/_ext-bridge.generated';
+
+let runtimeUpdateStartupCheckStarted = false;
+
+function notifyOpenClawRuntimeUpdate(result: OpenClawRuntimeUpdateResult) {
+  if (!result.updateAvailable) return;
+
+  toast('OpenClaw runtime update available', {
+    description: `${result.currentVersion ?? 'current'} → ${result.latestVersion ?? 'latest'}`,
+    action: {
+      label: 'Update',
+      onClick: () => {
+        void applyOpenClawUpdate()
+          .then(() => toast.success('OpenClaw runtime updated'))
+          .catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : String(error);
+            toast.error('Failed to update OpenClaw runtime', { description: message });
+          });
+      },
+    },
+  });
+}
+
+function notifyHermesRuntimeUpdate(result: HermesClawUpdateCheckResult) {
+  if (!result.updateAvailable) return;
+
+  toast('Hermes runtime update available', {
+    description: `${result.channel}: ${result.currentVersion ?? 'current'} → ${result.latestVersion ?? 'latest'}`,
+    action: {
+      label: 'Update',
+      onClick: () => {
+        void applyHermesClawUpdate({
+          channel: result.channel,
+          version: result.latestVersion ?? result.currentVersion,
+        })
+          .then(() => toast.success('Hermes runtime updated'))
+          .catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : String(error);
+            toast.error('Failed to update Hermes runtime', { description: message });
+          });
+      },
+    },
+  });
+}
+
+async function checkRuntimeUpdatesAtStartup() {
+  const [openClawResult, hermesResult] = await Promise.allSettled([
+    checkOpenClawUpdate(),
+    checkHermesClawUpdate(),
+  ]);
+
+  if (openClawResult.status === 'fulfilled') {
+    notifyOpenClawRuntimeUpdate(openClawResult.value);
+  } else {
+    console.warn('Failed to check OpenClaw runtime update:', openClawResult.reason);
+  }
+
+  if (hermesResult.status === 'fulfilled') {
+    notifyHermesRuntimeUpdate(hermesResult.value);
+  } else {
+    console.warn('Failed to check Hermes runtime update:', hermesResult.reason);
+  }
+}
+
+
+/**
+ * Error Boundary to catch and display React rendering errors
+ */
+class ErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('React Error Boundary caught error:', error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          padding: '40px',
+          color: '#f87171',
+          background: '#0f172a',
+          minHeight: '100vh',
+          fontFamily: 'monospace'
+        }}>
+          <h1 style={{ fontSize: '24px', marginBottom: '16px' }}>Something went wrong</h1>
+          <pre style={{
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-all',
+            background: '#1e293b',
+            padding: '16px',
+            borderRadius: '8px',
+            fontSize: '14px'
+          }}>
+            {this.state.error?.message}
+            {'\n\n'}
+            {this.state.error?.stack}
+          </pre>
+          <button
+            onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
+            style={{
+              marginTop: '16px',
+              padding: '8px 16px',
+              background: '#3b82f6',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer'
+            }}
+          >
+            Reload
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function App() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const skipSetupForE2E = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('e2eSkipSetup') === '1';
+  const initSettings = useSettingsStore((state) => state.init);
+  const theme = useSettingsStore((state) => state.theme);
+  const language = useSettingsStore((state) => state.language);
+  const setupComplete = useSettingsStore((state) => state.setupComplete);
+  const initGateway = useGatewayStore((state) => state.init);
+  const initProviders = useProviderStore((state) => state.init);
+
+  useEffect(() => {
+    initSettings();
+  }, [initSettings]);
+
+  // Sync i18n language with persisted settings on mount
+  useEffect(() => {
+    if (language && language !== i18n.language) {
+      i18n.changeLanguage(language);
+    }
+  }, [language]);
+
+  // Initialize Gateway connection on mount
+  useEffect(() => {
+    initGateway();
+  }, [initGateway]);
+
+  // Initialize provider snapshot on mount
+  useEffect(() => {
+    initProviders();
+  }, [initProviders]);
+
+  // Redirect to setup wizard if not complete
+  useEffect(() => {
+    if (!setupComplete && !skipSetupForE2E && !location.pathname.startsWith('/setup')) {
+      navigate('/setup');
+    }
+  }, [setupComplete, skipSetupForE2E, location.pathname, navigate]);
+
+  // Listen for navigation events from main process
+  useEffect(() => {
+    const handleNavigate = (...args: unknown[]) => {
+      const path = args[0];
+      if (typeof path === 'string') {
+        navigate(path);
+      }
+    };
+
+    const unsubscribe = window.electron.ipcRenderer.on('navigate', handleNavigate);
+
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
+  }, [navigate]);
+
+  // Apply theme
+  useEffect(() => {
+    const root = window.document.documentElement;
+    root.classList.remove('light', 'dark');
+
+    if (theme === 'system') {
+      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light';
+      root.classList.add(systemTheme);
+    } else {
+      root.classList.add(theme);
+    }
+  }, [theme]);
+
+  useEffect(() => {
+    applyGatewayTransportPreference();
+  }, []);
+
+  useEffect(() => {
+    if (!setupComplete || skipSetupForE2E || runtimeUpdateStartupCheckStarted) return;
+
+    runtimeUpdateStartupCheckStarted = true;
+    const timeoutId = window.setTimeout(() => {
+      void checkRuntimeUpdatesAtStartup();
+    }, 12_000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [setupComplete, skipSetupForE2E]);
+
+  // Load external renderer extensions (generated by scripts/generate-ext-bridge.mjs)
+  // and initialize all registered extensions.
+  useEffect(() => {
+    loadExternalRendererExtensions();
+    void rendererExtensionRegistry.initializeAll();
+    return () => rendererExtensionRegistry.teardownAll();
+  }, []);
+
+  const extraRoutes = rendererExtensionRegistry.getExtraRoutes();
+
+  return (
+    <ErrorBoundary>
+      <TooltipProvider delayDuration={300}>
+        <Routes>
+          {/* Setup wizard (shown on first launch) */}
+          <Route path="/setup/*" element={<Setup />} />
+
+          {/* Main application routes */}
+          <Route element={<MainLayout />}>
+            <Route path="/" element={<Chat />} />
+            <Route path="/models" element={<Models />} />
+            <Route path="/agents" element={<Agents />} />
+            <Route path="/channels" element={<Channels />} />
+            <Route path="/skills" element={<Skills />} />
+            <Route path="/cron" element={<Cron />} />
+            <Route path="/settings/*" element={<Settings />} />
+            <Route path="/dashboard" element={<OrovaDashboard />} />
+            <Route path="/leads" element={<Leads />} />
+            <Route path="/office" element={<OrovaOffice />} />
+            {extraRoutes.map((r) => (
+              <Route key={r.path} path={r.path} element={<r.component />} />
+            ))}
+          </Route>
+        </Routes>
+
+        {/* Global toast notifications */}
+        <Toaster
+          position="bottom-right"
+          richColors
+          closeButton
+          style={{ zIndex: 99999 }}
+        />
+      </TooltipProvider>
+    </ErrorBoundary>
+  );
+}
+
+export default App;

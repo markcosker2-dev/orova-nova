@@ -1,0 +1,59 @@
+{
+    "sidebar": {
+        "chat": "चैट",
+        "newChat": "नई चैट",
+        "cronTasks": "Cron कार्य",
+        "skills": "कौशल (Skills)",
+        "agents": "एजेंट (Agents)",
+        "channels": "चैनल",
+        "dashboard": "डैशबोर्ड",
+        "settings": "सेटिंग्स",
+        "devConsole": "डेवलपर कंसोल",
+        "models": "मॉडल (Models)",
+        "deleteSessionConfirm": "क्या आप वाकई सत्र \"{{label}}\" को हटाना चाहते हैं?",
+        "openClawPage": "OpenClaw पेज"
+    },
+    "actions": {
+        "save": "सहेजें",
+        "cancel": "रद्द करें",
+        "delete": "हटाएं",
+        "edit": "संपादित करें",
+        "refresh": "रीफ्रेश करें",
+        "close": "बंद करें",
+        "copy": "कॉपी करें",
+        "search": "खोजें",
+        "confirm": "पुष्टि करें",
+        "dismiss": "खारिज करें",
+        "load": "लोड करें",
+        "install": "इंस्टॉल करें",
+        "uninstall": "अनइंस्टॉल करें",
+        "enable": "सक्षम करें",
+        "disable": "अक्षम करें",
+        "back": "पीछे",
+        "next": "आगे",
+        "skip": "छोड़ें",
+        "restart": "पुनरारंभ करें",
+        "show": "दिखाएं",
+        "hide": "छिपाएं",
+        "clear": "साफ करें"
+    },
+    "status": {
+        "running": "चल रहा है",
+        "stopped": "रुका हुआ",
+        "error": "त्रुटि",
+        "connected": "जुड़ा हुआ",
+        "disconnected": "डिस्कनेक्ट",
+        "enabled": "सक्षम",
+        "disabled": "अक्षम",
+        "active": "सक्रिय",
+        "paused": "ठहरा हुआ",
+        "configured": "कॉन्फ़िगर किया गया",
+        "loading": "लोड हो रहा है...",
+        "saving": "सहेजा जा रहा है..."
+    },
+    "gateway": {
+        "notRunning": "Gateway नहीं चल रहा है",
+        "notRunningDesc": "इस सुविधा का उपयोग करने के लिए OpenClaw Gateway का चलना आवश्यक है। यह स्वचालित रूप से शुरू हो जाएगा, या आप इसे सेटिंग्स से शुरू कर सकते हैं।",
+        "warning": "Gateway नहीं चल रहा है।"
+    }
+}

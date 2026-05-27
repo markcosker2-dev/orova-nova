@@ -1,0 +1,59 @@
+{
+    "sidebar": {
+        "chat": "Chat",
+        "newChat": "Nova conversa",
+        "cronTasks": "Tarefas agendadas",
+        "skills": "Habilidades",
+        "agents": "Agentes",
+        "channels": "Canais",
+        "dashboard": "Painel",
+        "settings": "Configurações",
+        "devConsole": "Console do desenvolvedor",
+        "models": "Modelos",
+        "deleteSessionConfirm": "Tem certeza de que deseja excluir a sessão \"{{label}}\"?",
+        "openClawPage": "Página OpenClaw"
+    },
+    "actions": {
+        "save": "Salvar",
+        "cancel": "Cancelar",
+        "delete": "Excluir",
+        "edit": "Editar",
+        "refresh": "Atualizar",
+        "close": "Fechar",
+        "copy": "Copiar",
+        "search": "Pesquisar",
+        "confirm": "Confirmar",
+        "dismiss": "Descartar",
+        "load": "Carregar",
+        "install": "Instalar",
+        "uninstall": "Desinstalar",
+        "enable": "Ativar",
+        "disable": "Desativar",
+        "back": "Voltar",
+        "next": "Próximo",
+        "skip": "Pular",
+        "restart": "Reiniciar",
+        "show": "Mostrar",
+        "hide": "Ocultar",
+        "clear": "Limpar"
+    },
+    "status": {
+        "running": "Executando",
+        "stopped": "Parado",
+        "error": "Erro",
+        "connected": "Conectado",
+        "disconnected": "Desconectado",
+        "enabled": "Ativado",
+        "disabled": "Desativado",
+        "active": "Ativo",
+        "paused": "Pausado",
+        "configured": "Configurado",
+        "loading": "Carregando...",
+        "saving": "Salvando..."
+    },
+    "gateway": {
+        "notRunning": "Gateway não está executando",
+        "notRunningDesc": "O Gateway OpenClaw precisa estar em execução para usar este recurso. Ele iniciará automaticamente ou você pode iniciá-lo nas Configurações.",
+        "warning": "O Gateway não está em execução."
+    }
+}

@@ -1,0 +1,59 @@
+{
+    "sidebar": {
+        "chat": "دردشة",
+        "newChat": "دردشة جديدة",
+        "cronTasks": "المهام المجدولة",
+        "skills": "المهارات",
+        "agents": "الوكلاء",
+        "channels": "القنوات",
+        "dashboard": "لوحة القيادة",
+        "settings": "الإعدادات",
+        "devConsole": "وحدة تحكم المطور",
+        "models": "النماذج",
+        "deleteSessionConfirm": "هل أنت متأكد أنك تريد حذف الجلسة \"{{label}}\"؟",
+        "openClawPage": "صفحة OpenClaw"
+    },
+    "actions": {
+        "save": "حفظ",
+        "cancel": "إلغاء",
+        "delete": "حذف",
+        "edit": "تعديل",
+        "refresh": "تحديث",
+        "close": "إغلاق",
+        "copy": "نسخ",
+        "search": "بحث",
+        "confirm": "تأكيد",
+        "dismiss": "تجاهل",
+        "load": "تحميل",
+        "install": "تثبيت",
+        "uninstall": "إلغاء التثبيت",
+        "enable": "تفعيل",
+        "disable": "تعطيل",
+        "back": "رجوع",
+        "next": "التالي",
+        "skip": "تخطي",
+        "restart": "إعادة تشغيل",
+        "show": "إظهار",
+        "hide": "إخفاء",
+        "clear": "مسح"
+    },
+    "status": {
+        "running": "قيد التشغيل",
+        "stopped": "متوقف",
+        "error": "خطأ",
+        "connected": "متصل",
+        "disconnected": "غير متصل",
+        "enabled": "مفعل",
+        "disabled": "معطل",
+        "active": "نشط",
+        "paused": "متوقف مؤقتاً",
+        "configured": "تم التكوين",
+        "loading": "جاري التحميل...",
+        "saving": "جاري الحفظ..."
+    },
+    "gateway": {
+        "notRunning": "البوابة غير مشغلة",
+        "notRunningDesc": "تحتاج بوابة OpenClaw Gateway إلى العمل لاستخدام هذه الميزة. ستعمل تلقائياً، أو يمكنك تشغيلها من الإعدادات.",
+        "warning": "البوابة لا تعمل."
+    }
+}

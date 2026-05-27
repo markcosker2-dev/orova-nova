@@ -1,0 +1,404 @@
+{
+    "title": "Canaux de Messagerie",
+    "subtitle": "Gérez les canaux de messagerie, les comptes, les liaisons compte-agent et le compte par défaut de chaque canal.",
+    "refresh": "Actualiser",
+    "addChannel": "Ajouter un Canal",
+    "stats": {
+        "total": "Total des Canaux",
+        "connected": "Connectés",
+        "disconnected": "Déconnectés"
+    },
+    "gatewayWarning": "Le service Gateway n'est pas en cours d'exécution. Les canaux ne peuvent pas se connecter.",
+    "availableChannels": "Canaux Disponibles",
+    "supportedChannels": "Canaux Supportés",
+    "available": "Canaux Disponibles",
+    "availableDesc": "Connecter un nouveau canal",
+    "configured": "Canaux Configurés",
+    "configuredDesc": "Gérer les canaux déjà configurés",
+    "configuredBadge": "Configuré",
+    "deleteConfirm": "Êtes-vous sûr de vouloir supprimer ce canal ?",
+    "showAll": "Afficher Tout",
+    "pluginBadge": "Plugin",
+    "toast": {
+        "whatsappConnected": "WhatsApp connecté avec succès",
+        "whatsappFailed": "Échec de la connexion WhatsApp : {{error}}",
+        "qrConnected": "{{name}} connecté avec succès",
+        "qrFailed": "Échec de la connexion {{name}} : {{error}}",
+        "channelSaved": "Canal {{name}} enregistré",
+        "channelConnecting": "Connexion à {{name}}...",
+        "savedButRefreshFailed": "La configuration a été enregistrée, mais l'actualisation des données de la page a échoué. Veuillez actualiser manuellement.",
+        "restartManual": "Veuillez redémarrer la Gateway manuellement",
+        "configFailed": "Échec de la configuration : {{error}}",
+        "bindingUpdated": "Liaison du compte mise à jour",
+        "defaultUpdated": "Compte par défaut mis à jour",
+        "accountDeleted": "Compte supprimé",
+        "channelDeleted": "Canal supprimé"
+    },
+    "account": {
+        "add": "Ajouter un Compte",
+        "edit": "Modifier",
+        "delete": "Supprimer le Compte",
+        "deleteChannel": "Supprimer le canal",
+        "deleteConfirm": "Êtes-vous sûr de vouloir supprimer ce compte ?",
+        "default": "Par défaut actuel",
+        "setDefault": "Définir comme canal par défaut",
+        "bindAgentLabel": "Agent Lié",
+        "unassigned": "Non assigné",
+        "mainAccount": "Compte Principal",
+        "customIdLabel": "ID du Compte",
+        "customIdPlaceholder": "ex: feishu-sales-bot",
+        "customIdHint": "Utilisez un ID de compte en minuscules (lettres, chiffres, trait d'union, souligné) pour distinguer plusieurs comptes sous un même canal.",
+        "invalidId": "L'ID du compte ne peut pas être vide",
+        "invalidCanonicalId": "L'ID du compte doit utiliser des lettres minuscules, des chiffres, des traits d'union ou des soulignés, commencer par une lettre/chiffre et faire au maximum 64 caractères.",
+        "idLabel": "ID : {{id}}",
+        "boundTo": "Lié à : {{agent}}",
+        "handledBy": "Géré par {{agent}}",
+        "bindingStatusLabel": "Liaison : {{status}}",
+        "connectionStatusLabel": "Connexion : {{status}}",
+        "bindingStatus": {
+            "bound": "Lié",
+            "unbound": "Non lié"
+        },
+        "connectionStatus": {
+            "connected": "Connecté",
+            "connecting": "Connexion",
+            "degraded": "Dégradé",
+            "disconnected": "Déconnecté",
+            "error": "Erreur"
+        },
+        "accountIdPrompt": "Entrez un nouvel ID de compte pour ce canal",
+        "accountIdExists": "L'ID de compte {{accountId}} existe déjà"
+    },
+    "dialog": {
+        "updateTitle": "Mettre à jour {{name}}",
+        "configureTitle": "Configurer {{name}}",
+        "addTitle": "Ajouter un Canal",
+        "existingDesc": "Mettre à jour votre configuration existante",
+        "selectDesc": "Sélectionnez un type de canal à configurer",
+        "qrCode": "QRCode",
+        "token": "Token",
+        "scanQR": "Scannez ce code QR avec {{name}}",
+        "refreshCode": "Actualiser le code",
+        "loadingConfig": "Chargement de la configuration...",
+        "existingHint": "Vous avez une configuration existante pour ce canal",
+        "howToConnect": "Comment se connecter",
+        "viewDocs": "Voir la Documentation",
+        "channelName": "Nom du Canal",
+        "channelNamePlaceholder": "Mon {{name}}",
+        "enableChannel": "Activer le Canal",
+        "enableChannelDesc": "Si désactivé, la config est enregistrée mais le canal reste désactivé",
+        "credentialsVerified": "Identifiants Vérifiés",
+        "validationFailed": "Validation Échouée",
+        "warnings": "Avertissements",
+        "back": "Retour",
+        "validating": "Validation...",
+        "validateConfig": "Valider la Configuration",
+        "generatingQR": "Génération du QR...",
+        "validatingAndSaving": "Validation et Enregistrement...",
+        "generateQRCode": "Générer un Code QR",
+        "updateAndReconnect": "Mettre à jour et Reconnecter",
+        "saveAndConnect": "Enregistrer et Connecter",
+        "envVar": "Variable d'Environnement : {{var}}"
+    },
+    "health": {
+        "state": {
+            "degraded": "Gateway dégradée",
+            "unresponsive": "Gateway ne répond pas"
+        },
+        "reasons": {
+            "gateway_degraded": "Le heartbeat de la Gateway s'est récemment dégradé.",
+            "gateway_unresponsive": "Le plan de contrôle de la Gateway semble ne pas répondre.",
+            "channels_status_timeout": "La sonde d'état du runtime du canal a expiré.",
+            "rpc_timeout": "Les récents appels RPC de la Gateway ont expiré.",
+            "gateway_not_running": "La Gateway n'est pas en cours d'exécution.",
+            "gateway_error": "La Gateway est dans un état d'erreur.",
+            "runtime_error": "Le runtime du canal a signalé une erreur."
+        },
+        "restartGateway": "Redémarrer la Gateway",
+        "copyDiagnostics": "Copier les Diagnostics",
+        "viewDiagnostics": "Voir les Diagnostics",
+        "hideDiagnostics": "Masquer les Diagnostics",
+        "diagnosticsTitle": "Instantané des Diagnostics Gateway",
+        "diagnosticsCopied": "Diagnostics copiés dans le presse-papiers",
+        "diagnosticsCopyFailed": "Échec de la collecte des diagnostics : {{error}}",
+        "restartTriggered": "Redémarrage de la Gateway demandé",
+        "restartFailed": "Échec du redémarrage de la Gateway : {{error}}"
+    },
+    "meta": {
+        "telegram": {
+            "description": "Connectez Telegram en utilisant un bot token de @BotFather",
+            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/TjiGwxsMWi7hpDkDAQBc0ydMnEf#MEkKdqXP1orZU2x4SrFcdUHgnl1",
+            "fields": {
+                "botToken": {
+                    "label": "Bot Token",
+                    "placeholder": "123456:ABC-DEF..."
+                },
+                "allowedUsers": {
+                    "label": "IDs Utilisateurs Autorisés",
+                    "placeholder": "ex: 123456789, 987654321",
+                    "description": "Liste d'IDs utilisateurs séparés par des virgules autorisés à utiliser le bot. Requis pour la sécurité."
+                }
+            },
+            "instructions": [
+                "Ouvrez Telegram et cherchez @BotFather",
+                "Envoyez /newbot et suivez les instructions",
+                "Copiez le bot token fourni",
+                "Collez le token ci-dessous",
+                "Obtenez votre ID Utilisateur via @userinfobot et collez-le ci-dessous"
+            ]
+        },
+        "discord": {
+            "description": "Connectez Discord en utilisant un bot token du Portail Développeur",
+            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/BkOywJYCAiYRN9k4KTTceKPMnxg#QS6LdxnA2oNtfcxtFc8cgabnnNd",
+            "fields": {
+                "token": {
+                    "label": "Bot Token",
+                    "placeholder": "Votre Discord bot token"
+                },
+                "guildId": {
+                    "label": "ID de la Guilde/Serveur",
+                    "placeholder": "ex: 123456789012345678",
+                    "description": "Limiter le bot à un serveur spécifique. Clic droit sur le serveur → Copier l'ID du serveur."
+                },
+                "channelId": {
+                    "label": "ID du Salon (optionnel)",
+                    "placeholder": "ex: 123456789012345678",
+                    "description": "Limiter le bot à un salon spécifique. Clic droit sur le salon → Copier l'ID du salon."
+                }
+            },
+            "instructions": [
+                "Allez sur le Portail Développeur Discord → Applications → New Application",
+                "Dans la section Bot : Add Bot, puis copiez le Bot Token",
+                "Activez Message Content Intent + Server Members Intent dans Bot → Privileged Gateway Intents",
+                "Dans OAuth2 → URL Generator : sélectionnez \"bot\" + \"applications.commands\", ajoutez les permissions de message",
+                "Invitez le bot sur votre serveur en utilisant l'URL générée",
+                "Collez le bot token ci-dessous"
+            ]
+        },
+        "whatsapp": {
+            "description": "Connectez WhatsApp en scannant un code QR (aucun numéro de téléphone requis)",
+            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/ES7fwUfH8iGl8FkHYfFcyWB3n4d#doxcnUElomBZLi0NnKLUzn6zLbd",
+            "instructions": [
+                "Ouvrez WhatsApp sur votre téléphone",
+                "Allez dans Paramètres > Appareils liés > Lier un appareil",
+                "Scannez le code QR affiché ci-dessous",
+                "Le système identifiera automatiquement votre numéro de téléphone"
+            ]
+        },
+        "wechat": {
+            "description": "Connectez votre WeChat personnel avec le plugin officiel OpenClaw de Tencent en scannant un code QR",
+            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/GHYZwuPCriF0gWkXwkFcJ9zon3b",
+            "instructions": [
+                "Cliquez sur Générer un Code QR pour installer et activer le plugin WeChat officiel dans OpenClaw",
+                "Scannez le code QR ci-dessous avec WeChat et confirmez la connexion sur votre téléphone",
+                "Une fois la liaison réussie, une nouvelle discussion WeChat ClawBot apparaîtra automatiquement dans WeChat",
+                "Vous pourrez répéter le flux QR plus tard pour ajouter un autre compte WeChat ou reconnecter un compte existant"
+            ]
+        },
+        "dingtalk": {
+            "description": "Connectez DingTalk via le plugin de canal OpenClaw (mode Stream)",
+            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/Y5eNwiSiZidkLskrwtJc1rUln0b#doxcnDgA78n43DbkiQjI1OqUA7b",
+            "fields": {
+                "clientId": {
+                    "label": "ID Client (AppKey)",
+                    "placeholder": "dingxxxxxx"
+                },
+                "clientSecret": {
+                    "label": "Secret Client (AppSecret)",
+                    "placeholder": "Votre app secret"
+                }
+            },
+            "instructions": [
+                "Installez et activez le plugin dingtalk dans OpenClaw",
+                "Créez une application interne DingTalk et activez le mode Stream",
+                "Remplissez l'ID Client (AppKey) et le Secret Client (AppSecret)"
+            ]
+        },
+        "signal": {
+            "description": "Connectez Signal en utilisant signal-cli",
+            "docsUrl": "https://docs.openclaw.ai/channels/signal",
+            "fields": {
+                "phoneNumber": {
+                    "label": "Numéro de Téléphone",
+                    "placeholder": "+1234567890"
+                }
+            },
+            "instructions": [
+                "Installez signal-cli sur votre système",
+                "Enregistrez ou liez votre numéro de téléphone",
+                "Entrez votre numéro de téléphone ci-dessous"
+            ]
+        },
+        "feishu": {
+            "description": "Connectez un bot Feishu/Lark via WebSocket",
+            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/GKn8wOvHnibpPNkNkPzcAvGlnzK#GdHUdp9t9oqyegxwV8ScLvVGn1c",
+            "fields": {
+                "appId": {
+                    "label": "ID de l'App",
+                    "placeholder": "cli_xxxxxx"
+                },
+                "appSecret": {
+                    "label": "Secret de l'App",
+                    "placeholder": "Votre app secret"
+                }
+            },
+            "instructions": [
+                "Lisez la documentation, puis allez sur la Plateforme Ouverte Feishu",
+                "Créez une nouvelle application",
+                "Obtenez l'ID de l'App et le Secret de l'App",
+                "Configurez l'abonnement aux événements"
+            ]
+        },
+        "wecom": {
+            "description": "Connectez un Bot WeCom via plugin",
+            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/JTGnwoV0RixKPtkr4w7c7gpAnDc",
+            "fields": {
+                "botId": {
+                    "label": "ID du Bot",
+                    "placeholder": "ww_xxxxxx"
+                },
+                "secret": {
+                    "label": "Secret de l'App",
+                    "placeholder": "Votre secret WeCom Bot"
+                }
+            },
+            "instructions": [
+                "Créez une application dans la Console d'Administration WeCom pour obtenir les infos de configuration",
+                "Assurez-vous que la config du serveur de réception de messages est activée",
+                "Entrez votre ID de Bot (ou ID d'Entreprise) et le Secret pour établir la connexion"
+            ]
+        },
+        "imessage": {
+            "description": "Connectez iMessage via BlueBubbles (macOS)",
+            "docsUrl": "https://docs.openclaw.ai/channels/bluebubbles",
+            "fields": {
+                "serverUrl": {
+                    "label": "URL du Serveur BlueBubbles",
+                    "placeholder": "http://localhost:1234"
+                },
+                "password": {
+                    "label": "Mot de passe du Serveur",
+                    "placeholder": "Votre mot de passe serveur"
+                }
+            },
+            "instructions": [
+                "Installez le serveur BlueBubbles sur votre Mac",
+                "Notez l'URL du serveur et le mot de passe",
+                "Entrez les détails de connexion ci-dessous"
+            ]
+        },
+        "matrix": {
+            "description": "Connectez au protocole Matrix",
+            "docsUrl": "https://docs.openclaw.ai/channels/matrix",
+            "fields": {
+                "homeserver": {
+                    "label": "URL du Homeserver",
+                    "placeholder": "https://matrix.org"
+                },
+                "accessToken": {
+                    "label": "Jeton d'Accès",
+                    "placeholder": "Votre jeton d'accès"
+                }
+            },
+            "instructions": [
+                "Créez un compte Matrix ou utilisez un compte existant",
+                "Obtenez un jeton d'accès depuis votre client",
+                "Entrez le homeserver et le jeton ci-dessous"
+            ]
+        },
+        "line": {
+            "description": "Connectez l'API LINE Messaging",
+            "docsUrl": "https://docs.openclaw.ai/channels/line",
+            "fields": {
+                "channelAccessToken": {
+                    "label": "Jeton d'Accès du Canal",
+                    "placeholder": "Votre jeton d'accès au canal LINE"
+                },
+                "channelSecret": {
+                    "label": "Secret du Canal",
+                    "placeholder": "Votre secret de canal LINE"
+                }
+            },
+            "instructions": [
+                "Allez sur la Console Développeurs LINE",
+                "Créez un canal Messaging API",
+                "Obtenez le Jeton d'Accès du Canal et le Secret"
+            ]
+        },
+        "msteams": {
+            "description": "Connectez Microsoft Teams via Bot Framework",
+            "docsUrl": "https://docs.openclaw.ai/channels/msteams",
+            "fields": {
+                "appId": {
+                    "label": "ID de l'App",
+                    "placeholder": "Votre ID d'application Microsoft"
+                },
+                "appPassword": {
+                    "label": "Mot de passe de l'App",
+                    "placeholder": "Votre mot de passe d'application Microsoft"
+                }
+            },
+            "instructions": [
+                "Allez sur le Portail Azure",
+                "Enregistrez une nouvelle application Bot",
+                "Obtenez l'ID de l'App et créez un mot de passe",
+                "Configurez le canal Teams"
+            ]
+        },
+        "googlechat": {
+            "description": "Connectez Google Chat via webhook",
+            "docsUrl": "https://docs.openclaw.ai/channels/googlechat",
+            "fields": {
+                "serviceAccountKey": {
+                    "label": "Chemin du JSON du Compte de Service",
+                    "placeholder": "/chemin/vers/service-account.json"
+                }
+            },
+            "instructions": [
+                "Créez un projet Google Cloud",
+                "Activez l'API Google Chat",
+                "Créez un compte de service",
+                "Téléchargez le fichier de clé JSON"
+            ]
+        },
+        "mattermost": {
+            "description": "Connectez Mattermost via Bot API",
+            "docsUrl": "https://docs.openclaw.ai/channels/mattermost",
+            "fields": {
+                "serverUrl": {
+                    "label": "URL du Serveur",
+                    "placeholder": "https://votre-mattermost.com"
+                },
+                "botToken": {
+                    "label": "Jeton d'Accès du Bot",
+                    "placeholder": "Votre jeton d'accès au bot"
+                }
+            },
+            "instructions": [
+                "Allez dans les Intégrations Mattermost",
+                "Créez un nouveau Compte Bot",
+                "Copiez le jeton d'accès"
+            ]
+        },
+        "qqbot": {
+            "description": "Connectez le canal QQ Bot (intégré depuis OpenClaw 3.31)",
+            "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/KPIJwlyiGiupMrkiS9ice39Zn2c",
+            "fields": {
+                "appId": {
+                    "label": "ID de l'App",
+                    "placeholder": "Votre ID d'application QQ Bot"
+                },
+                "clientSecret": {
+                    "label": "Secret Client",
+                    "placeholder": "Votre secret client QQ Bot"
+                }
+            },
+            "instructions": [
+                "Enregistrez une application sur la Plateforme Ouverte QQ Bot",
+                "Obtenez l'ID de l'App et le Secret Client",
+                "Remplissez vos identifiants ci-dessous"
+            ]
+        }
+    },
+    "viewDocs": "Voir la Documentation"
+}

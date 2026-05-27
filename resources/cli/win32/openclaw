@@ -1,0 +1,26 @@
+#!/bin/sh
+# OpenClaw CLI wrapper for Git Bash / MSYS2 on Windows
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+INSTALL_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+case "$1" in
+  update)
+    echo "openclaw is managed by HermesClaw (bundled version)."
+    echo ""
+    echo "To update openclaw, update HermesClaw:"
+    echo "  Open HermesClaw > Settings > Check for Updates"
+    exit 0
+    ;;
+esac
+
+export OPENCLAW_EMBEDDED_IN="HermesClaw"
+NODE_EXE="$INSTALL_DIR/resources/bin/node.exe"
+OPENCLAW_ENTRY="$INSTALL_DIR/resources/openclaw/openclaw.mjs"
+
+if [ -f "$NODE_EXE" ]; then
+  if "$NODE_EXE" -e 'const [maj,min]=process.versions.node.split(".").map(Number);process.exit((maj>22||maj===22&&min>=16)?0:1)' >/dev/null 2>&1; then
+    exec "$NODE_EXE" "$OPENCLAW_ENTRY" "$@"
+  fi
+fi
+
+ELECTRON_RUN_AS_NODE=1 exec "$INSTALL_DIR/HermesClaw.exe" "$OPENCLAW_ENTRY" "$@"

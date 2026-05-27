@@ -1,61 +1,80 @@
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak
-*.env
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
 
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
+# Build outputs
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
+dist-electron/
+release/
+*.local
 
-# Data
-app/data/*.db
-app/data/*.json
-!app/data/.gitkeep
-service_account.json
-*.json.bak
-credentials.json
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test coverage
+coverage/
+playwright-report/
+test-results/
+
+# Cache
+.cache/
+.turbo/
+*.tsbuildinfo
+
+# Electron
+*.dmg
+*.exe
+*.AppImage
+*.deb
+*.rpm
+
+resources/bin
 
 # Secrets
+*.p12
 *.pem
 *.key
-*.pfx
-*.p12
-private_key.json
-aws_credentials
 
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
+build/
+artifacts/
+docs/pr-session-notes-*.md
+docs/
 
-# Docker
-.dockerignore
+.cursor/
+.claude/
+.opencode/
+.playwright-mcp/
+.sisyphus/
+.pnpm-store/
+package-lock.json
+tmp/
 
-# Old instance snapshots (contains neutralized secrets)
-openclaw_instance/openclaw-aws.pem
-openclaw_instance/service_account.json
-openclaw_instance/*.db
-openclaw_instance/**/*.pem
+# Generated extension bridges (created by scripts/generate-ext-bridge.mjs)
+electron/extensions/_ext-bridge.generated.ts
+src/extensions/_ext-bridge.generated.ts

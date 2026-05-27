@@ -1,0 +1,200 @@
+{
+    "steps": {
+        "welcome": {
+      "title": "Welcome to HermesClaw",
+            "description": "Your AI assistant is ready to be configured"
+        },
+        "runtime": {
+            "title": "Environment Check",
+            "description": "Verifying system requirements"
+        },
+        "provider": {
+            "title": "AI Provider",
+            "description": "Configure your AI service"
+        },
+        "channel": {
+            "title": "Connect a Channel",
+            "description": "Connect a messaging platform (optional)"
+        },
+        "installing": {
+            "title": "Setting Up",
+            "description": "Installing essential components"
+        },
+        "complete": {
+            "title": "All Set!",
+      "description": "HermesClaw is ready to use"
+        }
+    },
+    "welcome": {
+    "title": "Welcome to HermesClaw",
+    "description": "HermesClaw is a desktop workspace for running and managing AI agents. Configure model providers, install skills, connect messaging channels, and operate agent workflows — all from one local-first application.",
+        "features": {
+            "noCommand": "Zero command-line required",
+            "modernUI": "Modern, beautiful interface",
+            "bundles": "Pre-installed skill bundles",
+            "crossPlatform": "Cross-platform support"
+        }
+    },
+    "runtime": {
+        "title": "Checking Environment",
+        "viewLogs": "View Logs",
+        "recheck": "Re-check",
+        "installChoiceLabel": "Install runtime",
+        "installChoiceHint": "Choose which runtime to prepare during setup. In Both mode, OpenClaw stays primary and Hermes is configured as an OpenClaw agent.",
+        "nodejs": "Node.js Runtime",
+        "openclaw": "OpenClaw Package",
+        "gateway": "Gateway Service",
+        "startGateway": "Start Gateway",
+        "installChoice": {
+            "openclaw": {
+                "title": "OpenClaw",
+                "description": "Use OpenClaw as the primary runtime."
+            },
+            "hermes": {
+                "title": "Hermes",
+                "description": "Prepare Hermes-only mode without requiring OpenClaw startup in setup."
+            },
+            "both": {
+                "title": "OpenClaw + Hermes",
+                "description": "Keep OpenClaw as primary and wire Hermes as an OpenClaw agent."
+            }
+        },
+        "windowsWsl": {
+            "title": "Windows Hermes availability",
+            "description": "On Windows, Hermes can use an experimental native home path or a configured WSL2 distro. Until one of them is available, Setup can only continue with OpenClaw.",
+            "missing": "Hermes and OpenClaw + Hermes are temporarily unavailable because no native Hermes home path or WSL2 distro has been configured yet.",
+            "ready": "WSL2 is ready with distro: {{distro}}. Hermes-only and OpenClaw + Hermes are available.",
+            "nativeReady": "Native Hermes path configured for experimental Windows support.",
+            "nativeAndWslReady": "Native Hermes path configured; WSL distro {{distro}} is also available."
+        },
+        "status": {
+            "checking": "Checking...",
+            "success": "Node.js is available",
+            "error": "Failed",
+            "gatewayRunning": "Running on port {{port}}",
+            "packageReady": "OpenClaw package ready"
+        },
+        "issue": {
+            "title": "Environment issue detected",
+            "desc": "Please ensure OpenClaw is properly installed. Check the logs for details."
+        },
+        "logs": {
+            "title": "Application Logs",
+            "openFolder": "Open Log Folder",
+            "close": "Close",
+            "noLogs": "(No logs available yet)"
+        }
+    },
+    "provider": {
+        "label": "Model Provider",
+        "selectPlaceholder": "Select a provider...",
+        "baseUrl": "Base URL",
+        "modelId": "Model ID",
+        "modelIdDesc": "The model identifier from your provider (e.g. deepseek-ai/DeepSeek-V3)",
+        "codePlanPreset": "Code Plan Preset",
+        "codePlanMode": "Code Plan",
+        "useCodePlanPreset": "Use Ark Code Plan Preset",
+        "codePlanPresetDesc": "Code Plan uses https://ark.cn-beijing.volces.com/api/coding/v3 and model ark-code-latest. Do not use /api/v3 for Code Plan traffic.",
+        "codePlanDoc": "Code Plan docs",
+        "protocol": "Protocol",
+        "protocols": {
+            "openaiCompletions": "OpenAI Completions",
+            "openaiResponses": "OpenAI Responses",
+            "anthropic": "Anthropic Compatible"
+        },
+        "apiKey": "API Key",
+        "save": "Save",
+        "validateSave": "Validate & Save",
+        "valid": "Provider configured successfully",
+        "invalid": "Invalid API key",
+        "storedLocally": "Your API key is stored locally on your machine."
+    },
+    "channel": {
+        "title": "Connect a Messaging Channel",
+        "subtitle": "Choose a platform to connect your AI assistant to. You can add more channels later in Settings.",
+        "configure": "Configure {{name}}",
+        "howTo": "How to connect:",
+        "viewDocs": "View docs",
+        "validationError": "Validation failed",
+        "connected": "{{name}} Connected",
+        "connectedDesc": "Your channel has been configured. It will connect when the Gateway starts.",
+        "configureAnother": "Configure another channel"
+    },
+    "installing": {
+        "title": "Installing Essential Components",
+        "subtitle": "Setting up the tools needed to power your AI assistant",
+        "progress": "Progress",
+        "summary": "Preparing {{count}} installation phase(s) for this runtime choice.",
+        "steps": {
+            "openclaw": "OpenClaw Runtime",
+            "hermes": "Hermes Runtime",
+            "bridge": "Hermes Bridge"
+        },
+        "stepHint": {
+            "openclaw": "Prepare the primary OpenClaw runtime used by the app and gateway.",
+            "hermes": "Prepare the Hermes runtime for standalone use or as an OpenClaw agent backend.",
+            "bridge": "Apply the Hermes-as-agent bridge wiring for OpenClaw primary mode."
+        },
+        "status": {
+            "pending": "Pending",
+            "installing": "Installing...",
+            "installed": "Installed",
+            "failed": "Failed"
+        },
+        "error": "Setup Error:",
+        "retry": "Retry this installation",
+        "restart": "Try restarting the app",
+        "failureSource": {
+            "openclaw": "The failure happened while preparing the OpenClaw runtime.",
+            "hermes": "The failure happened while preparing the Hermes runtime.",
+            "bridge": "The failure happened while wiring Hermes as an OpenClaw agent bridge.",
+            "generic": "The failure source could not be determined from the current backend result."
+        },
+        "retryGuidance": {
+            "openclaw": "Check the OpenClaw package/build state and gateway prerequisites, then retry.",
+                "hermes": "Check Hermes installation prerequisites (including native path or WSL on Windows) and retry.",
+            "bridge": "Check the bridge prerequisites and retry after the runtimes are available.",
+            "generic": "Retry once after reviewing the error details. If it keeps failing, review the setup logs."
+        },
+        "wait": "This may take a few moments...",
+        "skip": "Skip this step"
+    },
+    "complete": {
+        "title": "Setup Complete!",
+    "subtitle": "HermesClaw is configured and ready to use. You can now start chatting with your AI assistant.",
+        "provider": "AI Provider",
+        "components": "Components",
+        "gateway": "Gateway",
+        "running": "Running",
+        "footer": "You can customize skills and connect channels in Settings"
+    },
+    "nav": {
+        "next": "Next",
+        "back": "Back",
+        "skipStep": "Skip this step",
+        "skipSetup": "Skip Setup",
+        "getStarted": "Get Started"
+    },
+    "defaultSkills": {
+        "opencode": {
+            "name": "OpenCode",
+            "description": "AI coding assistant backend"
+        },
+        "python-env": {
+            "name": "Python Environment",
+            "description": "Python runtime for skills"
+        },
+        "code-assist": {
+            "name": "Code Assist",
+            "description": "Code analysis and suggestions"
+        },
+        "file-tools": {
+            "name": "File Tools",
+            "description": "File operations and management"
+        },
+        "terminal": {
+            "name": "Terminal",
+            "description": "Shell command execution"
+        }
+    }
+}
