@@ -398,6 +398,85 @@ body {
     justify-content: center;
 }
 
+/* ─── AGENT CONTROL PANEL STYLES ─── */
+.agent-control {
+    margin: 14px 24px;
+    padding: 14px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.agent-control-left h2 {
+    font-size: 16px;
+    margin-bottom: 4px;
+}
+
+.agent-sub {
+    color: var(--text-dim);
+    font-size: 13px;
+}
+
+.agent-list {
+    display: flex;
+    gap: 10px;
+}
+
+.agent-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    min-width: 220px;
+}
+
+.agent-info {
+    flex: 1;
+}
+
+.agent-name {
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.agent-role {
+    color: var(--text-dim);
+    font-size: 12px;
+}
+
+.agent-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-secondary {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 6px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.btn-tertiary {
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--border-subtle);
+    padding: 6px 8px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.btn-secondary:hover { filter: brightness(1.05); }
+.btn-tertiary:hover { color: var(--text); border-color: var(--accent); }
+
 .theme-toggle-btn:hover {
     border-color: var(--accent);
     color: var(--accent-light);

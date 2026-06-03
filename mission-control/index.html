@@ -119,6 +119,37 @@
             </div>
         </div>
 
+        <!-- ─── AGENT CONTROL PANEL (AI Agentic Platform) ─── -->
+        <div id="agent-control" class="agent-control">
+            <div class="agent-control-left">
+                <h2>Agent Console</h2>
+                <p class="agent-sub">Control autonomous agents, monitor CEO pulse, and run workflows</p>
+            </div>
+            <div class="agent-list" id="agent-list">
+                <div class="agent-card" data-agent="nova">
+                    <div class="agent-info">
+                        <div class="agent-name">Nova</div>
+                        <div class="agent-role">CEO Agent — Lead analysis & orchestration</div>
+                    </div>
+                    <div class="agent-actions">
+                        <button class="btn-secondary run-agent" data-agent="nova">Run</button>
+                        <button class="btn-tertiary config-agent">Config</button>
+                    </div>
+                </div>
+
+                <div class="agent-card" data-agent="leadgen">
+                    <div class="agent-info">
+                        <div class="agent-name">LeadGen</div>
+                        <div class="agent-role">Lead generation & outreach</div>
+                    </div>
+                    <div class="agent-actions">
+                        <button class="btn-secondary run-agent" data-agent="leadgen">Run</button>
+                        <button class="btn-tertiary config-agent">Config</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- ──── SCREEN 1: TASK BOARD ──── -->
         <section id="screen-taskboard" class="screen active">
             <div class="screen-header">
