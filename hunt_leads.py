@@ -28,8 +28,8 @@ load_dotenv()
 
 
 def box(text):
-    line = "─" * max(len(text) + 4, 56)
-    top, mid, bot = f"╭{line}╮", f"│  {text}  │", f"╰{line}╯"
+    line = "-" * max(len(text) + 4, 56)
+    top, mid, bot = f"+{line}+", f"|  {text}  |", f"+{line}+"
     return f"\n{top}\n{mid}\n{bot}\n"
 
 
@@ -42,10 +42,10 @@ def bar(label, value=""):
 
 
 def score_emoji(score):
-    if score >= 75: return "🔥  Hot lead — call today"
-    if score >= 55: return "⭐  Warm — email, then follow up"
-    if score >= 35: return "📧  Cold — nurture sequence"
-    return "⚪  Low priority — keep in funnel"
+    if score >= 75: return "[HOT] Hot lead - call today"
+    if score >= 55: return "[WARM] Warm - email, then follow up"
+    if score >= 35: return "[COLD] Cold - nurture sequence"
+    return "[LOW] Low priority - keep in funnel"
 
 
 async def main():
@@ -55,30 +55,26 @@ async def main():
 
     full_query = f"{query} {location}".strip() if location else query
 
-    print(box(reducer("OROVA Lead Hunt – " + full_query, 54)))
+    print(box(reducer("OROVA Lead Hunt - " + full_query, 54)))
 
-    from app.skills.lead_gen_v2 import find_leads_v2
+    from app.skills.lead_gen_v3 import find_leads_v3 as find_leads_v2
 
     print("  Step 1/3  Discovery")
     result = await find_leads_v2(
-        niche=full_query,
-        location="",
-        max_results=count * 3,
-        enrich=True,
-        min_score=0,
+        count=count * 3,
+        query=full_query,
     )
 
-    if not result.get("success"):
-        print(f"  Error: {result.get('error', 'Unknown')}")
+    leads  = result.get("leads", []) or []
+    if not leads:
+        print(f"  Error: No leads returned (check API keys or queries)")
         return
 
-    raw    = result.get("raw_leads", [])
-    leads  = result.get("leads", []) or []
-    total  = result.get("total_found", len(leads))
-    qual   = result.get("qualified", len(leads))
+    total  = len(leads)
+    qual   = len(leads)
 
     bar("Raw leads found",  total)
-    bar("Qualified score≥0", qual)
+    bar("Qualified score >= 0", qual)
     bar("With owner name", result.get("with_owner_name", 0))
     bar("With email", result.get("with_email", 0))
     bar("With phone", result.get("with_phone", 0))
@@ -89,14 +85,14 @@ async def main():
     top = leads[:min(len(leads), 10)]
     print()
 
-    print(f"  RESULTS — {len(top)} leads  (sorted by score)")
-    print("  " + "─" * 54)
+    print(f"  RESULTS - {len(top)} leads  (sorted by score)")
+    print("  " + "-" * 54)
     for i, ld in enumerate(top, 1):
         biz     = ld.get("business") or ld.get("name", "Unknown")
-        owner   = ld.get("owner") or ld.get("owner_name", "—")
-        email   = ld.get("email", "—")
-        phone   = ld.get("phone") or ld.get("phones", "—")
-        website = ld.get("website") or ld.get("url", "—")
+        owner   = ld.get("owner") or ld.get("owner_name", "-")
+        email   = ld.get("email", "-")
+        phone   = ld.get("phone") or ld.get("phones", "-")
+        website = ld.get("website") or ld.get("url", "-")
         score   = ld.get("score", 0)
         status  = ld.get("status", "New")
         print(f"\n  #{i}  {biz}")

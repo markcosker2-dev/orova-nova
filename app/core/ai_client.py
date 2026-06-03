@@ -76,8 +76,8 @@ class UnifiedAIClient:
     # ── Model Flavors (User-Switchable via /mode) ──────────────────
     FLAVORS = {
         "fast":   "google/gemini-2.0-flash-lite-preview-02-05:free",
-        "smart":  "openai/gpt-oss-120b:free",
-        "genius": "qwen/qwen3-coder-480b-instruct:free",
+        "smart":  "meta-llama/llama-3.3-70b-instruct:free",
+        "genius": "qwen/qwen-2.5-coder-32b-instruct:free",
     }
 
     FLAVOR_FILE = "app/data/model_flavor.json"
@@ -109,8 +109,8 @@ class UnifiedAIClient:
 
     FALLBACK_CHAIN = [
         "google/gemini-2.0-flash-lite-preview-02-05:free",
-        "openai/gpt-oss-120b:free",
         "meta-llama/llama-3.3-70b-instruct:free",
+        "qwen/qwen-2.5-coder-32b-instruct:free",
     ]
 
     GROQ_MODEL = "llama-3.3-70b-versatile"
@@ -132,8 +132,8 @@ class UnifiedAIClient:
                 logger.warning(f"[-] Gemini native init failed: {e}")
 
         self.primary_client = None
-        api_key = os.getenv("OPENROUTER_API_KEY")
-        base_url = os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1")
+        api_key = os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY")
+        base_url = os.getenv("OPENROUTER_BASE_URL") or os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1")
         if api_key:
             try:
                 from openai import AsyncOpenAI

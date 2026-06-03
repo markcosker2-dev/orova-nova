@@ -31,6 +31,7 @@ Verified Components:
 - ✅ Exception handlers registered
 - ✅ Lifespan context manager (startup/shutdown)
 - ✅ Static files mounting for Mission Control
+- ✅ Mission Control served directly by the Python backend (no Electron required)
 - ✅ Authentication middleware (X-API-Key)
 
 Key Endpoints Tested:

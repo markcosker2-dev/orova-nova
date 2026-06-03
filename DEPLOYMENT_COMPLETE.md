@@ -103,6 +103,7 @@ OROVA has been systematically hardened and scaled from 58% production-ready to *
 - Admin actions: Lead Hunt, Email Monitor, Manual Backup buttons
 - Recent leads table: Sortable, with approval actions
 - API-authenticated: Requires DASHBOARD_API_KEY header
+- Backend-hosted: Mission Control can run directly from `app/main.py` without HermesClaw/Electron
 
 **Result:** Command center for operations. No spreadsheet required.
 

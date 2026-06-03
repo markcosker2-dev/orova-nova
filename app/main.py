@@ -907,11 +907,6 @@ async def run_pipeline_action(request: Request, authorized: bool = Depends(requi
     pipeline_name = data.get("pipeline")
     return {"status": "ok", "message": f"Pipeline {pipeline_name} started successfully"}
 
-# --- Static Frontend ---
-MC_PATH = os.path.join(root_path, "mission-control")
-if os.path.exists(MC_PATH):
-    app.mount("/", StaticFiles(directory=MC_PATH, html=True), name="static")
-
 @app.post("/api/actions/approve-email")
 async def approve_email(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
     data = await request.json()
@@ -1015,10 +1010,15 @@ async def _task_execution_loop():
             logger.error(f"[TASK LOOP] Loop error: {e}")
         await asyncio.sleep(30)
 
+# --- Static Frontend ---
+MC_PATH = os.path.join(root_path, "mission-control")
+if os.path.exists(MC_PATH):
+    app.mount("/", StaticFiles(directory=MC_PATH, html=True), name="static")
+
 
 if __name__ == "__main__":
     import uvicorn
-    # Use $PORT from environment, default to 18789
-    port = int(os.environ.get("PORT", 18789))
+    # Use $PORT from environment, default to 18790
+    port = int(os.environ.get("PORT", 18790))
     uvicorn.run("app.main:app", host="0.0.0.0", port=port)
 

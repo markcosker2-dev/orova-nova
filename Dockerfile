@@ -19,9 +19,9 @@ COPY mission-control/ mission-control/
 
 RUN mkdir -p /app/data /app/app/data /app/logs
 
-EXPOSE ${PORT:-10000}
+EXPOSE ${PORT:-18790}
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:${PORT:-10000}/health || exit 1
+    CMD curl -f http://localhost:${PORT:-18790}/health || exit 1
 
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-18789}"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-18790}"]

@@ -28,6 +28,7 @@ from app.skills.follow_up_sequences import generate_sequence, get_sequence_templ
 from app.skills.proposal_gen import generate_proposal, list_pricing_tiers
 from app.skills.perf_dashboard import generate_weekly_report, track_metric
 from app.core.agent_router import dispatch_task, get_all_statuses
+from app.skills.notion_crm import sync_to_notion_via_make
 from app.skills.definitions import TOOLS
 from app.core.guardrails import Guardrails
 from app.core.memory import MemoryDistiller
@@ -176,6 +177,7 @@ class TaskPlanner:
             "enrich_lead_apollo": enrich_lead_apollo, "bulk_enrich_leads": bulk_enrich_leads,
             "is_business_hours": is_business_hours, "next_business_hours_slot": next_business_hours_slot,
             "generate_cal_booking_link": generate_cal_booking_link,
+            "sync_to_notion_via_make": sync_to_notion_via_make,
         }
 
     HUNTING_TOOLS = ["sgai_search_and_extract", "sgai_deep_extract", "find_leads", "google_search", "research_lead", "hunt_hiring_signals"]

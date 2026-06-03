@@ -538,15 +538,23 @@ class DatabaseManager:
                 int(client_id)
             )
             lead_id = cls._sqlite_query(sql, params, return_lastrowid=True)
-            if lead_id and sync_to_sheets:
+            if lead_id:
                 lead_data["id"] = lead_id
+                # Sync to Google Sheets
+                if sync_to_sheets:
+                    try:
+                        config = cls.get_client_config(client_id)
+                        workbook = config.get("workbook")
+                        from app.skills.sheets_sync import sync_lead_to_sheets
+                        cls._schedule_async_task(sync_lead_to_sheets(lead_data, workbook_name=workbook))
+                    except Exception as exc:
+                        logger.warning(f"[SQLITE] Sheet sync could not be scheduled: {exc}")
+                # Sync to Notion CRM via Make.com
                 try:
-                    config = cls.get_client_config(client_id)
-                    workbook = config.get("workbook")
-                    from app.skills.sheets_sync import sync_lead_to_sheets
-                    cls._schedule_async_task(sync_lead_to_sheets(lead_data, workbook_name=workbook))
+                    from app.skills.notion_crm import sync_to_notion_via_make
+                    cls._schedule_async_task(sync_to_notion_via_make(lead_data))
                 except Exception as exc:
-                    logger.warning(f"[SQLITE] Sheet sync could not be scheduled: {exc}")
+                    logger.warning(f"[SQLITE] Notion CRM sync could not be scheduled: {exc}")
             return lead_id
 
     @classmethod
@@ -573,15 +581,23 @@ class DatabaseManager:
             return cls._redis_manager.update_lead_status(lead_id, new_status)
         elif cls._sqlite_fallback:
             cls._sqlite_query("UPDATE leads SET status = ? WHERE id = ?", (new_status, int(lead_id)))
-            try:
-                lead = cls.get_lead_by_id(lead_id)
-                client_id = lead.get("client_id", 0) if lead else 0
-                config = cls.get_client_config(client_id)
-                workbook = config.get("workbook")
-                from app.skills.sheets_sync import update_lead_status_sheets
-                cls._schedule_async_task(update_lead_status_sheets(int(lead_id), new_status, workbook_name=workbook))
-            except Exception as exc:
-                logger.warning(f"[SQLITE] Sheet status sync could not be scheduled: {exc}")
+            lead = cls.get_lead_by_id(lead_id)
+            if lead:
+                # Sync Google Sheets
+                try:
+                    client_id = lead.get("client_id", 0)
+                    config = cls.get_client_config(client_id)
+                    workbook = config.get("workbook")
+                    from app.skills.sheets_sync import update_lead_status_sheets
+                    cls._schedule_async_task(update_lead_status_sheets(int(lead_id), new_status, workbook_name=workbook))
+                except Exception as exc:
+                    logger.warning(f"[SQLITE] Sheet status sync could not be scheduled: {exc}")
+                # Sync Notion via Make.com
+                try:
+                    from app.skills.notion_crm import sync_to_notion_via_make
+                    cls._schedule_async_task(sync_to_notion_via_make(lead))
+                except Exception as exc:
+                    logger.warning(f"[SQLITE] Notion status sync could not be scheduled: {exc}")
 
     @classmethod
     def get_metrics(cls, client_id=0):

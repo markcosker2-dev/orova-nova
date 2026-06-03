@@ -848,6 +848,23 @@ TOOLS = [
             "parameters": {"type": "object", "properties": {}}
         }
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "sync_to_notion_via_make",
+            "description": "Manually trigger lead state synchronization to the Notion CRM via Make.com webhook relay.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "lead_data": {
+                        "type": "object",
+                        "description": "Dict containing lead data keys: business, owner, email, phone, website, url, status, score, notes."
+                    }
+                },
+                "required": ["lead_data"]
+            }
+        }
+    }
 ]
 
 

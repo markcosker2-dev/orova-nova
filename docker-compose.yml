@@ -5,10 +5,11 @@ services:
     build: .
     container_name: orova_gateway
     ports:
-      - "18789:18789"
+      - "18790:18790"
       - "10000:10000"
     environment:
       - ROLE=GATEWAY
+      - PORT=18790
       - OLLAMA_AUTH_TOKEN=${OLLAMA_AUTH_TOKEN:-}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
     restart: always
