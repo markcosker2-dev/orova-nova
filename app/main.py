@@ -7,6 +7,7 @@ import asyncio
 import threading
 import time
 import httpx
+import secrets
 from typing import Optional
 from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -52,16 +53,38 @@ TOPIC_AGENT_MAP = {
 
 # In-memory agent queue for Mission Control (simple, volatile)
 AGENT_QUEUE = []
+BACKGROUND_LOOP = None
+
+def _get_background_loop():
+    global BACKGROUND_LOOP
+    if BACKGROUND_LOOP is not None and BACKGROUND_LOOP.is_running():
+        return BACKGROUND_LOOP
+    try:
+        return asyncio.get_running_loop()
+    except RuntimeError:
+        return None
+
+
+def _schedule_background(coro):
+    loop = _get_background_loop()
+    if loop is None:
+        return None
+    try:
+        if loop.is_running():
+            return loop.create_task(coro)
+    except Exception:
+        pass
+    try:
+        return asyncio.run_coroutine_threadsafe(coro, loop)
+    except Exception:
+        return None
+
 
 def _append_log(msg: str):
     LOG_BUFFER.append({"ts": datetime.now().strftime("%H:%M:%S"), "msg": msg})
-    if len(LOG_BUFFER) > 100: LOG_BUFFER.pop(0)
-    try:
-        # persist recent logs asynchronously (keep last 500)
-        import asyncio
-        asyncio.create_task(DatabaseManager.set_state('agent_logs', LOG_BUFFER[-500:]))
-    except Exception:
-        pass  # best-effort
+    if len(LOG_BUFFER) > 100:
+        LOG_BUFFER.pop(0)
+    _schedule_background(DatabaseManager.set_state('agent_logs', LOG_BUFFER[-500:]))
 
 _task_loop_running = False
 
@@ -114,8 +137,9 @@ async def lifespan(app: FastAPI):
                 logger.warning(f"⚠️ No Drive backup available or restore failed: {restore_res.get('error')}")
 
     # [P6] Register SIGTERM for Render redeploys
-    loop = asyncio.get_running_loop()
-    DatabaseManager.register_sigterm_handler(loop)
+    global BACKGROUND_LOOP
+    BACKGROUND_LOOP = asyncio.get_running_loop()
+    DatabaseManager.register_sigterm_handler(BACKGROUND_LOOP)
     
     # [P6] Register Telegram Webhook
     tg_token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -289,27 +313,38 @@ async def health_check():
 async def require_dashboard_api_key(request: Request):
     """Accept dashboard API key via either X-API-Key (frontend) or X-Api-Key (FastAPI default header)."""
     expected = os.getenv("DASHBOARD_API_KEY", "nova_admin_2026")
+    # Allow legacy static key via X-API-Key
     x_api_key = request.headers.get("X-API-Key") or request.headers.get("X-Api-Key")
+    if x_api_key:
+        _provided = (x_api_key or "").strip()
+        _exp_trimmed = (expected or "").strip()
+        if _provided == _exp_trimmed:
+            return True
 
-    # Diagnose key mismatch
-    _provided = x_api_key or "<missing>"
-    _exp_trimmed = (expected or "").strip()
-    _prv_trimmed = (_provided or "").strip()
+    # Accept short-lived session tokens via X-Session-Token
+    session_token = request.headers.get("X-Session-Token")
+    if session_token:
+        try:
+            tokens = await DatabaseManager.get_state('dashboard_tokens') or {}
+        except Exception:
+            tokens = {}
+        token_entry = tokens.get(session_token)
+        if token_entry:
+            # token_entry: {"created_at": ts, "expires_at": ts, "issued_by": "..."}
+            try:
+                exp = token_entry.get('expires_at')
+                if exp and datetime.fromisoformat(exp) > datetime.utcnow():
+                    return True
+            except Exception:
+                pass
 
-    if _prv_trimmed != _exp_trimmed:
-        logger.warning(
-            f"[AUTH] Dashboard API key mismatch — "
-            f"expected has {len(_exp_trimmed)} chars, "
-            f"provided {_prv_trimmed!r} ({len(_prv_trimmed)} chars)"
-        )
-        raise HTTPException(status_code=403, detail="Unauthorized")
-
-    return True
+    logger.warning(f"[AUTH] Dashboard auth failed. header_keys={list(request.headers.keys())}")
+    raise HTTPException(status_code=403, detail="Unauthorized")
 
 
 @app.get("/_auth-debug")
-async def auth_debug(request: Request):
-    """Diagnostic — reveals key length mismatch without exposing the actual value."""
+async def auth_debug(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
+    """Diagnostic — verifies auth without exposing the actual key."""
     expected = os.getenv("DASHBOARD_API_KEY", "nova_admin_2026")
     x_api_key = request.headers.get("X-API-Key") or request.headers.get("X-Api-Key")
 
@@ -324,11 +359,36 @@ async def auth_debug(request: Request):
     return {
         "env_set": bool(expected),
         "expected_len": len(_exp),
-        "expected_hex": _exp.encode().hex() if _exp else None,
         "provided": _prv if matched else f"<{len(_prv)} chars>",
         "provided_len": len(_prv),
         "match": matched,
     }
+
+
+@app.post('/api/keys/new')
+async def issue_dashboard_token(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
+    """Issue a short-lived dashboard session token. Requires existing dashboard API key in header.
+    Returns {token: 'hex', expires_at: iso}
+    """
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    # TTL in seconds (default 3600 = 1 hour)
+    ttl = int(payload.get('ttl') or 3600)
+    issued_by = request.client.host if request.client else 'unknown'
+    token = secrets.token_hex(16)
+    expires_at = (datetime.utcnow() + timedelta(seconds=ttl)).isoformat()
+
+    # store token map in state
+    try:
+        tokens = await DatabaseManager.get_state('dashboard_tokens') or {}
+    except Exception:
+        tokens = {}
+    tokens[token] = { 'created_at': datetime.utcnow().isoformat(), 'expires_at': expires_at, 'issued_by': issued_by }
+    _schedule_background(DatabaseManager.set_state('dashboard_tokens', tokens))
+
+    return { 'status': 'ok', 'token': token, 'expires_at': expires_at }
 
 
 @app.get("/api/health")
@@ -422,11 +482,7 @@ async def api_agent_cancel(request: Request, authorized: bool = Depends(require_
             if r.get('status') == 'queued':
                 r['status'] = 'cancelled'
                 r['cancelled_at'] = datetime.utcnow().isoformat()
-                try:
-                    import asyncio
-                    asyncio.create_task(DatabaseManager.set_state('agent_queue', AGENT_QUEUE[:200]))
-                except Exception:
-                    pass
+                _schedule_background(DatabaseManager.set_state('agent_queue', AGENT_QUEUE[:200]))
                 _append_log(f"✋ Cancelled agent task {task_id}")
                 return {'status': 'ok', 'task_id': task_id, 'cancelled': True}
             return {'status': 'failed', 'reason': 'cannot cancel running or completed task', 'task': r}
@@ -450,12 +506,9 @@ async def api_agent_retry(request: Request, background: BackgroundTasks, authori
     new_task_id = f"agent-{int(time.time()*1000)}"
     record = {"task_id": new_task_id, "agent": original.get('agent'), "goal": original.get('goal'), "client_id": original.get('client_id', 0), "status": "queued", "ts": datetime.utcnow().isoformat()}
     AGENT_QUEUE.insert(0, record)
-    if len(AGENT_QUEUE) > 200: AGENT_QUEUE.pop()
-    try:
-        import asyncio
-        asyncio.create_task(DatabaseManager.set_state('agent_queue', AGENT_QUEUE[:200]))
-    except Exception:
-        pass
+    if len(AGENT_QUEUE) > 200:
+        AGENT_QUEUE.pop()
+    _schedule_background(DatabaseManager.set_state('agent_queue', AGENT_QUEUE[:200]))
 
     async def _run_retry(agent_name, goal_text, cid, tid):
         for r in AGENT_QUEUE:
@@ -481,11 +534,7 @@ async def api_agent_retry(request: Request, background: BackgroundTasks, authori
                     r['error'] = str(e)
                     r['completed_at'] = datetime.utcnow().isoformat()
                     break
-        try:
-            import asyncio
-            asyncio.create_task(DatabaseManager.set_state('agent_queue', AGENT_QUEUE[:200]))
-        except Exception:
-            pass
+        _schedule_background(DatabaseManager.set_state('agent_queue', AGENT_QUEUE[:200]))
 
     background.add_task(_run_retry, record['agent'], record['goal'], record['client_id'], new_task_id)
     return {'status': 'queued', 'new_task_id': new_task_id}
@@ -539,12 +588,9 @@ async def run_agent(request: Request, background: BackgroundTasks, authorized: b
     record = {"task_id": task_id, "agent": agent, "goal": goal, "client_id": client_id, "status": "queued", "ts": datetime.utcnow().isoformat()}
     AGENT_QUEUE.insert(0, record)
     # keep queue bounded
-    if len(AGENT_QUEUE) > 200: AGENT_QUEUE.pop()
-    try:
-        import asyncio
-        asyncio.create_task(DatabaseManager.set_state('agent_queue', AGENT_QUEUE[:200]))
-    except Exception:
-        pass
+    if len(AGENT_QUEUE) > 200:
+        AGENT_QUEUE.pop()
+    _schedule_background(DatabaseManager.set_state('agent_queue', AGENT_QUEUE[:200]))
 
     async def _run_bg(agent_name: str, goal_text: str, cid: int, tid: str):
         # mark running
@@ -563,11 +609,7 @@ async def run_agent(request: Request, background: BackgroundTasks, authorized: b
                     r["result"] = str(res)[:1000]
                     r["completed_at"] = datetime.utcnow().isoformat()
                     break
-                try:
-                    import asyncio
-                    asyncio.create_task(DatabaseManager.set_state('agent_queue', AGENT_QUEUE[:200]))
-                except Exception:
-                    pass
+            _schedule_background(DatabaseManager.set_state('agent_queue', AGENT_QUEUE[:200]))
         except Exception as e:
             _append_log(f"❌ Agent {agent_name} failed ({tid}): {e}")
             for r in AGENT_QUEUE:
@@ -576,11 +618,7 @@ async def run_agent(request: Request, background: BackgroundTasks, authorized: b
                     r["error"] = str(e)
                     r["completed_at"] = datetime.utcnow().isoformat()
                     break
-            try:
-                import asyncio
-                asyncio.create_task(DatabaseManager.set_state('agent_queue', AGENT_QUEUE[:200]))
-            except Exception:
-                pass
+            _schedule_background(DatabaseManager.set_state('agent_queue', AGENT_QUEUE[:200]))
 
     background.add_task(_run_bg, agent, goal, client_id, task_id)
     return {"status": "queued", "task_id": task_id, "agent": agent, "goal": goal}

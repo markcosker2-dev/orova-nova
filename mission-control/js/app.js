@@ -78,6 +78,8 @@ const CRON_EVENTS = [
 
 // ═══════════════════ API HELPER ═══════════════════
 const NOVA_API_KEY = localStorage.getItem('NOVA_API_KEY') || 'nova_admin_2026';
+// session token is read per-request from localStorage to allow dynamic issuance
+
 
 async function apiFetch(path, opts) {
     try {
@@ -85,8 +87,9 @@ async function apiFetch(path, opts) {
         opts = opts || {};
         opts.headers = opts.headers || {};
         
-        // Add API Key
-        opts.headers['X-API-Key'] = NOVA_API_KEY;
+        // Prefer short-lived session token if present (read dynamically)
+        const _sess = localStorage.getItem('NOVA_SESSION_TOKEN');
+        if (_sess) opts.headers['X-Session-Token'] = _sess; else opts.headers['X-API-Key'] = NOVA_API_KEY;
 
         // Set Content-Type automatically for JSON requests
         if (opts.body && typeof opts.body === 'string') {
@@ -190,6 +193,10 @@ document.querySelectorAll('.nav-item').forEach(function (item) {
 
 // ═══════════════════ THEME TOGGLE ═══════════════════
 var themeBtn = document.getElementById('theme-toggle');
+
+// Quick Auth button (request short-lived session token)
+var authBtn = document.getElementById('btn-get-session');
+if (authBtn) authBtn.addEventListener('click', async function () { showToast('Requesting session token...', 'info'); const t = await window.requestSessionToken(3600); if (t) showToast('Session token saved', 'success'); else showToast('Session token failed', 'error'); });
 (function () {
     var saved = localStorage.getItem('orova_theme') || 'dark';
     document.documentElement.setAttribute('data-theme', saved);
