@@ -50,6 +50,9 @@ TOPIC_AGENT_MAP = {
     "1": "nova", "2": "nova", "3": "nova", "5": "nova", "6": "nova", "7": "nova"
 }
 
+# In-memory agent queue for Mission Control (simple, volatile)
+AGENT_QUEUE = []
+
 def _append_log(msg: str):
     LOG_BUFFER.append({"ts": datetime.now().strftime("%H:%M:%S"), "msg": msg})
     if len(LOG_BUFFER) > 100: LOG_BUFFER.pop(0)
@@ -371,6 +374,18 @@ async def get_request_trace(request_id: str, authorized: bool = Depends(require_
     return {"status": "ok", "request_id": request_id, "trace": trace}
 
 
+@app.get('/api/agents/queue')
+async def api_agent_queue(limit: int = 50, authorized: bool = Depends(require_dashboard_api_key)):
+    """Return recent agent queue entries (in-memory)."""
+    return {"status": "ok", "queue": AGENT_QUEUE[:limit]}
+
+
+@app.get('/api/agents/logs')
+async def api_agent_logs(limit: int = 200, authorized: bool = Depends(require_dashboard_api_key)):
+    """Return recent in-memory logs for Mission Control UI."""
+    return {"status": "ok", "logs": LOG_BUFFER[-limit:]}
+
+
 
 @app.get("/api/leads")
 async def get_leads(limit: int = 100, authorized: bool = Depends(require_dashboard_api_key)):
@@ -415,14 +430,37 @@ async def run_agent(request: Request, background: BackgroundTasks, authorized: b
         client_id = 0
 
     task_id = f"agent-{int(time.time()*1000)}"
+    # enqueue a lightweight task record
+    record = {"task_id": task_id, "agent": agent, "goal": goal, "client_id": client_id, "status": "queued", "ts": datetime.utcnow().isoformat()}
+    AGENT_QUEUE.insert(0, record)
+    # keep queue bounded
+    if len(AGENT_QUEUE) > 200: AGENT_QUEUE.pop()
 
     async def _run_bg(agent_name: str, goal_text: str, cid: int, tid: str):
+        # mark running
+        for r in AGENT_QUEUE:
+            if r.get("task_id") == tid:
+                r["status"] = "running"
+                r["started_at"] = datetime.utcnow().isoformat()
+                break
         _append_log(f"▶ Queued agent run {agent_name} ({tid}): {goal_text}")
         try:
             res = await planner.execute(goal_text, client_id=cid, agent_id=agent_name)
             _append_log(f"✅ Agent {agent_name} completed ({tid}): {str(res)[:240]}")
+            for r in AGENT_QUEUE:
+                if r.get("task_id") == tid:
+                    r["status"] = "completed"
+                    r["result"] = str(res)[:1000]
+                    r["completed_at"] = datetime.utcnow().isoformat()
+                    break
         except Exception as e:
             _append_log(f"❌ Agent {agent_name} failed ({tid}): {e}")
+            for r in AGENT_QUEUE:
+                if r.get("task_id") == tid:
+                    r["status"] = "failed"
+                    r["error"] = str(e)
+                    r["completed_at"] = datetime.utcnow().isoformat()
+                    break
 
     background.add_task(_run_bg, agent, goal, client_id, task_id)
     return {"status": "queued", "task_id": task_id, "agent": agent, "goal": goal}

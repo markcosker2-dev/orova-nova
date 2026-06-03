@@ -477,6 +477,29 @@ body {
 .btn-secondary:hover { filter: brightness(1.05); }
 .btn-tertiary:hover { color: var(--text); border-color: var(--accent); }
 
+/* Agent meta panel */
+.agent-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 300px;
+}
+
+.agent-queue, .agent-logs {
+    background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));
+    border: 1px solid var(--border-subtle);
+    padding: 10px;
+    border-radius: 10px;
+}
+
+.agent-queue h4, .agent-logs h4 { margin: 0 0 6px 0; font-size: 13px; }
+
+.agent-queue-list, .agent-logs-list { max-height: 120px; overflow: auto; font-size: 12px; color: var(--text-dim); }
+
+.agent-queue-item { display:flex; justify-content:space-between; gap:8px; padding:6px 4px; border-bottom:1px dashed rgba(255,255,255,0.02); }
+.agent-queue-item .status { font-weight:700; color:var(--accent-light); }
+.log-line { font-size:11px; color:var(--text-muted); padding:4px 0; border-bottom:1px solid rgba(255,255,255,0.02); }
+
 .theme-toggle-btn:hover {
     border-color: var(--accent);
     color: var(--accent-light);
