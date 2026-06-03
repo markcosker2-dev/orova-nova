@@ -56,6 +56,12 @@ AGENT_QUEUE = []
 def _append_log(msg: str):
     LOG_BUFFER.append({"ts": datetime.now().strftime("%H:%M:%S"), "msg": msg})
     if len(LOG_BUFFER) > 100: LOG_BUFFER.pop(0)
+    try:
+        # persist recent logs asynchronously (keep last 500)
+        import asyncio
+        asyncio.create_task(DatabaseManager.set_state('agent_logs', LOG_BUFFER[-500:]))
+    except Exception:
+        pass  # best-effort
 
 _task_loop_running = False
 
@@ -162,6 +168,19 @@ async def lifespan(app: FastAPI):
                     await asyncio.sleep(60)
         asyncio.create_task(_ping())
     
+    # Restore persisted agent queue and logs into memory (best-effort)
+    try:
+        q = await DatabaseManager.get_state('agent_queue', [])
+        logs = await DatabaseManager.get_state('agent_logs', [])
+        if isinstance(q, list) and q:
+            AGENT_QUEUE.clear()
+            AGENT_QUEUE.extend(q[:200])
+        if isinstance(logs, list) and logs:
+            LOG_BUFFER.clear()
+            LOG_BUFFER.extend(logs[-200:])
+    except Exception:
+        pass
+
     logger.info("🚀 NOVA Gateway Online | Swarm Survivability Layer Active")
     yield
     await tg_queue.stop()
@@ -169,6 +188,8 @@ async def lifespan(app: FastAPI):
     _task_loop_running = False
     await cleanup_crawler()
     scheduler.shutdown()
+
+    
 
 app = FastAPI(title="OROVA Indestructible Agency Bridge", lifespan=lifespan)
 
@@ -386,6 +407,90 @@ async def api_agent_logs(limit: int = 200, authorized: bool = Depends(require_da
     return {"status": "ok", "logs": LOG_BUFFER[-limit:]}
 
 
+@app.post('/api/agents/cancel')
+async def api_agent_cancel(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
+    """Cancel a queued agent task. Payload {task_id: 'agent-...'}"""
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    task_id = payload.get('task_id') or request.query_params.get('task_id')
+    if not task_id:
+        raise HTTPException(status_code=400, detail='task_id required')
+    for r in AGENT_QUEUE:
+        if r.get('task_id') == task_id:
+            if r.get('status') == 'queued':
+                r['status'] = 'cancelled'
+                r['cancelled_at'] = datetime.utcnow().isoformat()
+                try:
+                    import asyncio
+                    asyncio.create_task(DatabaseManager.set_state('agent_queue', AGENT_QUEUE[:200]))
+                except Exception:
+                    pass
+                _append_log(f"✋ Cancelled agent task {task_id}")
+                return {'status': 'ok', 'task_id': task_id, 'cancelled': True}
+            return {'status': 'failed', 'reason': 'cannot cancel running or completed task', 'task': r}
+    raise HTTPException(status_code=404, detail='task not found')
+
+
+@app.post('/api/agents/retry')
+async def api_agent_retry(request: Request, background: BackgroundTasks, authorized: bool = Depends(require_dashboard_api_key)):
+    """Retry a previous task by task_id. Creates a new queued task and returns new task_id."""
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    task_id = payload.get('task_id') or request.query_params.get('task_id')
+    if not task_id:
+        raise HTTPException(status_code=400, detail='task_id required')
+    # find original
+    original = next((r for r in AGENT_QUEUE if r.get('task_id') == task_id), None)
+    if not original:
+        raise HTTPException(status_code=404, detail='original task not found')
+    new_task_id = f"agent-{int(time.time()*1000)}"
+    record = {"task_id": new_task_id, "agent": original.get('agent'), "goal": original.get('goal'), "client_id": original.get('client_id', 0), "status": "queued", "ts": datetime.utcnow().isoformat()}
+    AGENT_QUEUE.insert(0, record)
+    if len(AGENT_QUEUE) > 200: AGENT_QUEUE.pop()
+    try:
+        import asyncio
+        asyncio.create_task(DatabaseManager.set_state('agent_queue', AGENT_QUEUE[:200]))
+    except Exception:
+        pass
+
+    async def _run_retry(agent_name, goal_text, cid, tid):
+        for r in AGENT_QUEUE:
+            if r.get('task_id') == tid:
+                r['status'] = 'running'
+                r['started_at'] = datetime.utcnow().isoformat()
+                break
+        _append_log(f"↻ Retrying agent {agent_name} ({tid}): {goal_text}")
+        try:
+            res = await planner.execute(goal_text, client_id=cid, agent_id=agent_name)
+            _append_log(f"✅ Retry completed {agent_name} ({tid})")
+            for r in AGENT_QUEUE:
+                if r.get('task_id') == tid:
+                    r['status'] = 'completed'
+                    r['result'] = str(res)[:1000]
+                    r['completed_at'] = datetime.utcnow().isoformat()
+                    break
+        except Exception as e:
+            _append_log(f"❌ Retry failed {agent_name} ({tid}): {e}")
+            for r in AGENT_QUEUE:
+                if r.get('task_id') == tid:
+                    r['status'] = 'failed'
+                    r['error'] = str(e)
+                    r['completed_at'] = datetime.utcnow().isoformat()
+                    break
+        try:
+            import asyncio
+            asyncio.create_task(DatabaseManager.set_state('agent_queue', AGENT_QUEUE[:200]))
+        except Exception:
+            pass
+
+    background.add_task(_run_retry, record['agent'], record['goal'], record['client_id'], new_task_id)
+    return {'status': 'queued', 'new_task_id': new_task_id}
+
+
 
 @app.get("/api/leads")
 async def get_leads(limit: int = 100, authorized: bool = Depends(require_dashboard_api_key)):
@@ -435,6 +540,11 @@ async def run_agent(request: Request, background: BackgroundTasks, authorized: b
     AGENT_QUEUE.insert(0, record)
     # keep queue bounded
     if len(AGENT_QUEUE) > 200: AGENT_QUEUE.pop()
+    try:
+        import asyncio
+        asyncio.create_task(DatabaseManager.set_state('agent_queue', AGENT_QUEUE[:200]))
+    except Exception:
+        pass
 
     async def _run_bg(agent_name: str, goal_text: str, cid: int, tid: str):
         # mark running
@@ -453,6 +563,11 @@ async def run_agent(request: Request, background: BackgroundTasks, authorized: b
                     r["result"] = str(res)[:1000]
                     r["completed_at"] = datetime.utcnow().isoformat()
                     break
+                try:
+                    import asyncio
+                    asyncio.create_task(DatabaseManager.set_state('agent_queue', AGENT_QUEUE[:200]))
+                except Exception:
+                    pass
         except Exception as e:
             _append_log(f"❌ Agent {agent_name} failed ({tid}): {e}")
             for r in AGENT_QUEUE:
@@ -461,6 +576,11 @@ async def run_agent(request: Request, background: BackgroundTasks, authorized: b
                     r["error"] = str(e)
                     r["completed_at"] = datetime.utcnow().isoformat()
                     break
+            try:
+                import asyncio
+                asyncio.create_task(DatabaseManager.set_state('agent_queue', AGENT_QUEUE[:200]))
+            except Exception:
+                pass
 
     background.add_task(_run_bg, agent, goal, client_id, task_id)
     return {"status": "queued", "task_id": task_id, "agent": agent, "goal": goal}

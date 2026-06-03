@@ -36,7 +36,10 @@ async function fetchAndRenderQueue() {
             const id = item.task_id || '';
             const status = item.status || 'queued';
             const goal = (item.goal || '').slice(0,60);
-            return `<div class="agent-queue-item"><div style="flex:1"><strong>${name}</strong> — ${esc(goal)}</div><div class="status">${esc(status)}</div></div>`;
+            let actions = '';
+            if (status === 'queued') actions = `<button class="btn-tertiary btn-cancel" data-task="${id}">Cancel</button>`;
+            if (status === 'failed') actions = `<button class="btn-secondary btn-retry" data-task="${id}">Retry</button>`;
+            return `<div class="agent-queue-item"><div style="flex:1"><strong>${name}</strong> — ${esc(goal)}</div><div style="display:flex;gap:8px;align-items:center"><div class="status">${esc(status)}</div>${actions}</div></div>`;
         }).join('');
     } catch (e) { console.warn('Queue fetch failed', e); }
 }
@@ -66,3 +69,29 @@ function startAgentMonitoring() {
 
 // Launch when DOM ready
 document.addEventListener('DOMContentLoaded', function () { startAgentMonitoring(); });
+
+// Global handler for cancel/retry buttons inside queue
+document.addEventListener('click', async function (e) {
+    const el = e.target;
+    if (!el) return;
+    if (el.classList && el.classList.contains('btn-cancel')) {
+        const task = el.dataset.task;
+        if (!task) return;
+        showToast('✋ Cancelling...', 'info');
+        const res = await apiFetch('/api/agents/cancel', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ task_id: task })
+        });
+        if (res && res.status === 'ok') showToast('✅ Cancelled', 'success'); else showToast('❌ Cancel failed', 'error');
+        await fetchAndRenderQueue();
+    }
+    if (el.classList && el.classList.contains('btn-retry')) {
+        const task = el.dataset.task;
+        if (!task) return;
+        showToast('↻ Retrying...', 'info');
+        const res = await apiFetch('/api/agents/retry', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ task_id: task })
+        });
+        if (res && res.status === 'queued') showToast('✅ Retry queued', 'success'); else showToast('❌ Retry failed', 'error');
+        await fetchAndRenderQueue();
+    }
+});
