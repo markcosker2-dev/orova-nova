@@ -399,6 +399,34 @@ async def get_metrics(client_id: int = 0, authorized: bool = Depends(require_das
     flat = {k: metrics.get(k, 0) for k in ["leads_found", "emails_sent", "replies_received", "meetings_booked", "calls_made", "proposals_sent"]}
     return {"status": "ok", "metrics": metrics, **flat}
 
+
+@app.post("/api/agents/run")
+async def run_agent(request: Request, background: BackgroundTasks, authorized: bool = Depends(require_dashboard_api_key)):
+    """Queue an agent run. Payload: {"agent": "nova", "goal": "Find 10 leads"}. Returns queued task id."""
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    agent = payload.get("agent") or request.query_params.get("agent") or "nova"
+    goal = payload.get("goal") or f"Run routine for {agent}"
+    try:
+        client_id = int(request.query_params.get("client_id") or payload.get("client_id") or 0)
+    except Exception:
+        client_id = 0
+
+    task_id = f"agent-{int(time.time()*1000)}"
+
+    async def _run_bg(agent_name: str, goal_text: str, cid: int, tid: str):
+        _append_log(f"▶ Queued agent run {agent_name} ({tid}): {goal_text}")
+        try:
+            res = await planner.execute(goal_text, client_id=cid, agent_id=agent_name)
+            _append_log(f"✅ Agent {agent_name} completed ({tid}): {str(res)[:240]}")
+        except Exception as e:
+            _append_log(f"❌ Agent {agent_name} failed ({tid}): {e}")
+
+    background.add_task(_run_bg, agent, goal, client_id, task_id)
+    return {"status": "queued", "task_id": task_id, "agent": agent, "goal": goal}
+
 @app.post("/api/leads/clear")
 async def clear_leads(authorized: bool = Depends(require_dashboard_api_key)):
     await DatabaseManager.query("DELETE FROM leads")
