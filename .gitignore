@@ -78,3 +78,20 @@ tmp/
 # Generated extension bridges (created by scripts/generate-ext-bridge.mjs)
 electron/extensions/_ext-bridge.generated.ts
 src/extensions/_ext-bridge.generated.ts
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.pytest_cache/
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# OneDrive temp files
+H

@@ -120,6 +120,14 @@ async def lifespan(app: FastAPI):
     DatabaseManager.mark_ready()
     await AgentSoul.initialize()
 
+    # [SELF-LEARNING] Bootstrap learning tables for trace/pattern/skill storage
+    try:
+        from app.core.self_learning import ensure_tables as ensure_learning_tables
+        await ensure_learning_tables()
+        logger.info("[SELF_LEARN] Learning tables initialized")
+    except Exception as e:
+        logger.warning(f"[SELF_LEARN] Table init failed: {e}")
+
     if await DatabaseManager.is_empty():
         logger.info("♻️ Database appears empty. Checking Google Sheets for restoration source of truth...")
         leads = await restore_leads_from_sheets()

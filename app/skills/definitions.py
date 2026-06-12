@@ -910,4 +910,8 @@ TOOLS = [
     }
 ]
 
+# ── Alphabetical sort for prompt caching stability ──
+# Provider-side prompt caching requires deterministic tool ordering.
+# Sorting by function name ensures consistent token boundaries across requests.
+TOOLS.sort(key=lambda t: t["function"]["name"])
 

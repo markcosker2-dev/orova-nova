@@ -1,0 +1,30 @@
+# HermesClaw Codebase Rules
+
+## Split-Brain Boundary
+- OpenClaw (Node.js) handles: channel management, WebSocket gateway, canvas, TypeBox schema validation
+- Hermes Agent (Python) handles: planning, memory, tool execution, self-improvement loops
+- Do NOT mix concerns across the boundary
+
+## Tool Registry
+- TOOLS list in app/skills/definitions.py must be sorted alphabetically by function name
+- This preserves provider-side prompt caching and reduces API costs
+
+## Environment Variables
+- Never hardcode API keys. Always use os.getenv() with descriptive error messages
+- HINDSIGHT_API_LLM_MAX_CONCURRENT=1 must be set to prevent LLM slot starvation
+
+## Agent Identity
+- Nova is the only CEO agent. All sub-agents report to Nova
+- Sub-agents receive scoped context, not full conversation history
+- Identity probes are deflected with standard response
+
+## Email Safety
+- All outbound emails pass through MX record verification
+- Disposable email domains are blocked
+- Daily send cap: 50 emails per client per day
+- Business hours only: 7:30-11:30 AM, 6:00-8:00 PM PT
+
+## Security
+- Semantic Firewall validates every tool call before execution
+- Circuit breakers prevent runaway execution
+- Dashboard requires API key auth (X-Dashboard-Secret header)

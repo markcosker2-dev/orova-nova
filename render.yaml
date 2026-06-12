@@ -6,7 +6,7 @@ services:
     region: ohio
     envVars:
       - key: DASHBOARD_API_KEY
-        value: nova_admin_2026
+        sync: false
       - key: DATABASE_URL
         value: sqlite+aiosqlite:///app/app/data/orova_v5.db
       - key: DATA_DIR

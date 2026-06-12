@@ -61,6 +61,11 @@ from app.core.drift_guard import (
     drift_guard,
     EDGE_CASE_AUDIT_REPORT,
 )
+from app.core.self_learning import (
+    self_learning_loop,
+    ensure_tables as ensure_learning_tables,
+    ExecutionTrace,
+)
 from app.skills.smart_scraper import sgai_search_and_extract, sgai_deep_extract
 from app.skills.email_sequence_skill import create_drip_campaign
 from app.skills.copywriting_skill import write_cold_email, write_ad_copy
@@ -259,6 +264,27 @@ class TaskPlanner:
         if relevant_facts:
             system_content += "\n" + relevant_facts
         system_content += f"\nYou are Nova. Available tools: {tool_names}"
+        # Inject tool catalog and agent roster so Nova understands full context
+        from app.core.soul import AgentSoul
+        system_content += "\n\n" + AgentSoul.get_tool_catalog()
+        system_content += "\n\n" + AgentSoul.get_agent_roster()
+        # Inject learned skills and user preferences from self-learning loop
+        try:
+            learned_skills = await self_learning_loop.get_learned_skills(min_confidence=0.5)
+            if learned_skills:
+                skills_summary = "\n".join(
+                    f"  - {s['name']}: {s['description']}" for s in learned_skills[:10]
+                )
+                system_content += f"\n\n=== LEARNED WORKFLOWS ===\n{skills_summary}\n========================="
+            prefs = await self_learning_loop.get_preference_model(client_id=client_id)
+            if prefs:
+                prefs_flat = "; ".join(
+                    f"{k}: {v[0]['value']} ({v[0]['confidence']:.0%})"
+                    for k, v in prefs.items()
+                )
+                system_content += f"\n\nUSER PREFERENCES: {prefs_flat}"
+        except Exception as e:
+            logger.debug(f"[PLANNER] Self-learning context injection skipped: {e}")
         messages = [{"role": "system", "content": system_content}]
         if history:
             safe_history = _sanitise_history(history, n=6)
@@ -304,6 +330,10 @@ class TaskPlanner:
                 eff_report = efficiency_optimizer.complete_session(session_id)
                 if eff_report and eff_report.savings_percent() > 0:
                     logger.info(f"[EFFICIENCY] Session saved {eff_report.savings_percent()}% tokens")
+                await self._record_learning_trace(
+                    session_id, agent_id, goal, tool_call_history, client_id,
+                    "completed", step, task_start_time,
+                )
                 return {"status": "ok", "agent": agent_id, "steps": step, "response": content or "Task complete."}
 
             messages.append({"role": "assistant", "content": content, "tool_calls": tool_calls})
@@ -434,11 +464,13 @@ class TaskPlanner:
                     trace_manager.complete_trace(session_id, "completed", response=str(tool_result)[:500])
                     execution_circuit_breaker.complete_session(session_id, "completed")
                     efficiency_optimizer.complete_session(session_id)
+                    await self._record_learning_trace(session_id, agent_id, goal, tool_call_history, client_id, "completed", step, task_start_time)
                     return {"status": "ok", "agent": agent_id, "steps": step, "action": fn_name, "result": tool_result}
 
         trace_manager.complete_trace(session_id, "max_steps", response="Step limit reached.")
         execution_circuit_breaker.complete_session(session_id, "max_steps")
         efficiency_optimizer.complete_session(session_id)
+        await self._record_learning_trace(session_id, agent_id, goal, tool_call_history, client_id, "max_steps", MAX_STEPS, task_start_time)
         return {"status": "max_steps", "agent": agent_id, "steps": MAX_STEPS, "response": "Step limit reached."}
 
     async def _compress_context(self, messages: list) -> list:
@@ -468,3 +500,28 @@ class TaskPlanner:
         except asyncio.TimeoutError:
             summary = bulk[:400]
         return system + [{"role": "assistant", "content": f"[COMPRESSED HISTORY]: {summary}"}] + tail
+
+    async def _record_learning_trace(
+        self, session_id: str, agent_id: str, goal: str,
+        tool_call_history: List[Dict], client_id: int,
+        outcome: str, total_steps: int, task_start_time: float,
+    ):
+        """Record execution trace for the self-learning loop."""
+        try:
+            tool_sequence = [h["tool_name"] for h in tool_call_history]
+            trace = ExecutionTrace(
+                session_id=session_id,
+                agent_id=agent_id,
+                goal=goal,
+                tool_sequence=tool_sequence,
+                outcome=outcome,
+                total_steps=total_steps,
+                total_latency_ms=(time.time() - task_start_time) * 1000,
+                client_id=client_id,
+            )
+            await self_learning_loop.record_trace(trace)
+            await self_learning_loop.persist_knowledge(
+                client_id=client_id, goal=goal, outcome=outcome,
+            )
+        except Exception as e:
+            logger.debug(f"[PLANNER] Learning trace recording skipped: {e}")
