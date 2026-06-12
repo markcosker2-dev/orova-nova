@@ -23,7 +23,10 @@ class Router:
     def __init__(self, ai_planner, lead_hunter):
         self.planner = ai_planner
         self.lead_hunter = lead_hunter
-        self.shortcuts = {r"/reset": self._reset_instruction}
+        self.shortcuts = {
+            r"/reset": self._reset_instruction,
+            r"/approve_pruning": self._approve_pruning_handler
+        }
 
     async def route(self, message: str, chat_id: int, history: list = None, agent_id: str = "nova") -> Union[str, dict]:
         # [P4] Hardening: Generate request ID for tracing
@@ -80,6 +83,39 @@ class Router:
 
     async def _reset_instruction(self):
         return "Use the /reset command to wipe memory."
+
+    async def _approve_pruning_handler(self):
+        from app.core.database import DatabaseManager
+        from app.skills.email_sequence_skill import update_sheets_lead_status
+        lead_ids = await DatabaseManager.get_state("pending_prune_lead_ids")
+        if not lead_ids:
+            return "No pending stale leads to prune."
+            
+        try:
+            # Fetch lead details first so we can update Sheets
+            placeholders = ",".join("?" for _ in lead_ids)
+            leads = await DatabaseManager.fetchall(
+                f"SELECT business FROM leads WHERE id IN ({placeholders})",
+                tuple(lead_ids)
+            )
+            
+            # Update status in DB
+            await DatabaseManager.query(
+                f"UPDATE leads SET status = 'Archived', updated_at = CURRENT_TIMESTAMP WHERE id IN ({placeholders})",
+                tuple(lead_ids)
+            )
+            
+            # Clear state
+            await DatabaseManager.set_state("pending_prune_lead_ids", None)
+            
+            # Async background update of Google Sheets
+            for lead in leads:
+                asyncio.create_task(update_sheets_lead_status(lead["business"], "Archived"))
+                
+            return f"✅ Approved! Archived {len(lead_ids)} stale leads in the database and CRM."
+        except Exception as e:
+            logger.error(f"Error executing pruning: {e}")
+            return f"❌ Error executing pruning: {e}"
 
     async def _greet(self):
         return "👋 I'm Nova, your OROVA AI. Ready to work."

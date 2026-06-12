@@ -74,6 +74,10 @@ def generate_email(template_type: str = "premium_b2b_pain_focused", **context) -
     """
     Generate personalized cold email using Jinja2 templating.
     
+    Consults learned_strategies from the database to auto-select the best-
+    performing framework when no template_type is explicitly specified.
+    If a strategy has win_rate > 0.15 with confidence='high', it auto-selects it.
+    
     Args:
         template_type: Which template to use (see COLD_EMAIL_TEMPLATES)
         **context: Variables to fill in (contact_first_name, company_short, pain_point, etc.)
@@ -81,6 +85,29 @@ def generate_email(template_type: str = "premium_b2b_pain_focused", **context) -
     Returns:
         dict with subject and body
     """
+    # ── Self-improvement: Consult learned strategies ──
+    # If the caller didn't specify a template, try to pick the best one
+    if template_type == "auto" or template_type is None:
+        try:
+            from app.core.database import DatabaseManager
+            import asyncio
+            loop = asyncio.get_event_loop()
+            if loop and loop.is_running():
+                # We're in an async context
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    best = pool.submit(
+                        lambda: asyncio.run(_pick_best_framework())
+                    ).result()
+            else:
+                best = asyncio.run(_pick_best_framework())
+            if best:
+                template_type = best
+                logger.info(f"[EMAIL_TEMPLATES] Auto-selected framework '{best}' from learned strategies")
+        except Exception as e:
+            logger.warning(f"[EMAIL_TEMPLATES] Could not consult learned_strategies: {e}")
+            template_type = "premium_b2b_pain_focused"
+    
     template_str = COLD_EMAIL_TEMPLATES.get(template_type)
     if not template_str:
         logger.error(f"[EmailGen] Unknown template: {template_type}")
@@ -104,6 +131,27 @@ def generate_email(template_type: str = "premium_b2b_pain_focused", **context) -
     except Exception as e:
         logger.error(f"[EmailGen] Template render failed: {e}")
         return {"error": str(e)}
+
+
+async def _pick_best_framework() -> str:
+    """Query learned_strategies for the best email framework with high confidence."""
+    try:
+        from app.core.database import DatabaseManager
+        row = await DatabaseManager.fetchone(
+            """SELECT strategy_value FROM learned_strategies
+               WHERE strategy_type = 'email_framework'
+                 AND win_rate > 0.15
+                 AND confidence = 'high'
+                 AND active = 1
+               ORDER BY win_rate DESC
+               LIMIT 1"""
+        )
+        if row:
+            return row["strategy_value"]
+    except Exception as e:
+        logger.warning(f"[EMAIL_TEMPLATES] _pick_best_framework failed: {e}")
+    return None
+
 
 def generate_follow_up_sequence(contact_name: str, company: str, pain_point: str, 
                                  num_emails: int = 3, days_between: int = 3) -> list:

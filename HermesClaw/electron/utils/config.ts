@@ -8,10 +8,10 @@
  */
 export const PORTS = {
   /** HermesClaw GUI development server port */
-  HERMESCLAW_DEV: 5173,
+  HERMESCLAW_DEV: 6969,
 
   /** HermesClaw GUI production port (for reference) */
-  HERMESCLAW_GUI: 23333,
+  HERMESCLAW_GUI: 3100,
 
   /** Local host API server port */
   HERMESCLAW_HOST_API: 13210,

@@ -7,6 +7,7 @@ import hashlib
 import time
 import unicodedata
 from pathlib import Path
+from typing import List, Dict, Any, Optional
 from app.core.ai_client import UnifiedAIClient, GroqLimpResponse
 # Skills imports
 from app.skills.lead_finder import find_leads, research_lead
@@ -32,6 +33,34 @@ from app.skills.notion_crm import sync_to_notion_via_make
 from app.skills.definitions import TOOLS
 from app.core.guardrails import Guardrails
 from app.core.memory import MemoryDistiller
+from app.core.semantic_firewall import (
+    SemanticFirewall,
+    FirewallDecision,
+    create_tool_call_context,
+    firewall_guard,
+    get_semantic_firewall,
+)
+from app.core.decision_trace import (
+    DecisionStep,
+    DecisionTrace,
+    trace_manager,
+)
+from app.core.circuit_breaker import (
+    ExecutionCircuitBreaker,
+    CircuitBreakerConfig,
+    CircuitBreakerTripped,
+    execution_circuit_breaker,
+)
+from app.core.efficiency_optimizer import (
+    EfficiencyOptimizer,
+    efficiency_optimizer,
+    EfficiencyMetrics,
+)
+from app.core.drift_guard import (
+    DriftGuard,
+    drift_guard,
+    EDGE_CASE_AUDIT_REPORT,
+)
 from app.skills.smart_scraper import sgai_search_and_extract, sgai_deep_extract
 from app.skills.email_sequence_skill import create_drip_campaign
 from app.skills.copywriting_skill import write_cold_email, write_ad_copy
@@ -43,6 +72,8 @@ from app.skills.job_signal_hunter import hunt_hiring_signals, generate_hiring_ou
 from app.skills.apollo_enrichment import enrich_lead_apollo, bulk_enrich_leads
 from app.skills.timezone_scheduler import is_business_hours, next_business_hours_slot
 from app.skills.cal_booking import handle_cal_booking_webhook, generate_cal_booking_link
+from app.skills.email_proofreader import proofread_email
+from app.core.ceo_brain import CEOBrain
 
 # Safe imports for elite components
 try:
@@ -113,31 +144,20 @@ _IDENTITY_PROBE_RE = re.compile(
 _IDENTITY_DEFLECT = "I'm Nova, OROVA's AI. Let me know what you need."
 
 def _normalise_for_probe(text: str) -> str:
-    """Strip diacritics, zero-width chars, collapse whitespace for probe matching."""
-    # NFKD decomposition handles A.I. -> AI, fullwidth chars, etc.
     text = unicodedata.normalize("NFKD", text)
-    # Remove zero-width / invisible Unicode
     text = re.sub(r"[\u200b-\u200f\u202a-\u202e\ufeff]", "", text)
-    # Collapse internal punctuation runs that split keywords (a.i. -> ai)
     text = re.sub(r"(?<=\w)[.\-_](?=\w)", "", text)
-    # Collapse whitespace
     return re.sub(r"\s+", " ", text).strip()
 
 def _sanitise_history(history: list, n: int = 6) -> list:
-    """
-    Take the last n messages and trim leading orphaned tool/tool_calls messages.
-    The slice must begin with a 'user' message or an 'assistant' message
-    that has no pending tool_calls.
-    """
     tail = history[-n:] if len(history) >= n else history[:]
-    # Walk forward until we find a clean entry point
     for i, msg in enumerate(tail):
         role = msg.get("role")
         if role == "user":
             return tail[i:]
         if role == "assistant" and not msg.get("tool_calls"):
             return tail[i:]
-    return []  # nothing safe to inject
+    return []
 
 async def _call_tool(fn, args: dict):
     if fn is None: raise ValueError("Tool function is None")
@@ -150,6 +170,7 @@ class TaskPlanner:
         self.config = config or {}
         self.distiller = MemoryDistiller(self.ai)
         logger.info("[PLANNER] MemoryDistiller integrated.")
+        ceo_brain = CEOBrain()
         self.available_functions = {
             "elite_scrape": elite_scrape or make_disabled_tool_fallback("elite_scrape", "crawl4ai dependency is not installed"),
             "vision_browse": vision_browse or make_disabled_tool_fallback("vision_browse", "browser_use dependency is not installed"),
@@ -178,10 +199,15 @@ class TaskPlanner:
             "is_business_hours": is_business_hours, "next_business_hours_slot": next_business_hours_slot,
             "generate_cal_booking_link": generate_cal_booking_link,
             "sync_to_notion_via_make": sync_to_notion_via_make,
+            "proofread_email": proofread_email,
+            "morning_brief": ceo_brain.morning_brief,
+            "pipeline_health_check": ceo_brain.pipeline_health_check,
         }
+        self.firewall = get_semantic_firewall(self.config.get("firewall_config"))
+        logger.info("[PLANNER] Semantic Firewall integrated.")
 
     HUNTING_TOOLS = ["sgai_search_and_extract", "sgai_deep_extract", "find_leads", "google_search", "research_lead", "hunt_hiring_signals"]
-    OUTREACH_TOOLS = ["send_outreach", "send_email", "write_cold_email", "create_drip_campaign", "generate_sequence", "check_replies", "reply_to_email", "get_inbox", "trigger_retell_call", "generate_hiring_outreach", "enrich_lead_apollo", "is_business_hours", "composio_action"]
+    OUTREACH_TOOLS = ["send_outreach", "send_email", "write_cold_email", "create_drip_campaign", "generate_sequence", "check_replies", "reply_to_email", "get_inbox", "trigger_retell_call", "generate_hiring_outreach", "enrich_lead_apollo", "is_business_hours", "composio_action", "proofread_email", "morning_brief", "pipeline_health_check"]
     LIGHT_RESEARCH_TOOLS = ["deep_research", "browse_agent", "run_seo_audit", "bulk_enrich_leads", "next_business_hours_slot", "generate_cal_booking_link", "elite_scrape", "vision_browse"]
 
     def _scope_tools(self, goal: str) -> list:
@@ -200,26 +226,32 @@ class TaskPlanner:
 
     async def execute(self, goal: str, client_id: int = 0, conversation_history: list = None, agent_id: str = "nova", _already_intercepted: bool = False):
         normalised_goal = _normalise_for_probe(goal)
-        if _IDENTITY_PROBE_RE.search(normalised_goal): return {"status": "ok", "agent": agent_id, "steps": 0, "response": _IDENTITY_DEFLECT}
-        
+        if _IDENTITY_PROBE_RE.search(normalised_goal):
+            return {"status": "ok", "agent": agent_id, "steps": 0, "response": _IDENTITY_DEFLECT}
+
+        session_id = f"{agent_id}-{client_id}-{int(time.time()*1000)}"
+        task_start_time = time.time()
+
+        # Initialize all robustness systems
+        trace = trace_manager.start_trace(session_id, agent_id, client_id, goal)
+        execution_circuit_breaker.start_session(session_id)
+        efficiency_optimizer.start_session(session_id)
+
+        tool_call_history: List[Dict] = []
         call_counts: dict[str, int] = {}
         last_call_hash = ""
         history = list(conversation_history or [])
 
-        # ── [NEW] Tiered Memory Compression ──────────────────────────────
-        # Compress long histories before building the prompt window
         try:
             history = await self.distiller.distill(history, client_id=client_id)
         except Exception as e:
             logger.warning(f"[PLANNER] History distillation failed: {e}")
 
-        # Retrieve relevant long-term facts from the SQLite wiki and inject into system prompt
         try:
             relevant_facts = await self.distiller.retrieve_context(goal, client_id=client_id)
         except Exception as e:
             logger.warning(f"[PLANNER] Context retrieval failed: {e}")
             relevant_facts = ""
-        # ────────────────────────────────────────────────────────────────
 
         tools = self._scope_tools(goal)
         tool_names = [t["function"]["name"] for t in tools]
@@ -240,10 +272,22 @@ class TaskPlanner:
         for step in range(1, MAX_STEPS + 1):
             logger.info(f"[Nova:{agent_id}] Step {step}/{MAX_STEPS}")
 
+            # Circuit breaker check before API call
+            is_open, cbreason = execution_circuit_breaker.is_tripped(session_id)
+            if is_open:
+                logger.warning(f"[CIRCUIT] Session {session_id} is open: {cbreason}")
+                trace_manager.complete_trace(session_id, "blocked", error=f"Circuit breaker open: {cbreason}")
+                execution_circuit_breaker.complete_session(session_id, "blocked")
+                efficiency_optimizer.complete_session(session_id)
+                return {"status": "circuit_open", "agent": agent_id, "steps": step, "response": f"Task temporarily blocked: {cbreason}"}
+
             response = await self.ai.chat(messages=messages, tools=tools, tool_choice="auto")
-            
+
             if isinstance(response, GroqLimpResponse):
-                logger.warning("[PLANNER] Groq limp mode active — synthesizing final answer")
+                logger.warning("[PLANNER] Groq limp mode active")
+                trace_manager.complete_trace(session_id, "degraded", error="Groq limp mode")
+                execution_circuit_breaker.complete_session(session_id, "degraded")
+                efficiency_optimizer.complete_session(session_id)
                 limp_notice = (
                     "\n\n⚠️ *Degraded mode:* AI tool execution is temporarily unavailable "
                     "(all primary providers exhausted). The above is a text-only response — "
@@ -255,94 +299,172 @@ class TaskPlanner:
             content = getattr(response, "content", "") or ""
 
             if not tool_calls:
+                trace_manager.complete_trace(session_id, "completed", response=content or "Task complete.")
+                execution_circuit_breaker.complete_session(session_id, "completed")
+                eff_report = efficiency_optimizer.complete_session(session_id)
+                if eff_report and eff_report.savings_percent() > 0:
+                    logger.info(f"[EFFICIENCY] Session saved {eff_report.savings_percent()}% tokens")
                 return {"status": "ok", "agent": agent_id, "steps": step, "response": content or "Task complete."}
 
             messages.append({"role": "assistant", "content": content, "tool_calls": tool_calls})
 
             for tc in tool_calls:
                 fn_name = tc.function.name
+                step_start_time = time.time()
                 try:
                     args = json.loads(tc.function.arguments) if isinstance(tc.function.arguments, str) else (tc.function.arguments or {})
-                except: args = {}
+                except:
+                    args = {}
 
+                # Repeat call detection
                 h = _call_hash(fn_name, args)
                 if h == last_call_hash:
                     call_counts[h] = call_counts.get(h, 0) + 1
                 else:
                     call_counts[h] = 1
                 last_call_hash = h
-                
+
                 if call_counts[h] > MAX_REPEAT_CALLS:
-                    logger.warning(f"[PLANNER] Consecutive repeat loop for {fn_name}. Escaping.")
-                    return {
-                        "status": "ok", "agent": agent_id, "steps": step,
-                        "response": "I encountered a loop while trying to access that information. Here is my best summary...",
-                    }
+                    logger.warning(f"[PLANNER] Repeat loop for {fn_name}. Escaping.")
+                    trace_manager.complete_trace(session_id, "failed", response="Loop detected", error=f"Repeat loop on {fn_name}")
+                    execution_circuit_breaker.complete_session(session_id, "loop_detected")
+                    efficiency_optimizer.complete_session(session_id)
+                    return {"status": "ok", "agent": agent_id, "steps": step,
+                            "response": "I encountered a loop while trying to access that information. Here is my best summary..."}
 
-                logger.info(f"[Nova:{agent_id}] → {fn_name}({list(args.keys())})")
+                # Efficiency: cache check
+                should_execute, cached_result = efficiency_optimizer.should_optimize_call(session_id, fn_name, args)
+                if not should_execute and cached_result is not None:
+                    logger.info(f"[EFFICIENCY] Cache hit for {fn_name}")
+                    obs = str(cached_result)
+                    if isinstance(cached_result, dict):
+                        obs = json.dumps(cached_result, default=str)
+                    messages.append({"role": "tool", "tool_call_id": tc.id, "content": obs[:MAX_OBS_CHARS]})
+                    continue
+
+                # Circuit breaker: call limits
+                circuit_allowed = execution_circuit_breaker.check_call(
+                    session_id, fn_name, args,
+                    token_count=len(content) // 4 if content else 0,
+                    char_count=_ctx_size(messages),
+                )
+                if not circuit_allowed:
+                    logger.warning(f"[CIRCUIT] Blocked {fn_name}")
+                    trace_manager.add_step(session_id, DecisionStep(
+                        step_number=step, goal=goal, tool_name=fn_name,
+                        parameters=args, intent="", expected_outcome="",
+                        actual_outcome="Circuit breaker blocked", status="blocked",
+                        latency_ms=(time.time() - step_start_time) * 1000,
+                        firewall_decision="circuit_open", firewall_reason="Circuit breaker tripped",
+                    ))
+                    messages.append({"role": "tool", "tool_call_id": tc.id, "content": "[CIRCUIT BREAKER] Task limits exceeded."})
+                    continue
+
+                # Semantic firewall check
+                firewall_ctx = create_tool_call_context(
+                    goal=goal, tool_name=fn_name, params=args,
+                    session_id=session_id, agent_depth=0, history=tool_call_history,
+                    is_sub_agent=False, granted_credentials=[],
+                    max_tool_calls=self.firewall.config.max_tool_calls_per_task,
+                    task_timeout_ms=self.firewall.config.default_task_timeout_ms,
+                    task_start_time=task_start_time,
+                )
+
+                guard_result = await firewall_guard(self.firewall, goal, fn_name, args, firewall_ctx)
+
+                tool_call_history.append({
+                    "tool_name": fn_name, "parameters": args,
+                    "timestamp": time.time(), "decision": guard_result["decision"],
+                    "reason": guard_result["reason"],
+                })
+
+                if not guard_result["should_execute"]:
+                    logger.warning(f"[Firewall] Blocked {fn_name}: {guard_result['reason']}")
+                    obs = f"[FIREWALL BLOCKED] {guard_result['reason']}"
+                    messages.append({"role": "tool", "tool_call_id": tc.id, "content": obs})
+                    trace_manager.add_step(session_id, DecisionStep(
+                        step_number=step, goal=goal, tool_name=fn_name,
+                        parameters=args, intent=content[:200] if content else "",
+                        expected_outcome="", actual_outcome=obs, status="blocked",
+                        latency_ms=(time.time() - step_start_time) * 1000,
+                        firewall_decision=guard_result["decision"],
+                        firewall_reason=guard_result["reason"],
+                    ))
+                    continue
+
+                if guard_result.get("sanitized_parameters"):
+                    args = guard_result["sanitized_parameters"]
+
+                logger.info(f"[Nova:{agent_id}] -> {fn_name}({list(args.keys())})")
                 fn = self.available_functions.get(fn_name)
-                if not fn: tool_result = f"Error: Tool {fn_name} unknown."
+                tool_error = None
+                if not fn:
+                    tool_result = f"Error: Tool {fn_name} unknown."
+                    tool_error = tool_result
                 else:
-                    try: tool_result = await _call_tool(fn, args)
-                    except Exception as e: tool_result = f"Error: {e}"
+                    try:
+                        tool_result = await _call_tool(fn, args)
+                        if fn_name in efficiency_optimizer.CACHABLE_TOOLS:
+                            efficiency_optimizer.record_cache(fn_name, args, tool_result)
+                    except Exception as e:
+                        tool_result = f"Error: {e}"
+                        tool_error = str(e)
 
-                obs = _truncate_obs(str(tool_result))
+                obs = str(tool_result)
+                obs = efficiency_optimizer.optimize_observation(session_id, obs, fn_name)
+                obs = _truncate_obs(obs)
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": obs})
+
+                trace_manager.add_step(session_id, DecisionStep(
+                    step_number=step, goal=goal, tool_name=fn_name,
+                    parameters=args, intent=content[:200] if content else "",
+                    expected_outcome=str(tool_result)[:200] if tool_result else "",
+                    actual_outcome=obs[:200], status="error" if tool_error else "success",
+                    latency_ms=(time.time() - step_start_time) * 1000,
+                    firewall_decision=guard_result["decision"],
+                    firewall_reason=guard_result.get("reason", ""),
+                    error_message=tool_error[:200] if tool_error else "",
+                ))
 
                 if _ctx_size(messages) > MAX_TOTAL_CHARS:
                     logger.warning("[PLANNER] Context budget exceeded — compressing...")
                     messages = await self._compress_context(messages)
 
                 if fn_name in TERMINAL_TOOLS:
+                    trace_manager.complete_trace(session_id, "completed", response=str(tool_result)[:500])
+                    execution_circuit_breaker.complete_session(session_id, "completed")
+                    efficiency_optimizer.complete_session(session_id)
                     return {"status": "ok", "agent": agent_id, "steps": step, "action": fn_name, "result": tool_result}
 
+        trace_manager.complete_trace(session_id, "max_steps", response="Step limit reached.")
+        execution_circuit_breaker.complete_session(session_id, "max_steps")
+        efficiency_optimizer.complete_session(session_id)
         return {"status": "max_steps", "agent": agent_id, "steps": MAX_STEPS, "response": "Step limit reached."}
 
     async def _compress_context(self, messages: list) -> list:
-        """
-        Compress middle history while preserving the tool_calls <-> tool pairing
-        invariant required by the function-calling protocol.
-        """
         system = [m for m in messages if m["role"] == "system"]
         non_system = [m for m in messages if m["role"] != "system"]
-
-        # Keep at least the last 4 messages as a protected tail
         TAIL_SIZE = 4
         if len(non_system) <= TAIL_SIZE:
-            return messages  # Nothing safe to compress
-
+            return messages
         tail = non_system[-TAIL_SIZE:]
-
-        # Walk the tail backwards: if the first tail message is a 'tool' result,
-        # we must also keep the preceding assistant 'tool_calls' message.
-        # Expand the tail until it starts with a 'user' or 'assistant-no-tool_calls' message.
         safe_tail_start = len(non_system) - TAIL_SIZE
         while safe_tail_start > 0:
             anchor = non_system[safe_tail_start]
             if anchor["role"] == "tool":
-                safe_tail_start -= 1  # pull in the matching tool_calls message
+                safe_tail_start -= 1
             elif anchor["role"] == "assistant" and anchor.get("tool_calls"):
-                safe_tail_start -= 1  # pull in the user turn that preceded this
+                safe_tail_start -= 1
             else:
                 break
-        
         tail = non_system[safe_tail_start:]
         middle = non_system[:safe_tail_start]
-
         if not middle:
-            return messages  # Nothing to compress
-
-        bulk = "\n".join(
-            str(m.get("content", "")) for m in middle
-            if m.get("content")  # skip empty assistant turns
-        )
+            return messages
+        bulk = "\n".join(str(m.get("content", "")) for m in middle if m.get("content"))
         try:
-            summary = await asyncio.wait_for(
-                self.ai.write(f"Summarize these agent observations concisely:\n{bulk[:4000]}"),
-                timeout=15.0,
-            )
+            summary = await asyncio.wait_for(self.ai.write(f"Summarize these agent observations concisely:\n{bulk[:4000]}"), timeout=15.0)
             summary = summary[:800]
         except asyncio.TimeoutError:
             summary = bulk[:400]
-
         return system + [{"role": "assistant", "content": f"[COMPRESSED HISTORY]: {summary}"}] + tail

@@ -117,6 +117,7 @@ async def lifespan(app: FastAPI):
     # [P5/P6] Run migrations and optimizations
     DatabaseManager.init_db()
     await DatabaseManager.run_phase5_migrations()
+    DatabaseManager.mark_ready()
     await AgentSoul.initialize()
 
     if await DatabaseManager.is_empty():
@@ -136,6 +137,10 @@ async def lifespan(app: FastAPI):
             else:
                 logger.warning(f"⚠️ No Drive backup available or restore failed: {restore_res.get('error')}")
 
+    # [HERMESCLAW] Register all autonomous API endpoints
+    from app.core.hermesclaw_endpoints import register_hermesclaw_routes
+    register_hermesclaw_routes(app)
+    
     # [P6] Register SIGTERM for Render redeploys
     global BACKGROUND_LOOP
     BACKGROUND_LOOP = asyncio.get_running_loop()
@@ -311,17 +316,15 @@ async def health_check():
     }
 
 async def require_dashboard_api_key(request: Request):
-    """Accept dashboard API key via either X-API-Key (frontend) or X-Api-Key (FastAPI default header)."""
-    expected = os.getenv("DASHBOARD_API_KEY", "nova_admin_2026")
-    # Allow legacy static key via X-API-Key
-    x_api_key = request.headers.get("X-API-Key") or request.headers.get("X-Api-Key")
+    """Accept dashboard admin secret via X-Dashboard-Secret, X-API-Key, or X-Api-Key.
+    Short-lived session tokens are also accepted via X-Session-Token."""
+    expected = (os.getenv("DASHBOARD_API_KEY", "") or "").strip()
+    x_api_key = request.headers.get("X-Dashboard-Secret") or request.headers.get("X-API-Key") or request.headers.get("X-Api-Key")
     if x_api_key:
-        _provided = (x_api_key or "").strip()
-        _exp_trimmed = (expected or "").strip()
-        if _provided == _exp_trimmed:
+        provided = (x_api_key or "").strip()
+        if expected and provided == expected:
             return True
 
-    # Accept short-lived session tokens via X-Session-Token
     session_token = request.headers.get("X-Session-Token")
     if session_token:
         try:
@@ -330,7 +333,6 @@ async def require_dashboard_api_key(request: Request):
             tokens = {}
         token_entry = tokens.get(session_token)
         if token_entry:
-            # token_entry: {"created_at": ts, "expires_at": ts, "issued_by": "..."}
             try:
                 exp = token_entry.get('expires_at')
                 if exp and datetime.fromisoformat(exp) > datetime.utcnow():
@@ -345,8 +347,8 @@ async def require_dashboard_api_key(request: Request):
 @app.get("/_auth-debug")
 async def auth_debug(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
     """Diagnostic — verifies auth without exposing the actual key."""
-    expected = os.getenv("DASHBOARD_API_KEY", "nova_admin_2026")
-    x_api_key = request.headers.get("X-API-Key") or request.headers.get("X-Api-Key")
+    expected = os.getenv("DASHBOARD_API_KEY", "")
+    x_api_key = request.headers.get("X-Dashboard-Secret") or request.headers.get("X-API-Key") or request.headers.get("X-Api-Key")
 
     _exp = (expected or "").strip()
     _prv = (x_api_key or "").strip()
@@ -354,7 +356,7 @@ async def auth_debug(request: Request, authorized: bool = Depends(require_dashbo
     matched = (_prv == _exp)
     logger.warning(
         f"[AUTH-DEBUG] expected={len(_exp)}chars prv={_prv!r}({len(_prv)}chars) "
-        f"match={matched} via_header={'X-API-Key' if request.headers.get('X-API-Key') else ('X-Api-Key' if request.headers.get('X-Api-Key') else 'NONE')}"
+        f"match={matched} via_header={'X-Dashboard-Secret' if request.headers.get('X-Dashboard-Secret') else ('X-API-Key' if request.headers.get('X-API-Key') else ('X-Api-Key' if request.headers.get('X-Api-Key') else 'NONE'))}"
     )
     return {
         "env_set": bool(expected),
@@ -700,6 +702,13 @@ async def get_observability_performance(authorized: bool = Depends(require_dashb
     from app.core.monitoring import profiler
     return {"status": "ok", "performance": profiler.get_all_stats()}
 
+@app.get("/api/errors/recent")
+async def get_recent_errors(authorized: bool = Depends(require_dashboard_api_key)):
+    """Get recent error tracking data for the dashboard."""
+    from app.core.monitoring import error_tracker
+    summary = error_tracker.get_error_summary()
+    return {"status": "ok", "errors": summary}
+
 @app.get("/api/observability/dashboard")
 async def get_observability_dashboard(authorized: bool = Depends(require_dashboard_api_key)):
     """Get complete observability dashboard data."""
@@ -766,7 +775,49 @@ async def telegram_webhook(request: Request):
 
 # --- Additional Dashboard API Endpoints ---
 
+@app.get("/api/firewall/stats")
+async def get_firewall_stats(authorized: bool = Depends(require_dashboard_api_key)):
+    """Get Semantic Firewall statistics for dashboard."""
+    from app.core.semantic_firewall import get_semantic_firewall
+    fw = get_semantic_firewall()
+    stats = fw.get_stats()
+    recent = fw.get_audit_log(limit=50)
+    return {"status": "ok", "stats": stats, "recent": [
+        {"tool": e.tool_name, "decision": e.decision.value, "reason": e.reasons[-1] if e.reasons else "",
+         "timestamp": e.timestamp, "depth": e.agent_depth}
+        for e in recent
+    ]}
 
+@app.get("/api/firewall/rules")
+async def get_firewall_rules(authorized: bool = Depends(require_dashboard_api_key)):
+    """Get list of firewall rules and their priority."""
+    from app.core.semantic_firewall import BUILTIN_RULES
+    return {"status": "ok", "rules": [
+        {"name": name, "priority": priority}
+        for name, _, priority in BUILTIN_RULES
+    ]}
+
+@app.get("/api/circuit-breaker/stats")
+async def get_circuit_breaker_stats(authorized: bool = Depends(require_dashboard_api_key)):
+    """Get Execution Circuit Breaker statistics."""
+    from app.core.circuit_breaker import execution_circuit_breaker
+    stats = execution_circuit_breaker.get_stats()
+    return {"status": "ok", **stats}
+
+@app.get("/api/decision-traces/recent")
+async def get_recent_traces(limit: int = 10, authorized: bool = Depends(require_dashboard_api_key)):
+    """Get recent decision traces."""
+    from app.core.decision_trace import trace_manager
+    recent = trace_manager.get_recent_traces(n=limit)
+    failures = trace_manager.get_failure_summary()
+    return {"status": "ok", "traces": recent, "failure_summary": failures}
+
+@app.get("/api/decision-traces/performance")
+async def get_trace_performance(authorized: bool = Depends(require_dashboard_api_key)):
+    """Get aggregated performance from decision traces."""
+    from app.core.decision_trace import trace_manager
+    perf = trace_manager.get_performance_summary(n=50)
+    return {"status": "ok", "performance": perf}
 
 
 @app.get("/api/clients")

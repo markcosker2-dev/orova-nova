@@ -479,14 +479,14 @@ watch -n 10 'curl -s https://yourdomain/api/health | jq'
 **Solution:**
 1. Open browser Developer Tools (F12)
 2. Check Network tab for failed requests
-3. Verify API key in localStorage:
+3. Verify dashboard secret in localStorage:
    ```javascript
-   localStorage.getItem('NOVA_API_KEY')
+   localStorage.getItem('OROVA_DASHBOARD_SECRET')
    ```
 4. Should equal your DASHBOARD_API_KEY
 5. Update if needed:
    ```javascript
-   localStorage.setItem('NOVA_API_KEY', 'your-key-here')
+   localStorage.setItem('OROVA_DASHBOARD_SECRET', 'your-secret-here')
    ```
 6. Refresh page
 

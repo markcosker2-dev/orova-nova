@@ -5,6 +5,7 @@ import re
 import httpx
 from bs4 import BeautifulSoup
 from app.core.ai_client import UnifiedAIClient
+from app.skills.lead_enrichment import enrich_leads_batch
 
 ai = UnifiedAIClient()
 logger = logging.getLogger(__name__)
@@ -194,6 +195,18 @@ async def find_leads(count: int = 5, query: str = "business leads"):
     filtered = _filter_and_deduplicate(all_leads, count)
     logger.info(f"[LEAD FINDER V3] Final filtered count: {len(filtered)}")
 
+    # ─── ENRICHMENT: Auto-fill owner names, emails, phones from websites ──
+    if filtered:
+        try:
+            enriched = await enrich_leads_batch(filtered)
+            enrichment_count = sum(1 for l in enriched if l.get("_enriched"))
+            logger.info(f"[LEAD FINDER V3] Enriched {enrichment_count}/{len(enriched)} leads with contact info")
+            # Update in place
+            for i, lead in enumerate(enriched):
+                filtered[i] = lead
+        except Exception as e:
+            logger.warning(f"[LEAD FINDER V3] Enrichment failed (non-fatal): {e}")
+
     if not filtered:
         return {
             "text": (
@@ -207,7 +220,11 @@ async def find_leads(count: int = 5, query: str = "business leads"):
     result_text = f"**Found {len(filtered)} Business Leads:**\n\n"
     for i, l in enumerate(filtered, 1):
         snippet = l.get('snippet', '')[:150]
-        result_text += f"{i}. **{l.get('business', l.get('title', 'Unknown'))}**\n   🔗 {l['url']}\n   _{snippet}_\n\n"
+        owner_str = f"    👤 Owner: {l['owner']}\n" if l.get('owner') else ""
+        email_str = f"    📧 Email: {l['email']}\n" if l.get('email') else ""
+        phone_str = f"    📞 Phone: {l['phone']}\n" if l.get('phone') else ""
+        contact_block = owner_str + email_str + phone_str
+        result_text += f"{i}. **{l.get('business', l.get('title', 'Unknown'))}**\n   🔗 {l['url']}\n   _{snippet}_\n{contact_block}\n"
 
     return {"text": result_text, "leads": filtered}
 

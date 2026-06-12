@@ -1,0 +1,18 @@
+{
+  "parent": { "database_id": "DATABASE_ID" },
+  "properties": {
+    "Name": {
+      "title": [
+        { "text": { "content": "{{business}}" } }
+      ]
+    },
+    "Owner": { "rich_text": [ { "text": { "content": "{{owner}}" } } ] },
+    "Email": { "rich_text": [ { "text": { "content": "{{email}}" } } ] },
+    "Phone": { "rich_text": [ { "text": { "content": "{{phone}}" } } ] },
+    "Website": { "url": "{{website}}" },
+    "Status": { "select": { "name": "{{status}}" } },
+    "Score": { "number": {{score}} },
+    "Notes": { "rich_text": [ { "text": { "content": "{{notes}}" } } ] },
+    "Source": { "rich_text": [ { "text": { "content": "{{source}}" } } ] }
+  }
+}

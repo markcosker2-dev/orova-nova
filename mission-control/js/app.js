@@ -2,16 +2,16 @@
    OROVA Mission Control — Application Engine v2
    ───────────────────────────────────────────── */
 
-const API = (window.location.origin === 'null' || window.location.protocol === 'file:') 
-    ? 'http://localhost:18789' 
+const API = (window.location.origin === 'null' || window.location.protocol === 'file:')
+    ? 'http://localhost:18789'
     : window.location.origin;
 let currentClientId = 0; // 0 = OROVA Internal
 
 // ═══════════════════ DATA LAYER ═══════════════════
 const Store = {
-    async getTasks() { 
+    async getTasks() {
         const res = await apiFetch('/api/tasks');
-        return res ? res.tasks : []; 
+        return res ? res.tasks : [];
     },
     async setTasks(tasks) {
         return await apiFetch('/api/tasks', {
@@ -19,17 +19,17 @@ const Store = {
             body: JSON.stringify(tasks)
         });
     },
-    async getContent() { 
+    async getContent() {
         const res = await apiFetch('/api/content');
-        return res ? res.content : []; 
+        return res ? res.content : [];
     },
-    async getMemories() { 
+    async getMemories() {
         const res = await apiFetch('/api/memory');
-        return res ? res.memories : []; 
+        return res ? res.memories : [];
     },
-    async getChatHistory() { 
+    async getChatHistory() {
         const res = await apiFetch('/api/chat/history');
-        return res ? res.history : []; 
+        return res ? res.history : [];
     }
 };
 
@@ -77,19 +77,32 @@ const CRON_EVENTS = [
 // [REMOVED] seedTasks is now handled by backend SQLite migrations.
 
 // ═══════════════════ API HELPER ═══════════════════
-const NOVA_API_KEY = localStorage.getItem('NOVA_API_KEY') || 'nova_admin_2026';
-// session token is read per-request from localStorage to allow dynamic issuance
+const DASHBOARD_SECRET_KEY = 'OROVA_DASHBOARD_SECRET';
+const SESSION_TOKEN_KEY = 'OROVA_SESSION_TOKEN';
 
+function getDashboardSecret() {
+    return localStorage.getItem(DASHBOARD_SECRET_KEY) || '';
+}
+
+function setDashboardSecret(secret) {
+    if (secret) {
+        localStorage.setItem(DASHBOARD_SECRET_KEY, secret);
+    }
+}
 
 async function apiFetch(path, opts) {
     try {
         let fetchPath = path;
         opts = opts || {};
         opts.headers = opts.headers || {};
-        
-        // Prefer short-lived session token if present (read dynamically)
-        const _sess = localStorage.getItem('NOVA_SESSION_TOKEN');
-        if (_sess) opts.headers['X-Session-Token'] = _sess; else opts.headers['X-API-Key'] = NOVA_API_KEY;
+
+        const _sess = localStorage.getItem(SESSION_TOKEN_KEY);
+        const secret = getDashboardSecret();
+        if (_sess) {
+            opts.headers['X-Session-Token'] = _sess;
+        } else if (secret) {
+            opts.headers['X-Dashboard-Secret'] = secret;
+        }
 
         // Set Content-Type automatically for JSON requests
         if (opts.body && typeof opts.body === 'string') {
@@ -99,12 +112,12 @@ async function apiFetch(path, opts) {
         // Ensure client_id is present
         const separator = fetchPath.includes('?') ? '&' : '?';
         fetchPath += `${separator}client_id=${currentClientId}`;
-        
+
         const res = await fetch(API + fetchPath, opts);
         if (res.status === 401 || res.status === 403) {
-            const newKey = prompt("Unauthorized. Please enter your NOVA_API_KEY:");
-            if (newKey) {
-                localStorage.setItem('NOVA_API_KEY', newKey);
+            const newSecret = prompt("Unauthorized. Enter your dashboard secret to authenticate:");
+            if (newSecret) {
+                setDashboardSecret(newSecret);
                 window.location.reload();
             }
         }
@@ -188,6 +201,10 @@ document.querySelectorAll('.nav-item').forEach(function (item) {
         if (screen === 'skills') renderSkillsHub();
         if (screen === 'workflows') renderPipelineRunner();
         if (screen === 'office') renderOffice();
+        if (screen === 'ceobrain') renderCEOBrain();
+        if (screen === 'proofreader') renderProofreader();
+        if (screen === 'improvement') renderImprovement();
+        if (screen === 'lanes') renderLanes();
     });
 });
 
@@ -245,7 +262,7 @@ document.getElementById('btn-add-task').addEventListener('click', function () {
 document.getElementById('btn-save-task').addEventListener('click', async function () {
     var title = document.getElementById('task-title').value.trim();
     if (!title) return;
-    
+
     var data = {
         id: editingTaskId || uid(),
         title: title,
@@ -380,7 +397,7 @@ function handleImageUpload() {
 document.getElementById('btn-save-content').addEventListener('click', async function () {
     var title = document.getElementById('content-title').value.trim();
     if (!title) return;
-    
+
     var data = {
         id: editingContentId || uid(),
         title: title,
@@ -561,7 +578,7 @@ async function renderLeads() {
     var tbody = document.getElementById('leads-tbody');
     if (!tbody) return;
     tbody.innerHTML = '<tr><td colspan="6" class="leads-empty">Loading mission-critical leads...</td></tr>';
-    
+
     var data = await apiFetch('/api/leads');
     if (!data) {
         tbody.innerHTML = '<tr><td colspan="6" class="leads-empty">⚠️ Cannot reach server. Is Nova running?</td></tr>';
@@ -668,12 +685,12 @@ async function refreshAgents() {
 
     // Map backend agent_key -> frontend agent_id
     var keyToId = {
-        "Nova":     "nova",
-        "Hawk":     "hawk",
-        "Closer":   "closer",
-        "Quill":    "quill",
+        "Nova": "nova",
+        "Hawk": "hawk",
+        "Closer": "closer",
+        "Quill": "quill",
         "Sentinel": "sentinel",
-        "Oracle":   "oracle"
+        "Oracle": "oracle"
     };
 
     var agentData = {};
@@ -1174,7 +1191,7 @@ window.triggerPipeline = async function (name) {
 // ═══════════════════ WORKSPACE SWITCHER ═══════════════════
 async function loadWorkspaces() {
     try {
-        const res = await apiFetch('/api/clients'); 
+        const res = await apiFetch('/api/clients');
         const select = document.getElementById('workspace-switcher');
         if (select && res && res.clients) {
             let html = '<option value="0">OROVA Internal (Lead Gen)</option>';
@@ -1184,7 +1201,7 @@ async function loadWorkspaces() {
             select.innerHTML = html;
             select.value = currentClientId;
         }
-    } catch(e) { console.error("Could not load workspaces", e); }
+    } catch (e) { console.error("Could not load workspaces", e); }
 }
 
 // ─── MODAL LOGIC (Agency Hub) ───
@@ -1203,13 +1220,13 @@ document.getElementById('save-client-btn')?.addEventListener('click', async () =
     }
 
     showToast('🚀 Creating workspace...', 'info');
-    
+
     try {
         const res = await apiFetch('/api/clients', {
             method: 'POST',
             body: JSON.stringify({ name, niche, location })
         });
-        
+
         if (res && res.status === 'ok') {
             showToast(`✅ Workspace '${name}' created!`, 'success');
             closeModals();
@@ -1230,13 +1247,13 @@ document.getElementById('workspace-switcher')?.addEventListener('change', async 
     currentClientId = parseInt(e.target.value);
     const selectedText = e.target.options[e.target.selectedIndex].text;
     showToast('Switched Workspace context to ' + selectedText);
-    
+
     // Update active workspace label on the top bar
     const activeLabel = document.getElementById('active-workspace-name');
     if (activeLabel) {
         activeLabel.textContent = selectedText;
     }
-    
+
     // Force immediate refresh of all components
     showToast('🔄 Synchronizing data...', 'info');
     await Promise.all([
@@ -1256,6 +1273,157 @@ document.addEventListener('DOMContentLoaded', () => {
     loadWorkspaces();
 });
 
+// ═══════════════════ CEO BRAIN ═══════════════════
+async function renderCEOBrain() {
+    var hc = await apiFetch('/api/health_check');
+    if (hc && hc.health_score != null) {
+        document.getElementById('cb-health-score').textContent = hc.health_score + '/100';
+        document.getElementById('cb-health-score').className = 'stat-value ' + (hc.health_score >= 70 ? 'health-ok' : 'health-error');
+    }
+    if (hc && hc.alerts && hc.alerts.length > 0) {
+        document.getElementById('cb-task-proposals').innerHTML = hc.alerts.map(function (a) {
+            return '<div class="feed-entry">⚠️ ' + esc(a) + '</div>';
+        }).join('');
+    }
+}
+
+document.getElementById('btn-morning-brief')?.addEventListener('click', async function () {
+    var btn = this; btn.classList.add('loading'); btn.textContent = '☀️ Generating...';
+    showToast('☀️ Generating morning brief...', 'info');
+    var data = await apiFetch('/api/morning_brief', { method: 'POST', body: '{}' });
+    btn.classList.remove('loading'); btn.textContent = '☀️ Morning Brief';
+    if (data && data.brief) {
+        document.getElementById('cb-brief-output').textContent = data.brief;
+        document.getElementById('cb-last-brief').textContent = new Date().toLocaleTimeString();
+        showToast('✅ Brief generated!', 'success');
+    } else {
+        showToast('❌ Brief generation failed', 'error');
+    }
+});
+
+document.getElementById('btn-health-check')?.addEventListener('click', async function () {
+    var btn = this; btn.classList.add('loading');
+    showToast('🩺 Running health check...', 'info');
+    await renderCEOBrain();
+    btn.classList.remove('loading');
+    showToast('✅ Health check complete', 'success');
+});
+
+// ═══════════════════ PROOFREADER ═══════════════════
+async function renderProofreader() {
+    var data = await apiFetch('/api/outreach_outcomes?limit=100');
+    if (!data || !data.outcomes) return;
+    var outcomes = data.outcomes;
+    var passed = outcomes.filter(function (o) { return o.result === 'sent' && o.quality_score >= 80; }).length;
+    var rewritten = outcomes.filter(function (o) { return o.result === 'sent' && o.quality_score < 80; }).length;
+    var rejected = outcomes.filter(function (o) { return o.result === 'rejected'; }).length;
+    var scores = outcomes.map(function (o) { return o.quality_score || 0; });
+    var avg = scores.length > 0 ? (scores.reduce(function (a, b) { return a + b; }, 0) / scores.length).toFixed(0) : '—';
+    document.getElementById('pr-passed').textContent = passed;
+    document.getElementById('pr-rewritten').textContent = rewritten;
+    document.getElementById('pr-rejected').textContent = rejected;
+    document.getElementById('pr-avg-score').textContent = avg;
+
+    var historyEl = document.getElementById('pr-history');
+    historyEl.innerHTML = outcomes.slice(0, 20).map(function (o) {
+        return '<div class="feed-entry"><span class="feed-time">' + esc(o.recipient || '') + '</span><span class="feed-msg">' + esc(o.result) + ' (score: ' + (o.quality_score || '—') + ')</span></div>';
+    }).join('') || '<div class="feed-empty">No proofreads yet</div>';
+}
+
+document.getElementById('btn-run-proofread')?.addEventListener('click', async function () {
+    var to = document.getElementById('pr-to').value.trim();
+    var subject = document.getElementById('pr-subject').value.trim();
+    var body = document.getElementById('pr-body').value.trim();
+    if (!to || !subject || !body) { showToast('❌ Fill in all fields', 'error'); return; }
+    var btn = this; btn.classList.add('loading');
+    showToast('🔍 Running proofreader...', 'info');
+    var data = await apiFetch('/api/proofread', { method: 'POST', body: JSON.stringify({ to: to, subject: subject, body: body }) });
+    btn.classList.remove('loading');
+    var resultDiv = document.getElementById('pr-result');
+    var verdictEl = document.getElementById('pr-verdict');
+    var detailsEl = document.getElementById('pr-details');
+    if (data && data.verdict) {
+        resultDiv.style.display = 'block';
+        var emoji = data.verdict === 'pass' ? '✅' : (data.verdict === 'rewrite' ? '✏️' : '🚫');
+        verdictEl.innerHTML = '<strong style="font-size:1.2rem">' + emoji + ' Verdict: ' + data.verdict.toUpperCase() + '</strong> (Score: ' + data.score + '/100)';
+        detailsEl.innerHTML = '<p><strong>Fixes:</strong> ' + esc(data.fixes) + '</p>';
+        if (data.improved_body) {
+            detailsEl.innerHTML += '<p><strong>Improved Body:</strong></p><pre style="background:var(--bg-tertiary);padding:0.5rem;border-radius:4px;font-size:0.8rem">' + esc(data.improved_body) + '</pre>';
+        }
+        showToast('✅ Proofread complete', 'success');
+    } else {
+        showToast('❌ Proofreader failed', 'error');
+    }
+});
+
+// ═══════════════════ SELF-IMPROVEMENT ═══════════════════
+async function renderImprovement() {
+    var data = await apiFetch('/api/learned_strategies');
+    if (!data || !data.strategies) return;
+    var strategies = data.strategies;
+
+    // Best framework
+    var fw = strategies.find(function (s) { return s.strategy_type === 'email_framework' && s.active === 1; });
+    if (fw) {
+        document.getElementById('imp-best-framework').textContent = fw.strategy_value.toUpperCase();
+        document.getElementById('imp-framework-meta').textContent = 'Win rate: ' + (fw.win_rate * 100).toFixed(0) + '% | n=' + fw.sample_size + ' | ' + fw.confidence;
+    }
+    // Best timing
+    var timing = strategies.find(function (s) { return s.strategy_type === 'send_timing' && s.active === 1; });
+    if (timing) {
+        document.getElementById('imp-best-timing').textContent = timing.strategy_value + ':00';
+        document.getElementById('imp-timing-meta').textContent = 'Win rate: ' + (timing.win_rate * 100).toFixed(0) + '% | n=' + timing.sample_size + ' | ' + timing.confidence;
+    }
+    // Best niche
+    var niche = strategies.find(function (s) { return s.strategy_type === 'niche' && s.active === 1; });
+    if (niche) {
+        document.getElementById('imp-best-niche').textContent = niche.strategy_value || '—';
+        document.getElementById('imp-niche-meta').textContent = 'ROI: ' + (niche.win_rate * 100).toFixed(0) + '% | n=' + niche.sample_size;
+    }
+
+    // Table
+    var tableEl = document.getElementById('imp-strategies-table');
+    tableEl.innerHTML = strategies.length > 0 ? strategies.map(function (s) {
+        return '<div class="feed-entry"><span class="feed-time">' + esc(s.strategy_type) + '</span><span class="feed-msg">' + esc(s.strategy_value) + ' — win: ' + (s.win_rate * 100).toFixed(0) + '% (' + s.confidence + ')</span></div>';
+    }).join('') : '<div class="feed-empty">No strategies learned yet</div>';
+}
+
+document.getElementById('btn-run-improvement')?.addEventListener('click', async function () {
+    var btn = this; btn.classList.add('loading'); btn.textContent = '🔄 Running...';
+    showToast('🔄 Running improvement loop...', 'info');
+    var data = await apiFetch('/api/improvement_loop', { method: 'POST', body: '{}' });
+    btn.classList.remove('loading'); btn.textContent = '🔄 Run Improvement';
+    if (data && data.status === 'ok') {
+        showToast('✅ Improvement loop complete!', 'success');
+        await renderImprovement();
+    } else {
+        showToast('❌ Improvement loop failed', 'error');
+    }
+});
+
+// ═══════════════════ WORKER LANES ═══════════════════
+async function renderLanes() {
+    // Each lane card's status is just a placeholder since lanes run on schedule
+}
+
+document.querySelectorAll('.lane-trigger').forEach(function (btn) {
+    btn.addEventListener('click', async function () {
+        var lane = this.dataset.lane;
+        var statusEl = document.getElementById('lane-status-' + lane);
+        statusEl.textContent = '▶ Running...';
+        showToast('⚙️ Triggering Lane ' + lane + '...', 'info');
+        var data = await apiFetch('/api/worker/trigger/lane/' + lane, { method: 'POST', body: '{}' });
+        if (data && data.status === 'ok') {
+            statusEl.textContent = '✅ Triggered';
+            showToast('✅ Lane ' + lane + ' triggered!', 'success');
+        } else {
+            statusEl.textContent = '❌ Failed';
+            showToast('❌ Lane trigger failed', 'error');
+        }
+        setTimeout(function () { statusEl.textContent = '⏳ Pending'; }, 5000);
+    });
+});
+
 // Auto-refresh live feed, notifications, agents, drafts, health, and chart every 15s
 setInterval(function () {
     refreshLiveFeed();
@@ -1264,6 +1432,11 @@ setInterval(function () {
     refreshPendingDrafts();
     refreshHealth();
     renderAnalytics();
+    // Auto-refresh new dashboard screens when active
+    if (document.getElementById('screen-ceobrain')?.classList.contains('active')) renderCEOBrain();
+    if (document.getElementById('screen-proofreader')?.classList.contains('active')) renderProofreader();
+    if (document.getElementById('screen-improvement')?.classList.contains('active')) renderImprovement();
+    if (document.getElementById('screen-lanes')?.classList.contains('active')) renderLanes();
 }, 15000);
 
 // Refresh chart and leads every 60s (less frequent since data changes slowly)

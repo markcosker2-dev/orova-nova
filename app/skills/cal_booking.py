@@ -203,3 +203,68 @@ def format_meeting_for_telegram(meeting_dict: Dict) -> str:
 - Confirmation sent
 - Ready for meeting
 """
+
+
+CALENDLY_LINK = os.getenv("CALENDLY_LINK", "")
+CAL_COM_EVENT_SLUG = os.getenv("CAL_COM_EVENT_SLUG", "")
+GOOGLE_CALENDAR_BOOKING_LINK = os.getenv("GOOGLE_CALENDAR_BOOKING_LINK", "")
+
+
+def get_booking_link(lead_name: str = "", business_name: str = "") -> str:
+    """
+    Generate a meeting booking link to include in outbound emails.
+    Priority: Calendly > Cal.com > Google Calendar > fallback message.
+    
+    Returns a URL or empty string if no booking service is configured.
+    """
+    if CALENDLY_LINK:
+        return CALENDLY_LINK
+    
+    if CAL_COM_EVENT_SLUG:
+        return f"https://cal.com/{CAL_COM_EVENT_SLUG}"
+    
+    if GOOGLE_CALENDAR_BOOKING_LINK:
+        return GOOGLE_CALENDAR_BOOKING_LINK
+    
+    return ""
+
+
+def generate_meeting_intro_email(lead_name: str, business_name: str = "", booking_link: str = "") -> str:
+    """
+    Generate a follow-up email body for when a prospect replies HOT and wants to schedule.
+    Includes the booking link to minimize back-and-forth.
+    """
+    link = booking_link or get_booking_link(lead_name, business_name)
+    
+    if link:
+        return (
+            f"Hi {lead_name},\n\n"
+            f"Great to hear from you! I'd love to get a quick call scheduled to discuss "
+            f"how we can help {'with ' + business_name if business_name else 'your business'}.\n\n"
+            f"You can book a time that works for you here:\n{link}\n\n"
+            f"Looking forward to connecting!\n\n"
+            f"Best,\nNova | OROVA"
+        )
+    else:
+        return (
+            f"Hi {lead_name},\n\n"
+            f"Great to hear from you! I'd love to get a quick call scheduled. "
+            f"Could you send me a few times that work for you this week?\n\n"
+            f"Looking forward to connecting!\n\n"
+            f"Best,\nNova | OROVA"
+        )
+
+
+def generate_meeting_confirmation(lead_name: str, meeting_time: str = "", business_name: str = "") -> str:
+    """
+    Generate a confirmation email after a meeting is booked via Cal.com webhook.
+    """
+    time_str = f" on {meeting_time}" if meeting_time else ""
+    return (
+        f"Hi {lead_name},\n\n"
+        f"Just confirming our meeting{time_str}. I'm looking forward to discussing "
+        f"how we can help {'with ' + business_name if business_name else 'your business'}.\n\n"
+        f"If anything changes, feel free to reschedule using the link in your calendar invite.\n\n"
+        f"See you soon!\n\n"
+        f"Best,\nNova | OROVA"
+    )

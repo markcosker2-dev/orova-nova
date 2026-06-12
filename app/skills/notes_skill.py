@@ -61,6 +61,14 @@ def add_note(content: str, category: str = "general"):
     }
 
 
+def log_skill_note(skill_name: str, message: str, category: str = "self-improvement"):
+    """Log a short skill improvement / feedback note."""
+    if not message:
+        return {"success": False, "error": "Missing message"}
+    content = f"[{skill_name}] {message}"
+    return add_note(content, category)
+
+
 def list_notes(category: str = None, limit: int = 10):
     """List notes
     

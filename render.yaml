@@ -9,6 +9,8 @@ services:
         value: nova_admin_2026
       - key: DATABASE_URL
         value: sqlite+aiosqlite:///app/app/data/orova_v5.db
+      - key: DATA_DIR
+        value: /app/app/data
       - fromContext: OLLAMA_AUTH_TOKEN
       - fromContext: TELEGRAM_BOT_TOKEN
       - fromContext: TAVILY_API_KEY
@@ -17,8 +19,13 @@ services:
       - fromContext: NOTION_TOKEN
       - fromContext: NOTION_DATABASE_ID
       - fromContext: OROVA_SECRET
+      - fromContext: BROWSERLESS_API_KEY
+      - fromContext: APOLLO_API_KEY
+      - fromContext: SERPAPI_KEY
+      - fromContext: FIRECRAWL_API_KEY
+      - fromContext: GOOGLE_API_KEY
     disk:
       name: orova-data
       mountPath: /app/app/data
       sizeGB: 1
-    healthCheckPath: /health
+    healthCheckPath: /api/health

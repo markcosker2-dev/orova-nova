@@ -30,7 +30,7 @@ cp nova.env.example .env
 ```
 
 Edit `.env` and fill in:
-1. `NOVA_API_KEY` — make up any secret string (e.g. `nova-my-secret-2024`)
+1. `DASHBOARD_API_KEY` — make up any secret string (e.g. `orova-dashboard-secret-2026`)
 2. `GOOGLE_API_KEY` — from https://aistudio.google.com/app/apikey (free)
 3. `EMAIL_USER` + `EMAIL_PASS` — Gmail + App Password (see below)
 4. `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` — from @BotFather
@@ -52,19 +52,12 @@ You do NOT upload your `.env` file — use Secrets instead.
 
 ---
 
-## Step 3 — Add the NOVA_API_KEY to your dashboard JS
+## Step 3 — Authenticate the dashboard
 
-Open `js/app.js` and find the `apiFetch` function. Update it to send your API key:
+Open `js/app.js` and make sure your dashboard sends a secret or session token with requests.
+If you use the browser prompt flow, store your dashboard secret in local storage as `OROVA_DASHBOARD_SECRET`.
 
-```javascript
-async function apiFetch(path, opts = {}) {
-    opts.headers = opts.headers || {};
-    opts.headers['X-API-Key'] = 'YOUR_NOVA_API_KEY_HERE'; // same as in .env
-    let fetchPath = path + (path.includes('?') ? '&' : '?') + `client_id=${currentClientId}`;
-    const res = await fetch(API + fetchPath, opts);
-    return await res.json();
-}
-```
+The server accepts `X-Dashboard-Secret` or `X-Session-Token` headers for dashboard auth.
 
 ---
 
@@ -145,7 +138,7 @@ Google Sheets → synced copy you can share with clients
 ## Troubleshooting
 
 **Dashboard shows blank / 404 on API calls**
-→ Make sure `NOVA_API_KEY` in your JS matches the one in `.env`
+→ Make sure `OROVA_DASHBOARD_SECRET` is stored in localStorage or that your session token is valid
 
 **Emails not sending**
 → Check EMAIL_USER and EMAIL_PASS are set correctly

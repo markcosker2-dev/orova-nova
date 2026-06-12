@@ -864,6 +864,49 @@ TOOLS = [
                 "required": ["lead_data"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "proofread_email",
+            "description": "Runs a draft outreach email through an AI quality proofreader evaluating grammar, tone, personalization, compliance, and spam triggers.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "to": {"type": "string", "description": "Recipient email address"},
+                    "subject": {"type": "string", "description": "Email subject line"},
+                    "body": {"type": "string", "description": "Email body text"},
+                    "recipient_context": {"type": "string", "description": "Optional context about the recipient/company"}
+                },
+                "required": ["to", "subject", "body"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "morning_brief",
+            "description": "Generate daily morning executive briefing containing pipeline metrics, ROLL averages, HOT replies, and task schedule.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "client_id": {"type": "integer", "description": "Client ID"}
+                }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "pipeline_health_check",
+            "description": "Runs a check on the pipeline health, returning health score and action items.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "client_id": {"type": "integer", "description": "Client ID"}
+                }
+            }
+        }
     }
 ]
 

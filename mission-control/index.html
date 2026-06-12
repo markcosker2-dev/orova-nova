@@ -26,7 +26,7 @@
             <span class="brand-text">OROVA</span>
             <span class="brand-sub">Mission Control</span>
         </div>
-        
+
         <!-- PHASE 10: Multi-Tenant Workspace Selector -->
         <div class="workspace-container">
             <select id="workspace-switcher" class="workspace-dropdown" aria-label="Select Client Workspace">
@@ -65,10 +65,24 @@
             <li class="nav-item" data-screen="office">
                 <span class="nav-icon">⬢</span><span class="nav-label">Digital Office</span>
             </li>
+            <li class="nav-item" data-screen="ceobrain">
+                <span class="nav-icon">🧠</span><span class="nav-label">CEO Brain</span>
+            </li>
+            <li class="nav-item" data-screen="proofreader">
+                <span class="nav-icon">✅</span><span class="nav-label">Proofreader</span>
+            </li>
+            <li class="nav-item" data-screen="improvement">
+                <span class="nav-icon">📈</span><span class="nav-label">Self-Improvement</span>
+            </li>
+            <li class="nav-item" data-screen="lanes">
+                <span class="nav-icon">⚙️</span><span class="nav-label">Worker Lanes</span>
+            </li>
         </ul>
         <!-- AI-NATIVE: Nova Pulse -->
         <div class="nova-pulse">
-            <div class="pulse-icon"><div class="pulse-ring"></div></div>
+            <div class="pulse-icon">
+                <div class="pulse-ring"></div>
+            </div>
             <div class="pulse-info">
                 <span class="pulse-label">Nova Intelligence</span>
                 <span id="nova-status" class="pulse-status">Analyzing Lead Quality...</span>
@@ -103,9 +117,10 @@
                 </button>
                 <button class="action-btn report" id="btn-ceo-report" title="CEO Report">
                     <span class="action-icon">📊</span><span class="action-label">CEO Report</span>
-                </button>                <button class="action-btn auth" id="btn-get-session" title="Get Session Token">
+                </button> <button class="action-btn auth" id="btn-get-session" title="Get Session Token">
                     <span class="action-icon">🔐</span><span class="action-label">Auth</span>
-                </button>            </div>
+                </button>
+            </div>
             <div class="notif-area">
                 <button class="notif-bell" id="notif-bell" title="Notifications">
                     🔔 <span class="notif-badge" id="notif-badge" style="display:none">0</span>
@@ -471,6 +486,224 @@
             </div>
             <div class="pipeline-list" id="pipeline-list"></div>
         </section>
+
+        <!-- ──── SCREEN 12: CEO BRAIN ──── -->
+        <section id="screen-ceobrain" class="screen">
+            <div class="screen-header">
+                <div>
+                    <h1>🧠 CEO Brain</h1>
+                    <p class="screen-subtitle">Autonomous pipeline analysis, task proposals, and morning briefings</p>
+                </div>
+                <div class="header-actions">
+                    <button class="btn-primary" id="btn-morning-brief">☀️ Morning Brief</button>
+                    <button class="btn-secondary" id="btn-health-check">🩺 Health Check</button>
+                </div>
+            </div>
+            <div class="stats-grid" id="ceo-brain-stats">
+                <div class="stat-card">
+                    <div class="stat-value" id="cb-health-score">—</div>
+                    <div class="stat-label">Pipeline Health</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="cb-tasks-proposed">—</div>
+                    <div class="stat-label">Tasks Proposed</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="cb-last-brief">—</div>
+                    <div class="stat-label">Last Brief</div>
+                </div>
+            </div>
+            <div class="analytics-panels" style="margin-top:1rem">
+                <div class="analytics-panel" style="flex:2">
+                    <h3>📋 Task Proposals</h3>
+                    <div id="cb-task-proposals" class="live-feed">
+                        <div class="feed-empty">No tasks proposed yet. Run a health check.</div>
+                    </div>
+                </div>
+                <div class="analytics-panel" style="flex:1">
+                    <h3>📅 Proposed Schedule</h3>
+                    <div id="cb-schedule" class="live-feed">
+                        <div class="feed-empty">No schedule generated yet.</div>
+                    </div>
+                </div>
+            </div>
+            <div class="analytics-panel" style="margin-top:1rem">
+                <h3>📨 Briefing Output</h3>
+                <div id="cb-brief-output" class="brief-output"
+                    style="max-height:300px;overflow-y:auto;padding:1rem;background:var(--bg-tertiary);border-radius:8px;font-size:0.85rem;line-height:1.6;white-space:pre-wrap">
+                    Run a morning brief to see the output here.</div>
+            </div>
+        </section>
+
+        <!-- ──── SCREEN 13: PROOFREADER ──── -->
+        <section id="screen-proofreader" class="screen">
+            <div class="screen-header">
+                <div>
+                    <h1>✅ Email Proofreader</h1>
+                    <p class="screen-subtitle">AI quality gate for every outbound email</p>
+                </div>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="pr-passed">0</div>
+                    <div class="stat-label">Passed</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="pr-rewritten">0</div>
+                    <div class="stat-label">Rewritten</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="pr-rejected">0</div>
+                    <div class="stat-label">Rejected</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="pr-avg-score">—</div>
+                    <div class="stat-label">Avg Quality Score</div>
+                </div>
+            </div>
+            <div class="proofread-tester"
+                style="margin-top:1rem;padding:1.5rem;background:var(--bg-secondary);border-radius:12px;border:1px solid var(--border)">
+                <h3>🧪 Test Proofreader</h3>
+                <div class="form-row" style="display:flex;gap:1rem;flex-wrap:wrap">
+                    <div class="form-group" style="flex:1;min-width:200px">
+                        <label>To</label>
+                        <input type="text" id="pr-to" placeholder="recipient@example.com" style="width:100%">
+                    </div>
+                    <div class="form-group" style="flex:2;min-width:300px">
+                        <label>Subject</label>
+                        <input type="text" id="pr-subject" placeholder="Email subject" style="width:100%">
+                    </div>
+                </div>
+                <div class="form-group" style="margin-top:0.5rem">
+                    <label>Body</label>
+                    <textarea id="pr-body" rows="4" placeholder="Email body text..." style="width:100%"></textarea>
+                </div>
+                <button class="btn-primary" id="btn-run-proofread" style="margin-top:0.5rem">🔍 Run Proofreader</button>
+                <div id="pr-result" style="margin-top:1rem;display:none">
+                    <div class="pr-verdict" id="pr-verdict"></div>
+                    <div class="pr-details" id="pr-details"></div>
+                </div>
+            </div>
+            <div class="analytics-panel" style="margin-top:1rem">
+                <h3>📊 Proofread History</h3>
+                <div id="pr-history" class="live-feed">
+                    <div class="feed-empty">No proofreads yet. Send some emails to see history.</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ──── SCREEN 14: SELF-IMPROVEMENT ──── -->
+        <section id="screen-improvement" class="screen">
+            <div class="screen-header">
+                <div>
+                    <h1>📈 Self-Improvement Loop</h1>
+                    <p class="screen-subtitle">Learn from outcomes, optimize strategies, prune dead leads</p>
+                </div>
+                <div class="header-actions">
+                    <button class="btn-primary" id="btn-run-improvement">🔄 Run Improvement</button>
+                </div>
+            </div>
+            <div class="analytics-panels">
+                <div class="analytics-panel" style="flex:1">
+                    <h3>🏆 Best Email Framework</h3>
+                    <div id="imp-best-framework" class="strategy-display"
+                        style="text-align:center;padding:2rem;font-size:2rem;font-weight:700">—</div>
+                    <div style="text-align:center;font-size:0.8rem;color:var(--text-dim)" id="imp-framework-meta"></div>
+                </div>
+                <div class="analytics-panel" style="flex:1">
+                    <h3>⏰ Best Send Timing</h3>
+                    <div id="imp-best-timing" class="strategy-display"
+                        style="text-align:center;padding:2rem;font-size:2rem;font-weight:700">—</div>
+                    <div style="text-align:center;font-size:0.8rem;color:var(--text-dim)" id="imp-timing-meta"></div>
+                </div>
+                <div class="analytics-panel" style="flex:1">
+                    <h3>🎯 Best Niche</h3>
+                    <div id="imp-best-niche" class="strategy-display"
+                        style="text-align:center;padding:2rem;font-size:1.5rem;font-weight:700">—</div>
+                    <div style="text-align:center;font-size:0.8rem;color:var(--text-dim)" id="imp-niche-meta"></div>
+                </div>
+            </div>
+            <div class="analytics-panels" style="margin-top:1rem">
+                <div class="analytics-panel">
+                    <h3>📊 All Learned Strategies</h3>
+                    <div id="imp-strategies-table" class="live-feed">
+                        <div class="feed-empty">No strategies learned yet. Run the improvement loop.</div>
+                    </div>
+                </div>
+                <div class="analytics-panel">
+                    <h3>🗑️ Stale Leads</h3>
+                    <div id="imp-stale-leads" class="live-feed">
+                        <div class="feed-empty">Check improvement loop for stale lead proposals.</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ──── SCREEN 15: WORKER LANES ──── -->
+        <section id="screen-lanes" class="screen">
+            <div class="screen-header">
+                <div>
+                    <h1>⚙️ Worker Lanes</h1>
+                    <p class="screen-subtitle">9 autonomous execution lanes — trigger, monitor, and control</p>
+                </div>
+            </div>
+            <div class="lanes-grid" id="lanes-grid">
+                <div class="lane-card" data-lane="1">
+                    <div class="lane-header"><span class="lane-icon">⚡</span>Lane 1: Fast Lane</div>
+                    <div class="lane-desc">Approvals & Retell calls — every 2 min</div>
+                    <div class="lane-status" id="lane-status-1">⏳ Pending</div>
+                    <button class="btn-secondary lane-trigger" data-lane="1">▶ Trigger Now</button>
+                </div>
+                <div class="lane-card" data-lane="2">
+                    <div class="lane-header"><span class="lane-icon">🕵️</span>Lane 2: Lead Hunt</div>
+                    <div class="lane-desc">Multi-tier lead hunting — every 60 min</div>
+                    <div class="lane-status" id="lane-status-2">⏳ Pending</div>
+                    <button class="btn-secondary lane-trigger" data-lane="2">▶ Trigger Now</button>
+                </div>
+                <div class="lane-card" data-lane="3">
+                    <div class="lane-header"><span class="lane-icon">📬</span>Lane 3: Reply Monitor</div>
+                    <div class="lane-desc">Check AgentMail for replies — every 5 min</div>
+                    <div class="lane-status" id="lane-status-3">⏳ Pending</div>
+                    <button class="btn-secondary lane-trigger" data-lane="3">▶ Trigger Now</button>
+                </div>
+                <div class="lane-card" data-lane="4">
+                    <div class="lane-header"><span class="lane-icon">📞</span>Lane 4: Cold Escalation</div>
+                    <div class="lane-desc">Escalate cold leads to call queue — every 30 min</div>
+                    <div class="lane-status" id="lane-status-4">⏳ Pending</div>
+                    <button class="btn-secondary lane-trigger" data-lane="4">▶ Trigger Now</button>
+                </div>
+                <div class="lane-card" data-lane="5">
+                    <div class="lane-header"><span class="lane-icon">☁️</span>Lane 5: Cloud Backup</div>
+                    <div class="lane-desc">Google Drive database backup — every 6 h</div>
+                    <div class="lane-status" id="lane-status-5">⏳ Pending</div>
+                    <button class="btn-secondary lane-trigger" data-lane="5">▶ Trigger Now</button>
+                </div>
+                <div class="lane-card" data-lane="6">
+                    <div class="lane-header"><span class="lane-icon">🧠</span>Lane 6: CEO Brief</div>
+                    <div class="lane-desc">Morning CEO briefing — daily at 17:00 PST</div>
+                    <div class="lane-status" id="lane-status-6">⏳ Pending</div>
+                    <button class="btn-secondary lane-trigger" data-lane="6">▶ Trigger Now</button>
+                </div>
+                <div class="lane-card" data-lane="7">
+                    <div class="lane-header"><span class="lane-icon">🩺</span>Lane 7: Health Monitor</div>
+                    <div class="lane-desc">Pipeline health check — every 2 h</div>
+                    <div class="lane-status" id="lane-status-7">⏳ Pending</div>
+                    <button class="btn-secondary lane-trigger" data-lane="7">▶ Trigger Now</button>
+                </div>
+                <div class="lane-card" data-lane="8">
+                    <div class="lane-header"><span class="lane-icon">📈</span>Lane 8: Self-Improvement</div>
+                    <div class="lane-desc">Strategy optimization loop — every 6 h</div>
+                    <div class="lane-status" id="lane-status-8">⏳ Pending</div>
+                    <button class="btn-secondary lane-trigger" data-lane="8">▶ Trigger Now</button>
+                </div>
+                <div class="lane-card" data-lane="9">
+                    <div class="lane-header"><span class="lane-icon">⏰</span>Lane 9: Drip Sequence</div>
+                    <div class="lane-desc">Send pending sequence emails — every 1 h</div>
+                    <div class="lane-status" id="lane-status-9">⏳ Pending</div>
+                    <button class="btn-secondary lane-trigger" data-lane="9">▶ Trigger Now</button>
+                </div>
+            </div>
+        </section>
     </main>
 
     <!-- ═══ MODALS ═══ -->
@@ -578,7 +811,8 @@
                 <button class="modal-close" data-close>&times;</button>
             </div>
             <div class="modal-body">
-                <p style="margin-bottom: 1.5rem; color: var(--text-dim); font-size: 0.9rem;">Onboard a new client to the OROVA Agency Hub.</p>
+                <p style="margin-bottom: 1.5rem; color: var(--text-dim); font-size: 0.9rem;">Onboard a new client to the
+                    OROVA Agency Hub.</p>
                 <div class="form-group">
                     <label>Business Name</label>
                     <input type="text" id="client-name" placeholder="e.g. Elite Luxury Estates">

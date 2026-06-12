@@ -75,7 +75,18 @@ const CRON_EVENTS = [
 // [REMOVED] seedTasks is now handled by backend SQLite migrations.
 
 // ═══════════════════ API HELPER ═══════════════════
-const NOVA_API_KEY = localStorage.getItem('NOVA_API_KEY') || 'nova_admin_2026';
+const DASHBOARD_SECRET_KEY = 'OROVA_DASHBOARD_SECRET';
+const SESSION_TOKEN_KEY = 'OROVA_SESSION_TOKEN';
+
+function getDashboardSecret() {
+    return localStorage.getItem(DASHBOARD_SECRET_KEY) || '';
+}
+
+function setDashboardSecret(secret) {
+    if (secret) {
+        localStorage.setItem(DASHBOARD_SECRET_KEY, secret);
+    }
+}
 
 async function apiFetch(path, opts) {
     try {
@@ -83,8 +94,13 @@ async function apiFetch(path, opts) {
         opts = opts || {};
         opts.headers = opts.headers || {};
         
-        // Add API Key
-        opts.headers['X-API-Key'] = NOVA_API_KEY;
+        const _sess = localStorage.getItem(SESSION_TOKEN_KEY);
+        const secret = getDashboardSecret();
+        if (_sess) {
+            opts.headers['X-Session-Token'] = _sess;
+        } else if (secret) {
+            opts.headers['X-Dashboard-Secret'] = secret;
+        }
 
         // Set Content-Type automatically for JSON requests
         if (opts.body && typeof opts.body === 'string') {
@@ -97,9 +113,9 @@ async function apiFetch(path, opts) {
         
         const res = await fetch(API + fetchPath, opts);
         if (res.status === 401) {
-            const newKey = prompt("Unauthorized. Please enter your NOVA_API_KEY:");
-            if (newKey) {
-                localStorage.setItem('NOVA_API_KEY', newKey);
+            const newSecret = prompt("Unauthorized. Enter your dashboard secret to authenticate:");
+            if (newSecret) {
+                setDashboardSecret(newSecret);
                 window.location.reload();
             }
         }

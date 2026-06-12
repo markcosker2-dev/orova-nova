@@ -293,3 +293,83 @@ async def log_call_to_sheets(call_data: Dict[str, Any], workbook_name: Optional[
     except Exception as exc:
         logger.error(f"[SheetsSync] log_call_to_sheets failed: {exc}")
         return {"ok": False, "error": str(exc)}
+
+
+async def sync_lead_status_to_sheets(lead_id: int, new_status: str, notes: str = "", workbook_name: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Update a lead's status in Google Sheets CRM when pipeline state changes.
+    Called automatically when Nova marks a lead as contacted, replied, meeting_booked, etc.
+    """
+    try:
+        worksheet = await _get_worksheet("Leads", workbook_name)
+        # Find lead by ID column
+        id_vals = await asyncio.to_thread(worksheet.col_values, 1)
+        search_id = str(lead_id)
+        if search_id not in id_vals:
+            logger.info(f"[SheetsSync] Lead {lead_id} not found in Sheets, skipping status update")
+            return {"ok": False, "reason": "lead_not_found"}
+        
+        row_idx = id_vals.index(search_id) + 1
+        headers = WORKSHEET_HEADERS["Leads"]
+        
+        # Update Status column (index 7)
+        status_col = headers.index("Status") + 1
+        await asyncio.to_thread(worksheet.update_cell, row_idx, status_col, new_status)
+        
+        # Update Notes column (index 11) if provided
+        if notes:
+            notes_col = headers.index("Notes") + 1
+            await asyncio.to_thread(worksheet.update_cell, row_idx, notes_col, notes)
+        
+        logger.info(f"[SheetsSync] Lead {lead_id} status updated to '{new_status}' in Sheets")
+        return {"ok": True, "row": row_idx, "status": new_status}
+    except Exception as exc:
+        logger.error(f"[SheetsSync] sync_lead_status_to_sheets failed: {exc}")
+        return {"ok": False, "error": str(exc)}
+
+
+async def sync_lead_outcome_to_sheets(lead_id: int, action: str, result: str, details: str = "", workbook_name: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Log an outreach outcome for a lead in the Sheets CRM.
+    Tracks email sent, call made, meeting booked, etc.
+    """
+    try:
+        worksheet = await _get_worksheet("Leads", workbook_name)
+        id_vals = await asyncio.to_thread(worksheet.col_values, 1)
+        search_id = str(lead_id)
+        if search_id not in id_vals:
+            return {"ok": False, "reason": "lead_not_found"}
+        
+        row_idx = id_vals.index(search_id) + 1
+        headers = WORKSHEET_HEADERS["Leads"]
+        
+        # Update Status based on action/result combo
+        status_map = {
+            ("email_sent", "sent"): "Contacted",
+            ("email_sent", "rejected"): "Email Blocked",
+            ("email_sent", "failed"): "Email Failed",
+            ("call_made", "answered"): "Call Connected",
+            ("call_made", "voicemail"): "Voicemail Left",
+            ("call_made", "failed"): "Call Failed",
+            ("reply", "hot"): "Replied - Hot",
+            ("reply", "warm"): "Replied - Warm",
+            ("reply", "cold"): "Replied - Cold",
+            ("meeting", "booked"): "Meeting Booked",
+        }
+        new_status = status_map.get((action, result))
+        if new_status:
+            status_col = headers.index("Status") + 1
+            await asyncio.to_thread(worksheet.update_cell, row_idx, status_col, new_status)
+        
+        # Append notes
+        if details:
+            notes_col = headers.index("Notes") + 1
+            existing_notes = await asyncio.to_thread(worksheet.cell, row_idx, notes_col).value or ""
+            timestamp = datetime.now().strftime("%m/%d %H:%M")
+            new_notes = f"{existing_notes}\n[{timestamp}] {action}: {result} - {details}" if existing_notes else f"[{timestamp}] {action}: {result} - {details}"
+            await asyncio.to_thread(worksheet.update_cell, row_idx, notes_col, new_notes)
+        
+        return {"ok": True, "row": row_idx}
+    except Exception as exc:
+        logger.error(f"[SheetsSync] sync_lead_outcome_to_sheets failed: {exc}")
+        return {"ok": False, "error": str(exc)}

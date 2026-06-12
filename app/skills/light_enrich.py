@@ -9,6 +9,8 @@ from bs4 import BeautifulSoup, NavigableString
 from typing import Dict, Any, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor
 
+from app.skills.notes_skill import log_skill_note
+
 logger = logging.getLogger(__name__)
 
 # ─── SINGLETONS, EXECUTORS AND HELPERS ────────────────────────────
@@ -1014,18 +1016,39 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
                 if people:
                     # Find first person with a non-empty email
                     p = next((person for person in people if person.get("email")), people[0])
+                    found_fields = []
                     if not lead.get("owner") and p.get("name"):
                         lead["owner"] = p.get("name")
                         logger.info(f"[ENRICH] → Owner from Apollo: {lead['owner']}")
+                        found_fields.append("owner")
                     if not lead.get("email") and p.get("email"):
                         lead["email"] = p.get("email")
                         logger.info(f"[ENRICH] → Email from Apollo: {lead['email']}")
-                    # Fetch phone number if available
+                        found_fields.append("email")
                     if not lead.get("phone") and p.get("phone_numbers"):
                         lead["phone"] = _normalize_phone_to_e164(p.get("phone_numbers")[0].get("raw_number"))
                         logger.info(f"[ENRICH] → Phone from Apollo: {lead['phone']}")
+                        found_fields.append("phone")
+                    if found_fields:
+                        log_skill_note(
+                            "apollo_enrichment",
+                            f"Apollo lookup added {', '.join(found_fields)} for {biz_name or domain}.",
+                            category="lead_enrichment"
+                        )
+                else:
+                    logger.warning(f"[ENRICH] Apollo API returned no matches for {domain}")
+                    log_skill_note(
+                        "apollo_enrichment",
+                        f"Apollo returned no matches for {biz_name or domain}, domain={domain}.",
+                        category="lead_enrichment"
+                    )
             else:
                 logger.warning(f"[ENRICH] Apollo API returned status {resp.status_code}: {resp.text[:200]}")
+                log_skill_note(
+                    "apollo_enrichment",
+                    f"Apollo status {resp.status_code} for {biz_name or domain}: {resp.text[:200]}",
+                    category="lead_enrichment"
+                )
         except Exception as e:
             logger.warning(f"[ENRICH] Apollo failed: {e}")
 
@@ -1035,8 +1058,18 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
         ddg_owner, ddg_email = await _ddg_enrich_contact(biz_name, domain)
         if ddg_owner and not lead.get("owner"):
             lead["owner"] = ddg_owner
+            log_skill_note(
+                "ddg_enrichment",
+                f"DDG enrichment found owner for {biz_name or domain}: {ddg_owner}.",
+                category="lead_enrichment"
+            )
         if ddg_email and not lead.get("email"):
             lead["email"] = ddg_email
+            log_skill_note(
+                "ddg_enrichment",
+                f"DDG enrichment found email for {biz_name or domain}: {ddg_email}.",
+                category="lead_enrichment"
+            )
 
     # ─── STEP 5: Email Guess (Last Resort) ────────────────────
     if not lead.get("email") and lead.get("owner") and domain and "yelp.com" not in domain:

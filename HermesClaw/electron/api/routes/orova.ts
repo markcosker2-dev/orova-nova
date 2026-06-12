@@ -146,6 +146,32 @@ function translatePath(pathname: string): string {
   if (pathname.startsWith('/api/hermesclaw/leads')) {
     return pathname.replace('/api/hermesclaw', '/api');
   }
+  // ── HermesClaw new autonomous feature endpoints ──
+  if (pathname.startsWith('/api/hermesclaw/proofread')) {
+    return '/api/proofread';
+  }
+  if (pathname.startsWith('/api/hermesclaw/morning_brief')) {
+    return '/api/morning_brief';
+  }
+  if (pathname.startsWith('/api/hermesclaw/health_check')) {
+    return '/api/health_check';
+  }
+  if (pathname.startsWith('/api/hermesclaw/improvement_loop')) {
+    return '/api/improvement_loop';
+  }
+  if (pathname.startsWith('/api/hermesclaw/approve_pruning')) {
+    return '/api/approve_pruning';
+  }
+  if (pathname.startsWith('/api/hermesclaw/outreach_outcomes')) {
+    return '/api/outreach_outcomes';
+  }
+  if (pathname.startsWith('/api/hermesclaw/learned_strategies')) {
+    return '/api/learned_strategies';
+  }
+  if (pathname.startsWith('/api/hermesclaw/worker/trigger/lane/')) {
+    const lane = pathname.replace('/api/hermesclaw/worker/trigger/lane/', '');
+    return `/api/worker/trigger/lane/${lane}`;
+  }
   return pathname;
 }
 
@@ -155,7 +181,7 @@ function transformResponse(pathname: string, data: unknown): unknown {
     const status = response.status;
     const normalizedStatus = status === 'Operational' ? 'ok' :
       status === 'Degraded' ? 'warn' :
-      status === 'Critical' ? 'error' : 'ok';
+        status === 'Critical' ? 'error' : 'ok';
     const { status: _status, ...healthRest } = response;
     return {
       status: normalizedStatus,

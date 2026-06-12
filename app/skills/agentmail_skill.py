@@ -5,11 +5,28 @@ Nova gets her own email inbox via AgentMail API.
 She can create inboxes, send outreach, check replies, and respond.
 """
 import os
+import re
+import asyncio
 import logging
 import json
 from typing import Dict, Any
+from datetime import datetime
+from app.core.database import DatabaseManager
 
 logger = logging.getLogger(__name__)
+
+def _send_telegram_alert(message: str):
+    import requests
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_id = os.getenv("PERSONAL_CHAT_ID") or os.getenv("ADMIN_CHAT_ID")
+    if not token or not chat_id:
+        logger.warning("Telegram report skipped: TOKEN or CHAT_ID missing.")
+        return
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    try:
+        requests.post(url, data={"chat_id": chat_id, "text": message, "parse_mode": "Markdown"}, timeout=10)
+    except Exception as e:
+        logger.error(f"Failed to send Telegram alert: {e}")
 
 # ── Globals ──────────────────────────────────────────────────────
 _client = None
@@ -22,10 +39,9 @@ def _get_client():
     if _client is None:
         try:
             from agentmail import AgentMail
-            # Hard-coded fallback for Render deployment
-            api_key = os.getenv("AGENTMAIL_API_KEY") or "am_988862c7b479727d0307efac939de69cb11239ffae39b1dc5c050579470d6550"
+            api_key = os.getenv("AGENTMAIL_API_KEY")
             if not api_key:
-                return None, "AGENTMAIL_API_KEY not set in Render environment variables!"
+                return None, "AGENTMAIL_API_KEY not set in environment variables! Set it in Render dashboard or .env file."
             _client = AgentMail(api_key=api_key)
             logger.info("[+] AgentMail client initialized")
         except Exception as e:
@@ -102,38 +118,203 @@ def create_inbox(username: str = "nova-orova", display_name: str = "Nova | OROVA
         return {"status": "error", "message": str(e)}
 
 
-def send_outreach(to: str, subject: str, body: str) -> dict:
+_EMAIL_RE = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
+
+# Known disposable/temp email domains (blocklist)
+_DISPOSABLE_DOMAINS = frozenset([
+    "tempmail.com", "throwaway.email", "guerrillamail.com", "mailinator.com",
+    "yopmail.com", "guerrillamailblock.com", "grr.la", "dispostable.com",
+    "sharklasers.com", "trashmail.com", "fakeinbox.com", "temp-mail.org",
+    "10minutemail.com", "getnada.com", "emailondeck.com",
+])
+
+def _validate_email(email: str) -> bool:
+    """Basic email format validation before sending."""
+    return bool(_EMAIL_RE.match(email.strip())) if email else False
+
+
+async def _verify_email_deliverable(email: str) -> dict:
     """
-    Synchronous — safe to call via _call_tool() which wraps it
-    in run_in_executor automatically.
+    Verify an email is deliverable by checking MX records and basic hygiene.
+    Returns: {"valid": bool, "reason": str}
     """
-    api_key = os.getenv("AGENTMAIL_API_KEY") or "am_988862c7b479727d0307efac939de69cb11239ffae39b1dc5c050579470d6550"
+    import re as _re
+    email = (email or "").strip().lower()
+    
+    # Format check
+    if not _EMAIL_RE.match(email):
+        return {"valid": False, "reason": "Invalid email format"}
+    
+    # Extract domain
+    domain = email.split("@")[1] if "@" in email else ""
+    
+    # Block disposable domains
+    if domain in _DISPOSABLE_DOMAINS:
+        return {"valid": False, "reason": f"Disposable email domain: {domain}"}
+    
+    # Block common fake patterns
+    if _re.match(r"^(test|fake|temp|trash|dump|spam)@", email):
+        return {"valid": False, "reason": "Likely test/disposable address"}
+    
+    # MX record check
+    try:
+        import asyncio as _aio
+        loop = _aio.get_event_loop()
+        import socket
+        
+        def _check_mx():
+            try:
+                result = socket.getaddrinfo(domain, 25, socket.AF_INET, socket.SOCK_STREAM)
+                return len(result) > 0
+            except (socket.gaierror, socket.error):
+                return False
+        
+        mx_exists = await loop.run_in_executor(None, _check_mx)
+        if not mx_exists:
+            return {"valid": False, "reason": f"No MX/A records found for domain: {domain}"}
+    except Exception as e:
+        logger.warning(f"[EmailVerify] MX check failed for {domain}: {e} — proceeding anyway")
+    
+    return {"valid": True, "reason": "OK"}
+
+
+async def send_outreach(
+    to: str, 
+    subject: str, 
+    body: str, 
+    skip_proofread: bool = False, 
+    recipient_context: str = "",
+    lead_id: int = 0,
+    strategy: str = "pas",
+    niche: str = "",
+    client_id: int = 0
+) -> dict:
+    """
+    Sends an outreach email. Passes through the AI proofreading gate first
+    unless skip_proofread is True.
+    """
+    api_key = os.getenv("AGENTMAIL_API_KEY")
     if not api_key:
         raise EnvironmentError(
             "AGENTMAIL_API_KEY is not set. "
-            "Add it to your .env file or environment variables."
+            "Add it to your Render environment variables or .env file."
         )
 
     client, error = _get_client()
     if not client:
          raise EnvironmentError(f"AgentMail client failed to initialize: {error}")
 
+    # Validate email format before sending
+    if not _validate_email(to):
+        logger.warning(f"[AgentMail] Invalid email format: {to}. Skipping send.")
+        return {"status": "error", "error": f"Invalid email format: {to}"}
+
+    # Deep verification: MX record check + disposable domain block
+    verify_result = await _verify_email_deliverable(to)
+    if not verify_result["valid"]:
+        logger.warning(f"[AgentMail] Email verification failed for {to}: {verify_result['reason']}")
+        return {"status": "error", "error": f"Email not deliverable: {verify_result['reason']}"}
+
     # Use Nova's default inbox
     sender = _get_nova_inbox()
     if not sender:
         raise ValueError("No Nova inbox available. Create one first with create_inbox.")
 
+    final_subject = subject
+    final_body = body
+    quality_score = 100.0
+    fixes = "None"
+
+    if not skip_proofread:
+        from app.skills.email_proofreader import proofread_email
+        attempts = 0
+        max_attempts = 3  # Original + 2 retries
+        
+        while attempts < max_attempts:
+            verdict_res = await proofread_email(to, final_subject, final_body, recipient_context)
+            verdict = verdict_res.get("verdict", "pass").lower()
+            quality_score = verdict_res.get("score", 80.0)
+            fixes = verdict_res.get("fixes", "None")
+            
+            if verdict == "pass":
+                final_subject = verdict_res.get("improved_subject", final_subject)
+                final_body = verdict_res.get("improved_body", final_body)
+                break
+            elif verdict == "rewrite" and attempts < max_attempts - 1:
+                logger.info(f"[AgentMail] Proofreader rewrite requested (Attempt {attempts+1}). Applying fixes...")
+                final_subject = verdict_res.get("improved_subject", final_subject)
+                final_body = verdict_res.get("improved_body", final_body)
+                attempts += 1
+            else:
+                # Reject or max attempts reached with failures
+                logger.warning(f"[AgentMail] Email outreach to {to} was REJECTED by proofreader. Blocking send.")
+                alert_msg = (
+                    f"🚫 **Email Send Blocked by Proofreader**\n\n"
+                    f"To: {to}\n"
+                    f"Original Subject: {subject}\n"
+                    f"Score: {quality_score}\n"
+                    f"Reason/Fixes:\n{fixes}"
+                )
+                _send_telegram_alert(alert_msg)
+                
+                try:
+                    now = datetime.now()
+                    DatabaseManager.update_metrics({"emails_rejected": 1}, client_id=client_id)
+                    await DatabaseManager.query(
+                        """INSERT INTO outreach_outcomes (action, strategy, niche, recipient, lead_id, result, quality_score, send_hour, send_day, metadata, client_id)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        ("email_sent", strategy, niche, to, lead_id, "rejected", quality_score, now.hour, now.weekday(), json.dumps({"fixes": fixes}), client_id)
+                    )
+                except Exception as db_err:
+                    logger.error(f"Failed to log rejected outcome: {db_err}")
+                    
+                return {"status": "rejected", "reason": fixes, "score": quality_score}
+
     try:
-        result = client.inboxes.messages.send(
-            inbox_id=sender,
-            to=to,
-            subject=subject,
-            text=body
+        # Send using AgentMail client synchronous call wrapped inside run_in_executor in caller,
+        # but since we are async, we run in executor directly here.
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,
+            lambda: client.inboxes.messages.send(
+                inbox_id=sender,
+                to=to,
+                subject=final_subject,
+                text=final_body
+            )
         )
-        logger.info(f"[AgentMail] Sent to {to} | subject='{subject}'")
-        return {"status": "success", "to": to, "message_id": getattr(result, "message_id", None)}
+        logger.info(f"[AgentMail] Sent to {to} | subject='{final_subject}'")
+        msg_id = getattr(result, "message_id", None)
+        
+        try:
+            now = datetime.now()
+            # Also update client quotas if needed
+            await DatabaseManager.query(
+                "INSERT OR IGNORE INTO client_quotas (client_id) VALUES (?)", (client_id,)
+            )
+            await DatabaseManager.query(
+                "UPDATE client_quotas SET emails_sent_today = emails_sent_today + 1 WHERE client_id = ?", (client_id,)
+            )
+            await DatabaseManager.query(
+                """INSERT INTO outreach_outcomes (action, strategy, niche, recipient, lead_id, result, quality_score, send_hour, send_day, metadata, client_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                ("email_sent", strategy, niche, to, lead_id, "sent", quality_score, now.hour, now.weekday(), json.dumps({"message_id": msg_id}), client_id)
+            )
+        except Exception as db_err:
+            logger.error(f"Failed to log success outcome: {db_err}")
+            
+        return {"status": "success", "to": to, "message_id": msg_id, "score": quality_score}
     except Exception as e:
         logger.error(f"[AgentMail] Send failed to {to}: {e}", exc_info=True)
+        try:
+            now = datetime.now()
+            await DatabaseManager.query(
+                """INSERT INTO outreach_outcomes (action, strategy, niche, recipient, lead_id, result, quality_score, send_hour, send_day, metadata, client_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                ("email_sent", strategy, niche, to, lead_id, "failed", quality_score, now.hour, now.weekday(), json.dumps({"error": str(e)}), client_id)
+            )
+        except Exception as db_err:
+            logger.error(f"Failed to log fail outcome: {db_err}")
         raise
 
 

@@ -8,10 +8,10 @@
  */
 export const PORTS = {
   /** HermesClaw GUI development server port */
-  HERMESCLAW_DEV: 5173,
+  HERMESCLAW_DEV: 6969,
 
   /** HermesClaw GUI production port (for reference) */
-  HERMESCLAW_GUI: 23333,
+  HERMESCLAW_GUI: 3100,
 
   /** Local host API server port */
   HERMESCLAW_HOST_API: 13210,
@@ -38,10 +38,10 @@ export function getPort(key: keyof typeof PORTS): number {
 export const APP_PATHS = {
   /** OpenClaw configuration directory */
   OPENCLAW_CONFIG: '~/.openclaw',
-  
+
   /** HermesClaw configuration directory */
   HERMESCLAW_CONFIG: '~/.hermesclaw',
-  
+
   /** Log files directory */
   LOGS: '~/.hermesclaw/logs',
 } as const;
@@ -58,13 +58,13 @@ export type UpdateChannel = (typeof UPDATE_CHANNELS)[number];
 export const UPDATE_CONFIG = {
   /** Check interval in milliseconds (6 hours) */
   CHECK_INTERVAL: 6 * 60 * 60 * 1000,
-  
+
   /** Default update channel */
   DEFAULT_CHANNEL: 'stable' as UpdateChannel,
-  
+
   /** Auto download updates */
   AUTO_DOWNLOAD: false,
-  
+
   /** Show update notifications */
   SHOW_NOTIFICATION: true,
 };
@@ -75,16 +75,16 @@ export const UPDATE_CONFIG = {
 export const GATEWAY_CONFIG = {
   /** WebSocket reconnection delay (ms) */
   RECONNECT_DELAY: 5000,
-  
+
   /** RPC call timeout (ms) */
   RPC_TIMEOUT: 30000,
-  
+
   /** Health check interval (ms) */
   HEALTH_CHECK_INTERVAL: 30000,
-  
+
   /** Maximum startup retries */
   MAX_STARTUP_RETRIES: 30,
-  
+
   /** Startup retry interval (ms) */
   STARTUP_RETRY_INTERVAL: 1000,
 };

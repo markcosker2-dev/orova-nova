@@ -7,6 +7,7 @@ Generates high-converting copy using proven frameworks:
 AIDA, PAS, Before-After-Bridge, Story-Brand, 4Ps
 """
 
+import asyncio
 import logging
 from typing import Optional
 from app.core.ai_client import UnifiedAIClient
@@ -197,7 +198,27 @@ async def write_cold_email(
     industry: str = "business services",
     offer: str = "AI-powered lead generation"
 ) -> str:
-    """Generate a cold email using a marketing psychology framework."""
+    """Generate a cold email using a marketing psychology framework.
+    
+    When framework='auto', consults learned_strategies to pick the best
+    performing framework (self-improvement loop integration).
+    """
+    # ── Self-improvement: Consult learned strategies ──
+    if framework == "auto":
+        try:
+            loop = asyncio.get_event_loop()
+            if loop and loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    best = pool.submit(lambda: asyncio.run(_pick_best_copy_framework())).result()
+            else:
+                best = asyncio.run(_pick_best_copy_framework())
+            if best:
+                framework = best
+                logger.info(f"[COPYWRITING] Auto-selected framework '{best}' from learned strategies")
+        except Exception as e:
+            logger.warning(f"[COPYWRITING] Could not consult learned_strategies: {e}")
+    
     fw = FRAMEWORKS.get(framework, FRAMEWORKS["pas"])
     logger.info(f"[COPYWRITING] Generating cold email via {fw['name']} for {prospect}")
 
@@ -274,6 +295,27 @@ def _template_fallback(fw, prospect, industry, offer):
         f"---\n"
         f"⚠️ AI unavailable — using template fallback\n"
     )
+
+
+async def _pick_best_copy_framework() -> str:
+    """Query learned_strategies for the best email framework with high confidence."""
+    try:
+        from app.core.database import DatabaseManager
+        row = await DatabaseManager.fetchone(
+            """SELECT strategy_value FROM learned_strategies
+               WHERE strategy_type = 'email_framework'
+                 AND win_rate > 0.15
+                 AND confidence = 'high'
+                 AND active = 1
+               ORDER BY win_rate DESC
+               LIMIT 1"""
+        )
+        if row:
+            return row["strategy_value"]
+    except Exception as e:
+        logger.warning(f"[COPYWRITING] _pick_best_copy_framework failed: {e}")
+    return None
+
 
 async def list_frameworks() -> str:
     report = "# ✍️ Available Copywriting Frameworks\n\n"

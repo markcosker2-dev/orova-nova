@@ -1,0 +1,14 @@
+{
+  "parent": { "database_id": "212e1edf1d3980c5a1efc13ef46f3856" },
+  "properties": {
+    "Name": { "title": [{ "text": { "content": "Acme Remodeling Co" }}] },
+    "Owner": { "rich_text": [{ "text": { "content": "Jane Doe" }}] },
+    "Email": { "rich_text": [{ "text": { "content": "jane.doe@acme.com" }}] },
+    "Phone": { "rich_text": [{ "text": { "content": "+1-555-123-4567" }}] },
+    "Website": { "url": "https://acme.example.com" },
+    "Status": { "select": { "name": "new" } },
+    "Score": { "number": 85 },
+    "Notes": { "rich_text": [{ "text": { "content": "Requested pricing for a full kitchen remodel. Prefers email contact." }}] },
+    "Source": { "rich_text": [{ "text": { "content": "Nova Engine" }}] }
+  }
+}

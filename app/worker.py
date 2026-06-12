@@ -411,18 +411,23 @@ async def run_reply_monitor(client_id=0):
 # When leads don't open/reply to emails after X days,
 # automatically escalate to phone call.
 # ═══════════════════════════════════════════════════════
-
 async def run_cold_lead_escalation(client_id=0):
-    """📞 Identify leads that haven't replied and escalate to phone call."""
+    """📞 Identify leads that haven't replied and auto-trigger RetellAI calls."""
+    global daily_call_counter
+    _reset_daily_counters()
     logger.info(f"📞 [ESCALATION] [Client {client_id}] Checking for cold leads...")
     try:
         loop = asyncio.get_running_loop()
         pst_tz = pytz.timezone('America/Los_Angeles')
         now_pst = datetime.now(pst_tz)
-        
+
         # Give a little buffer for cold calls: 10 AM to 4 PM PST
         if now_pst.hour < 10 or now_pst.hour >= 16:
             logger.info(f"⏳ [ESCALATION] Outside prime calling hours ({now_pst.strftime('%I:%M %p')} PST). Suspending escalations.")
+            return
+
+        if daily_call_counter >= MAX_CALLS_PER_DAY:
+            logger.info(f"📞 [ESCALATION] Daily call cap ({MAX_CALLS_PER_DAY}) reached. Skipping.")
             return
 
         cold_leads = await loop.run_in_executor(None, lambda: DatabaseManager.get_cold_leads(COLD_LEAD_DAYS_THRESHOLD, client_id=client_id))
@@ -430,49 +435,90 @@ async def run_cold_lead_escalation(client_id=0):
             logger.info(f"📞 [ESCALATION] [Client {client_id}] No true cold leads to escalate.")
             return
 
-        cold_business_names = {l["business"].lower() for l in cold_leads if l.get("business")}
-
-        client_auth = await loop.run_in_executor(None, _get_sheets_client)
-        sheet_name = os.getenv("GOOGLE_SHEETS_WORKBOOK", "OROVA CRM")
-        sheet = await loop.run_in_executor(None, lambda: client_auth.open(sheet_name).sheet1)
-        rows = await loop.run_in_executor(None, sheet.get_all_values)
-
         escalated = 0
-        for idx, row in enumerate(rows[1:], start=2):
+        called = 0
+
+        for lead in cold_leads:
             if daily_call_counter >= MAX_CALLS_PER_DAY:
+                logger.info(f"📞 [ESCALATION] Daily call cap reached mid-batch. Stopping.")
                 break
 
-            status = row[COL_IDX_STATUS] if len(row) > COL_IDX_STATUS else ""
-            company = row[COL_IDX_COMPANY] if len(row) > COL_IDX_COMPANY else "Unknown"
-            contact = row[COL_IDX_OWNER] if len(row) > COL_IDX_OWNER else ""
+            business = lead.get("business", "Unknown")
+            phone = lead.get("phone", "")
+            contact = lead.get("owner", "")
+            email = lead.get("email", "")
 
-            # Only escalate leads for this specific client and matching names
-            if status in ("Email Sent", "Contacted") and company.lower() in cold_business_names:
-                logger.info(f"📞 [ESCALATION] [Client {client_id}] True cold lead detected: {company}. Escalating to call.")
-
-                # Mark as Ready for Call (requires CEO approval in Fast Lane)
-                await loop.run_in_executor(None, lambda: sheet.update_cell(idx, COL_SHEET_STATUS, "Ready for Call"))
-                notes = row[COL_IDX_NOTES] if len(row) > COL_IDX_NOTES else ""
-                await loop.run_in_executor(None, lambda: sheet.update_cell(idx, COL_SHEET_NOTES, f"{notes} | Client {client_id} Auto-escalated: {COLD_LEAD_DAYS_THRESHOLD}+ days no reply"))
-
-                # Update SQLite to match so it doesn't get flagged again
-                await loop.run_in_executor(None, lambda: DatabaseManager.query(
+            if not phone:
+                logger.info(f"📞 [ESCALATION] Skipping {business} — no phone number on file.")
+                # Still mark as "Ready for Call" so it shows up in dashboard
+                await loop.run_in_executor(None, lambda b=business, cid=client_id: DatabaseManager.query(
                     "UPDATE leads SET status = 'Ready for Call' WHERE LOWER(business) = ? AND client_id = ?",
-                    (company.lower(), int(client_id))
+                    (b.lower(), int(cid))
                 ))
-
                 escalated += 1
+                continue
 
-                await loop.run_in_executor(None, lambda: send_telegram_report(
-                    f"📞 **Cold Lead Auto-Escalation** [Client {client_id}]\n\n"
-                    f"**{company}** ({contact}) has not replied to emails for {COLD_LEAD_DAYS_THRESHOLD}+ days.\n"
-                    f"Marked as **Ready for Call**. Approve in Fast Lane."
+            # Trigger RetellAI call directly
+            logger.info(f"📞 [ESCALATION] Triggering cold call for {business} ({phone})...")
+            context = {
+                "business_name": business,
+                "contact_name": contact,
+                "icebreaker": f"Following up on our email about improving your online presence",
+                "call_type": "cold_escalation",
+            }
+
+            try:
+                import inspect
+                if inspect.iscoroutinefunction(trigger_retell_call):
+                    result = await trigger_retell_call(phone, context)
+                else:
+                    result = await loop.run_in_executor(None, trigger_retell_call, phone, context)
+
+                if result.get("success"):
+                    call_id = result.get("call_id")
+                    called += 1
+                    logger.info(f"✅ [ESCALATION] Cold call triggered for {business}. Call ID: {call_id}")
+
+                    # Update lead status in SQLite
+                    await loop.run_in_executor(None, lambda b=business, cid=client_id: DatabaseManager.query(
+                        "UPDATE leads SET status = 'Cold Call Initiated' WHERE LOWER(business) = ? AND client_id = ?",
+                        (b.lower(), int(cid))
+                    ))
+
+                    await loop.run_in_executor(None, lambda: send_telegram_report(
+                        f"📞 **Cold Lead Auto-Call** [Client {client_id}]\n\n"
+                        f"**{business}** ({contact}) — no reply for {COLD_LEAD_DAYS_THRESHOLD}+ days.\n"
+                        f"Phone: `{phone}`\n"
+                        f"Call ID: `{call_id}`"
+                    ))
+                else:
+                    error = result.get("error", "Unknown")
+                    logger.warning(f"⚠️ [ESCALATION] Cold call failed for {business}: {error}")
+                    # Mark as "Ready for Call" as fallback
+                    await loop.run_in_executor(None, lambda b=business, cid=client_id: DatabaseManager.query(
+                        "UPDATE leads SET status = 'Ready for Call' WHERE LOWER(business) = ? AND client_id = ?",
+                        (b.lower(), int(cid))
+                    ))
+            except Exception as call_err:
+                logger.error(f"❌ [ESCALATION] Call trigger error for {business}: {call_err}")
+                await loop.run_in_executor(None, lambda b=business, cid=client_id: DatabaseManager.query(
+                    "UPDATE leads SET status = 'Ready for Call' WHERE LOWER(business) = ? AND client_id = ?",
+                    (b.lower(), int(cid))
                 ))
 
-        if escalated > 0:
-            logger.info(f"📞 [ESCALATION] [Client {client_id}] Escalated {escalated} cold leads to call queue.")
-        else:
-            logger.info(f"📞 [ESCALATION] [Client {client_id}] No matching cold leads found in Sheets.")
+            escalated += 1
+
+            # Rate limit: wait between calls
+            if called < MAX_CALLS_PER_DAY:
+                await asyncio.sleep(5)
+
+        logger.info(f"📞 [ESCALATION] [Client {client_id}] Processed {escalated} cold leads, triggered {called} calls.")
+
+        if called > 0:
+            await loop.run_in_executor(None, lambda: send_telegram_report(
+                f"📞 **Cold Lead Escalation Complete** [Client {client_id}]\n\n"
+                f"Triggered **{called}** auto-calls for leads that went cold after {COLD_LEAD_DAYS_THRESHOLD} days."
+            ))
 
     except Exception as e:
         logger.error(f"Cold Lead Escalation Error (Client {client_id}): {e}")
@@ -526,15 +572,48 @@ def cloud_backup_job():
     except Exception as e:
         logger.error(f"[LANE 5] Backup Error: {e}")
 
+def ceo_brain_job():
+    logger.info("[LANE 6] Triggering Nova CEO Brain Morning Brief...")
+    from app.core.ceo_brain import CEOBrain
+    brain = CEOBrain()
+    _run_async(brain.morning_brief())
+
+def health_check_job():
+    logger.info("[LANE 7] Triggering Pipeline Health Check...")
+    from app.core.ceo_brain import CEOBrain
+    brain = CEOBrain()
+    _run_async(brain.pipeline_health_check())
+
+def self_improvement_job():
+    logger.info("[LANE 8] Triggering Self-Improvement Loop...")
+    from app.core.self_improvement import ImprovementLoop
+    loop = ImprovementLoop()
+    _run_async(loop.run())
+
+def sequence_drip_job():
+    logger.info("[LANE 9] Triggering Drip Sequence Sender...")
+    from app.skills.email_sequence_skill import send_pending_drip_emails
+    _run_async(send_pending_drip_emails())
+
+def reply_and_drip_check_job():
+    logger.info("[REPLY & DRIP CHECK] Checking replies and processing drips...")
+    reply_monitor_job()
+    from app.skills.email_sequence_skill import check_drip_replies_and_process
+    _run_async(check_drip_replies_and_process())
+
 
 # ═══════════════════════════════════════════════════════
-# THE SCHEDULE — 4 Autonomous Lanes
+# THE SCHEDULE — 9 Autonomous Lanes
 # ═══════════════════════════════════════════════════════
-schedule.every(APPROVAL_CHECK_MINUTES).minutes.do(fast_lane_job)     # Lane 1: Approvals + calls
-schedule.every(REPLY_CHECK_MINUTES).minutes.do(reply_monitor_job)     # Lane 3: Reply monitoring
-schedule.every(COLD_CALL_CHECK_MINUTES).minutes.do(cold_escalation_job) # Lane 4: Cold lead → call
-schedule.every(HUNT_INTERVAL_MINUTES).minutes.do(slow_lane_job)       # Lane 2: Lead hunting
-schedule.every(6).hours.do(cloud_backup_job)                          # Lane 5: Google Drive Backup
+schedule.every(APPROVAL_CHECK_MINUTES).minutes.do(fast_lane_job)      # Lane 1: Approvals + calls
+schedule.every(HUNT_INTERVAL_MINUTES).minutes.do(slow_lane_job)        # Lane 2: Lead hunting
+schedule.every(REPLY_CHECK_MINUTES).minutes.do(reply_and_drip_check_job) # Lane 3: Reply + Drip monitoring
+schedule.every(COLD_CALL_CHECK_MINUTES).minutes.do(cold_escalation_job)  # Lane 4: Cold lead → call
+schedule.every(6).hours.do(cloud_backup_job)                           # Lane 5: Google Drive Backup
+schedule.every().day.at("17:00").do(ceo_brain_job)                     # Lane 6: CEO Morning Brief (5PM PST)
+schedule.every(2).hours.do(health_check_job)                           # Lane 7: Pipeline Health Check
+schedule.every(6).hours.do(self_improvement_job)                       # Lane 8: Strategy Self-Improvement
+schedule.every(1).hours.do(sequence_drip_job)                          # Lane 9: Drip Sequence Sender
 
 
 def start_worker_scheduler() -> threading.Thread:
@@ -545,7 +624,6 @@ def start_worker_scheduler() -> threading.Thread:
 
 
 def _scheduler_loop():
-    """Background loop — calls schedule.run_pending() every second."""
     import schedule
     logger.info("⏱️ Worker scheduler loop started.")
     while True:
@@ -563,6 +641,10 @@ if __name__ == "__main__":
     logger.info(f"   -> Lane 3 (Replies):    Every {REPLY_CHECK_MINUTES} min")
     logger.info(f"   -> Lane 4 (Escalation): Every {COLD_CALL_CHECK_MINUTES} min")
     logger.info(f"   -> Lane 5 (Cloud Backup): Every 6 hours")
+    logger.info(f"   -> Lane 6 (CEO Brief):  Every day at 17:00 PST")
+    logger.info(f"   -> Lane 7 (Health):    Every 2 hours")
+    logger.info(f"   -> Lane 8 (Improve):   Every 6 hours")
+    logger.info(f"   -> Lane 9 (Drip Send):  Every 1 hour")
     logger.info(f"   -> Daily call cap: {MAX_CALLS_PER_DAY}")
     logger.info(f"   -> Daily hunt cap: {MAX_RUNS_PER_DAY}")
 
