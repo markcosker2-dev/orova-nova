@@ -19,11 +19,55 @@ import re
 import json
 import logging
 import asyncio
+import time
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger(__name__)
+
+# ─── APOLLO BROWSER SCRAPER (FREE, PRIMARY) ────────────────────────────────
+APOLLO_COOKIES_PATH = Path(__file__).parent / "apollo_scraper" / "apollo_cookies.json"
+
+async def apollo_search_people(query: str, max_results: int = 10) -> dict:
+    """
+    Apollo browser scraper — FREE, uses Playwright to read Apollo's free tier.
+    Returns list of leads with name, title, email, phone, company.
+    """
+    if not APOLLO_COOKIES_PATH.exists():
+        return {"status": "error", "error": "Apollo cookies not set up. Run setup_apollo_cookies.py first."}
+    
+    try:
+        from app.skills.apollo_scraper.scraper import ApolloBrowserScraper
+        scraper = ApolloBrowserScraper(cookies_path=str(APOLLO_COOKIES_PATH))
+        await scraper.launch(headless=True)
+        
+        if not await scraper.ensure_logged_in():
+            await scraper.close()
+            return {"status": "error", "error": "Apollo cookies expired. Run setup_apollo_cookies.py again."}
+        
+        leads = await scraper.search_people(query=query, max_results=max_results)
+        await scraper.close()
+        
+        if leads:
+            results = []
+            for lead in leads:
+                results.append({
+                    "name": lead.name,
+                    "title": lead.title,
+                    "email": lead.email,
+                    "phone": lead.phone,
+                    "company": lead.company,
+                    "location": lead.location,
+                })
+            return {"status": "success", "data": results}
+        return {"status": "error", "error": "No Apollo results found"}
+    except ImportError:
+        logger.warning("[SMART SCRAPER] Apollo scraper not importable")
+        return {"status": "error", "error": "Apollo scraper module not available"}
+    except Exception as e:
+        logger.error(f"[SMART SCRAPER] Apollo search failed: {e}")
+        return {"status": "error", "error": str(e)}
 
 # ─── EXTRACTION SCHEMA ─────────────────────────────────────────────────────
 LEAD_EXTRACTION_SCHEMA = {
@@ -170,6 +214,7 @@ async def enrich_lead_ai(
 ) -> dict:
     """
     Unified enrichment pipeline — tries multiple methods:
+      0. Apollo browser scraper (free, ~75% hit rate — PRIMARY)
       1. ScrapeGraphAI deep extract (AI-powered, free)
       2. ScrapeGraphAI search (AI-powered, free)
       3. HTML scrape fallback (basic)
@@ -182,6 +227,19 @@ async def enrich_lead_ai(
         "phone": None,
         "source": "none",
     }
+
+    # Strategy 0: Apollo browser scraper (free, ~75% hit rate — try first)
+    apollo_query = query or business_name
+    apollo_result = await apollo_search_people(apollo_query, max_results=3)
+    if apollo_result.get("status") == "success" and apollo_result.get("data"):
+        # Apollo returns a list of people
+        for person in apollo_result["data"]:
+            if person.get("email") or person.get("name"):
+                result["owner_name"] = person.get("name")
+                result["email"] = person.get("email")
+                result["phone"] = person.get("phone")
+                result["source"] = "apollo_browser"
+                return result
 
     # Strategy 1: Deep extract from URL (most reliable)
     if url:
