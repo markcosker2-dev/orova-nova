@@ -280,6 +280,22 @@ TOOLS = [
 {
         "type": "function",
         "function": {
+            "name": "enrich_lead_ai",
+            "description": "AI-powered lead enrichment using ScrapeGraphAI + Groq (free). Takes a business name + URL, extracts owner name, email, and phone via multi-strategy pipeline.",
+            "parameters": {
+                "type": 'object',
+                "properties": {
+                    "business_name": {'type': 'string', 'description': 'The business name to enrich'},
+                    "url": {'type': 'string', 'description': 'The business website URL (optional but recommended)'},
+                    "query": {'type': 'string', 'description': 'Custom search query override (optional)'},
+                },
+                "required": ['business_name'],
+            },
+        }
+    },
+{
+        "type": "function",
+        "function": {
             "name": "find_leads",
             "description": "Search the web for business leads. Returns a list of titles, URLs, and snippets.",
             "parameters": {

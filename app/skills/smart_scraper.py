@@ -1,13 +1,31 @@
+"""
+Smart Scraper — FREE + Reliable Lead Extraction
+================================================
+Uses ScrapeGraphAI (open-source) with Groq as the LLM backend.
+
+Pipeline:
+  1. sgai_search_and_extract() — DDG search + AI extraction
+  2. sgai_deep_extract() — Deep scrape a single URL
+  3. enrich_lead_ai() — Unified enrichment: tries search, then deep extract, then fallback
+
+Cost: $0 (Groq free tier + ScrapeGraphAI open source)
+
+The LLM backend is Groq (free tier: 30K requests/day), which powers the
+AI extraction of owner names, emails, and phone numbers from web pages.
+"""
+
 import os
+import re
+import json
 import logging
 import asyncio
-import json
 from pathlib import Path
 from datetime import datetime
+from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger(__name__)
 
-# ─── EXTRACTION SCHEMA ───────────────────────────────────────────────
+# ─── EXTRACTION SCHEMA ─────────────────────────────────────────────────────
 LEAD_EXTRACTION_SCHEMA = {
     "type": "object",
     "properties": {
@@ -43,139 +61,308 @@ LEAD_EXTRACTION_SCHEMA = {
     "required": ["business_name"]
 }
 
-# ─── CORE SDK WRAPPERS ───────────────────────────────────────────────
+EXTRACTION_PROMPT = (
+    "Find the Owner, CEO, or Principal of this business. "
+    "Extract their full name, personal-looking email, and any direct or mobile phone numbers. "
+    "Flag the phone as 'Verified_Mobile' if it appears in a 'Contact the Owner' context. "
+    "Disqualify generic 1-800 or info@ contact points."
+)
+
+# ─── GROQ LLM CONFIG (FREE) ───────────────────────────────────────────────
+# Uses Groq's free tier: 30K requests/day with Llama 3
+# This is the LLM backend for ScrapeGraphAI's AI extraction
+
+SGAI_GRAPH_CONFIG = {
+    "llm": {
+        "model": "groq/llama3-8b-8192",
+        "api_key": os.getenv("GROQ_API_KEY", ""),
+    },
+    "browser_config": {
+        "headless": True,
+        "browser_type": "playwright",
+    },
+    "verbose": False,
+}
+
+# ─── CORE FUNCTIONS (FREE) ────────────────────────────────────────────────
 
 async def sgai_search_and_extract(query: str, count: int = 3) -> dict:
     """
-    Uses ScrapeGraphAI Cloud SDK to search the web and extract structured JSON directly.
+    ScrapeGraphAI search + AI extraction.
+    Uses Groq (free) as the LLM backend.
+    Returns structured dict with business_name, owner_name, email, phone.
     """
-    logger.info(f"[SMART SCRAPER] Initiating SGAI Search: {query}")
-    
-    # Check for API Key
-    if not os.getenv("SGAI_API_KEY"):
-        logger.error("[SMART SCRAPER] SGAI_API_KEY is not set. Returning error.")
-        return {"error": "SGAI_API_KEY not configured in environment."}
+    logger.info(f"[SMART SCRAPER] Search: {query}")
+
+    groq_key = os.getenv("GROQ_API_KEY", "")
+    if not groq_key:
+        logger.warning("[SMART SCRAPER] GROQ_API_KEY not set — falling back to basic search")
+        return await _simple_search_fallback(query, count)
 
     try:
-        from scrapegraph_py import AsyncScrapeGraphAI
-        
-        async with AsyncScrapeGraphAI() as sgai:
-            res = await sgai.search(
-                query=query,
-                num_results=count,
-                prompt="Find the Owner, CEO, or Principal of this business. Extract their full name, personal-looking email, and any direct or mobile phone numbers. Flag the phone as 'Verified_Mobile' if it appears in a 'Contact the Owner' context. Disqualify generic 1-800 or info@ contact points.",
-                schema=LEAD_EXTRACTION_SCHEMA
-            )
-            
-            if res.status == "success":
-                logger.info("[SMART SCRAPER] Search & Extract SUCCESS")
-                return {"status": "success", "data": res.data}
-            else:
-                logger.warning(f"[SMART SCRAPER] API Error: {res.error}")
-                return {"status": "error", "error": res.error}
-                
+        from scrapegraphai.graphs import SearchGraph
+
+        graph = SearchGraph(
+            prompt=EXTRACTION_PROMPT,
+            config={
+                "llm": {
+                    "model": "groq/llama3-8b-8192",
+                    "api_key": groq_key,
+                },
+                "verbose": False,
+            },
+        )
+        result = graph.run({"query": query, "num_results": count})
+        logger.info("[SMART SCRAPER] Search+Extract SUCCESS")
+        return {"status": "success", "data": result}
     except ImportError:
-        logger.error("[SMART SCRAPER] scrapegraph-py not installed.")
-        return {"error": "scrapegraph-py SDK not installed."}
+        logger.warning("[SMART SCRAPER] scrapegraphai not installed — using fallback")
+        return await _simple_search_fallback(query, count)
     except Exception as e:
-        logger.error(f"[SMART SCRAPER] Exception: {e}")
-        return {"error": str(e)}
+        logger.error(f"[SMART SCRAPER] Search failed: {e}")
+        return {"status": "error", "error": str(e)}
+
 
 async def sgai_deep_extract(url: str) -> dict:
     """
-    Uses ScrapeGraphAI Cloud SDK to perform a deep extraction on a specific URL.
+    ScrapeGraphAI deep extraction on a single URL.
+    Uses Groq (free) to extract owner name, email, phone from the page.
     """
-    logger.info(f"[SMART SCRAPER] Initiating SGAI Extract on: {url}")
-    
-    if not os.getenv("SGAI_API_KEY"):
-        return {"error": "SGAI_API_KEY not configured in environment."}
+    logger.info(f"[SMART SCRAPER] Deep extract: {url}")
+
+    groq_key = os.getenv("GROQ_API_KEY", "")
+    if not groq_key:
+        return {"status": "error", "error": "GROQ_API_KEY not set"}
 
     try:
-        from scrapegraph_py import AsyncScrapeGraphAI
-        from scrapegraph_py import FetchConfig
-        
-        async with AsyncScrapeGraphAI() as sgai:
-            res = await sgai.extract(
-                prompt="Find the Owner, CEO, or Principal of this business. Extract their full name, personal-looking email, and any direct or mobile phone numbers. Flag the phone as 'Verified_Mobile' if it appears in a 'Contact the Owner' context.",
-                url=url,
-                schema=LEAD_EXTRACTION_SCHEMA,
-                fetch_config=FetchConfig(mode="js", stealth=True, timeout=30000)
-            )
-            
-            if res.status == "success":
-                logger.info("[SMART SCRAPER] Deep Extract SUCCESS")
-                # Immediately write to Wiki if we have good data
-                await _save_to_lead_wiki(url, res.data.get("results", {}).get("json", {}).get("data", {}))
-                return {"status": "success", "data": res.data}
-            else:
-                logger.warning(f"[SMART SCRAPER] API Error: {res.error}")
-                return {"status": "error", "error": res.error}
-                
-    except Exception as e:
-        logger.error(f"[SMART SCRAPER] Exception: {e}")
-        return {"error": str(e)}
+        from scrapegraphai.graphs import SmartScraperGraph
 
-# ─── LEAD WIKI SYSTEM ───────────────────────────────────────────────
+        graph = SmartScraperGraph(
+            prompt=EXTRACTION_PROMPT,
+            source=url,
+            config={
+                "llm": {
+                    "model": "groq/llama3-8b-8192",
+                    "api_key": groq_key,
+                },
+                "verbose": False,
+            },
+        )
+        result = graph.run()
+        logger.info("[SMART SCRAPER] Deep extract SUCCESS")
+
+        # Save to lead wiki if we got good data
+        if isinstance(result, dict):
+            await _save_to_lead_wiki(url, result)
+        return {"status": "success", "data": result}
+    except ImportError:
+        logger.warning("[SMART SCRAPER] scrapegraphai not installed — falling back to HTML parse")
+        return await _html_scrape_fallback(url)
+    except Exception as e:
+        logger.error(f"[SMART SCRAPER] Deep extract failed: {e}")
+        return {"status": "error", "error": str(e)}
+
+
+async def enrich_lead_ai(
+    business_name: str,
+    url: str = "",
+    query: str = "",
+) -> dict:
+    """
+    Unified enrichment pipeline — tries multiple methods:
+      1. ScrapeGraphAI deep extract (AI-powered, free)
+      2. ScrapeGraphAI search (AI-powered, free)
+      3. HTML scrape fallback (basic)
+    Returns: { business_name, owner_name, email, phone, source }
+    """
+    result = {
+        "business_name": business_name,
+        "owner_name": None,
+        "email": None,
+        "phone": None,
+        "source": "none",
+    }
+
+    # Strategy 1: Deep extract from URL (most reliable)
+    if url:
+        extracted = await sgai_deep_extract(url)
+        if extracted.get("status") == "success" and extracted.get("data"):
+            data = extracted["data"]
+            if isinstance(data, dict):
+                result["owner_name"] = data.get("owner_name")
+                result["email"] = data.get("personal_email")
+                result["phone"] = data.get("direct_phone")
+                result["source"] = "sgai_deep_extract"
+                if result["owner_name"] or result["email"]:
+                    return result
+
+    # Strategy 2: Search + extract
+    search_query = query or f"{business_name} owner email phone"
+    extracted = await sgai_search_and_extract(search_query, count=3)
+    if extracted.get("status") == "success" and extracted.get("data"):
+        data = extracted["data"]
+        if isinstance(data, dict):
+            result["owner_name"] = result["owner_name"] or data.get("owner_name")
+            result["email"] = result["email"] or data.get("personal_email")
+            result["phone"] = result["phone"] or data.get("direct_phone")
+            result["source"] = "sgai_search"
+            if result["owner_name"] or result["email"]:
+                return result
+
+    # Strategy 3: Basic HTML scrape fallback
+    if url:
+        html_result = await _html_scrape_fallback(url)
+        if html_result.get("status") == "success":
+            data = html_result.get("data", {})
+            result["owner_name"] = result["owner_name"] or data.get("owner_name")
+            result["email"] = result["email"] or data.get("personal_email")
+            result["phone"] = result["phone"] or data.get("direct_phone")
+            result["source"] = "html_scrape"
+            if result["owner_name"] or result["email"]:
+                return result
+
+    return result
+
+
+# ─── FALLBACK: HTML SCRAPE (NO LLM REQUIRED) ──────────────────────────────
+
+async def _html_scrape_fallback(url: str) -> dict:
+    """
+    Basic HTML scrape + regex extraction. No LLM needed.
+    Scans homepage + /contact + /about pages for email, phone, owner names.
+    """
+    try:
+        import httpx
+        from bs4 import BeautifulSoup
+
+        pages_to_check = [url]
+        # Try common subpages
+        base = url.rstrip("/")
+        for path in ["/contact", "/about", "/about-us", "/team"]:
+            pages_to_check.append(base + path)
+
+        emails = set()
+        phones = set()
+        names = set()
+
+        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+            for page_url in pages_to_check:
+                try:
+                    resp = await client.get(page_url, headers={"User-Agent": "Mozilla/5.0"})
+                    if resp.status_code != 200:
+                        continue
+                    soup = BeautifulSoup(resp.text, "html.parser")
+                    text = soup.get_text(separator=" ")
+
+                    # Extract emails
+                    for m in re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', resp.text):
+                        m = m.lower()
+                        if m not in ("info@contact.com", "user@example.com"):
+                            emails.add(m)
+
+                    # Extract phones
+                    for m in re.findall(r'(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}', text):
+                        m = m.strip()
+                        if len(m) >= 10:
+                            phones.add(m)
+
+                    # Extract plausible names from common patterns
+                    for m in re.findall(r'(?:CEO|Owner|Founder|Principal|Director|Manager)\s+(?:named?\s+)?([A-Z][a-z]+\s+[A-Z][a-z]+)', text):
+                        if _is_plausible_name(m):
+                            names.add(m)
+
+                except Exception:
+                    continue
+
+        result = {
+            "business_name": url.split("//")[-1].split("/")[0],
+            "owner_name": list(names)[0] if names else None,
+            "personal_email": list(emails)[0] if emails else None,
+            "direct_phone": list(phones)[0] if phones else None,
+            "is_verified_mobile": False,
+            "confidence_score": 3 if emails else 1,
+        }
+
+        if names or emails or phones:
+            await _save_to_lead_wiki(url, result)
+        return {"status": "success", "data": result}
+    except Exception as e:
+        logger.error(f"[HTML SCRAPE] Fallback failed: {e}")
+        return {"status": "error", "error": str(e)}
+
+
+async def _simple_search_fallback(query: str, count: int) -> dict:
+    """
+    DuckDuckGo search fallback when ScrapeGraphAI isn't available.
+    Returns raw search results (no AI extraction).
+    """
+    try:
+        from duckduckgo_search import DDGS
+        results = []
+        with DDGS() as ddgs:
+            for r in ddgs.text(query, max_results=count):
+                results.append({
+                    "title": r.get("title", ""),
+                    "url": r.get("href", ""),
+                    "snippet": r.get("body", ""),
+                })
+        return {"status": "success", "data": results}
+    except Exception as e:
+        logger.error(f"[FALLBACK] DuckDuckGo error: {e}")
+        return {"status": "error", "error": str(e)}
+
+
+# ─── HELPERS ───────────────────────────────────────────────────────────────
+
+def _is_plausible_name(text: str) -> bool:
+    if not text or len(text) < 4 or len(text) > 50:
+        return False
+    parts = text.split()
+    if len(parts) < 2 or len(parts) > 4:
+        return False
+    if not all(re.match(r"^[A-Za-z'\-]+$", p) for p in parts):
+        return False
+    if not parts[0][0].isupper():
+        return False
+    return True
+
 
 async def _save_to_lead_wiki(url: str, extracted_data: dict):
-    """
-    Saves a verified lead to a persistent Markdown Wiki file.
-    """
+    """Save a verified lead to a persistent Markdown Wiki file."""
     if not extracted_data:
         return
-        
+
     b_name = extracted_data.get("business_name")
     if not b_name:
         return
-        
-    # Only save if we found an owner or email (High Quality)
+
     if not extracted_data.get("owner_name") and not extracted_data.get("personal_email"):
         return
-        
-    logger.info(f"[LEAD WIKI] Generating wiki file for {b_name}...")
-    
-    # Ensure directory exists
+
+    logger.info(f"[LEAD WIKI] Generating wiki for {b_name}...")
     wiki_dir = Path("leads")
     wiki_dir.mkdir(exist_ok=True)
-    
-    # Create a safe filename
+
     safe_name = "".join([c for c in b_name if c.isalpha() or c.isdigit() or c==' ']).rstrip()
     safe_name = safe_name.replace(' ', '_').lower()
     wiki_path = wiki_dir / f"{safe_name}.md"
-    
-    # Prepare Content
+
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    
-    md_content = f"# 🏰 OROVA Lead Wiki: {b_name}\n"
+    md_content = f"# Lead Wiki: {b_name}\n"
     md_content += f"> **Hunted On:** {now}\n> **Source URL:** {url}\n> **Confidence Score:** {extracted_data.get('confidence_score', 'N/A')}/10\n\n"
-    
-    md_content += "## 👤 The 'Big Fish' (Owner/Decision Maker)\n"
+    md_content += "## Owner / Decision Maker\n"
     md_content += f"- **Name:** {extracted_data.get('owner_name', 'Unknown')}\n"
     md_content += f"- **Role:** {extracted_data.get('owner_role', 'Unknown')}\n\n"
-    
-    md_content += "## 📞 Contact Vectors\n"
-    md_content += f"- **Personal Email:** {extracted_data.get('personal_email', 'None found')}\n"
-    
+    md_content += "## Contact Info\n"
+    md_content += f"- **Email:** {extracted_data.get('personal_email', 'None found')}\n"
     phone = extracted_data.get('direct_phone', 'None found')
-    is_mobile = extracted_data.get('is_verified_mobile', False)
-    badge = "📱 (Verified Mobile)" if is_mobile else "☎️ (Standard)"
-    md_content += f"- **Direct Phone:** {phone} {badge}\n\n"
-    
-    md_content += "## 📝 Outreach Log & System State\n"
-    md_content += "- [ ] Initial Email Sent\n"
-    md_content += "- [ ] Retell AI Call Triggered\n"
-    md_content += "- [ ] Deal Closed\n\n"
-    
-    md_content += "---\n*Auto-generated by Antigravity Smart Scraper (ScrapeGraphAI SDK)*\n"
-    
+    badge = "(Mobile)" if extracted_data.get('is_verified_mobile') else "(Standard)"
+    md_content += f"- **Phone:** {phone} {badge}\n\n"
+    md_content += "---\n*Auto-generated by Smart Scraper (ScrapeGraphAI + Groq)*\n"
+
     try:
-        # If it exists, we append an update. If not, we create new.
-        if wiki_path.exists():
-            with open(wiki_path, "a", encoding="utf-8") as f:
-                f.write(f"\n\n### Update: {now}\nData re-verified via ScrapeGraphAI.\n")
-        else:
-            with open(wiki_path, "w", encoding="utf-8") as f:
-                f.write(md_content)
+        with open(wiki_path, "w", encoding="utf-8") as f:
+            f.write(md_content)
         logger.info(f"[LEAD WIKI] Saved -> {wiki_path}")
     except Exception as e:
-        logger.error(f"[LEAD WIKI] Failed to save {wiki_path}: {e}")
+        logger.error(f"[LEAD WIKI] Failed: {e}")

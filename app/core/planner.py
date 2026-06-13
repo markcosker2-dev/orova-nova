@@ -66,7 +66,7 @@ from app.core.self_learning import (
     ensure_tables as ensure_learning_tables,
     ExecutionTrace,
 )
-from app.skills.smart_scraper import sgai_search_and_extract, sgai_deep_extract
+from app.skills.smart_scraper import sgai_search_and_extract, sgai_deep_extract, enrich_lead_ai
 from app.skills.email_sequence_skill import create_drip_campaign
 from app.skills.copywriting_skill import write_cold_email, write_ad_copy
 from app.skills.analytics_skill import pipeline_report, conversion_analysis, roi_calculator
@@ -181,6 +181,7 @@ class TaskPlanner:
             "vision_browse": vision_browse or make_disabled_tool_fallback("vision_browse", "browser_use dependency is not installed"),
             "composio_action": make_disabled_tool_fallback("composio_action", "Composio integration is not configured"),
             "sgai_search_and_extract": sgai_search_and_extract, "sgai_deep_extract": sgai_deep_extract,
+            "enrich_lead_ai": enrich_lead_ai,
             "find_leads": find_leads, "browse_agent": browse_and_extract, "google_search": google_search_scrape,
             "deep_research": deep_research, "research_lead": research_lead, "analyze_competitor": analyze_competitor,
             "compare_competitors": compare_competitors, "write_content": write_content, "optimize_post": optimize_post,
@@ -211,7 +212,7 @@ class TaskPlanner:
         self.firewall = get_semantic_firewall(self.config.get("firewall_config"))
         logger.info("[PLANNER] Semantic Firewall integrated.")
 
-    HUNTING_TOOLS = ["sgai_search_and_extract", "sgai_deep_extract", "find_leads", "google_search", "research_lead", "hunt_hiring_signals"]
+    HUNTING_TOOLS = ["sgai_search_and_extract", "sgai_deep_extract", "find_leads", "google_search", "research_lead", "hunt_hiring_signals", "enrich_lead_ai"]
     OUTREACH_TOOLS = ["send_outreach", "send_email", "write_cold_email", "create_drip_campaign", "generate_sequence", "check_replies", "reply_to_email", "get_inbox", "trigger_retell_call", "generate_hiring_outreach", "enrich_lead_apollo", "is_business_hours", "composio_action", "proofread_email", "morning_brief", "pipeline_health_check"]
     LIGHT_RESEARCH_TOOLS = ["deep_research", "browse_agent", "run_seo_audit", "bulk_enrich_leads", "next_business_hours_slot", "generate_cal_booking_link", "elite_scrape", "vision_browse"]
 
