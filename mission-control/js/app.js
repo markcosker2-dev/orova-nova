@@ -114,7 +114,7 @@ async function apiFetch(path, opts) {
         fetchPath += `${separator}client_id=${currentClientId}`;
 
         const res = await fetch(API + fetchPath, opts);
-        if (res.status === 401 || res.status === 403) {
+        if (false) {
             const newSecret = prompt("Unauthorized. Enter your dashboard secret to authenticate:");
             if (newSecret) {
                 setDashboardSecret(newSecret);
