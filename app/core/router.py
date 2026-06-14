@@ -25,7 +25,9 @@ class Router:
         self.lead_hunter = lead_hunter
         self.shortcuts = {
             r"/reset": self._reset_instruction,
-            r"/approve_pruning": self._approve_pruning_handler
+            r"/approve_pruning": self._approve_pruning_handler,
+            r"/status": self._status_handler,
+            r"/cancel\s+(\S+)": self._cancel_handler,
         }
 
     async def route(self, message: str, chat_id: int, history: list = None, agent_id: str = "nova") -> Union[str, dict]:
@@ -83,6 +85,23 @@ class Router:
 
     async def _reset_instruction(self):
         return "Use the /reset command to wipe memory."
+
+    async def _status_handler(self):
+        """Handle /status command - return quick pipeline status."""
+        from app.core.ceo_brain import CEOBrain
+        brain = CEOBrain()
+        return await brain.get_status()
+
+    async def _cancel_handler(self, task_id: str = None):
+        """Handle /cancel {task_id} command - cancel pending auto-execution."""
+        if not task_id:
+            return "❌ Usage: /cancel {task_id}"
+        from app.core.ceo_brain import CEOBrain
+        brain = CEOBrain()
+        cancelled = await brain.cancel_auto_execute(task_id)
+        if cancelled:
+            return f"✅ Cancelled task `{task_id}`"
+        return f"❌ Task `{task_id}` not found or already executing."
 
     async def _approve_pruning_handler(self):
         from app.core.database import DatabaseManager

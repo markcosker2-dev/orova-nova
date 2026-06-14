@@ -325,9 +325,13 @@ class CEOBrain:
         Queries today's calendar and returns a formatted daily schedule proposal.
         Prioritizes tasks: HOT replies > drip sequence sends > hunting.
         """
-        # Retrieve calendar events
-        cal = get_today()
-        cal_events = cal.get("events", []) if cal.get("success") else []
+        # Retrieve calendar events with graceful fallback if OAuth is not configured
+        try:
+            cal = get_today()
+            cal_events = cal.get("events", []) if cal.get("success") else []
+        except Exception as e:
+            logger.warning(f"[CEO_BRAIN] Calendar access failed: {e}. Using default schedule.")
+            cal_events = []
         
         # Build schedule text
         schedule_lines = []
