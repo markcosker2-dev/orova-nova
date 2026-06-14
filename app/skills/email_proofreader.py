@@ -62,7 +62,13 @@ async def proofread_email(
         ai = UnifiedAIClient()
         response_str = await ai.extract(prompt)
         # Clean up any potential markdown wraps
-        response_str = response_str.strip().replace("```json", "").replace("```", "").strip()
+        response_str = response_str.strip()
+        response_str = response_str.replace("```json", "").replace("```", "").strip()
+        # Try to extract JSON if LLM returned extra text around it
+        import re
+        json_match = re.search(r'\{[\s\S]*\}', response_str)
+        if json_match:
+            response_str = json_match.group(0)
         result = json.loads(response_str)
         
         # Ensure keys exist
