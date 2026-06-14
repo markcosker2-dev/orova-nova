@@ -894,3 +894,6 @@ TOOLS = [
     }
 ]
 
+# Sort alphabetically by function name to preserve provider-side prompt caching
+TOOLS.sort(key=lambda x: x["function"]["name"])
+
