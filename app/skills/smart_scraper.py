@@ -370,6 +370,75 @@ async def _simple_search_fallback(query: str, count: int) -> dict:
         return {"status": "error", "error": str(e)}
 
 
+# ─── LEAD SCORING & FILTERING ─────────────────────────────────────────────
+
+def score_lead_for_orova(lead: dict) -> dict:
+    """
+    Score a lead 0-10 for OROVA's luxury/high-ticket targeting.
+    Returns lead dict augmented with score and filter_decision.
+    """
+    score = 5
+    reasons = []
+    
+    # Contact quality
+    email = (lead.get("email") or "").lower()
+    phone = lead.get("phone") or ""
+    name = lead.get("owner_name") or lead.get("name") or ""
+    
+    has_personal_email = email and not email.startswith(("info@", "contact@", "support@", "hello@", "admin@"))
+    has_name = len(name.split()) >= 2
+    has_phone = len(phone) >= 10
+    
+    if has_personal_email:
+        score += 2
+        reasons.append("personal email")
+    elif email:
+        score += 0.5
+        reasons.append("generic email")
+    
+    if has_name:
+        score += 1.5
+        reasons.append("owner name found")
+    
+    if has_phone:
+        score += 1
+        reasons.append("phone number")
+    
+    # Source quality bonus
+    source = lead.get("source", "")
+    if source == "apollo_browser":
+        score += 1
+        reasons.append("apollo verified")
+    
+    score = min(10, max(0, score))
+    
+    # Filter decision
+    if score >= 7 and (has_personal_email or has_name):
+        decision = "PASS"
+    elif score >= 5 and email:
+        decision = "PASS"
+    elif score >= 4:
+        decision = "BORDERLINE"
+    else:
+        decision = "REJECT"
+    
+    lead["orova_score"] = round(score, 1)
+    lead["score_reasons"] = reasons
+    lead["filter_decision"] = decision
+    return lead
+
+
+def score_and_filter_leads(leads: list, min_score: float = 4.0) -> list:
+    """
+    Score a list of leads and filter out low-quality ones.
+    Returns leads sorted by score (highest first), only those above min_score.
+    """
+    scored = [score_lead_for_orova(lead) for lead in leads]
+    filtered = [lead for lead in scored if lead.get("orova_score", 0) >= min_score]
+    filtered.sort(key=lambda x: x.get("orova_score", 0), reverse=True)
+    return filtered
+
+
 # ─── HELPERS ───────────────────────────────────────────────────────────────
 
 def _is_plausible_name(text: str) -> bool:
