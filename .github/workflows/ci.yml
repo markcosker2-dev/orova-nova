@@ -28,4 +28,4 @@ jobs:
 
       - name: Run unit tests
         run: |
-          python -m pytest tests/test_circuit_breaker.py tests/test_dashboard_api.py --maxfail=1 -q
+          python -m pytest tests/ --maxfail=3 -q
