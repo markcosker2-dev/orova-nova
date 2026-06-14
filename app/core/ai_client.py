@@ -169,10 +169,9 @@ class UnifiedAIClient:
             return SimpleNamespace(content="[!!] No AI providers available.", tool_calls=None)
 
         # ─── TIER 1: Native Google Gemini 2.0 (Fast, Free, Block-proof) ───
-        if self.google_client and not tools:
+        if self.google_client:
             try:
                 logger.info(f"[*] AI ({role}): Querying Native Google Gemini (gemini-2.0-flash-lite)...")
-                # Format messages for the official google API
                 system_instruction = ""
                 contents = []
                 for msg in messages:
@@ -184,7 +183,7 @@ class UnifiedAIClient:
                             "parts": [msg.get("content", "")]
                         })
 
-                config = {
+                gen_config = {
                     "temperature": temperature,
                     "max_output_tokens": max_tokens
                 }
@@ -194,16 +193,46 @@ class UnifiedAIClient:
                     system_instruction=system_instruction if system_instruction else None
                 )
 
-                # Execute Google API in executor thread to maintain async flow
+                # Convert OpenAI-style tools to Gemini function format
+                gemini_tools = None
+                if tools:
+                    gemini_tools = self._convert_tools_to_gemini(tools)
+
                 loop = asyncio.get_running_loop()
+                gen_kwargs = {"contents": contents, "generation_config": gen_config}
+                if gemini_tools:
+                    gen_kwargs["tools"] = gemini_tools
+
                 response = await loop.run_in_executor(
                     None,
-                    lambda: model.generate_content(contents=contents, generation_config=config)
+                    lambda: model.generate_content(**gen_kwargs)
                 )
 
                 if response and response.text:
-                    logger.info(f"[+] AI ({role}): Direct Gemini OK")
-                    return SimpleNamespace(content=response.text, tool_calls=None)
+                    # Check if Gemini returned function calls
+                    if (hasattr(response, "candidates") and response.candidates and
+                        response.candidates[0].content.parts and
+                        any(hasattr(p, "function_call") and p.function_call for p in response.candidates[0].content.parts)):
+                        # Extract function calls from Gemini response
+                        tool_calls = []
+                        for part in response.candidates[0].content.parts:
+                            if hasattr(part, "function_call") and part.function_call:
+                                fc = part.function_call
+                                args = dict(fc.args) if fc.args else {}
+                                # Build a tool_call object matching OpenAI format
+                                tool_calls.append(SimpleNamespace(
+                                    id=f"gemini_{fc.name}_{int(time.time()*1000)}",
+                                    type="function",
+                                    function=SimpleNamespace(
+                                        name=fc.name,
+                                        arguments=json.dumps(args)
+                                    )
+                                ))
+                        logger.info(f"[+] AI ({role}): Direct Gemini OK with {len(tool_calls)} tool call(s)")
+                        return SimpleNamespace(content=response.text or "", tool_calls=tool_calls)
+                    else:
+                        logger.info(f"[+] AI ({role}): Direct Gemini OK")
+                        return SimpleNamespace(content=response.text, tool_calls=None)
             except Exception as e:
                 logger.warning(f"[!] Direct Gemini API call failed: {e}. Falling back to other providers...")
 
@@ -280,6 +309,21 @@ class UnifiedAIClient:
     async def quick(self, prompt: str, **kwargs):
         result = await self.chat(prompt, role="fast", **kwargs)
         return result.content or ""
+
+    def _convert_tools_to_gemini(self, tools: List[Dict]) -> List:
+        """Convert OpenAI-style tool definitions to Gemini function calling format."""
+        gemini_tools = []
+        for tool in tools:
+            if tool.get("type") == "function" and "function" in tool:
+                func = tool["function"]
+                gemini_tools.append({
+                    "function_declarations": [{
+                        "name": func["name"],
+                        "description": func.get("description", ""),
+                        "parameters": func.get("parameters", {})
+                    }]
+                })
+        return gemini_tools if gemini_tools else None
 
     def _send_alert(self, msg: str):
         if not self.tg_token or not self.admin_chat_id:
