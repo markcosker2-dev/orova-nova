@@ -208,18 +208,18 @@ class UnifiedAIClient:
                     lambda: model.generate_content(**gen_kwargs)
                 )
 
-                if response and response.text:
-                    # Check if Gemini returned function calls
+                if response:
+                    # Check if Gemini returned function calls (may have no text)
+                    tool_calls = None
                     if (hasattr(response, "candidates") and response.candidates and
                         response.candidates[0].content.parts and
-                        any(hasattr(p, "function_call") and p.function_call for p in response.candidates[0].content.parts)):
-                        # Extract function calls from Gemini response
+                        any(hasattr(p, "function_call") and p.function_call
+                            for p in response.candidates[0].content.parts)):
                         tool_calls = []
                         for part in response.candidates[0].content.parts:
                             if hasattr(part, "function_call") and part.function_call:
                                 fc = part.function_call
                                 args = dict(fc.args) if fc.args else {}
-                                # Build a tool_call object matching OpenAI format
                                 tool_calls.append(SimpleNamespace(
                                     id=f"gemini_{fc.name}_{int(time.time()*1000)}",
                                     type="function",
@@ -229,10 +229,11 @@ class UnifiedAIClient:
                                     )
                                 ))
                         logger.info(f"[+] AI ({role}): Direct Gemini OK with {len(tool_calls)} tool call(s)")
-                        return SimpleNamespace(content=response.text or "", tool_calls=tool_calls)
                     else:
                         logger.info(f"[+] AI ({role}): Direct Gemini OK")
-                        return SimpleNamespace(content=response.text, tool_calls=None)
+                    text = response.text if response.text else ""
+                    if text or tool_calls:
+                        return SimpleNamespace(content=text, tool_calls=tool_calls)
             except Exception as e:
                 logger.warning(f"[!] Direct Gemini API call failed: {e}. Falling back to other providers...")
 
