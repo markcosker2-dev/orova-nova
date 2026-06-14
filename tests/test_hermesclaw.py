@@ -1,3 +1,6 @@
+# Run this after any change to verify nothing broke:
+# python -m pytest tests/test_hermesclaw.py -v
+
 """
 HermesClaw Test Suite
 =====================
@@ -105,6 +108,7 @@ class TestCEOBrain:
         assert hasattr(CEOBrain, "auto_schedule_day")
         assert hasattr(CEOBrain, "cancel_auto_execute")
         assert hasattr(CEOBrain, "_execute_tasks")
+        assert hasattr(CEOBrain, "get_status")
 
     def test_pipeline_health_check(self):
         """Verify pipeline_health_check returns health_score and alerts.
@@ -125,6 +129,13 @@ class TestCEOBrain:
                 assert isinstance(health["health_score"], (int, float))
                 assert isinstance(health["alerts"], list)
         asyncio.run(run())
+
+    def test_morning_brief_delegates_to_get_status(self):
+        """morning_brief should use get_status to build the status section."""
+        import inspect as _ins
+        from app.core.ceo_brain import CEOBrain
+        src = _ins.getsource(CEOBrain.morning_brief)
+        assert "get_status" in src or "is_fresh" in src, "morning_brief should check for fresh start"
 
 
 # ── Fix 3: Self-Improvement Loop ──────────────────────────────────

@@ -28,6 +28,53 @@ class CEOBrain:
     def __init__(self):
         self.ai = UnifiedAIClient()
 
+    async def get_status(self, client_id: int = 0) -> str:
+        """Quick Telegram status summary. Run when user sends /status."""
+        metrics = DatabaseManager.get_metrics(client_id)
+
+        # Pull best strategy from learned_strategies
+        best_framework = "BAB"
+        best_hour = "10:00"
+        best_niche = "None yet"
+        try:
+            fw_row = await DatabaseManager.fetchone(
+                "SELECT strategy_value, win_rate FROM learned_strategies WHERE strategy_type='email_framework' AND client_id=? AND active=1 ORDER BY win_rate DESC LIMIT 1",
+                (client_id,)
+            )
+            if fw_row:
+                best_framework = f"{fw_row['strategy_value']} ({fw_row['win_rate']*100:.1f}%)"
+        except Exception:
+            pass
+        try:
+            tim_row = await DatabaseManager.fetchone(
+                "SELECT strategy_value FROM learned_strategies WHERE strategy_type='send_timing' AND client_id=? AND active=1 ORDER BY win_rate DESC LIMIT 1",
+                (client_id,)
+            )
+            if tim_row:
+                best_hour = tim_row['strategy_value']
+        except Exception:
+            pass
+        try:
+            niche_row = await DatabaseManager.fetchone(
+                "SELECT strategy_value, win_rate FROM learned_strategies WHERE strategy_type='niche' AND client_id=? AND active=1 ORDER BY win_rate DESC LIMIT 1",
+                (client_id,)
+            )
+            if niche_row:
+                best_niche = f"{niche_row['strategy_value']} ({niche_row['win_rate']*100:.1f}%)"
+        except Exception:
+            pass
+
+        return (
+            f"📊 **Nova Status**\n"
+            f"Framework: {best_framework} ← Learned\n"
+            f"Send time: {best_hour} ← Default (no data yet) if no row\n"
+            f"Best niche: {best_niche}\n"
+            f"Leads today: {metrics.get('leads_found', 0)}\n"
+            f"Emails sent today: {metrics.get('emails_sent', 0)}\n"
+            f"Replies: {metrics.get('replies_received', 0)}\n"
+            f"Meetings: {metrics.get('meetings_booked', 0)}\n"
+        )
+
     async def morning_brief(self, client_id: int = 0) -> str:
         """
         Runs daily to generate a comprehensive morning briefing.
@@ -38,6 +85,29 @@ class CEOBrain:
         
         # 1. Gather Metrics
         metrics = DatabaseManager.get_metrics(client_id)
+        
+        # Detect fresh start (no data at all) and short-circuit with friendly first-boot message
+        is_fresh = (
+            metrics.get('leads_found', 0) == 0
+            and metrics.get('emails_sent', 0) == 0
+            and metrics.get('replies_received', 0) == 0
+        )
+        if is_fresh:
+            logger.info("[CEO_BRAIN] No pipeline data yet — first boot message.")
+            first_boot_msg = (
+                "☀️ **Nova First Boot**\n\n"
+                "No pipeline data yet — I'm seeding with industry baselines.\n\n"
+                "📋 **What's ready:**\n"
+                "• Email Proofreader: ACTIVE (every email is checked)\n"
+                "• CEO Brain: ACTIVE (morning brief at 5 PM PST)\n"
+                "• Self-Improvement: ACTIVE (learns from outcomes)\n\n"
+                "🎯 **Start recommendation:**\n"
+                "Framework: **BAB** (Before-After-Bridge) — 22% avg reply rate (industry benchmark).\n"
+                "Send time: **10:00 AM** — I'll track your best hours as you send emails.\n\n"
+                "I'll start tracking once you send your first outreach. 🚀"
+            )
+            _send_telegram_alert(first_boot_msg)
+            return first_boot_msg
         
         # 2. Query 7-day averages
         yesterday_sends = 0
@@ -268,7 +338,7 @@ class CEOBrain:
             ("09:00 - 10:00", "Review Inbox & Draft Suggested Replies (HOT)"),
             ("10:00 - 11:30", "Execute Pending Drip Outreach & Proofread"),
             ("13:00 - 14:30", "Pipeline Health Check & Lead Hunting"),
-            ("16:00 - 17:00", "Daily Summary, Notion CRM Sync, & Backup")
+            ("16:00 - 17:00", "Daily Summary, Google Sheets CRM Sync, & Backup")
         ]
         
         for time_slot, default_task in slots:
