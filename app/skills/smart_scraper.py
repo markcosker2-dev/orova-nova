@@ -36,19 +36,18 @@ async def apollo_search_people(query: str, max_results: int = 10) -> dict:
     """
     if not APOLLO_COOKIES_PATH.exists():
         return {"status": "error", "error": "Apollo cookies not set up. Run setup_apollo_cookies.py first."}
-    
+
+    scraper = None
     try:
         from app.skills.apollo_scraper.scraper import ApolloBrowserScraper
         scraper = ApolloBrowserScraper(cookies_path=str(APOLLO_COOKIES_PATH))
         await scraper.launch(headless=True)
-        
+
         if not await scraper.ensure_logged_in():
-            await scraper.close()
             return {"status": "error", "error": "Apollo cookies expired. Run setup_apollo_cookies.py again."}
-        
+
         leads = await scraper.search_people(query=query, max_results=max_results)
-        await scraper.close()
-        
+
         if leads:
             results = []
             for lead in leads:
@@ -68,6 +67,10 @@ async def apollo_search_people(query: str, max_results: int = 10) -> dict:
     except Exception as e:
         logger.error(f"[SMART SCRAPER] Apollo search failed: {e}")
         return {"status": "error", "error": str(e)}
+    finally:
+        if scraper:
+            try: await scraper.close()
+            except: pass
 
 # ─── EXTRACTION SCHEMA ─────────────────────────────────────────────────────
 LEAD_EXTRACTION_SCHEMA = {
@@ -239,6 +242,7 @@ async def enrich_lead_ai(
                 result["email"] = person.get("email")
                 result["phone"] = person.get("phone")
                 result["source"] = "apollo_browser"
+                score_lead_for_orova(result)
                 return result
 
     # Strategy 1: Deep extract from URL (most reliable)
@@ -252,6 +256,7 @@ async def enrich_lead_ai(
                 result["phone"] = data.get("direct_phone")
                 result["source"] = "sgai_deep_extract"
                 if result["owner_name"] or result["email"]:
+                    score_lead_for_orova(result)
                     return result
 
     # Strategy 2: Search + extract
@@ -265,6 +270,7 @@ async def enrich_lead_ai(
             result["phone"] = result["phone"] or data.get("direct_phone")
             result["source"] = "sgai_search"
             if result["owner_name"] or result["email"]:
+                score_lead_for_orova(result)
                 return result
 
     # Strategy 3: Basic HTML scrape fallback
@@ -277,8 +283,17 @@ async def enrich_lead_ai(
             result["phone"] = result["phone"] or data.get("direct_phone")
             result["source"] = "html_scrape"
             if result["owner_name"] or result["email"]:
+                score_lead_for_orova(result)
                 return result
 
+    score_lead_for_orova(result)
+    return result
+
+
+# ─── SCORE BEFORE RETURNING ────────────────────────────────────────────────
+def enrich_and_score(result: dict) -> dict:
+    """Score the enrichment result before returning to Nova."""
+    score_lead_for_orova(result)
     return result
 
 
