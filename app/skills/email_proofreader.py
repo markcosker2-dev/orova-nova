@@ -80,12 +80,18 @@ async def proofread_email(
         # Clean up any potential markdown wraps
         response_str = response_str.strip()
         response_str = response_str.replace("```json", "").replace("```", "").strip()
-        # Try to extract JSON if LLM returned extra text around it
-        import re
-        json_match = re.search(r'\{[\s\S]*\}', response_str)
-        if json_match:
-            response_str = json_match.group(0)
-        result = json.loads(response_str)
+        
+        # Try to parse JSON directly first
+        try:
+            result = json.loads(response_str)
+        except json.JSONDecodeError:
+            # Fall back: find the FIRST complete JSON object using balanced-brace matching
+            import re
+            match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', response_str, re.DOTALL)
+            if match:
+                result = json.loads(match.group(0))
+            else:
+                raise json.JSONDecodeError("No JSON object found", response_str, 0)
         
         # Ensure keys exist
         result["verdict"] = result.get("verdict", "pass").lower()

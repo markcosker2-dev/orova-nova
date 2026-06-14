@@ -294,7 +294,16 @@ class DatabaseManager:
 
     @classmethod
     def get_metrics(cls, client_id: int = 0) -> dict:
-        conn = cls.get_connection()
+        """Return pipeline metrics. Returns safe defaults if DB is unavailable."""
+        try:
+            conn = cls.get_connection()
+        except (AttributeError, Exception):
+            # DB not initialized yet — return safe empty dict
+            return {
+                "leads_found": 0, "emails_sent": 0,
+                "replies_received": 0, "meetings_booked": 0,
+                "calls_made": 0, "proposals_sent": 0, "cost": 0.0
+            }
         try:
             # Aggregate counts from leads table
             total = conn.execute("SELECT COUNT(*) FROM leads WHERE client_id = ?", (client_id,)).fetchone()[0]
@@ -322,10 +331,17 @@ class DatabaseManager:
             cost = float(cost_row[0]) if cost_row else 0.0
 
             return {
-                "leads_found": total, "emails_sent": contacted,
-                "replies_received": replied, "meetings_booked": meetings,
+                "leads_found": int(total or 0), "emails_sent": int(contacted or 0),
+                "replies_received": int(replied or 0), "meetings_booked": int(meetings or 0),
                 "calls_made": calls_made, "proposals_sent": proposals_sent,
                 "cost": cost
+            }
+        except Exception as e:
+            logger.error(f"[DB] get_metrics failed: {e}")
+            return {
+                "leads_found": 0, "emails_sent": 0,
+                "replies_received": 0, "meetings_booked": 0,
+                "calls_made": 0, "proposals_sent": 0, "cost": 0.0
             }
         finally:
             conn.close()
