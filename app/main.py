@@ -324,11 +324,22 @@ async def health_check():
     }
 
 async def require_dashboard_api_key(request: Request):
-    return True
+    """Validate dashboard API key from X-Dashboard-Secret header or query param."""
+    expected = os.getenv("DASHBOARD_API_KEY")
+    if not expected:
+        # No key configured — deny access in production
+        return False
+    # Check header first, then query param
+    provided = request.headers.get("X-Dashboard-Secret") or request.query_params.get("dashboard_key")
+    if not provided:
+        return False
+    return provided == expected
 
 @app.get("/_auth-debug")
 async def auth_debug(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
-    return {"status": "bypassed"}
+    if not authorized:
+        return {"status": "denied", "reason": "missing or invalid API key"}
+    return {"status": "authenticated"}
 @app.post('/api/keys/new')
 async def issue_dashboard_token(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
     """Issue a short-lived dashboard session token. Requires existing dashboard API key in header.

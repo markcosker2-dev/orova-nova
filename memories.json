@@ -1,5 +1,0 @@
-[
-  { "id": "m1", "tag": "config", "title": "Office Hours (California Law)", "body": "Mark's office hours are strictly 7:30 AM – 11:30 AM and 6:00 PM – 8:00 PM California Time (PT). Never propose or book meetings outside these windows.", "date": "2026-02-15" },
-  { "id": "m2", "tag": "persona", "title": "Nova CEO Persona (Hormozi-Mode)", "body": "Nova operates as OROVA's autonomous CEO. She leads with Grand Slam Offers, identifies Offer Gaps via SEO audits, and executes multi-channel attacks (Email + Voice). Social replies max 25 words.", "date": "2026-02-14" },
-  { "id": "m3", "tag": "strategy", "title": "Brand Aesthetic: B&W Luxury", "body": "All Instagram visuals MUST be high-contrast Black & White, minimalist, luxury. The Creative Director (Pixel) enforces this via brand_guidelines.json.", "date": "2026-02-14" }
-]

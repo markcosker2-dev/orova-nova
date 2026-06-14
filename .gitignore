@@ -73,6 +73,7 @@ docs/
 .sisyphus/
 .pnpm-store/
 .continue/
+.kilo/
 package-lock.json
 tmp/
 
@@ -93,6 +94,13 @@ __pycache__/
 *.db
 *.db-shm
 *.db-wal
+
+# Runtime state (user-specific, never commit)
+memories.json
+tasks.json
+notifications.json
+agent_status.json
+content.json
 
 # OneDrive temp files
 H
