@@ -19,6 +19,11 @@ from app.skills.agentmail_skill import _send_telegram_alert, check_replies
 logger = logging.getLogger(__name__)
 
 
+# In-memory store for pending auto-execute proposals (survives within a process)
+_pending_proposals: dict = {}  # task_id -> {"tasks": [...], "created_at": datetime, "timer": asyncio.Task}
+_AUTO_EXECUTE_TIMEOUT = 1800  # 30 minutes in seconds
+
+
 class CEOBrain:
     def __init__(self):
         self.ai = UnifiedAIClient()
@@ -127,6 +132,10 @@ class CEOBrain:
         report += f"\n📅 **Today's Schedule:**\n{schedule_text}"
         
         _send_telegram_alert(report)
+
+        # ── Auto-execute: schedule tasks to run in 30 min if no override ──
+        await self._schedule_auto_execute(proposed_tasks, client_id)
+
         return report
 
     async def pipeline_health_check(self, client_id: int = 0) -> dict:
@@ -183,6 +192,12 @@ class CEOBrain:
             )
             _send_telegram_alert(alert_msg)
             
+        # If health score drops below 70, auto-execute corrective tasks
+        if health_score < 70:
+            corrective_tasks = await self.propose_tasks(metrics, client_id)
+            if corrective_tasks:
+                await self._schedule_auto_execute(corrective_tasks, client_id, source="health_alert")
+
         return {
             "health_score": health_score,
             "alerts": alerts,
@@ -270,3 +285,90 @@ class CEOBrain:
                 schedule_lines.append(f"• {time_slot}: {default_task}")
                 
         return "\n".join(schedule_lines)
+
+    async def _schedule_auto_execute(self, tasks: list, client_id: int = 0, source: str = "morning_brief"):
+        """Schedule tasks to auto-execute in 30 minutes unless cancelled."""
+        import uuid as _uuid
+        task_id = str(_uuid.uuid4())[:8]
+
+        # Check for existing override
+        try:
+            override = await DatabaseManager.get_state("override_auto_execute")
+            if override:
+                logger.info("[CEO_BRAIN] Auto-execute overridden by user. Skipping.")
+                return
+        except Exception:
+            pass
+
+        # Store proposal
+        _pending_proposals[task_id] = {
+            "tasks": tasks,
+            "client_id": client_id,
+            "created_at": datetime.datetime.now(),
+            "source": source,
+        }
+
+        # Schedule auto-execution after 30 minutes
+        async def _auto_execute_callback():
+            await asyncio.sleep(_AUTO_EXECUTE_TIMEOUT)
+            proposal = _pending_proposals.pop(task_id, None)
+            if not proposal:
+                return  # was cancelled or already executed
+            logger.info(f"[CEO_BRAIN] Auto-executing {len(proposal['tasks'])} tasks (no override received)")
+            await self._execute_tasks(proposal["tasks"], proposal["client_id"])
+            _send_telegram_alert(
+                f"🤖 **Auto-Executed** {len(proposal['tasks'])} tasks (source: {proposal['source']})\n"
+                f"Tasks:\n" + "\n".join(f"• {t['description']} [{t['priority']}]" for t in proposal["tasks"])
+            )
+
+        timer = asyncio.create_task(_auto_execute_callback())
+        _pending_proposals[task_id]["timer"] = timer
+
+        _send_telegram_alert(
+            f"⏰ **Schedule Proposal** (auto-execute in 30 min if no override)\n\n"
+            + "\n".join(f"• {t['description']} [{t['priority']}]" for t in tasks)
+            + "\n\n Reply with `/cancel {task_id}` to stop auto-execution."
+        )
+        logger.info(f"[CEO_BRAIN] Proposal {task_id} scheduled. Auto-execute in 30 min unless cancelled.")
+
+    async def cancel_auto_execute(self, task_id: str) -> bool:
+        """Cancel a pending auto-execute proposal. Returns True if cancelled."""
+        proposal = _pending_proposals.pop(task_id, None)
+        if proposal:
+            timer = proposal.get("timer")
+            if timer and not timer.done():
+                timer.cancel()
+            _send_telegram_alert(f"✅ Auto-execute cancelled for proposal `{task_id}`.")
+            return True
+        return False
+
+    async def _execute_tasks(self, tasks: list, client_id: int = 0):
+        """Execute a list of proposed tasks. This is the action layer."""
+        for task in tasks:
+            action = task.get("action", "")
+            try:
+                if action == "hunt":
+                    logger.info(f"[CEO_BRAIN] Executing hunt task: {task['description']}")
+                    # Trigger a lead hunt via the planner
+                    from app.core.planner import run_planner
+                    await run_planner(task["description"], client_id=client_id)
+                elif action == "drip":
+                    logger.info(f"[CEO_BRAIN] Executing drip task: {task['description']}")
+                    from app.skills.email_sequence_skill import drip_send_pending
+                    await drip_send_pending(client_id=client_id)
+                elif action == "routine":
+                    logger.info(f"[CEO_BRAIN] Executing routine task: {task['description']}")
+                    # Default: run enrichment on existing leads
+                    from app.skills.smart_scraper import enrich_lead_ai
+                    # Enrich up to 5 leads
+                    from app.core.database import DatabaseManager
+                    leads = await DatabaseManager.fetchall(
+                        "SELECT * FROM leads WHERE client_id=? AND orova_score IS NULL LIMIT 5",
+                        (client_id,)
+                    )
+                    for lead in leads:
+                        await enrich_lead_ai(lead)
+                else:
+                    logger.info(f"[CEO_BRAIN] Unknown action '{action}', skipping task: {task['description']}")
+            except Exception as e:
+                logger.error(f"[CEO_BRAIN] Failed to execute task '{action}': {e}")

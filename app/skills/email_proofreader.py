@@ -1,8 +1,24 @@
 import logging
 import json
+import os
+import re
 from app.core.ai_client import UnifiedAIClient
 
 logger = logging.getLogger(__name__)
+
+
+def _send_telegram_alert(message: str):
+    """Send alert to Telegram when proofreader fails."""
+    try:
+        import requests
+        token = os.getenv("TELEGRAM_BOT_TOKEN")
+        chat_id = os.getenv("PERSONAL_CHAT_ID") or os.getenv("ADMIN_CHAT_ID")
+        if not token or not chat_id:
+            return
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        requests.post(url, data={"chat_id": chat_id, "text": message, "parse_mode": "Markdown"}, timeout=10)
+    except Exception as e:
+        logger.error(f"Failed to send Telegram alert: {e}")
 
 async def proofread_email(
     to: str,
@@ -82,11 +98,13 @@ async def proofread_email(
         return result
     except Exception as e:
         logger.error(f"[PROOFREADER] Evaluation failed: {e}", exc_info=True)
-        # Fallback to PASS so the system doesn't break if AI is down
+        # BLOCK the email — do not silently pass on failure
+        alert_msg = f"⚠️ **PROOFREADER BLOCKED**\nTo: {to}\nSubject: {subject}\nReason: {e}\n*Email was NOT sent.*"
+        _send_telegram_alert(alert_msg)
         return {
-            "verdict": "pass",
-            "score": 80.0,
-            "fixes": f"System bypass: {e}",
+            "verdict": "reject",
+            "score": 0.0,
+            "fixes": f"BLOCKED: Proofreader failed — email not sent. {e}",
             "improved_subject": subject,
             "improved_body": body
         }

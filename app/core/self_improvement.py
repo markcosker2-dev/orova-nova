@@ -99,6 +99,13 @@ class OutcomeTracker:
 
 
 class StrategyOptimizer:
+    # Industry baselines for cold start — based on B2B cold email benchmarks
+    INDUSTRY_BASELINES = {
+        "pas": 0.18,   # Pain-Agitate-Solve: 18% avg reply rate
+        "bab": 0.22,   # Before-After-Bridge: 22% avg reply rate
+        "aida": 0.15,  # Attention-Interest-Desire-Action: 15% avg reply rate
+    }
+
     def __init__(self):
         self.ai = UnifiedAIClient()
 
@@ -180,6 +187,19 @@ class StrategyOptimizer:
             
             best_framework = "pas"  # default
             best_win_rate = 0.0
+
+            # Cold start: seed with industry baselines if no data
+            if not rows:
+                logger.info("[STRATEGY_OPTIMIZER] No email framework data — seeding industry baselines")
+                for framework, baseline_rate in self.INDUSTRY_BASELINES.items():
+                    strat_id = f"email_framework_{framework}"
+                    await DatabaseManager.query(
+                        """INSERT OR IGNORE INTO learned_strategies
+                           (id, strategy_type, strategy_value, win_rate, sample_size, confidence, active, client_id)
+                           VALUES (?, 'email_framework', ?, ?, 0, 'baseline', 1, ?)""",
+                        (strat_id, framework, baseline_rate, client_id)
+                    )
+                return "pas"  # default until real data arrives
             
             for row in rows:
                 strategy = row["strategy"]
