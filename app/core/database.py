@@ -194,6 +194,24 @@ class DatabaseManager:
         """)
         conn.commit()
 
+        # ── MIGRATION: add missing columns to existing tables ──
+        cls._migrate_columns(conn)
+
+    @classmethod
+    def _migrate_columns(cls, conn):
+        """Add missing columns to existing tables (safe, idempotent)."""
+        migrations = [
+            ("leads", "updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
+            ("metrics", "metric_value", "REAL DEFAULT 0"),
+        ]
+        for table, column, col_def in migrations:
+            try:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_def}")
+                conn.commit()
+                logger.info(f"[DB MIGRATION] Added {table}.{column}")
+            except Exception:
+                pass  # Column already exists, ignore
+
     @classmethod
     def get_connection(cls):
         import sqlite3

@@ -72,6 +72,7 @@ docs/
 .playwright-mcp/
 .sisyphus/
 .pnpm-store/
+.continue/
 package-lock.json
 tmp/
 
