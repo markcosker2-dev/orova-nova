@@ -288,18 +288,32 @@ class UnifiedAIClient:
                         logger.warning(f"[!] {model_name} failed: {e}")
                     continue
 
-        # --- Phase 2: Groq (Limp Mode) ---
+        # --- Phase 2: Groq (Primary when others offline, supports tool calling) ---
         if self.groq_client:
             try:
-                logger.info(f"[*] AI ({role}): FAILOVER to Groq (Limp Mode)")
-                response = await self.groq_client.chat.completions.create(
-                    model=self.GROQ_MODEL, messages=messages,
-                    temperature=temperature, max_tokens=max_tokens, timeout=30.0
-                )
+                groq_kwargs = {
+                    "model": self.GROQ_MODEL, "messages": messages,
+                    "temperature": temperature, "max_tokens": max_tokens, "timeout": 60.0,
+                }
+                if tools:
+                    groq_kwargs["tools"] = tools
+                    groq_kwargs["tool_choice"] = tool_choice or "auto"
+                    logger.info(f"[*] AI ({role}): Querying Groq with {len(tools)} tools")
+                else:
+                    logger.info(f"[*] AI ({role}): Querying Groq (text-only)")
+
+                response = await self.groq_client.chat.completions.create(**groq_kwargs)
                 if response.choices:
-                    logger.warning("[!] Entering Groq limp mode — tools stripped")
-                    # Return sentinel type so planner knows tools are offline
-                    return GroqLimpResponse(content=response.choices[0].message.content)
+                    msg = response.choices[0].message
+                    if msg.tool_calls:
+                        logger.info(f"[+] AI ({role}): Groq OK with {len(msg.tool_calls)} tool call(s)")
+                        return msg
+                    if not tools:
+                        logger.info(f"[+] AI ({role}): Groq OK (text)")
+                        return msg
+                    # Tools were passed but Groq returned text — may be describing them
+                    logger.warning("[!] Groq returned text when tools were available — reprompting")
+                    return GroqLimpResponse(content=msg.content)
             except Exception as e:
                 last_error = str(e)
                 logger.warning(f"[!] Groq failed: {e}")
