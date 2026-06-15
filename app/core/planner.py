@@ -131,13 +131,15 @@ def _call_hash(fn_name: str, fn_args: dict) -> str:
     return hashlib.md5(payload.encode()).hexdigest()
 
 _EMAIL_RE = re.compile(r"[\w.+\-]+@[\w\-]+\.[a-zA-Z]{2,}", re.IGNORECASE)
-_PERSONA_LOCK = """\
-╔══════════════════════════════════════════════════════╗
-║            IDENTITY LOCK — NON-NEGOTIABLE            ║
-╠══════════════════════════════════════════════════════╣
-║ You are NOVA — OROVA's proprietary elite AI partner. ║
-╚══════════════════════════════════════════════════════╝
-"""
+# Load Nova's full persona from soul.py at module init time
+try:
+    from app.core.soul import SYSTEM_PROMPT_BASE as _NOVA_PERSONA
+except ImportError:
+    _NOVA_PERSONA = (
+        "You are Nova — the Autonomous CEO of OROVA. "
+        "You are Mark's elite AI partner. You don't just 'assist' — you lead."
+    )
+_PERSONA_LOCK = _NOVA_PERSONA
 _IDENTITY_PROBE_RE = re.compile(
     r"\b(what (ai|model|llm|system) are you"
     r"|are you (chatgpt|gpt|gemini|claude|openai|anthropic|google)"
