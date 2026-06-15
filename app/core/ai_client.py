@@ -47,7 +47,7 @@ def _is_open(model_name: str) -> bool:
     b = _BREAKER[provider]
     if b["open_until"] > time.monotonic():
         return True
-    if b["open_until"] > 0:          # cooldown expired → half-open
+    if b["open_until"] > 0:
         b["open_until"] = 0.0
         b["failures"]   = 0
     return False
@@ -70,11 +70,9 @@ async def _backoff(attempt: int, base: float = 1.0, cap: float = 8.0):
 
 class UnifiedAIClient:
     """
-    Unified AI Client — OpenRouter + Groq fallback.
-    Indestructible Edition (May 2026).
+    Unified AI Client — Groq primary, Gemini secondary, OpenRouter tertiary.
     """
 
-    # ── Model Flavors (User-Switchable via /mode) ──────────────────
     FLAVORS = {
         "fast":   "google/gemini-2.0-flash-lite-preview-02-05:free",
         "smart":  "meta-llama/llama-3.3-70b-instruct:free",
@@ -93,19 +91,9 @@ class UnifiedAIClient:
         except Exception as e:
             logger.warning(f"[AI] set_flavor failed: {e}")
 
-    # ── Role-Based Model Map ─────────
     ROLE_MODELS = {
-        "reasoner":  "google/gemini-2.0-flash-lite-preview-02-05:free",
-        "writer":    "google/gemini-2.0-flash-lite-preview-02-05:free",
-        "extractor": "google/gemini-2.0-flash-lite-preview-02-05:free",
-        "fast":      "google/gemini-2.0-flash-lite-preview-02-05:free",
         "default":   "google/gemini-2.0-flash-lite-preview-02-05:free",
         "nova":      "google/gemini-2.0-flash-lite-preview-02-05:free",
-        "hawk":      "google/gemini-2.0-flash-lite-preview-02-05:free",
-        "closer":    "google/gemini-2.0-flash-lite-preview-02-05:free",
-        "oracle":    "google/gemini-2.0-flash-lite-preview-02-05:free",
-        "sentinel":  "google/gemini-2.0-flash-lite-preview-02-05:free",
-        "quill":     "google/gemini-2.0-flash-lite-preview-02-05:free",
     }
 
     FALLBACK_CHAIN = [
@@ -120,7 +108,18 @@ class UnifiedAIClient:
         self.admin_chat_id = os.getenv("ADMIN_CHAT_ID")
         self.tg_token = os.getenv("TELEGRAM_BOT_TOKEN")
 
-        # ─── NATIVE GEMINI CLIENT (100% Free, High Limit B2B engine) ───
+        # ─── GROQ CLIENT (Primary — OpenAI-compatible, supports tool calling) ──
+        self.groq_client = None
+        groq_key = os.getenv("GROQ_API_KEY")
+        if groq_key:
+            try:
+                from openai import AsyncOpenAI
+                self.groq_client = AsyncOpenAI(api_key=groq_key, base_url="https://api.groq.com/openai/v1")
+                logger.info("[+] Groq AI Client — READY")
+            except Exception as e:
+                logger.warning(f"[-] Groq init failed: {e}")
+
+        # ─── NATIVE GEMINI CLIENT (Secondary / Free) ──
         self.google_client = None
         google_key = os.getenv("GOOGLE_API_KEY")
         if google_key:
@@ -132,6 +131,7 @@ class UnifiedAIClient:
             except Exception as e:
                 logger.warning(f"[-] Gemini native init failed: {e}")
 
+        # ─── OPENROUTER (Tertiary fallback) ──
         self.primary_client = None
         api_key = os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY")
         base_url = os.getenv("OPENROUTER_BASE_URL") or os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1")
@@ -150,57 +150,66 @@ class UnifiedAIClient:
             except Exception as e:
                 logger.warning(f"[-] Primary AI init failed: {e}")
 
-        self.groq_client = None
-        groq_key = os.getenv("GROQ_API_KEY")
-        if groq_key:
-            try:
-                from openai import AsyncOpenAI
-                self.groq_client = AsyncOpenAI(api_key=groq_key, base_url="https://api.groq.com/openai/v1")
-                logger.info("[+] Fallback AI Client (Groq) — READY")
-            except Exception as e:
-                logger.warning(f"[-] Groq init failed: {e}")
-
     async def chat(self, messages, tools: Optional[List[Dict]] = None,
                    tool_choice: Optional[str] = None,
                    temperature=0.7, max_tokens=2000, role: str = "default") -> Any:
         if isinstance(messages, str):
             messages = [{"role": "user", "content": messages}]
 
-        if not self.google_client and not self.primary_client and not self.groq_client:
+        if not self.groq_client and not self.google_client and not self.primary_client:
             return SimpleNamespace(content="[!!] No AI providers available.", tool_calls=None)
 
-        # ─── TIER 1: Native Google Gemini 2.0 (Fast, Free, Block-proof) ───
+        # ─── TIER 1: Groq (Primary — full tool support, free tier available) ───
+        if self.groq_client:
+            try:
+                groq_kwargs = {
+                    "model": self.GROQ_MODEL, "messages": messages,
+                    "temperature": temperature, "max_tokens": max_tokens, "timeout": 60.0,
+                }
+                if tools:
+                    groq_kwargs["tools"] = tools
+                    groq_kwargs["tool_choice"] = tool_choice or "auto"
+                    logger.info(f"[*] Groq ({role}): Querying with {len(tools)} tools")
+                else:
+                    logger.info(f"[*] Groq ({role}): Querying (text-only)")
+
+                response = await self.groq_client.chat.completions.create(**groq_kwargs)
+                if response.choices:
+                    msg = response.choices[0].message
+                    if msg.tool_calls:
+                        logger.info(f"[+] Groq ({role}): OK with {len(msg.tool_calls)} tool call(s)")
+                        return msg
+                    if not tools:
+                        logger.info(f"[+] Groq ({role}): OK (text)")
+                        return msg
+                    logger.warning(f"[!] Groq ({role}): text when tools available — reprompting")
+                    return GroqLimpResponse(content=msg.content)
+            except Exception as e:
+                logger.warning(f"[!] Groq failed: {e}")
+
+        # ─── TIER 2: Native Google Gemini (Free, with proper conversation format) ───
         if self.google_client:
             try:
-                logger.info(f"[*] AI ({role}): Querying Native Google Gemini (gemini-2.0-flash-lite)...")
+                logger.info(f"[*] Gemini ({role}): Querying...")
                 system_instruction = ""
-                contents = []
+                contents = self._convert_messages_to_gemini(messages)
+
                 for msg in messages:
                     if msg.get("role") == "system":
                         system_instruction = msg.get("content", "")
-                    else:
-                        contents.append({
-                            "role": "user" if msg.get("role") == "user" else "model",
-                            "parts": [msg.get("content", "")]
-                        })
+                        break
 
                 gen_config = {
                     "temperature": temperature,
                     "max_output_tokens": max_tokens
                 }
 
-                # Use gemini-2.0-flash (supports function calling) instead of flash-lite (no tool support)
-                # Keep flash-lite as secondary try if flash fails
-                gemini_model_name = "gemini-2.0-flash-001"
-                if not tools:
-                    gemini_model_name = "gemini-2.0-flash-lite"
-
+                gemini_model_name = "gemini-2.0-flash-001" if tools else "gemini-2.0-flash-lite"
                 model = self.google_client.GenerativeModel(
                     model_name=gemini_model_name,
                     system_instruction=system_instruction if system_instruction else None
                 )
 
-                # Convert OpenAI-style tools to Gemini function format
                 gemini_tools = None
                 if tools:
                     gemini_tools = self._convert_tools_to_gemini(tools)
@@ -217,6 +226,8 @@ class UnifiedAIClient:
 
                 if response:
                     tool_calls = None
+                    text = response.text if response.text else ""
+
                     if (hasattr(response, "candidates") and response.candidates and
                         response.candidates[0].content.parts and
                         any(hasattr(p, "function_call") and p.function_call
@@ -234,39 +245,33 @@ class UnifiedAIClient:
                                         arguments=json.dumps(args)
                                     )
                                 ))
-                        logger.info(f"[+] AI ({role}): Direct Gemini OK with {len(tool_calls)} tool call(s)")
+                        logger.info(f"[+] Gemini ({role}): OK with {len(tool_calls)} tool call(s)")
                     else:
-                        # Fallback: parse text responses that describe tool calls
-                        # (handles flash-lite and models that text-respond instead of function-calling)
-                        text = response.text if response.text else ""
+                        # Text fallback: parse text for tool calls if tools were provided
                         if text and tools:
-                            tool_calls = self._extract_tool_calls_from_text(text, tools)
-                            if tool_calls:
-                                logger.info(f"[+] AI ({role}): Gemini responded with text, parsed {len(tool_calls)} tool call(s)")
+                            parsed = self._extract_tool_calls_from_text(text, tools)
+                            if parsed:
+                                tool_calls = parsed
                                 text = ""
-                        logger.info(f"[+] AI ({role}): Direct Gemini OK")
-                    text = response.text if response.text else ""
+                                logger.info(f"[+] Gemini ({role}): text parsed -> {len(tool_calls)} tool call(s)")
+
                     if text or tool_calls:
                         return SimpleNamespace(content=text, tool_calls=tool_calls)
             except Exception as e:
-                logger.warning(f"[!] Direct Gemini API call failed: {e}. Falling back to other providers...")
+                logger.warning(f"[!] Gemini failed: {e}")
 
-        flavor = await self._get_flavor()
-        primary_model = self.FLAVORS[flavor] if flavor in self.FLAVORS else self.ROLE_MODELS.get(role, self.ROLE_MODELS["default"])
-
-        chain = [primary_model]
-        for model in self.FALLBACK_CHAIN:
-            if model not in chain: chain.append(model)
-
+        # ─── TIER 3: OpenRouter (Tertiary) ───
         last_error = None
         if self.primary_client:
+            primary_model = self.ROLE_MODELS.get(role, self.ROLE_MODELS["default"])
+            chain = [primary_model] + [m for m in self.FALLBACK_CHAIN if m != primary_model]
+
             for attempt, model_name in enumerate(chain):
                 if _is_open(model_name):
                     logger.info(f"[BREAKER] Skipping {model_name} — circuit open")
                     continue
-
                 try:
-                    logger.info(f"[*] AI ({role}): Trying {model_name}")
+                    logger.info(f"[*] OpenRouter ({role}): Trying {model_name}")
                     kwargs = {
                         "model": model_name, "messages": messages, "tools": tools,
                         "temperature": temperature, "max_tokens": max_tokens, "timeout": 60.0
@@ -276,7 +281,7 @@ class UnifiedAIClient:
                     response = await self.primary_client.chat.completions.create(**kwargs)
                     if response.choices:
                         _record_success(model_name)
-                        logger.info(f"[+] AI ({role}): {model_name} OK")
+                        logger.info(f"[+] OpenRouter ({role}): {model_name} OK")
                         return response.choices[0].message
                 except Exception as e:
                     last_error = str(e)
@@ -288,40 +293,70 @@ class UnifiedAIClient:
                         logger.warning(f"[!] {model_name} failed: {e}")
                     continue
 
-        # --- Phase 2: Groq (Primary when others offline, supports tool calling) ---
-        if self.groq_client:
-            try:
-                groq_kwargs = {
-                    "model": self.GROQ_MODEL, "messages": messages,
-                    "temperature": temperature, "max_tokens": max_tokens, "timeout": 60.0,
-                }
-                if tools:
-                    groq_kwargs["tools"] = tools
-                    groq_kwargs["tool_choice"] = tool_choice or "auto"
-                    logger.info(f"[*] AI ({role}): Querying Groq with {len(tools)} tools")
-                else:
-                    logger.info(f"[*] AI ({role}): Querying Groq (text-only)")
-
-                response = await self.groq_client.chat.completions.create(**groq_kwargs)
-                if response.choices:
-                    msg = response.choices[0].message
-                    if msg.tool_calls:
-                        logger.info(f"[+] AI ({role}): Groq OK with {len(msg.tool_calls)} tool call(s)")
-                        return msg
-                    if not tools:
-                        logger.info(f"[+] AI ({role}): Groq OK (text)")
-                        return msg
-                    # Tools were passed but Groq returned text — may be describing them
-                    logger.warning("[!] Groq returned text when tools were available — reprompting")
-                    return GroqLimpResponse(content=msg.content)
-            except Exception as e:
-                last_error = str(e)
-                logger.warning(f"[!] Groq failed: {e}")
-
         return SimpleNamespace(
             content=f"[!!] All AI providers failed for role '{role}'. Last error: {last_error[:100] if last_error else 'Unknown'}",
             tool_calls=None
         )
+
+    def _convert_messages_to_gemini(self, messages: list) -> list:
+        """Convert OpenAI-format messages to Gemini-format contents.
+        
+        Handles system, user, assistant (with tool_calls), and tool responses
+        properly for multi-turn tool-using conversations.
+        """
+        contents = []
+        for msg in messages:
+            role = msg.get("role", "")
+            if role == "system":
+                continue  # handled separately as system_instruction
+            elif role == "user":
+                contents.append({
+                    "role": "user",
+                    "parts": [{"text": msg.get("content", "")}]
+                })
+            elif role == "assistant":
+                parts = []
+                content = msg.get("content", "")
+                if content:
+                    parts.append({"text": content})
+                for tc in (msg.get("tool_calls") or []):
+                    try:
+                        args = tc.get("function", {}).get("arguments", "{}")
+                        if isinstance(args, str):
+                            args = json.loads(args)
+                        parts.append({
+                            "function_call": {
+                                "name": tc["function"]["name"],
+                                "args": args
+                            }
+                        })
+                    except (json.JSONDecodeError, KeyError):
+                        continue
+                if parts:
+                    contents.append({"role": "model", "parts": parts})
+            elif role == "tool":
+                # Gemini wants function_response in a user-part message
+                # Find the name of the function that was called
+                tc_id = msg.get("tool_call_id", "")
+                name = self._find_tool_name_from_id(tc_id, messages) or "unknown"
+                contents.append({
+                    "role": "user",
+                    "parts": [{
+                        "function_response": {
+                            "name": name,
+                            "response": {"result": msg.get("content", "")}
+                        }
+                    }]
+                })
+        return contents
+
+    def _find_tool_name_from_id(self, tool_call_id: str, messages: list) -> str:
+        """Look backwards through messages to find the tool call name by ID."""
+        for msg in reversed(messages):
+            for tc in (msg.get("tool_calls") or []):
+                if tc.get("id") == tool_call_id or tc.get("function", {}).get("name", ""):
+                    return tc.get("function", {}).get("name", "")
+        return ""
 
     # ── Convenience Methods ────────────────────────────────────────
     async def reason(self, messages, tools=None, **kwargs):
@@ -355,30 +390,23 @@ class UnifiedAIClient:
         return gemini_tools if gemini_tools else None
 
     def _extract_tool_calls_from_text(self, text: str, tools: List[Dict]) -> Optional[List]:
-        """Parse a Gemini text response that names tool calls instead of using function calling.
-        
-        Some Gemini models (flash-lite) don't support native function calling and respond
-        with text like "Using find_leads tool..." or JSON tool call descriptions.
-        This extracts those and converts them to proper tool call objects.
-        """
+        """Parse text responses that name tool calls instead of using function calling."""
         tool_names = {t["function"]["name"] for t in tools if t.get("function")}
         found_calls = []
-        
-        # Pattern 1: JSON block with tool name and arguments
+
         json_pat = re.compile(r'```(?:json)?\s*\{\s*"tool"\s*:\s*"(\w+)"', re.IGNORECASE)
         for match in json_pat.finditer(text):
             name = match.group(1)
             if name in tool_names:
-                # Try to extract arguments from the JSON block
                 block_start = text.find("{", match.start())
                 if block_start >= 0:
-                    depth, end = 1, -1
+                    depth, end = 1, block_start
                     for i in range(block_start + 1, len(text)):
                         if text[i] == "{": depth += 1
                         elif text[i] == "}":
                             depth -= 1
                             if depth == 0: end = i + 1; break
-                    if end > 0:
+                    if end > block_start:
                         try:
                             block = json.loads(text[block_start:end])
                             args = block.get("arguments", block.get("args", block.get("parameters", {})))
@@ -390,8 +418,7 @@ class UnifiedAIClient:
                                 ))
                                 continue
                         except: pass
-        
-        # Pattern 2: Tool name mentioned with "using", "calling", "running" etc.
+
         if not found_calls:
             for name in tool_names:
                 if re.search(rf'\b(?:using|calling|running|execute|run)\b.*?\b{re.escape(name)}\b', text, re.IGNORECASE):
@@ -406,7 +433,7 @@ class UnifiedAIClient:
                         type="function",
                         function=SimpleNamespace(name=name, arguments="{}")
                     ))
-        
+
         return found_calls if found_calls else None
 
     def _send_alert(self, msg: str):
