@@ -2,6 +2,7 @@ import os
 import logging
 import asyncio
 import json
+import re
 import time
 from typing import List, Dict, Optional, Any
 from types import SimpleNamespace
@@ -188,8 +189,14 @@ class UnifiedAIClient:
                     "max_output_tokens": max_tokens
                 }
 
+                # Use gemini-2.0-flash (supports function calling) instead of flash-lite (no tool support)
+                # Keep flash-lite as secondary try if flash fails
+                gemini_model_name = "gemini-2.0-flash-001"
+                if not tools:
+                    gemini_model_name = "gemini-2.0-flash-lite"
+
                 model = self.google_client.GenerativeModel(
-                    model_name="gemini-2.0-flash-lite",
+                    model_name=gemini_model_name,
                     system_instruction=system_instruction if system_instruction else None
                 )
 
@@ -209,7 +216,6 @@ class UnifiedAIClient:
                 )
 
                 if response:
-                    # Check if Gemini returned function calls (may have no text)
                     tool_calls = None
                     if (hasattr(response, "candidates") and response.candidates and
                         response.candidates[0].content.parts and
@@ -230,6 +236,14 @@ class UnifiedAIClient:
                                 ))
                         logger.info(f"[+] AI ({role}): Direct Gemini OK with {len(tool_calls)} tool call(s)")
                     else:
+                        # Fallback: parse text responses that describe tool calls
+                        # (handles flash-lite and models that text-respond instead of function-calling)
+                        text = response.text if response.text else ""
+                        if text and tools:
+                            tool_calls = self._extract_tool_calls_from_text(text, tools)
+                            if tool_calls:
+                                logger.info(f"[+] AI ({role}): Gemini responded with text, parsed {len(tool_calls)} tool call(s)")
+                                text = ""
                         logger.info(f"[+] AI ({role}): Direct Gemini OK")
                     text = response.text if response.text else ""
                     if text or tool_calls:
@@ -325,6 +339,61 @@ class UnifiedAIClient:
                     }]
                 })
         return gemini_tools if gemini_tools else None
+
+    def _extract_tool_calls_from_text(self, text: str, tools: List[Dict]) -> Optional[List]:
+        """Parse a Gemini text response that names tool calls instead of using function calling.
+        
+        Some Gemini models (flash-lite) don't support native function calling and respond
+        with text like "Using find_leads tool..." or JSON tool call descriptions.
+        This extracts those and converts them to proper tool call objects.
+        """
+        tool_names = {t["function"]["name"] for t in tools if t.get("function")}
+        found_calls = []
+        
+        # Pattern 1: JSON block with tool name and arguments
+        json_pat = re.compile(r'```(?:json)?\s*\{\s*"tool"\s*:\s*"(\w+)"', re.IGNORECASE)
+        for match in json_pat.finditer(text):
+            name = match.group(1)
+            if name in tool_names:
+                # Try to extract arguments from the JSON block
+                block_start = text.find("{", match.start())
+                if block_start >= 0:
+                    depth, end = 1, -1
+                    for i in range(block_start + 1, len(text)):
+                        if text[i] == "{": depth += 1
+                        elif text[i] == "}":
+                            depth -= 1
+                            if depth == 0: end = i + 1; break
+                    if end > 0:
+                        try:
+                            block = json.loads(text[block_start:end])
+                            args = block.get("arguments", block.get("args", block.get("parameters", {})))
+                            if isinstance(args, dict):
+                                found_calls.append(SimpleNamespace(
+                                    id=f"gemini_ext_{name}_{int(time.time()*1000)}",
+                                    type="function",
+                                    function=SimpleNamespace(name=name, arguments=json.dumps(args))
+                                ))
+                                continue
+                        except: pass
+        
+        # Pattern 2: Tool name mentioned with "using", "calling", "running" etc.
+        if not found_calls:
+            for name in tool_names:
+                if re.search(rf'\b(?:using|calling|running|execute|run)\b.*?\b{re.escape(name)}\b', text, re.IGNORECASE):
+                    found_calls.append(SimpleNamespace(
+                        id=f"gemini_txt_{name}_{int(time.time()*1000)}",
+                        type="function",
+                        function=SimpleNamespace(name=name, arguments="{}")
+                    ))
+                elif re.search(rf'\b{re.escape(name)}\b.*?\btool\b', text, re.IGNORECASE):
+                    found_calls.append(SimpleNamespace(
+                        id=f"gemini_txt_{name}_{int(time.time()*1000)}",
+                        type="function",
+                        function=SimpleNamespace(name=name, arguments="{}")
+                    ))
+        
+        return found_calls if found_calls else None
 
     def _send_alert(self, msg: str):
         if not self.tg_token or not self.admin_chat_id:
