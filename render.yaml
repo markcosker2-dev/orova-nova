@@ -24,8 +24,4 @@ services:
       - fromContext: SERPAPI_KEY
       - fromContext: FIRECRAWL_API_KEY
       - fromContext: GOOGLE_API_KEY
-    disk:
-      name: orova-data
-      mountPath: /app/app/data
-      sizeGB: 1
-    healthCheckPath: /api/health
+    # healthCheckPath: /health

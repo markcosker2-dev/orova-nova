@@ -233,7 +233,12 @@ app = FastAPI(title="OROVA Indestructible Agency Bridge", lifespan=lifespan)
 # [P5] CORS — allow dashboard origin
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:13210",
+        "http://127.0.0.1:13210",
+        "http://localhost:9119",
+        os.getenv("RENDER_EXTERNAL_URL", ""),
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -338,11 +343,6 @@ async def require_dashboard_api_key(request: Request):
         raise HTTPException(status_code=403, detail="Unauthorized: invalid API key")
     return True
 
-@app.get("/_auth-debug")
-async def auth_debug(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
-    if not authorized:
-        return {"status": "denied", "reason": "missing or invalid API key"}
-    return {"status": "authenticated"}
 @app.post('/api/keys/new')
 async def issue_dashboard_token(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
     """Issue a short-lived dashboard session token. Requires existing dashboard API key in header.

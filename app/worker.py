@@ -255,6 +255,10 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
 
     import random
     if not niche:
+        niche = os.getenv("TARGET_NICHE") or None
+        location = location or os.getenv("TARGET_LOCATION") or None
+
+    if not niche:
         niches = [
             'exotic car dealer california',
             'luxury car dealership california',
