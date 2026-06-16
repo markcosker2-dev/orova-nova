@@ -226,7 +226,7 @@ class TaskPlanner:
         if _EMAIL_RE.search(goal): scope = self.OUTREACH_TOOLS
         elif any(k in goal_lower for k in ["find leads", "search for", "hunt", "prospect"]): scope = self.HUNTING_TOOLS
         elif any(k in goal_lower for k in ["send", "email", "outreach", "reply", "follow up"]): scope = self.OUTREACH_TOOLS
-        else: scope = self.OUTREACH_TOOLS + self.LIGHT_RESEARCH_TOOLS
+        else: scope = self.OUTREACH_TOOLS + self.LIGHT_RESEARCH_TOOLS + self.HUNTING_TOOLS
         scoped = [t for t in TOOLS if t["function"]["name"] in scope]
         if not scoped:
             logger.warning(f"[PLANNER] No tools matched scope for goal: {goal[:80]!r}")

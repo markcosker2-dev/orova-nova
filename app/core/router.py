@@ -60,10 +60,12 @@ class Router:
             return _IDENTITY_DEFLECT
 
         for pattern, handler in self.shortcuts.items():
-            if re.search(pattern, lower_msg):
+            m = re.search(pattern, lower_msg)
+            if m:
+                groups = m.groups()
                 logger.info(f"[Router] {request_id} Shortcut matched '{pattern}'")
                 tracer.trace(request_id, "shortcut_matched", {"pattern": pattern})
-                return await handler()
+                return await handler(*groups) if groups else await handler()
 
         email_match = _EMAIL_RE.search(message)
         send_intent = any(k in lower_msg for k in ["send", "write", "email", "reach out", "follow up"])

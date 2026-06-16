@@ -9,17 +9,20 @@ from app.core.database import DatabaseManager
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api", tags=["hermesclaw"])
-
-
-async def require_api_key(request):
-    """Simple API key auth for HermesClaw endpoints."""
+async def _require_api_key(request):
+    """Auth dependency for HermesClaw endpoints. Uses DASHBOARD_API_KEY env var."""
+    import os
     from fastapi import Request
-    expected = "nova_admin_2026"
-    api_key = request.headers.get("X-API-Key") or request.headers.get("X-Api-Key") or ""
+    expected = os.getenv("DASHBOARD_API_KEY") or os.getenv("NOVA_API_KEY")
+    if not expected:
+        raise HTTPException(status_code=500, detail="API key not configured")
+    api_key = request.headers.get("X-Dashboard-Secret") or request.headers.get("X-API-Key") or ""
     if api_key.strip() != expected:
         raise HTTPException(status_code=403, detail="Unauthorized")
     return True
+
+
+router = APIRouter(prefix="/api", tags=["hermesclaw"], dependencies=[Depends(_require_api_key)])
 
 
 @router.post("/proofread")
