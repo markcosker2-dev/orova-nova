@@ -78,6 +78,8 @@ from app.skills.apollo_enrichment import enrich_lead_apollo, bulk_enrich_leads
 from app.skills.timezone_scheduler import is_business_hours, next_business_hours_slot
 from app.skills.cal_booking import handle_cal_booking_webhook, generate_cal_booking_link
 from app.skills.email_proofreader import proofread_email
+from app.skills.lead_gen_v2 import find_leads_v2
+from app.skills.scrapling_scraper import stealth_search, stealth_extract, bulk_scrape
 from app.core.ceo_brain import CEOBrain
 
 # Safe imports for elite components
@@ -169,7 +171,8 @@ def _sanitise_history(history: list, n: int = 6) -> list:
 async def _call_tool(fn, args: dict):
     if fn is None: raise ValueError("Tool function is None")
     if inspect.iscoroutinefunction(fn): return await fn(**args)
-    return await asyncio.get_event_loop().run_in_executor(None, lambda: fn(**args))
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, lambda: fn(**args))
 
 class TaskPlanner:
     def __init__(self, ai_client: UnifiedAIClient, config: dict = None):
@@ -210,13 +213,17 @@ class TaskPlanner:
             "proofread_email": proofread_email,
             "morning_brief": ceo_brain.morning_brief,
             "pipeline_health_check": ceo_brain.pipeline_health_check,
+            "find_leads_v2": find_leads_v2,
+            "stealth_search": stealth_search,
+            "stealth_extract": stealth_extract,
+            "bulk_scrape": bulk_scrape,
         }
         self.firewall = get_semantic_firewall(self.config.get("firewall_config"))
         logger.info("[PLANNER] Semantic Firewall integrated.")
 
-    HUNTING_TOOLS = ["sgai_search_and_extract", "sgai_deep_extract", "find_leads", "google_search", "research_lead", "hunt_hiring_signals", "enrich_lead_ai"]
+    HUNTING_TOOLS = ["sgai_search_and_extract", "sgai_deep_extract", "find_leads", "find_leads_v2", "google_search", "research_lead", "hunt_hiring_signals", "enrich_lead_ai"]
     OUTREACH_TOOLS = ["send_outreach", "send_email", "write_cold_email", "create_drip_campaign", "generate_sequence", "check_replies", "reply_to_email", "get_inbox", "trigger_retell_call", "generate_hiring_outreach", "enrich_lead_apollo", "is_business_hours", "composio_action", "proofread_email", "morning_brief", "pipeline_health_check"]
-    LIGHT_RESEARCH_TOOLS = ["deep_research", "browse_agent", "run_seo_audit", "bulk_enrich_leads", "next_business_hours_slot", "generate_cal_booking_link", "elite_scrape", "vision_browse"]
+    LIGHT_RESEARCH_TOOLS = ["deep_research", "browse_agent", "run_seo_audit", "bulk_enrich_leads", "next_business_hours_slot", "generate_cal_booking_link", "elite_scrape", "vision_browse", "stealth_search", "stealth_extract", "bulk_scrape"]
 
     def _scope_tools(self, goal: str) -> list:
         if not TOOLS:
