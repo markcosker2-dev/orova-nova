@@ -642,27 +642,6 @@ def _scheduler_loop():
 
 
 if __name__ == "__main__":
-    logger.info("🚀 OROVA Autonomous Worker Initiated.")
-    logger.info(f"   -> Lane 1 (Fast):       Every {APPROVAL_CHECK_MINUTES} min")
-    logger.info(f"   -> Lane 2 (Hunt):       Every {HUNT_INTERVAL_MINUTES} min")
-    logger.info(f"   -> Lane 3 (Replies):    Every {REPLY_CHECK_MINUTES} min")
-    logger.info(f"   -> Lane 4 (Escalation): Every {COLD_CALL_CHECK_MINUTES} min")
-    logger.info(f"   -> Lane 5 (Cloud Backup): Every 6 hours")
-    logger.info(f"   -> Lane 6 (CEO Brief):  Every day at 17:00 PST")
-    logger.info(f"   -> Lane 7 (Health):    Every 2 hours")
-    logger.info(f"   -> Lane 8 (Improve):   Every 6 hours")
-    logger.info(f"   -> Lane 9 (Drip Send):  Every 1 hour")
-    logger.info(f"   -> Daily call cap: {MAX_CALLS_PER_DAY}")
-    logger.info(f"   -> Daily hunt cap: {MAX_RUNS_PER_DAY}")
-
-    # Run immediately on startup
-    fast_lane_job()
-    slow_lane_job()
-
-    while True:
-        try:
-            schedule.run_pending()
-        except Exception as e:
-            logger.error(f"🚨 FATAL RUNTIME ERROR in worker loop: {e}. Worker is persisting.")
-            time.sleep(10) # Wait before resuming to prevent tight crash looping
-        time.sleep(1)
+    logger.error("🚨 app/worker.py is designed to run as a library imported by app.main:app (via lifespan). Running it directly re-introduces the duplicate-scheduler bug. Start the FastAPI app instead: uvicorn app.main:app")
+    import sys
+    sys.exit(1)

@@ -96,7 +96,8 @@ class GDPRCompliance:
                 consent_dt = datetime.fromisoformat(consent_date)
                 if datetime.utcnow() - consent_dt > timedelta(days=365 * 3):  # 3 year consent
                     return {"valid": False, "reason": "Consent expired"}
-            except:
+            except (ValueError, TypeError) as e:
+                logger.warning(f"[Compliance] Invalid consent_date: {consent_date!r} — {e}")
                 return {"valid": False, "reason": "Invalid consent date format"}
         
         return {"valid": True, "legal_basis": basis}

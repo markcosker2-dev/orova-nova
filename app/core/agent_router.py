@@ -11,9 +11,8 @@ logger = logging.getLogger(__name__)
 # Critical: Aesthetic and networking activity dominate luxury leads.
 SCORING_WEIGHTS = {
     "revenue": 0.2,           # Baseline qualification
-    "tech_stack": 0.1,        # Systems check
     "linkedin_activity": 0.3, # Active founders are easier to close
-    "aesthetic_score": 0.4    # Luxury brands must look the part
+    "aesthetic_score": 0.5    # Luxury brands must look the part
 }
 
 def calculate_hawk_score(lead_data: dict) -> dict:
