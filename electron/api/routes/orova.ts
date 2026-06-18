@@ -5,7 +5,9 @@ import { proxyAwareFetch } from '../../utils/proxy-fetch';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 
-const DEFAULT_OROVA_API_KEY = 'nova_admin_2026';
+// Auth key: read from environment or fail closed
+// The real key is stored in ElectronStore and set via the UI.
+const DEFAULT_OROVA_API_KEY = process.env.OROVA_SECRET || '';
 
 const AGENT_DEPT_MAP: Record<string, string> = {
   "CEO": "Executive",
@@ -144,6 +146,30 @@ function translatePath(pathname: string): string {
     return '/api/performance';
   }
   if (pathname.startsWith('/api/hermesclaw/leads')) {
+    return pathname.replace('/api/hermesclaw', '/api');
+  }
+  if (pathname.startsWith('/api/hermesclaw/proofread')) {
+    return '/api/proofread';
+  }
+  if (pathname.startsWith('/api/hermesclaw/morning_brief')) {
+    return '/api/morning_brief';
+  }
+  if (pathname.startsWith('/api/hermesclaw/health_check')) {
+    return '/api/health_check';
+  }
+  if (pathname.startsWith('/api/hermesclaw/improvement_loop')) {
+    return '/api/improvement_loop';
+  }
+  if (pathname.startsWith('/api/hermesclaw/approve_pruning')) {
+    return '/api/approve_pruning';
+  }
+  if (pathname.startsWith('/api/hermesclaw/outreach_outcomes')) {
+    return '/api/outreach_outcomes';
+  }
+  if (pathname.startsWith('/api/hermesclaw/learned_strategies')) {
+    return '/api/learned_strategies';
+  }
+  if (pathname.startsWith('/api/hermesclaw/worker/trigger/lane/')) {
     return pathname.replace('/api/hermesclaw', '/api');
   }
   return pathname;
