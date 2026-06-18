@@ -119,7 +119,7 @@ function createDefaultSettings(): AppSettings {
 
     // OROVA
     orovaBackendUrl: 'http://127.0.0.1:18790',
-    orovaApiKey: 'nova_admin_2026',
+    orovaApiKey: process.env.OROVA_SECRET || '',
 
     // Runtime
     runtime: {

@@ -161,9 +161,13 @@ async def lifespan(app: FastAPI):
         webhook_url = f"{render_url}/telegram"
         try:
             async with httpx.AsyncClient() as client:
+                tg_webhook_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
+                payload = {"url": webhook_url, "allowed_updates": ["message"]}
+                if tg_webhook_secret:
+                    payload["secret_token"] = tg_webhook_secret
                 res = await client.post(
                     f"https://api.telegram.org/bot{tg_token}/setWebhook",
-                    json={"url": webhook_url, "allowed_updates": ["message"]},
+                    json=payload,
                     timeout=10
                 )
                 if res.status_code == 200:
@@ -240,8 +244,8 @@ app.add_middleware(
         os.getenv("RENDER_EXTERNAL_URL", ""),
     ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS", "PUT", "DELETE"],
+    allow_headers=["Content-Type", "Authorization", "X-Dashboard-Secret", "X-API-Key", "X-Telegram-Bot-Api-Secret-Token"],
 )
 
 @app.exception_handler(Exception)
@@ -288,58 +292,27 @@ async def cmd_stats(update, context):
 
 @app.get("/health")
 async def health_check():
-    """Phase 4+: Full system pulse — circuit breakers, queue depth, learning stats, hardening metrics."""
-    from app.core.ai_client import _BREAKER
-    from app.core.hardening import memory_monitor, health_checks, tracer
-    
-    now = datetime.utcnow()
-    window_24h = now - timedelta(hours=24)
-    
-    # Circuit Breaker Status
-    breaker_status = {k: {"state": "open" if v["open_until"] > time.time() else "closed", "failures": v["failures"]} for k, v in _BREAKER.items()}
-    
-    # Queue Depth
-    try: q_depth = tg_queue._q.qsize()
-    except: q_depth = -1
-    
-    # Learning Stats (24h)
-    try:
-        row = await DatabaseManager.fetchone("SELECT COUNT(*) as cnt, AVG(decay_score) as avg_score FROM learned_patterns WHERE last_used_at >= ?", (window_24h.isoformat(),))
-        learning_stats = {"patterns_reinforced": row["cnt"], "avg_confidence": row["avg_score"]}
-    except: learning_stats = {}
-    
-    # [P4] Memory monitoring
-    memory_status = await memory_monitor.check_memory()
-    
-    # [P4] Health checks
-    hardening_health = await health_checks.run_all()
-    
-    any_open = any(v["state"] == "open" for v in breaker_status.values())
-    memory_critical = memory_status.get("critical", False)
-    
-    return {
-        "status": "Critical" if memory_critical else ("Degraded" if any_open else "Operational"),
-        "timestamp": now.isoformat(),
-        "circuit_breakers": breaker_status,
-        "queue_depth": q_depth,
-        "learning_stats": learning_stats,
-        "memory": memory_status,
-        "hardening_health": hardening_health,
-        "active_traces": len(tracer.traces),
-    }
+    """Lightweight health probe for Render's uptime checks."""
+    return {"status": "Operational", "timestamp": datetime.utcnow().isoformat()}
 
 async def require_dashboard_api_key(request: Request):
-    """Validate dashboard API key from X-Dashboard-Secret header or query param.
+    """Validate dashboard API key. Accepts X-Dashboard-Secret, X-API-Key, or ?dashboard_key=...
     Raises 403 if missing or invalid — endpoints receive True if passed.
+    Uses constant-time comparison to prevent timing attacks.
     """
+    import secrets as _secrets
     expected = os.getenv("DASHBOARD_API_KEY")
     if not expected:
-        raise HTTPException(status_code=403, detail="Unauthorized: DASHBOARD_API_KEY not configured")
-    # Check header first, then query param
-    provided = request.headers.get("X-Dashboard-Secret") or request.query_params.get("dashboard_key")
+        raise HTTPException(status_code=500, detail="Server misconfiguration: DASHBOARD_API_KEY not set")
+    # Check multiple header names + query param
+    provided = (
+        request.headers.get("X-Dashboard-Secret")
+        or request.headers.get("X-API-Key")
+        or request.query_params.get("dashboard_key")
+    )
     if not provided:
-        raise HTTPException(status_code=403, detail="Unauthorized: missing X-Dashboard-Secret header")
-    if provided != expected:
+        raise HTTPException(status_code=403, detail="Unauthorized: missing API key header")
+    if not _secrets.compare_digest(provided, expected):
         raise HTTPException(status_code=403, detail="Unauthorized: invalid API key")
     return True
 
@@ -742,6 +715,12 @@ async def process_telegram_message(data: dict):
 @app.post("/telegram")
 async def telegram_webhook(request: Request):
     """Ingest point for Telegram via Queue."""
+    tg_webhook_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
+    if tg_webhook_secret:
+        header_token = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+        if not secrets.compare_digest(header_token, tg_webhook_secret):
+            logger.warning(f"[Telegram] Rejected webhook with invalid secret token")
+            return JSONResponse(status_code=403, content={"status": "unauthorized"})
     data = await request.json()
     logger.info(f"[Telegram] Webhook received update: {list(data.keys())}")
     accepted = await tg_queue.enqueue(data)

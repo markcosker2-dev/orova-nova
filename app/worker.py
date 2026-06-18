@@ -131,7 +131,7 @@ def send_telegram_report(message):
 # LANE 1: FAST LANE — Approval checks + execute calls
 # Runs every 2 minutes
 # ═══════════════════════════════════════════════════════
-_call_counter_lock = asyncio.Lock()
+_call_counter_lock = threading.Lock()
 
 async def run_ceo_fast_lane(client_id=0):
     """⚡ Check for leads needing approval and execute approved calls."""
@@ -171,7 +171,7 @@ async def _execute_approved_call(sheet, row, idx, client_id=0):
         await loop.run_in_executor(None, lambda: sheet.update_cell(idx, COL_SHEET_STATUS, "Approved"))  # Release lock
         return
 
-    async with _call_counter_lock:
+    with _call_counter_lock:
         if daily_call_counter >= MAX_CALLS_PER_DAY:
             logger.info(f"📞 Daily call limit ({MAX_CALLS_PER_DAY}) reached. Skipping.")
             await loop.run_in_executor(None, lambda: sheet.update_cell(idx, COL_SHEET_STATUS, "Approved"))  # Release lock
@@ -227,7 +227,7 @@ async def _execute_approved_call(sheet, row, idx, client_id=0):
     else:
         error = result.get("error", "Unknown error")
         logger.error(f"❌ [CALL] Failed: {error}")
-        async with _call_counter_lock:
+        with _call_counter_lock:
             daily_call_counter -= 1  # Release slot on failure
         await loop.run_in_executor(None, lambda: sheet.update_cell(idx, COL_SHEET_STATUS, "Call Failed"))
         await loop.run_in_executor(None, lambda: send_telegram_report(f"⚠️ **Call Failed**\n\nError calling **{company}**: {error}"))
@@ -243,14 +243,18 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
     _reset_daily_counters()
     loop = asyncio.get_running_loop()
 
-    if daily_hunt_counter >= MAX_RUNS_PER_DAY:
-        logger.info(f"🌙 [SLOW LANE] [Client {client_id}] Daily limit reached. Skipping lead hunt.")
-        return
+    with _call_counter_lock:
+        if daily_hunt_counter >= MAX_RUNS_PER_DAY:
+            logger.info(f"🌙 [SLOW LANE] [Client {client_id}] Daily limit reached. Skipping lead hunt.")
+            return
+        daily_hunt_counter += 1  # Reserve slot atomically
 
     # Check Cost Guardrail
     metrics = await loop.run_in_executor(None, DatabaseManager.get_metrics, client_id)
     if float(metrics.get("cost", 0)) >= MAX_DAILY_COST:
         logger.warning(f"🛑 [WALLET] Daily cost limit (${MAX_DAILY_COST}) reached for Client {client_id}. Halting.")
+        with _call_counter_lock:
+            daily_hunt_counter -= 1  # Release slot
         return
 
     import random
@@ -362,7 +366,6 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
         else:
             logger.info("   -> No leads found this shift.")
 
-        daily_hunt_counter += 1
         logger.info(f"   -> Hunt complete. Total runs today: {daily_hunt_counter}")
 
     except Exception as e:
@@ -614,7 +617,7 @@ schedule.every(HUNT_INTERVAL_MINUTES).minutes.do(slow_lane_job)        # Lane 2:
 schedule.every(REPLY_CHECK_MINUTES).minutes.do(reply_and_drip_check_job) # Lane 3: Reply + Drip monitoring
 schedule.every(COLD_CALL_CHECK_MINUTES).minutes.do(cold_escalation_job)  # Lane 4: Cold lead → call
 schedule.every(6).hours.do(cloud_backup_job)                           # Lane 5: Google Drive Backup
-schedule.every().day.at("17:00").do(ceo_brain_job)                     # Lane 6: CEO Morning Brief (5PM PST)
+schedule.every().day.at("17:00").do(ceo_brain_job)                     # Lane 6: CEO Morning Brief (17:00 UTC = ~9-10 AM Pacific)
 schedule.every(2).hours.do(health_check_job)                           # Lane 7: Pipeline Health Check
 schedule.every(6).hours.do(self_improvement_job)                       # Lane 8: Strategy Self-Improvement
 schedule.every(1).hours.do(sequence_drip_job)                          # Lane 9: Drip Sequence Sender

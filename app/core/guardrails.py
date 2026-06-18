@@ -120,8 +120,10 @@ class Guardrails:
         """
         Sanitize input to remove system prompt override attempts.
         Normalizes homoglyphs before matching.
+        Logs original text for audit if content is stripped.
         """
         import unicodedata
+        original = text
         text = unicodedata.normalize("NFKC", text)
 
         forbidden = [
@@ -138,10 +140,16 @@ class Guardrails:
             "override",
         ]
 
+        matched_patterns = []
         for phrase in forbidden:
             pattern = re.compile(re.escape(phrase), re.IGNORECASE)
             if pattern.search(text):
+                matched_patterns.append(phrase)
                 logger.warning(f"Guardrails: Sanitized forbidden phrase '{phrase}'")
                 text = pattern.sub("[REDACTED]", text)
 
-        return text
+        stripped = text.strip()
+        if not stripped and original.strip():
+            logger.warning(f"Guardrails: Message fully stripped. Original: '{original[:200]}'. Patterns: {matched_patterns}")
+
+        return stripped

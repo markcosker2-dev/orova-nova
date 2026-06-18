@@ -59,9 +59,14 @@ class Router:
             tracer.trace(request_id, "identity_probe")
             return _IDENTITY_DEFLECT
 
+        # [C3] Admin-only shortcut commands require ADMIN_CHAT_ID match
         for pattern, handler in self.shortcuts.items():
             m = re.search(pattern, lower_msg)
             if m:
+                admin_id = int(os.getenv("ADMIN_CHAT_ID", "0"))
+                if admin_id and chat_id != admin_id:
+                    logger.warning(f"[Router] {request_id} Admin shortcut '{pattern}' rejected from chat_id={chat_id}")
+                    return "❌ Admin access required for this command."
                 groups = m.groups()
                 logger.info(f"[Router] {request_id} Shortcut matched '{pattern}'")
                 tracer.trace(request_id, "shortcut_matched", {"pattern": pattern})

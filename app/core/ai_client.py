@@ -340,7 +340,7 @@ class UnifiedAIClient:
                 tc_id = msg.get("tool_call_id", "")
                 name = self._find_tool_name_from_id(tc_id, messages) or "unknown"
                 contents.append({
-                    "role": "user",
+                    "role": "function",
                     "parts": [{
                         "function_response": {
                             "name": name,
@@ -354,7 +354,7 @@ class UnifiedAIClient:
         """Look backwards through messages to find the tool call name by ID."""
         for msg in reversed(messages):
             for tc in (msg.get("tool_calls") or []):
-                if tc.get("id") == tool_call_id or tc.get("function", {}).get("name", ""):
+                if tc.get("id") == tool_call_id:
                     return tc.get("function", {}).get("name", "")
         return ""
 
@@ -375,19 +375,18 @@ class UnifiedAIClient:
         return result.content or ""
 
     def _convert_tools_to_gemini(self, tools: List[Dict]) -> List:
-        """Convert OpenAI-style tool definitions to Gemini function calling format."""
-        gemini_tools = []
+        """Convert OpenAI-style tool definitions to Gemini function calling format.
+        Returns a single function_declarations array containing all tools, as Gemini expects."""
+        declarations = []
         for tool in tools:
             if tool.get("type") == "function" and "function" in tool:
                 func = tool["function"]
-                gemini_tools.append({
-                    "function_declarations": [{
-                        "name": func["name"],
-                        "description": func.get("description", ""),
-                        "parameters": func.get("parameters", {})
-                    }]
+                declarations.append({
+                    "name": func["name"],
+                    "description": func.get("description", ""),
+                    "parameters": func.get("parameters", {})
                 })
-        return gemini_tools if gemini_tools else None
+        return [{"function_declarations": declarations}] if declarations else None
 
     def _extract_tool_calls_from_text(self, text: str, tools: List[Dict]) -> Optional[List]:
         """Parse text responses that name tool calls instead of using function calling."""

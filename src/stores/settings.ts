@@ -153,7 +153,7 @@ const defaultSettings: SettingsSnapshot = {
     },
   },
   orovaBackendUrl: 'http://127.0.0.1:18790',
-  orovaApiKey: 'nova_admin_2026',
+  orovaApiKey: import.meta.env.VITE_OROVA_SECRET || '',
   orovaRuntimeMode: 'combined',
   orovaAutoStart: true,
 };

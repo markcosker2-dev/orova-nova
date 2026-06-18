@@ -5,7 +5,7 @@ import { proxyAwareFetch } from '../utils/proxy-fetch';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 
-const DEFAULT_OROVA_API_KEY = 'nova_admin_2026';
+const DEFAULT_OROVA_API_KEY = process.env.OROVA_SECRET || '';
 
 const AGENT_DEPT_MAP: Record<string, string> = {
   "CEO": "Executive",

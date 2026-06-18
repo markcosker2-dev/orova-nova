@@ -12,12 +12,13 @@ logger = logging.getLogger(__name__)
 async def _require_api_key(request):
     """Auth dependency for HermesClaw endpoints. Uses DASHBOARD_API_KEY env var."""
     import os
+    import secrets
     from fastapi import Request
     expected = os.getenv("DASHBOARD_API_KEY") or os.getenv("NOVA_API_KEY")
     if not expected:
         raise HTTPException(status_code=500, detail="API key not configured")
     api_key = request.headers.get("X-Dashboard-Secret") or request.headers.get("X-API-Key") or ""
-    if api_key.strip() != expected:
+    if not secrets.compare_digest(api_key.strip(), expected):
         raise HTTPException(status_code=403, detail="Unauthorized")
     return True
 
