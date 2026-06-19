@@ -166,11 +166,9 @@ async def _scrape_website(url: str) -> dict:
                     if not result["email"]:
                         emails = EMAIL_RE.findall(text)
                         noise_domains = ["example.com", "domain.com", "test.com", "wix.com", "squarespace.com"]
-                        for email in emails:
-                            domain = email.split("@")[-1].lower()
-                            if domain not in noise_domains:
-                                result["email"] = email
-                                break
+                        filtered = [e for e in emails if e.split("@")[-1].lower() not in noise_domains]
+                        if filtered:
+                            result["email"] = _prioritize_email(filtered)
                     
                     # Extract owner name
                     if not result["owner_name"]:
@@ -580,13 +578,18 @@ async def find_leads_v3(count: int = 5, query: str = "business leads") -> dict:
     # Take top N
     final = enriched_leads[:count]
     
-    # Build clean output
+    # Build clean output — include ALL fields for sheets pipeline
     clean_output = []
     for lead in final:
         clean_output.append({
+            "business": lead.get("business", ""),
             "owner_name": lead.get("owner_name", ""),
             "email": lead.get("email", ""),
             "phone": lead.get("phone", ""),
+            "website": lead.get("website", ""),
+            "url": lead.get("url", ""),
+            "score": lead.get("score", 0),
+            "status": lead.get("status", "New"),
         })
     
     if not clean_output:
