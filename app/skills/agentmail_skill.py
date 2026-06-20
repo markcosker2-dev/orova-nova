@@ -318,8 +318,55 @@ async def send_outreach(
         raise
 
 
+def _get_last_reply_check():
+    """Read last-processed reply timestamp from state_store via sync SQLite."""
+    try:
+        import sqlite3
+        from app.core.database import DB_PATH
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        try:
+            row = conn.execute(
+                "SELECT value FROM state_store WHERE key = 'last_reply_check_at'"
+            ).fetchone()
+            if row and row["value"]:
+                return datetime.fromisoformat(row["value"])
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.warning(f"Could not read last_reply_check_at: {e}")
+    return None
+
+
+def _set_last_reply_check(ts: datetime) -> None:
+    """Persist last-processed reply timestamp to state_store."""
+    try:
+        import sqlite3
+        from app.core.database import DB_PATH
+        conn = sqlite3.connect(DB_PATH)
+        try:
+            conn.execute(
+                "INSERT OR REPLACE INTO state_store (key, value, updated_at) "
+                "VALUES ('last_reply_check_at', ?, CURRENT_TIMESTAMP)",
+                (ts.isoformat(),),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.warning(f"Could not persist last_reply_check_at: {e}")
+
+
 def check_replies(inbox_id: str = None, limit: int = 10) -> Dict[str, Any]:
-    """Check Nova's inbox for new messages/replies."""
+    """
+    Check Nova's inbox for new INBOUND messages since last check.
+
+    Fixes two bugs from the previous version:
+    1. No labels filter meant SENT messages could show up as 'replies'.
+       Now filtered to labels=["INBOX"].
+    2. No checkpoint meant the same messages re-alerted every 5min cycle.
+       Now tracks last_reply_check_at in state_store.
+    """
     client, error = _get_client()
     if not client:
         return {"status": "error", "message": f"AgentMail client not initialized: {error}"}
@@ -328,8 +375,22 @@ def check_replies(inbox_id: str = None, limit: int = 10) -> Dict[str, Any]:
     if not inbox:
         return {"status": "error", "message": "No inbox available."}
 
+    last_checked = _get_last_reply_check()
+    now = datetime.utcnow()
+
+    # First run: set checkpoint, return empty — don't alert on backlog
+    if last_checked is None:
+        _set_last_reply_check(now)
+        logger.info("[AgentMail] First check — checkpoint set, no backlog alert.")
+        return {"status": "success", "inbox": inbox, "count": 0, "messages": []}
+
     try:
-        result = client.inboxes.messages.list(inbox_id=inbox)
+        result = client.inboxes.messages.list(
+            inbox_id=inbox,
+            limit=limit,
+            labels=["INBOX"],
+            after=last_checked,
+        )
         messages = []
         if hasattr(result, 'messages') and result.messages:
             for msg in result.messages[:limit]:
@@ -341,11 +402,14 @@ def check_replies(inbox_id: str = None, limit: int = 10) -> Dict[str, Any]:
                     "date": str(getattr(msg, 'created_at', ''))
                 })
 
+        # Advance checkpoint on success only
+        _set_last_reply_check(now)
+
         return {
             "status": "success",
             "inbox": inbox,
             "count": len(messages),
-            "messages": messages
+            "messages": messages,
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
