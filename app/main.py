@@ -31,6 +31,8 @@ from app.core.database import DatabaseManager
 from app.core.soul import AgentSoul
 from app.skills.lead_gen_v3 import find_leads
 
+from app.core.json_logger import configure_structured_logging
+
 class BufferHandler(logging.Handler):
     def emit(self, record):
         try:
@@ -38,7 +40,7 @@ class BufferHandler(logging.Handler):
         except NameError:
             pass  # Module still initializing
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+configure_structured_logging(level=logging.INFO)
 logger = logging.getLogger()
 logger.addHandler(BufferHandler())
 
@@ -54,6 +56,8 @@ TOPIC_AGENT_MAP = {
 # In-memory agent queue for Mission Control (simple, volatile)
 AGENT_QUEUE = []
 BACKGROUND_LOOP = None
+_task_loop_event = asyncio.Event()  # Thread-safe event for task loop coordination
+_shutdown_event = asyncio.Event()  # Graceful shutdown signal
 
 def _get_background_loop():
     global BACKGROUND_LOOP
@@ -86,8 +90,6 @@ def _append_log(msg: str):
         LOG_BUFFER.pop(0)
     _schedule_background(DatabaseManager.set_state('agent_logs', LOG_BUFFER[-500:]))
 
-_task_loop_running = False
-
 
 
 from app.core.telegram_queue import tg_queue
@@ -111,7 +113,7 @@ from app.skills.sheets_sync import restore_leads_from_sheets, update_lead_status
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # [WORKER] Start autonomous scheduler thread (FastAPI lifespan bootstraps all lanes)
-    from app.worker import start_worker_scheduler
+    from app.worker import start_worker_scheduler, stop_worker_scheduler
     start_worker_scheduler()
 
     # [P5/P6] Run migrations and optimizations
@@ -133,7 +135,7 @@ async def lifespan(app: FastAPI):
         leads = await restore_leads_from_sheets()
         if leads:
             for lead in leads:
-                DatabaseManager.save_lead(lead, sync_to_sheets=False)
+                await DatabaseManager.asave_lead(lead, sync_to_sheets=False)
             logger.info(f"♻️ Restored {len(leads)} leads from Google Sheets")
         else:
             logger.warning("⚠️ No leads found in Google Sheets. Attempting Google Drive backup restore...")
@@ -196,17 +198,17 @@ async def lifespan(app: FastAPI):
     
     scheduler.add_job(_run_reinforcer_cycle_sync, "interval", hours=6, max_instances=1)
     scheduler.start()
-    # Keep-alive ping for Render free tier
+    # Keep-alive ping for Render free tier (reuse single client)
     keep_alive_url = os.getenv("RENDER_EXTERNAL_URL")
     if keep_alive_url:
+        _keep_alive_client = httpx.AsyncClient(timeout=5.0)
         async def _ping():
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                while True:
-                    try:
-                        await client.get(keep_alive_url)
-                    except Exception:
-                        pass
-                    await asyncio.sleep(60)
+            while True:
+                try:
+                    await _keep_alive_client.get(keep_alive_url)
+                except Exception:
+                    pass
+                await asyncio.sleep(60)
         asyncio.create_task(_ping())
     
     # Restore persisted agent queue and logs into memory (best-effort)
@@ -224,25 +226,88 @@ async def lifespan(app: FastAPI):
 
     logger.info("🚀 NOVA Gateway Online | Swarm Survivability Layer Active")
     yield
+    # ── Graceful Shutdown ──
+    _shutdown_event.set()
+    _task_loop_event.set()  # Signal task loop to exit
+    stop_worker_scheduler()  # Signal worker daemon thread to exit
     await tg_queue.stop()
-    global _task_loop_running
-    _task_loop_running = False
     await cleanup_crawler()
     scheduler.shutdown()
-
-    
+    # Close keep-alive client if it exists
+    try:
+        if '_keep_alive_client' in globals():
+            await _keep_alive_client.aclose()
+    except Exception:
+        pass
+    logger.info("🛑 NOVA Gateway Offline — graceful shutdown complete")
 
 app = FastAPI(title="OROVA Indestructible Agency Bridge", lifespan=lifespan)
 
-# [P5] CORS — allow dashboard origin
+# [S-06] Request body size limit — reject bodies > 1MB to prevent OOM on 512MB tier
+MAX_BODY_BYTES = 1 * 1024 * 1024  # 1 MB
+
+@app.middleware("http")
+async def limit_body_size(request: Request, call_next):
+    """Reject oversized request bodies and enforce HTTPS in production."""
+    # Body size check
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > MAX_BODY_BYTES:
+        return JSONResponse(status_code=413, content={"status": "error", "detail": "Request body too large (max 1MB)"})
+    # HTTPS enforcement in production
+    if os.getenv("APP_ENV") == "production":
+        forwarded_proto = request.headers.get("x-forwarded-proto", "")
+        if forwarded_proto == "http":
+            https_url = str(request.url).replace("http://", "https://", 1)
+            return JSONResponse(status_code=301, headers={"Location": https_url})
+    response = await call_next(request)
+    # Add HSTS header in production
+    if os.getenv("APP_ENV") == "production":
+        response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
+    return response
+
+# [S-12] Per-route rate limiting middleware — stricter limits for write/agent endpoints
+@app.middleware("http")
+async def per_route_rate_limit(request: Request, call_next):
+    """Apply per-route rate limits using PerRouteRateLimiter from hardening."""
+    from app.core.hardening import api_rate_limiter
+    
+    # Skip rate limiting for health checks
+    if request.url.path in ("/health", "/api/health"):
+        return await call_next(request)
+    
+    # Identify client: use X-Forwarded-For if behind proxy, else client host
+    client_ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+    if not client_ip:
+        client_ip = request.client.host if request.client else "unknown"
+    client_id = f"api_{client_ip}"
+    
+    if not api_rate_limiter.is_allowed(client_id, request.url.path):
+        retry_after = api_rate_limiter.get_retry_after(client_id, request.url.path)
+        logger.warning(f"[RateLimit] {client_id} exceeded limit on {request.url.path} — retry after {retry_after:.1f}s")
+        return JSONResponse(
+            status_code=429,
+            content={
+                "status": "error",
+                "detail": "Rate limit exceeded. Please try again later.",
+                "retry_after": round(retry_after, 1),
+            },
+            headers={"Retry-After": str(int(retry_after) + 1)},
+        )
+    
+    return await call_next(request)
+
+# [P5] CORS — allow dashboard origin (filter out empty strings to prevent wildcard-with-credentials)
+_cors_origins = [
+    "http://localhost:13210",
+    "http://127.0.0.1:13210",
+    "http://localhost:9119",
+    os.getenv("RENDER_EXTERNAL_URL", ""),
+]
+_cors_origins = [o for o in _cors_origins if o]  # Remove empty strings
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:13210",
-        "http://127.0.0.1:13210",
-        "http://localhost:9119",
-        os.getenv("RENDER_EXTERNAL_URL", ""),
-    ],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS", "PUT", "DELETE"],
     allow_headers=["Content-Type", "Authorization", "X-Dashboard-Secret", "X-API-Key", "X-Telegram-Bot-Api-Secret-Token"],
@@ -292,8 +357,31 @@ async def cmd_stats(update, context):
 
 @app.get("/health")
 async def health_check():
-    """Lightweight health probe for Render's uptime checks."""
-    return {"status": "Operational", "timestamp": datetime.utcnow().isoformat()}
+    """Enhanced health probe for Render's uptime checks — verifies DB + memory."""
+    checks = {"status": "Operational", "timestamp": datetime.utcnow().isoformat()}
+    # Check DB connectivity
+    try:
+        if DatabaseManager.is_ready():
+            row = await DatabaseManager.fetchone("SELECT 1 as ok")
+            checks["db"] = "ok" if row else "degraded"
+        else:
+            checks["db"] = "not_ready"
+            checks["status"] = "Degraded"
+    except Exception as e:
+        checks["db"] = f"error: {e}"
+        checks["status"] = "Degraded"
+    # Check memory
+    try:
+        from app.core.hardening import memory_monitor
+        mem = await memory_monitor.check_memory()
+        if mem.get("critical"):
+            checks["memory"] = "critical"
+            checks["status"] = "Critical"
+        else:
+            checks["memory"] = "ok"
+    except Exception:
+        checks["memory"] = "unknown"
+    return checks
 
 async def require_dashboard_api_key(request: Request):
     """Validate dashboard API key. Accepts X-Dashboard-Secret, X-API-Key, or ?dashboard_key=...
@@ -303,7 +391,8 @@ async def require_dashboard_api_key(request: Request):
     import secrets as _secrets
     expected = os.getenv("DASHBOARD_API_KEY")
     if not expected:
-        raise HTTPException(status_code=500, detail="Server misconfiguration: DASHBOARD_API_KEY not set")
+        logger.critical("DASHBOARD_API_KEY not set — dashboard endpoints unavailable")
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
     # Check multiple header names + query param
     provided = (
         request.headers.get("X-Dashboard-Secret")
@@ -339,6 +428,14 @@ async def issue_dashboard_token(request: Request, authorized: bool = Depends(req
     tokens[token] = { 'created_at': datetime.utcnow().isoformat(), 'expires_at': expires_at, 'issued_by': issued_by }
     _schedule_background(DatabaseManager.set_state('dashboard_tokens', tokens))
 
+    # [S-07] Prune expired tokens on every issuance
+    now_iso = datetime.utcnow().isoformat()
+    expired_keys = [k for k, v in tokens.items() if v.get('expires_at', '') < now_iso]
+    for k in expired_keys:
+        del tokens[k]
+    if expired_keys:
+        _schedule_background(DatabaseManager.set_state('dashboard_tokens', tokens))
+
     return { 'status': 'ok', 'token': token, 'expires_at': expires_at }
 
 
@@ -371,7 +468,7 @@ async def api_health_check(authorized: bool = Depends(require_dashboard_api_key)
         "status": "Critical" if memory_critical else ("Degraded" if any_open else "Operational"),
         "uptime": "Running",
         "errors": total_errors,
-        "agents_online": 6,  # Nova, Hawk, Closer, Quill, Sentinel, Oracle
+        "agents_online": sum(1 for v in breaker_status.values() if v["state"] == "closed"),
         "pending_emails": 0,
         "scheduler": {
             "fast_lane": "Active",
@@ -515,7 +612,7 @@ async def get_leads(limit: int = 100, authorized: bool = Depends(require_dashboa
 
 @app.get("/api/metrics")
 async def get_metrics(client_id: int = 0, authorized: bool = Depends(require_dashboard_api_key)):
-    metrics = DatabaseManager.get_metrics(client_id)
+    metrics = await DatabaseManager.aget_metrics(client_id)
     flat = {k: metrics.get(k, 0) for k in ["leads_found", "emails_sent", "replies_received", "meetings_booked", "calls_made", "proposals_sent"]}
     return {"status": "ok", "metrics": metrics, **flat}
 
@@ -1025,7 +1122,7 @@ async def chat_with_agent(request: Request, authorized: bool = Depends(require_d
 
 @app.post("/api/actions/hunt-leads")
 async def action_hunt_leads(authorized: bool = Depends(require_dashboard_api_key)):
-    from app.worker import run_lead_hunt_slow_lane, start_worker_scheduler
+    from app.worker import run_lead_hunt_slow_lane, start_worker_scheduler, stop_worker_scheduler
     import asyncio as _asyncio
     task = _asyncio.create_task(
         run_lead_hunt_slow_lane(client_id=0, niche=None, location=None)
@@ -1182,14 +1279,11 @@ async def deny_email(request: Request, authorized: bool = Depends(require_dashbo
 # TASK EXECUTION LOOP — Background worker for `/api/tasks`
 # ═══════════════════════════════════════════════════════
 
-_task_loop_running = False
-
 async def _task_execution_loop():
     """Background loop — polls tasks.json every 30 s and runs tasks."""
-    global _task_loop_running
-    _task_loop_running = True
+    _task_loop_event.set()
     logger.info("⏱️ Task execution loop started (poll interval: 30s)")
-    while _task_loop_running:
+    while not _shutdown_event.is_set():
         try:
             tasks_file = os.path.join(root_path, "tasks.json")
             if not os.path.exists(tasks_file):

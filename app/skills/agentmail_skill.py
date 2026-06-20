@@ -11,20 +11,24 @@ import logging
 import json
 from typing import Dict, Any
 from datetime import datetime
+import httpx
 from app.core.database import DatabaseManager
 
 logger = logging.getLogger(__name__)
 
-def _send_telegram_alert(message: str):
-    import requests
-    token = os.getenv("TELEGRAM_BOT_TOKEN")
-    chat_id = os.getenv("PERSONAL_CHAT_ID") or os.getenv("ADMIN_CHAT_ID")
-    if not token or not chat_id:
+# Cached at module level to avoid repeated env reads
+_TG_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+_TG_CHAT_ID = os.getenv("PERSONAL_CHAT_ID") or os.getenv("ADMIN_CHAT_ID")
+
+async def _send_telegram_alert(message: str):
+    """Async Telegram alert — non-blocking, reuses cached token/chat_id."""
+    if not _TG_TOKEN or not _TG_CHAT_ID:
         logger.warning("Telegram report skipped: TOKEN or CHAT_ID missing.")
         return
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    url = f"https://api.telegram.org/bot{_TG_TOKEN}/sendMessage"
     try:
-        requests.post(url, data={"chat_id": chat_id, "text": message, "parse_mode": "Markdown"}, timeout=10)
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.post(url, data={"chat_id": _TG_CHAT_ID, "text": message, "parse_mode": "Markdown"})
     except Exception as e:
         logger.error(f"Failed to send Telegram alert: {e}")
 
@@ -259,7 +263,7 @@ async def send_outreach(
                 
                 try:
                     now = datetime.now()
-                    DatabaseManager.update_metrics({"emails_rejected": 1}, client_id=client_id)
+                    await DatabaseManager.aupdate_metrics({"emails_rejected": 1}, client_id=client_id)
                     await DatabaseManager.query(
                         """INSERT INTO outreach_outcomes (action, strategy, niche, recipient, lead_id, result, quality_score, send_hour, send_day, metadata, client_id)
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",

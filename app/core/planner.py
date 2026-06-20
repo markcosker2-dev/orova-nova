@@ -5,31 +5,13 @@ import json
 import re
 import hashlib
 import time
-import unicodedata
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from app.core.ai_client import UnifiedAIClient, GroqLimpResponse
-# Skills imports
-from app.skills.lead_finder import find_leads, research_lead
-from app.skills.browser_ops import browse_and_extract, google_search_scrape
-from app.skills.gmail_skill import get_inbox, search_emails, send_email
-from app.skills.calendar_skill import get_today, get_week, create_event, update_event, delete_event, get_office_hour_slots
-from app.skills.orova_sales_core import get_orova_prompt
-from app.skills.seo_audit import run_seo_audit as seo_audit
-from app.skills.arsenal_skills import advanced_browser
-from app.skills.sheets_skill import append_to_sheet, create_new_sheet
-from app.skills.deep_research import deep_research
-from app.skills.competitive_intel import analyze_competitor, compare_competitors
-from app.skills.content_writer import write_content, optimize_post
-from app.skills.approval_workflow import request_approval, list_pending
-from app.skills.agentmail_skill import create_inbox, send_outreach, check_replies, reply_to_email, summarize_and_categorize_inbox
-from app.skills.outbound_dialer import trigger_retell_call
-from app.skills.image_gen import generate_ai_image
-from app.skills.follow_up_sequences import generate_sequence, get_sequence_templates
-from app.skills.proposal_gen import generate_proposal, list_pricing_tiers
-from app.skills.perf_dashboard import generate_weekly_report, track_metric
-from app.core.agent_router import dispatch_task, get_all_statuses
-from app.skills.notion_crm import sync_to_notion_via_make
+
+# ── Lazy skill imports ──────────────────────────────────────
+# Skills are imported on first access to reduce startup time and
+# memory footprint (CQ-01). Only core infra is imported eagerly.
 from app.skills.definitions import TOOLS
 from app.core.guardrails import Guardrails
 from app.core.memory import MemoryDistiller
@@ -66,23 +48,65 @@ from app.core.self_learning import (
     ensure_tables as ensure_learning_tables,
     ExecutionTrace,
 )
-from app.skills.smart_scraper import sgai_search_and_extract, sgai_deep_extract, enrich_lead_ai
-from app.skills.email_sequence_skill import create_drip_campaign
-from app.skills.copywriting_skill import write_cold_email, write_ad_copy
-from app.skills.analytics_skill import pipeline_report, conversion_analysis, roi_calculator
-from app.core.pipeline import run_pipeline, list_pipelines
-from app.skills.lead_validator import validate_contact, score_lead
-from app.skills.email_templates import generate_email, generate_follow_up_sequence
-from app.skills.job_signal_hunter import hunt_hiring_signals, generate_hiring_outreach
-from app.skills.apollo_enrichment import enrich_lead_apollo, bulk_enrich_leads
-from app.skills.timezone_scheduler import is_business_hours, next_business_hours_slot
-from app.skills.cal_booking import handle_cal_booking_webhook, generate_cal_booking_link
-from app.skills.email_proofreader import proofread_email
-from app.skills.lead_gen_v2 import find_leads_v2
-from app.skills.scrapling_scraper import stealth_search, stealth_extract, bulk_scrape
-from app.core.ceo_brain import CEOBrain
 
-# Safe imports for elite components
+
+class _LazyModule:
+    """Lazy importer — defers heavy skill imports until first attribute access."""
+    def __init__(self, import_path: str, names: list[str]):
+        self._import_path = import_path
+        self._names = names
+        self._module = None
+
+    def _load(self):
+        if self._module is None:
+            import importlib
+            self._module = importlib.import_module(self._import_path)
+        return self._module
+
+    def __getattr__(self, name):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        mod = self._load()
+        return getattr(mod, name)
+
+
+# Lazy skill module proxies — imported only when a tool is actually called
+_skills_lead_finder = _LazyModule("app.skills.lead_finder", ["find_leads", "research_lead"])
+_skills_browser_ops = _LazyModule("app.skills.browser_ops", ["browse_and_extract", "google_search_scrape"])
+_skills_gmail = _LazyModule("app.skills.gmail_skill", ["get_inbox", "search_emails", "send_email"])
+_skills_calendar = _LazyModule("app.skills.calendar_skill", ["get_today", "get_week", "create_event", "update_event", "delete_event", "get_office_hour_slots"])
+_skills_orova_sales = _LazyModule("app.skills.orova_sales_core", ["get_orova_prompt"])
+_skills_seo = _LazyModule("app.skills.seo_audit", ["run_seo_audit"])
+_skills_arsenal = _LazyModule("app.skills.arsenal_skills", ["advanced_browser"])
+_skills_sheets = _LazyModule("app.skills.sheets_skill", ["append_to_sheet", "create_new_sheet"])
+_skills_deep_research = _LazyModule("app.skills.deep_research", ["deep_research"])
+_skills_competitive = _LazyModule("app.skills.competitive_intel", ["analyze_competitor", "compare_competitors"])
+_skills_content = _LazyModule("app.skills.content_writer", ["write_content", "optimize_post"])
+_skills_approval = _LazyModule("app.skills.approval_workflow", ["request_approval", "list_pending"])
+_skills_agentmail = _LazyModule("app.skills.agentmail_skill", ["create_inbox", "send_outreach", "check_replies", "reply_to_email", "summarize_and_categorize_inbox"])
+_skills_dialer = _LazyModule("app.skills.outbound_dialer", ["trigger_retell_call"])
+_skills_image = _LazyModule("app.skills.image_gen", ["generate_ai_image"])
+_skills_follow_up = _LazyModule("app.skills.follow_up_sequences", ["generate_sequence", "get_sequence_templates"])
+_skills_proposal = _LazyModule("app.skills.proposal_gen", ["generate_proposal", "list_pricing_tiers"])
+_skills_perf = _LazyModule("app.skills.perf_dashboard", ["generate_weekly_report", "track_metric"])
+_skills_agent_router = _LazyModule("app.core.agent_router", ["dispatch_task", "get_all_statuses"])
+_skills_notion = _LazyModule("app.skills.notion_crm", ["sync_to_notion_via_make"])
+_skills_smart_scraper = _LazyModule("app.skills.smart_scraper", ["sgai_search_and_extract", "sgai_deep_extract", "enrich_lead_ai"])
+_skills_email_seq = _LazyModule("app.skills.email_sequence_skill", ["create_drip_campaign"])
+_skills_copywriting = _LazyModule("app.skills.copywriting_skill", ["write_cold_email", "write_ad_copy"])
+_skills_analytics = _LazyModule("app.skills.analytics_skill", ["pipeline_report", "conversion_analysis", "roi_calculator"])
+_skills_pipeline = _LazyModule("app.core.pipeline", ["run_pipeline", "list_pipelines"])
+_skills_lead_validator = _LazyModule("app.skills.lead_validator", ["validate_contact", "score_lead"])
+_skills_email_templates = _LazyModule("app.skills.email_templates", ["generate_email", "generate_follow_up_sequence"])
+_skills_job_signal = _LazyModule("app.skills.job_signal_hunter", ["hunt_hiring_signals", "generate_hiring_outreach"])
+_skills_apollo = _LazyModule("app.skills.apollo_enrichment", ["enrich_lead_apollo", "bulk_enrich_leads"])
+_skills_timezone = _LazyModule("app.skills.timezone_scheduler", ["is_business_hours", "next_business_hours_slot"])
+_skills_cal_booking = _LazyModule("app.skills.cal_booking", ["handle_cal_booking_webhook", "generate_cal_booking_link"])
+_skills_email_proof = _LazyModule("app.skills.email_proofreader", ["proofread_email"])
+_skills_lead_gen_v2 = _LazyModule("app.skills.lead_gen_v2", ["find_leads_v2"])
+_skills_scrapling = _LazyModule("app.skills.scrapling_scraper", ["stealth_search", "stealth_extract", "bulk_scrape"])
+
+# Safe imports for elite components (already guarded, keep as-is)
 try:
     from app.skills.mem0_skill import mega_memory
     MEGA_CLAW_ONLINE = True
@@ -142,21 +166,7 @@ except ImportError:
         "You are Mark's elite AI partner. You don't just 'assist' — you lead."
     )
 _PERSONA_LOCK = _NOVA_PERSONA
-_IDENTITY_PROBE_RE = re.compile(
-    r"\b(what (ai|model|llm|system) are you"
-    r"|are you (chatgpt|gpt|gemini|claude|openai|anthropic|google)"
-    r"|who (made|built|created|trained|developed) you"
-    r"|what (powers|runs|underlies) you"
-    r"|which (company|team|lab) (built|made|created) you)\b",
-    re.IGNORECASE
-)
-_IDENTITY_DEFLECT = "I'm Nova, OROVA's AI. Let me know what you need."
-
-def _normalise_for_probe(text: str) -> str:
-    text = unicodedata.normalize("NFKD", text)
-    text = re.sub(r"[\u200b-\u200f\u202a-\u202e\ufeff]", "", text)
-    text = re.sub(r"(?<=\w)[.\-_](?=\w)", "", text)
-    return re.sub(r"\s+", " ", text).strip()
+from app.core.identity import IDENTITY_PROBE_RE as _IDENTITY_PROBE_RE, IDENTITY_DEFLECT as _IDENTITY_DEFLECT, normalise_for_probe as _normalise_for_probe
 
 def _sanitise_history(history: list, n: int = 6) -> list:
     tail = history[-n:] if len(history) >= n else history[:]
@@ -180,43 +190,82 @@ class TaskPlanner:
         self.config = config or {}
         self.distiller = MemoryDistiller(self.ai)
         logger.info("[PLANNER] MemoryDistiller integrated.")
+        # CEOBrain is lightweight — import eagerly for morning_brief / pipeline_health_check
+        from app.core.ceo_brain import CEOBrain
         ceo_brain = CEOBrain()
         self.available_functions = {
+            # ── Guarded imports (already resolved at module level) ──
             "elite_scrape": elite_scrape or make_disabled_tool_fallback("elite_scrape", "crawl4ai dependency is not installed"),
             "vision_browse": vision_browse or make_disabled_tool_fallback("vision_browse", "browser_use dependency is not installed"),
             "composio_action": make_disabled_tool_fallback("composio_action", "Composio integration is not configured"),
-            "sgai_search_and_extract": sgai_search_and_extract, "sgai_deep_extract": sgai_deep_extract,
-            "enrich_lead_ai": enrich_lead_ai,
-            "find_leads": find_leads, "browse_agent": browse_and_extract, "google_search": google_search_scrape,
-            "deep_research": deep_research, "research_lead": research_lead, "analyze_competitor": analyze_competitor,
-            "compare_competitors": compare_competitors, "write_content": write_content, "optimize_post": optimize_post,
-            "get_inbox": get_inbox, "search_emails": search_emails, "send_email": send_email,
-            "get_today": get_today, "get_week": get_week, "get_office_hour_slots": get_office_hour_slots,
-            "create_event": create_event, "update_event": update_event, "delete_event": delete_event,
-            "get_orova_prompt": get_orova_prompt, "advanced_browser": advanced_browser, "append_to_sheet": append_to_sheet,
-            "create_new_sheet": create_new_sheet, "request_approval": request_approval, "list_pending": list_pending,
-            "create_inbox": create_inbox, "send_outreach": send_outreach, "check_replies": check_replies,
-            "reply_to_email": reply_to_email, "summarize_and_categorize_inbox": summarize_and_categorize_inbox,
-            "trigger_retell_call": trigger_retell_call, "generate_ai_image": generate_ai_image,
-            "run_seo_audit": seo_audit, "generate_sequence": generate_sequence, "generate_proposal": generate_proposal,
-            "weekly_report": generate_weekly_report, "track_metric": track_metric, "dispatch_task": dispatch_task,
-            "create_drip_campaign": create_drip_campaign, "write_cold_email": write_cold_email,
-            "write_ad_copy": write_ad_copy, "pipeline_report": pipeline_report, "conversion_analysis": conversion_analysis,
-            "roi_calculator": roi_calculator, "run_pipeline": run_pipeline, "list_pipelines": list_pipelines,
-            "validate_contact": validate_contact, "score_lead": score_lead,
-            "generate_email": generate_email, "generate_follow_up_sequence": generate_follow_up_sequence,
-            "hunt_hiring_signals": hunt_hiring_signals, "generate_hiring_outreach": generate_hiring_outreach,
-            "enrich_lead_apollo": enrich_lead_apollo, "bulk_enrich_leads": bulk_enrich_leads,
-            "is_business_hours": is_business_hours, "next_business_hours_slot": next_business_hours_slot,
-            "generate_cal_booking_link": generate_cal_booking_link,
-            "sync_to_notion_via_make": sync_to_notion_via_make,
-            "proofread_email": proofread_email,
+            # ── Lazy-loaded skills (imported on first call via _LazyModule proxy) ──
+            "sgai_search_and_extract": _skills_smart_scraper.sgai_search_and_extract,
+            "sgai_deep_extract": _skills_smart_scraper.sgai_deep_extract,
+            "enrich_lead_ai": _skills_smart_scraper.enrich_lead_ai,
+            "find_leads": _skills_lead_finder.find_leads,
+            "browse_agent": _skills_browser_ops.browse_and_extract,
+            "google_search": _skills_browser_ops.google_search_scrape,
+            "deep_research": _skills_deep_research.deep_research,
+            "research_lead": _skills_lead_finder.research_lead,
+            "analyze_competitor": _skills_competitive.analyze_competitor,
+            "compare_competitors": _skills_competitive.compare_competitors,
+            "write_content": _skills_content.write_content,
+            "optimize_post": _skills_content.optimize_post,
+            "get_inbox": _skills_gmail.get_inbox,
+            "search_emails": _skills_gmail.search_emails,
+            "send_email": _skills_gmail.send_email,
+            "get_today": _skills_calendar.get_today,
+            "get_week": _skills_calendar.get_week,
+            "get_office_hour_slots": _skills_calendar.get_office_hour_slots,
+            "create_event": _skills_calendar.create_event,
+            "update_event": _skills_calendar.update_event,
+            "delete_event": _skills_calendar.delete_event,
+            "get_orova_prompt": _skills_orova_sales.get_orova_prompt,
+            "advanced_browser": _skills_arsenal.advanced_browser,
+            "append_to_sheet": _skills_sheets.append_to_sheet,
+            "create_new_sheet": _skills_sheets.create_new_sheet,
+            "request_approval": _skills_approval.request_approval,
+            "list_pending": _skills_approval.list_pending,
+            "create_inbox": _skills_agentmail.create_inbox,
+            "send_outreach": _skills_agentmail.send_outreach,
+            "check_replies": _skills_agentmail.check_replies,
+            "reply_to_email": _skills_agentmail.reply_to_email,
+            "summarize_and_categorize_inbox": _skills_agentmail.summarize_and_categorize_inbox,
+            "trigger_retell_call": _skills_dialer.trigger_retell_call,
+            "generate_ai_image": _skills_image.generate_ai_image,
+            "run_seo_audit": _skills_seo.run_seo_audit,
+            "generate_sequence": _skills_follow_up.generate_sequence,
+            "generate_proposal": _skills_proposal.generate_proposal,
+            "weekly_report": _skills_perf.generate_weekly_report,
+            "track_metric": _skills_perf.track_metric,
+            "dispatch_task": _skills_agent_router.dispatch_task,
+            "create_drip_campaign": _skills_email_seq.create_drip_campaign,
+            "write_cold_email": _skills_copywriting.write_cold_email,
+            "write_ad_copy": _skills_copywriting.write_ad_copy,
+            "pipeline_report": _skills_analytics.pipeline_report,
+            "conversion_analysis": _skills_analytics.conversion_analysis,
+            "roi_calculator": _skills_analytics.roi_calculator,
+            "run_pipeline": _skills_pipeline.run_pipeline,
+            "list_pipelines": _skills_pipeline.list_pipelines,
+            "validate_contact": _skills_lead_validator.validate_contact,
+            "score_lead": _skills_lead_validator.score_lead,
+            "generate_email": _skills_email_templates.generate_email,
+            "generate_follow_up_sequence": _skills_email_templates.generate_follow_up_sequence,
+            "hunt_hiring_signals": _skills_job_signal.hunt_hiring_signals,
+            "generate_hiring_outreach": _skills_job_signal.generate_hiring_outreach,
+            "enrich_lead_apollo": _skills_apollo.enrich_lead_apollo,
+            "bulk_enrich_leads": _skills_apollo.bulk_enrich_leads,
+            "is_business_hours": _skills_timezone.is_business_hours,
+            "next_business_hours_slot": _skills_timezone.next_business_hours_slot,
+            "generate_cal_booking_link": _skills_cal_booking.generate_cal_booking_link,
+            "sync_to_notion_via_make": _skills_notion.sync_to_notion_via_make,
+            "proofread_email": _skills_email_proof.proofread_email,
             "morning_brief": ceo_brain.morning_brief,
             "pipeline_health_check": ceo_brain.pipeline_health_check,
-            "find_leads_v2": find_leads_v2,
-            "stealth_search": stealth_search,
-            "stealth_extract": stealth_extract,
-            "bulk_scrape": bulk_scrape,
+            "find_leads_v2": _skills_lead_gen_v2.find_leads_v2,
+            "stealth_search": _skills_scrapling.stealth_search,
+            "stealth_extract": _skills_scrapling.stealth_extract,
+            "bulk_scrape": _skills_scrapling.bulk_scrape,
         }
         self.firewall = get_semantic_firewall(self.config.get("firewall_config"))
         logger.info("[PLANNER] Semantic Firewall integrated.")

@@ -7,17 +7,11 @@ import httpx
 from typing import Optional, Union
 from app.core.hardening import rate_limiter, sanitizer, tracer, RequestSanitizer
 from app.core.guardrails import Guardrails
+from app.core.identity import IDENTITY_PROBE_RE as _IDENTITY_PROBE_RE, IDENTITY_DEFLECT as _IDENTITY_DEFLECT
 
 logger = logging.getLogger(__name__)
 
 _EMAIL_RE = re.compile(r"[\w.+\-]+@[\w\-]+\.[a-zA-Z]{2,}", re.IGNORECASE)
-_IDENTITY_PROBE_RE = re.compile(
-    r"\b(what (ai|model|llm) are you|are you (chatgpt|gpt|gemini|claude|openai|anthropic|google)|"
-    r"who (made|built|created|trained) you|what powers you|underlying model|"
-    r"what (are|is) (your|the) (model|ai|engine)|powered by)\b",
-    re.IGNORECASE,
-)
-_IDENTITY_DEFLECT = "I'm Nova, OROVA's AI partner. What can I do for you?"
 
 class Router:
     def __init__(self, ai_planner, lead_hunter):

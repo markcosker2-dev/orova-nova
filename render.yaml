@@ -24,4 +24,4 @@ services:
       - fromContext: SERPAPI_KEY
       - fromContext: FIRECRAWL_API_KEY
       - fromContext: GOOGLE_API_KEY
-    # healthCheckPath: /health
+    healthCheckPath: /health

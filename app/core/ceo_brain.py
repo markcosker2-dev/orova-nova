@@ -30,7 +30,7 @@ class CEOBrain:
 
     async def get_status(self, client_id: int = 0) -> str:
         """Quick Telegram status summary. Run when user sends /status."""
-        metrics = DatabaseManager.get_metrics(client_id)
+        metrics = await DatabaseManager.aget_metrics(client_id)
 
         # Pull best strategy from learned_strategies
         best_framework = "BAB"
@@ -84,7 +84,7 @@ class CEOBrain:
         logger.info("[CEO_BRAIN] Generating morning briefing...")
         
         # 1. Gather Metrics
-        metrics = DatabaseManager.get_metrics(client_id)
+        metrics = await DatabaseManager.aget_metrics(client_id)
         
         # Detect fresh start (no data at all) and short-circuit with friendly first-boot message
         is_fresh = (
@@ -216,7 +216,7 @@ class CEOBrain:
         logger.info("[CEO_BRAIN] Running pipeline health check...")
         
         # 1. Gather Metrics
-        metrics = DatabaseManager.get_metrics(client_id)
+        metrics = await DatabaseManager.aget_metrics(client_id)
         
         # 2. Check lead flow rate
         health_score = 100

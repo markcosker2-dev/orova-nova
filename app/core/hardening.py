@@ -125,6 +125,38 @@ class RateLimiter:
             return (1 - current_tokens) * (self.period / self.rate)
         return 0.0
 
+
+# [S-12] Per-route rate limiter — allows different limits per route pattern
+class PerRouteRateLimiter:
+    """Rate limiter with per-route configuration.
+    
+    Routes are matched by prefix. More specific routes should be registered first.
+    Default limit applies to any route not explicitly configured.
+    """
+    
+    def __init__(self, default_rate: int = 100, default_period: float = 60.0):
+        self._default = RateLimiter(rate=default_rate, period=default_period)
+        # Ordered list of (prefix, RateLimiter) — first match wins
+        self._routes: list[tuple[str, RateLimiter]] = []
+    
+    def add_route(self, prefix: str, rate: int, period: float = 60.0):
+        """Register a per-route rate limit. More specific prefixes should be added first."""
+        self._routes.append((prefix, RateLimiter(rate=rate, period=period)))
+    
+    def is_allowed(self, client_id: str, path: str) -> bool:
+        """Check if request is allowed for the given client and path."""
+        for prefix, limiter in self._routes:
+            if path.startswith(prefix):
+                return limiter.is_allowed(client_id)
+        return self._default.is_allowed(client_id)
+    
+    def get_retry_after(self, client_id: str, path: str) -> float:
+        """Returns seconds to wait before retry is allowed."""
+        for prefix, limiter in self._routes:
+            if path.startswith(prefix):
+                return limiter.get_retry_after(client_id)
+        return self._default.get_retry_after(client_id)
+
 # ─────── [P4.4] REQUEST SANITIZATION ─────────
 class RequestSanitizer:
     """Validate and sanitize user inputs to prevent injection/overflow attacks."""
@@ -369,3 +401,16 @@ memory_monitor = MemoryMonitor()
 health_checks = HealthCheckRegistry()
 tracer = RequestTracer()
 sanitizer = RequestSanitizer()
+
+# [S-12] Per-route rate limiter — stricter limits for write/agent endpoints
+api_rate_limiter = PerRouteRateLimiter(default_rate=100, default_period=60.0)
+# Stricter: agent run endpoints (5 req/min per client)
+api_rate_limiter.add_route("/api/agents/run", rate=5, period=60.0)
+api_rate_limiter.add_route("/api/agents/retry", rate=5, period=60.0)
+api_rate_limiter.add_route("/api/agents/cancel", rate=10, period=60.0)
+# Stricter: key generation (3 req/min per client)
+api_rate_limiter.add_route("/api/keys/new", rate=3, period=60.0)
+# Moderate: lead mutation endpoints (20 req/min per client)
+api_rate_limiter.add_route("/api/leads/clear", rate=20, period=60.0)
+api_rate_limiter.add_route("/api/leads/", rate=20, period=60.0)
+# Lenient: read-only endpoints use default (100 req/min)

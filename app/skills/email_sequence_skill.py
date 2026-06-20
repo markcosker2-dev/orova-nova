@@ -483,7 +483,7 @@ async def check_drip_replies_and_process():
             try:
                 now = datetime.now()
                 # Update metrics
-                DatabaseManager.update_metrics({"replies_received": 1}, client_id=0)
+                await DatabaseManager.aupdate_metrics({"replies_received": 1}, client_id=0)
                 await DatabaseManager.query(
                     """INSERT INTO outreach_outcomes (action, strategy, niche, recipient, lead_id, result, quality_score, send_hour, send_day, metadata, client_id)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",

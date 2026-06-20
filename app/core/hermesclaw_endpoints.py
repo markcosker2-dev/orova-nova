@@ -134,7 +134,7 @@ async def api_revenue_metrics(client_id: int = 0):
     """Get comprehensive revenue metrics: pipeline stats, conversion funnel, ROI."""
     try:
         # Get base metrics from DB
-        metrics = DatabaseManager.get_metrics(client_id=client_id)
+        metrics = await DatabaseManager.aget_metrics(client_id=client_id)
         
         # Calculate conversion rates
         leads = metrics.get("leads_found", 0)

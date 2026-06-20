@@ -7,7 +7,7 @@ import time
 from datetime import datetime
 import pytz
 import schedule
-import requests
+import httpx
 import json
 import gspread
 from google.oauth2.service_account import Credentials
@@ -32,15 +32,17 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def _run_async(coro):
-    """Run an async coroutine safely even if an event loop is already running."""
+    """Run an async coroutine safely. Prefers the running loop if available."""
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
         loop = None
     if loop and loop.is_running():
+        # Use run_coroutine_threadsafe to avoid deadlock when called from
+        # a thread that shares the main event loop (e.g., schedule jobs).
         import concurrent.futures
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            return pool.submit(asyncio.run, coro).result()
+        future = asyncio.run_coroutine_threadsafe(coro, loop)
+        return future.result(timeout=120)
     return asyncio.run(coro)
 
 
@@ -83,18 +85,22 @@ MAX_DAILY_COST = 5.0            # $5.00 daily safety cap
 # Security: Wallet Drain Safeguard
 daily_hunt_counter = 0
 daily_call_counter = 0
+_hunt_counter_lock = threading.Lock()
+_call_counter_lock = threading.Lock()
 _pst_tz = pytz.timezone('America/Los_Angeles')
 last_reset_day = datetime.now(_pst_tz).day
 
 
 def _reset_daily_counters():
-    """Reset daily counters at midnight PST."""
+    """Reset daily counters at midnight PST (thread-safe)."""
     global daily_hunt_counter, daily_call_counter, last_reset_day
     _pst_tz = pytz.timezone('America/Los_Angeles')
     current_day = datetime.now(_pst_tz).day
     if current_day != last_reset_day:
-        daily_hunt_counter = 0
-        daily_call_counter = 0
+        with _hunt_counter_lock:
+            daily_hunt_counter = 0
+        with _call_counter_lock:
+            daily_call_counter = 0
         last_reset_day = current_day
 
 
@@ -112,17 +118,19 @@ def _get_sheets_client():
     return gspread.authorize(creds)
 
 
-def send_telegram_report(message):
-    """Send a report to Mark via Telegram."""
-    token = os.getenv("TELEGRAM_BOT_TOKEN")
-    chat_id = os.getenv("PERSONAL_CHAT_ID") or os.getenv("ADMIN_CHAT_ID")
-    if not token or not chat_id:
+# Cached at module level
+_TG_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+_TG_CHAT_ID = os.getenv("PERSONAL_CHAT_ID") or os.getenv("ADMIN_CHAT_ID")
+
+async def send_telegram_report(message):
+    """Send a report to Mark via Telegram (async, non-blocking)."""
+    if not _TG_TOKEN or not _TG_CHAT_ID:
         logger.warning("Telegram report skipped: TOKEN or CHAT_ID missing.")
         return
-
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    url = f"https://api.telegram.org/bot{_TG_TOKEN}/sendMessage"
     try:
-        requests.post(url, data={"chat_id": chat_id, "text": message, "parse_mode": "Markdown"}, timeout=10)
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.post(url, data={"chat_id": _TG_CHAT_ID, "text": message, "parse_mode": "Markdown"})
     except Exception as e:
         logger.error(f"Failed to send Telegram report: {e}")
 
@@ -131,7 +139,6 @@ def send_telegram_report(message):
 # LANE 1: FAST LANE — Approval checks + execute calls
 # Runs every 2 minutes
 # ═══════════════════════════════════════════════════════
-_call_counter_lock = threading.Lock()
 
 async def run_ceo_fast_lane(client_id=0):
     """⚡ Check for leads needing approval and execute approved calls."""
@@ -217,11 +224,8 @@ async def _execute_approved_call(sheet, row, idx, client_id=0):
 
         # Update SQLite metrics
         try:
-            metrics = await loop.run_in_executor(None, DatabaseManager.get_metrics, client_id)
-            await loop.run_in_executor(
-                None,
-                lambda: DatabaseManager.update_metrics({"calls_made": metrics.get("calls_made", 0) + 1}, client_id=client_id)
-            )
+            metrics = await DatabaseManager.aget_metrics(client_id)
+            await DatabaseManager.aupdate_metrics({"calls_made": metrics.get("calls_made", 0) + 1}, client_id=client_id)
         except Exception:
             pass
     else:
@@ -250,7 +254,7 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
         daily_hunt_counter += 1  # Reserve slot atomically
 
     # Check Cost Guardrail
-    metrics = await loop.run_in_executor(None, DatabaseManager.get_metrics, client_id)
+    metrics = await DatabaseManager.aget_metrics(client_id)
     if float(metrics.get("cost", 0)) >= MAX_DAILY_COST:
         logger.warning(f"🛑 [WALLET] Daily cost limit (${MAX_DAILY_COST}) reached for Client {client_id}. Halting.")
         with _call_counter_lock:
@@ -347,14 +351,14 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
                     lead["date"] = datetime.now().strftime("%Y-%m-%d")
                     lead["vertical"] = niche
                     
-                    await loop.run_in_executor(None, lambda l=lead: DatabaseManager.save_lead(l, default_vertical=niche, client_id=client_id))
+                    await DatabaseManager.asave_lead(lead, default_vertical=niche, client_id=client_id)
 
             # Update metrics
             try:
-                metrics = await loop.run_in_executor(None, DatabaseManager.get_metrics, client_id)
-                await loop.run_in_executor(None, lambda: DatabaseManager.update_metrics({
+                metrics = await DatabaseManager.aget_metrics(client_id)
+                await DatabaseManager.aupdate_metrics({
                     "leads_found": metrics.get("leads_found", 0) + count
-                }, client_id=client_id))
+                }, client_id=client_id)
             except Exception:
                 pass
 
@@ -402,10 +406,10 @@ async def run_reply_monitor(client_id=0):
 
                 # Update reply metrics
                 try:
-                    metrics = await loop.run_in_executor(None, DatabaseManager.get_metrics, client_id)
-                    await loop.run_in_executor(None, lambda: DatabaseManager.update_metrics({
+                    metrics = await DatabaseManager.aget_metrics(client_id)
+                    await DatabaseManager.aupdate_metrics({
                         "replies_received": metrics.get("replies_received", 0) + 1
-                    }, client_id=client_id))
+                    }, client_id=client_id)
                 except Exception:
                     pass
     except Exception as e:
@@ -437,7 +441,7 @@ async def run_cold_lead_escalation(client_id=0):
             logger.info(f"📞 [ESCALATION] Daily call cap ({MAX_CALLS_PER_DAY}) reached. Skipping.")
             return
 
-        cold_leads = await loop.run_in_executor(None, lambda: DatabaseManager.get_cold_leads(COLD_LEAD_DAYS_THRESHOLD, client_id=client_id))
+        cold_leads = await DatabaseManager.aget_cold_leads(COLD_LEAD_DAYS_THRESHOLD, client_id=client_id)
         if not cold_leads:
             logger.info(f"📞 [ESCALATION] [Client {client_id}] No true cold leads to escalate.")
             return
@@ -458,10 +462,10 @@ async def run_cold_lead_escalation(client_id=0):
             if not phone:
                 logger.info(f"📞 [ESCALATION] Skipping {business} — no phone number on file.")
                 # Still mark as "Ready for Call" so it shows up in dashboard
-                await loop.run_in_executor(None, lambda b=business, cid=client_id: DatabaseManager.query(
+                await DatabaseManager.query(
                     "UPDATE leads SET status = 'Ready for Call' WHERE LOWER(business) = ? AND client_id = ?",
-                    (b.lower(), int(cid))
-                ))
+                    (business.lower(), int(client_id))
+                )
                 escalated += 1
                 continue
 
@@ -487,10 +491,10 @@ async def run_cold_lead_escalation(client_id=0):
                     logger.info(f"✅ [ESCALATION] Cold call triggered for {business}. Call ID: {call_id}")
 
                     # Update lead status in SQLite
-                    await loop.run_in_executor(None, lambda b=business, cid=client_id: DatabaseManager.query(
+                    await DatabaseManager.query(
                         "UPDATE leads SET status = 'Cold Call Initiated' WHERE LOWER(business) = ? AND client_id = ?",
-                        (b.lower(), int(cid))
-                    ))
+                        (business.lower(), int(client_id))
+                    )
 
                     await loop.run_in_executor(None, lambda: send_telegram_report(
                         f"📞 **Cold Lead Auto-Call** [Client {client_id}]\n\n"
@@ -502,16 +506,16 @@ async def run_cold_lead_escalation(client_id=0):
                     error = result.get("error", "Unknown")
                     logger.warning(f"⚠️ [ESCALATION] Cold call failed for {business}: {error}")
                     # Mark as "Ready for Call" as fallback
-                    await loop.run_in_executor(None, lambda b=business, cid=client_id: DatabaseManager.query(
+                    await DatabaseManager.query(
                         "UPDATE leads SET status = 'Ready for Call' WHERE LOWER(business) = ? AND client_id = ?",
-                        (b.lower(), int(cid))
-                    ))
+                        (business.lower(), int(client_id))
+                    )
             except Exception as call_err:
                 logger.error(f"❌ [ESCALATION] Call trigger error for {business}: {call_err}")
-                await loop.run_in_executor(None, lambda b=business, cid=client_id: DatabaseManager.query(
+                await DatabaseManager.query(
                     "UPDATE leads SET status = 'Ready for Call' WHERE LOWER(business) = ? AND client_id = ?",
-                    (b.lower(), int(cid))
-                ))
+                    (business.lower(), int(client_id))
+                )
 
             escalated += 1
 
@@ -623,22 +627,34 @@ schedule.every(6).hours.do(self_improvement_job)                       # Lane 8:
 schedule.every(1).hours.do(sequence_drip_job)                          # Lane 9: Drip Sequence Sender
 
 
+# ── Graceful shutdown event ──────────────────────────────────
+_stop_event = threading.Event()
+
+
 def start_worker_scheduler() -> threading.Thread:
     """Start the schedule loop in a daemon thread. Safe to call from FastAPI lifespan."""
+    _stop_event.clear()
     th = threading.Thread(target=_scheduler_loop, daemon=True)
     th.start()
     return th
 
 
+def stop_worker_scheduler():
+    """Signal the scheduler loop to stop gracefully."""
+    logger.info("🛑 Signaling worker scheduler to stop...")
+    _stop_event.set()
+
+
 def _scheduler_loop():
     import schedule
     logger.info("⏱️ Worker scheduler loop started.")
-    while True:
+    while not _stop_event.is_set():
         try:
             schedule.run_pending()
         except Exception as e:
             logger.error(f"[SCHED] Scheduler error: {e}")
-        time.sleep(1)
+        # Sleep in small increments so we can respond to stop signal quickly
+        _stop_event.wait(1)
 
 
 if __name__ == "__main__":

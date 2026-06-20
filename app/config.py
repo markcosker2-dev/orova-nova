@@ -7,7 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,10 +23,10 @@ class Settings(BaseSettings):
     app_env: str = "development"
     debug: bool = False
     port: int = 18790
-    secret_key: str = "change-me-in-production"
+    secret_key: str  # No default — must be set via .env or environment
 
     # ── Dashboard ─────────────────────────────────────────────────────────────
-    dashboard_api_key: str = ""
+    dashboard_api_key: str  # No default — must be set via .env or environment
 
     # ── LLM ───────────────────────────────────────────────────────────────────
     groq_api_key: str = ""
@@ -73,11 +73,9 @@ class Settings(BaseSettings):
     google_worksheet_name: str = "Leads"
 
     # ── Database ─────────────────────────────────────────────────────────────
+    # Note: DatabaseManager uses raw sqlite3 with DB_PATH from database.py.
+    # This URL is kept for future sqlmodel/aiosqlite migration.
     database_url: str = "sqlite+aiosqlite:///./data/orova.db"
-
-    # ── OpenClaw ──────────────────────────────────────────────────────────────
-    openclaw_gateway_url: str = "ws://127.0.0.1:18789"
-    openclaw_gateway_token: str = ""
 
     # ── Webhooks ─────────────────────────────────────────────────────────────
     discord_webhook_url: str = ""
@@ -104,6 +102,29 @@ class Settings(BaseSettings):
                 q, loc = item.split(":", 1)
                 pairs.append((q.strip(), loc.strip()))
         return pairs or [("dentists", "Dallas TX")]
+
+    @model_validator(mode="after")
+    def validate_production_settings(self):
+        """Ensure critical secrets are set in production."""
+        if self.app_env == "production":
+            if not self.secret_key or self.secret_key == "change-me-in-production":
+                raise ValueError("secret_key must be set in production (remove default 'change-me-in-production')")
+            if not self.dashboard_api_key:
+                raise ValueError("DASHBOARD_API_KEY must be set in production")
+        # Ensure at least one AI provider is configured
+        has_provider = any([
+            self.groq_api_key, self.openrouter_api_key,
+            self.google_ai_studio_key, self.openai_api_key,
+            self.primary_llm_api_key,
+        ])
+        if not has_provider:
+            import logging
+            logging.getLogger(__name__).warning(
+                "⚠️  No LLM API key configured — all AI calls will fail. "
+                "Set at least one of: GROQ_API_KEY, OPENROUTER_API_KEY, "
+                "GOOGLE_AI_STUDIO_KEY, OPENAI_API_KEY, or PRIMARY_LLM_API_KEY"
+            )
+        return self
 
 
 @lru_cache(maxsize=1)
