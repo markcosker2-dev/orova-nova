@@ -324,7 +324,8 @@ class _DBBase:
     def register_sigterm_handler(cls, loop):
         try:
             loop.add_signal_handler(signal.SIGTERM, cls._close_all_connections)
-        except: pass
+        except Exception:
+            pass  # SIGTERM handler registration failed (e.g., on Windows)
 
     @classmethod
     async def run_phase5_migrations(cls):
@@ -333,10 +334,12 @@ class _DBBase:
                 for col in ["owner", "website", "email", "phone", "vertical", "icebreaker", "score"]:
                     try:
                         conn.execute(f"ALTER TABLE leads ADD COLUMN {col} TEXT")
-                    except: pass
+                    except Exception:
+                        pass  # Column already exists or unsupported
                 try:
                     conn.execute("ALTER TABLE leads ADD COLUMN score REAL DEFAULT 0")
-                except: pass
+                except Exception:
+                    pass  # Column already exists or unsupported
                 conn.commit()
             except Exception as e:
                 logger.error(f"Phase 5 migration error: {e}")

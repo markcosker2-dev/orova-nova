@@ -544,9 +544,10 @@ async def rule_high_impact_tools(ctx: ToolCallContext, config: FirewallConfig) -
     elif ctx.tool_name == "execute_code" and isinstance(ctx.parameters.get("code"), str):
         code = ctx.parameters["code"]
         # Normalize: replace all non-word chars with spaces so that
-        # subprocess.run(["rm", "-rf", path]) matches "rm -rf" (S-08 fix).
+        # subprocess.run(["rm", "-rf", path]) becomes "subprocess run rm rf path ".
+        # Pattern drops the literal hyphen since normalization already removed it.
         normalized_code = re.sub(r'\W+', ' ', code)
-        if re.search(r"rm\s+-rf|DELETE|DROP|TRUNCATE|format|shutdown", normalized_code, re.IGNORECASE):
+        if re.search(r"rm\s+rf|DELETE|DROP|TRUNCATE|format|shutdown", normalized_code, re.IGNORECASE):
             destructive = True
     elif ctx.tool_name == "database_write" and re.search(r"DELETE|DROP|TRUNCATE", json.dumps(ctx.parameters), re.IGNORECASE):
         destructive = True
