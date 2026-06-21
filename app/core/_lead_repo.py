@@ -78,9 +78,9 @@ class _LeadRepo:
         return await loop.run_in_executor(None, lambda: cls._is_duplicate_lead(email, domain, client_id))
 
     @classmethod
-    def save_lead(cls, lead: dict, sync_to_sheets: bool = True, default_vertical: str = None, client_id: int = 0) -> int:
+    def save_lead(cls, lead: dict, default_vertical: str = None, client_id: int = 0) -> int:
         """Save a lead with automatic deduplication. Returns lead_id or -1 if duplicate.
-        If sync_to_sheets=True, automatically syncs to Google Sheets CRM."""
+        Dedup check and insert happen inside a single transaction to prevent TOCTOU races."""
         email = lead.get("email", "").strip()
         url = lead.get("url") or lead.get("website", "")
         domain = ""
@@ -88,13 +88,30 @@ class _LeadRepo:
             try:
                 from urllib.parse import urlparse
                 domain = urlparse(url).netloc.replace("www.", "")
-            except: pass
+            except Exception:
+                pass
         cid = lead.get("client_id") or client_id or 0
-        if cls._is_duplicate_lead(email, domain, client_id=cid):
-            logger.info(f"[DEDUP] Skipping duplicate lead: {email or domain}")
-            return -1
+        # ── Single transaction: dedup check + insert ──
         with cls.connection() as conn:
             try:
+                # Dedup check inside the transaction
+                if email:
+                    row = conn.execute(
+                        "SELECT id FROM leads WHERE lower(email) = lower(?) AND client_id = ? LIMIT 1",
+                        (email.strip(), cid)
+                    ).fetchone()
+                    if row:
+                        logger.info(f"[DEDUP] Skipping duplicate lead: {email}")
+                        return -1
+                if domain:
+                    row = conn.execute(
+                        "SELECT id FROM leads WHERE lower(website) LIKE ? AND client_id = ? LIMIT 1",
+                        (f"%{domain.lower()}%", cid)
+                    ).fetchone()
+                    if row:
+                        logger.info(f"[DEDUP] Skipping duplicate lead: {domain}")
+                        return -1
+                # Insert — same transaction, no race window
                 vertical = lead.get("vertical") or default_vertical or ""
                 cursor = conn.execute(
                     """INSERT INTO leads (business, owner, url, website, email, phone, vertical, status, notes, icebreaker, score, client_id, updated_at)
@@ -112,7 +129,7 @@ class _LeadRepo:
                 return -1
 
     @classmethod
-    async def asave_lead(cls, lead: dict, sync_to_sheets: bool = True, default_vertical: str = None, client_id: int = 0) -> int:
+    async def asave_lead(cls, lead: dict, default_vertical: str = None, client_id: int = 0) -> int:
         """Async wrapper for save_lead (CQ-07)."""
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, lambda: cls.save_lead(lead, sync_to_sheets, default_vertical, client_id))
+        return await loop.run_in_executor(None, lambda: cls.save_lead(lead, default_vertical, client_id))

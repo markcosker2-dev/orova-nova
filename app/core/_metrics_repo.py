@@ -79,8 +79,46 @@ class _MetricsRepo:
 
     @classmethod
     async def get_performance_stats(cls, client_id: int = 0) -> dict:
-        return {
+        """Compute real performance stats from the leads table.
+        Returns avg_leads_per_day, conversion_rate, and response_time_avg (placeholder)."""
+        defaults = {
             "avg_leads_per_day": 0,
-            "conversion_rate": 0,
+            "conversion_rate": 0.0,
             "response_time_avg": 0,
         }
+        try:
+            with cls.connection() as conn:
+                # Average leads per day (over the last 30 days)
+                row = conn.execute(
+                    """SELECT COALESCE(COUNT(*) / MAX(1.0, CAST(julianday('now') - julianday(MIN(created_at)) AS REAL)), 0) AS avg_per_day
+                       FROM leads WHERE client_id = ? AND created_at >= datetime('now', '-30 days')""",
+                    (client_id,)
+                ).fetchone()
+                avg_leads_per_day = round(float(row["avg_per_day"] if row else 0), 2) if row else 0.0
+
+                # Conversion rate: (meetings_booked + replied) / total_leads
+                total_row = conn.execute(
+                    "SELECT COUNT(*) AS cnt FROM leads WHERE client_id = ?", (client_id,)
+                ).fetchone()
+                total = int(total_row["cnt"]) if total_row else 0
+
+                converted_row = conn.execute(
+                    """SELECT COUNT(*) AS cnt FROM leads
+                       WHERE client_id = ? AND status IN ('Meeting Booked', 'Replied', 'Client')""",
+                    (client_id,)
+                ).fetchone()
+                converted = int(converted_row["cnt"]) if converted_row else 0
+
+                conversion_rate = round((converted / total) * 100, 2) if total > 0 else 0.0
+
+                # Response time avg: not tracked in current schema, return 0
+                response_time_avg = 0
+
+                return {
+                    "avg_leads_per_day": avg_leads_per_day,
+                    "conversion_rate": conversion_rate,
+                    "response_time_avg": response_time_avg,
+                }
+        except Exception as e:
+            logger.error(f"[DB] get_performance_stats failed: {e}")
+            return defaults

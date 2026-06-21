@@ -135,7 +135,7 @@ async def lifespan(app: FastAPI):
         leads = await restore_leads_from_sheets()
         if leads:
             for lead in leads:
-                await DatabaseManager.asave_lead(lead, sync_to_sheets=False)
+                await DatabaseManager.asave_lead(lead)
             logger.info(f"♻️ Restored {len(leads)} leads from Google Sheets")
         else:
             logger.warning("⚠️ No leads found in Google Sheets. Attempting Google Drive backup restore...")

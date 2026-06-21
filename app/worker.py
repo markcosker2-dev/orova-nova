@@ -18,11 +18,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.skills.lead_gen_v3 import find_leads
 from app.skills.outbound_dialer import trigger_retell_call
-from app.skills.agentmail_skill import check_replies
+from app.skills.agentmail_skill import check_replies, send_outreach
 from app.core.database import DatabaseManager
 from app.skills.light_enrich import enrich_lead_lite
 from app.skills.lead_validator import score_lead
 from app.skills.opportunity_scanner import scan_opportunity
+from app.skills.email_sequence_skill import start_drip_campaign
 
 # Logging
 logging.basicConfig(
@@ -351,7 +352,54 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
                     lead["date"] = datetime.now().strftime("%Y-%m-%d")
                     lead["vertical"] = niche
                     
-                    await DatabaseManager.asave_lead(lead, default_vertical=niche, client_id=client_id)
+                    lead_id = await DatabaseManager.asave_lead(lead, default_vertical=niche, client_id=client_id)
+
+                    # ── [PIPELINE] Send outreach email + enroll in drip ──
+                    if lead_id and lead_id != -1:
+                        lead_email = lead.get("email", "").strip()
+                        lead_phone = lead.get("phone", "").strip()
+                        lead_owner = lead.get("owner") or lead.get("owner_name") or "there"
+                        lead_biz = lead.get("business", "your business")
+
+                        # Send initial cold outreach email
+                        if lead_email:
+                            try:
+                                subject = f"Quick question about {lead_biz}"
+                                body = (
+                                    f"Hi {lead_owner},\n\n"
+                                    f"I came across {lead_biz} and was really impressed by what you're doing. "
+                                    f"I'd love to learn more about your operations and see if there's a way we could help streamline things.\n\n"
+                                    f"Would you be open to a quick 15-minute chat this week?\n\n"
+                                    f"Best,\nNova @ OROVA"
+                                )
+                                outreach_result = await send_outreach(
+                                    to=lead_email,
+                                    subject=subject,
+                                    body=body,
+                                    recipient_context=f"Owner of {lead_biz} in {niche} vertical",
+                                    lead_id=lead_id,
+                                    strategy="cold_intro",
+                                    niche=niche,
+                                    client_id=client_id,
+                                )
+                                if outreach_result.get("status") == "success":
+                                    logger.info(f"   -> ✅ Outreach email sent to {lead_email} (lead {lead_id})")
+                                    lead["status"] = "Email Sent"
+                                else:
+                                    logger.warning(f"   -> ⚠️ Outreach email failed for {lead_email}: {outreach_result.get('error','unknown')}")
+                            except Exception as email_err:
+                                logger.warning(f"   -> ⚠️ Outreach email error for {lead_email}: {email_err}")
+
+                        # Enroll in cold_intro_drip for automated follow-ups
+                        try:
+                            drip_result = await start_drip_campaign(lead_id, sequence_type="cold_intro_drip")
+                            if drip_result.get("status") == "success":
+                                logger.info(f"   -> 📧 Enrolled lead {lead_id} in cold_intro_drip sequence")
+                            else:
+                                logger.warning(f"   -> ⚠️ Drip enrollment failed for lead {lead_id}: {drip_result.get('error','unknown')}")
+                        except Exception as drip_err:
+                            logger.warning(f"   -> ⚠️ Drip enrollment error for lead {lead_id}: {drip_err}")
+                    # ────────────────────────────────────────────────────────
 
             # Update metrics
             try:
@@ -458,6 +506,40 @@ async def run_cold_lead_escalation(client_id=0):
             phone = lead.get("phone", "")
             contact = lead.get("owner", "")
             email = lead.get("email", "")
+            lead_id = lead.get("id", 0)
+
+            # ── [PIPELINE] Try email re-engagement BEFORE phone call ──
+            if email:
+                try:
+                    re_subject = f"Re: Quick question about {business}"
+                    re_body = (
+                        f"Hi {contact or 'there'},\n\n"
+                        f"Just circling back on my earlier note about {business}. "
+                        f"I know things get busy — no pressure at all, but I'd still love to connect if you have 10 minutes this week.\n\n"
+                        f"Best,\nNova @ OROVA"
+                    )
+                    email_result = await send_outreach(
+                        to=email,
+                        subject=re_subject,
+                        body=re_body,
+                        recipient_context=f"Re-engagement for cold lead: {business}",
+                        lead_id=lead_id,
+                        strategy="cold_escalation",
+                        niche=lead.get("vertical", ""),
+                        client_id=client_id,
+                    )
+                    if email_result.get("status") == "success":
+                        logger.info(f"📧 [ESCALATION] Re-engagement email sent to {email} for {business}")
+                        await DatabaseManager.query(
+                            "UPDATE leads SET status = 'Re-Engaged' WHERE id = ? AND client_id = ?",
+                            (int(lead_id), int(client_id))
+                        )
+                        escalated += 1
+                        continue  # Email sent — skip phone call, give them time to reply
+                    else:
+                        logger.warning(f"⚠️ [ESCALATION] Re-engagement email failed for {email}: {email_result.get('error','')}")
+                except Exception as email_err:
+                    logger.warning(f"⚠️ [ESCALATION] Email re-engagement error for {business}: {email_err}")
 
             if not phone:
                 logger.info(f"📞 [ESCALATION] Skipping {business} — no phone number on file.")

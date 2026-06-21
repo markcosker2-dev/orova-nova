@@ -54,6 +54,11 @@ def _is_plausible_name(text: str) -> bool:
     return True
 
 def _normalize_phone_to_e164(phone: str) -> str:
+    """Validate and format phone to E.164 using the `phonenumbers` library.
+    
+    Falls back to basic digit-based formatting if phonenumbers is unavailable.
+    Retains fake-number pre-checks (repeated digits, sequential, 999-prefix).
+    """
     if not phone:
         return ""
     digits = re.sub(r'\D', '', phone)
@@ -70,6 +75,18 @@ def _normalize_phone_to_e164(phone: str) -> str:
     # Reject numbers starting with 999
     if raw_number.startswith("999"):
         return ""
+    
+    # ── phonenumbers library (proper validation) ──
+    try:
+        import phonenumbers
+        parsed = phonenumbers.parse(phone, "US")
+        if phonenumbers.is_valid_number(parsed):
+            return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+        return ""
+    except Exception:
+        pass  # Fall through to basic formatting
+    
+    # ── Fallback: basic digit formatting ──
     if len(digits) == 10:
         return f"+1{digits}"
     elif len(digits) == 11 and digits.startswith("1"):
@@ -80,19 +97,65 @@ def _normalize_phone_to_e164(phone: str) -> str:
 
 # Regex patterns
 PHONE_RE = re.compile(r'\(?\d{3}\)?[\s.\-]\d{3}[\s.\-]\d{4}')
+# Extended phone: international, extensions, dotted, tel: links
+PHONE_RE_EXTENDED = re.compile(
+    r'(?:\+?1[\s.\-]?)?\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}'
+    r'(?:\s*(?:ext|extension|x|#)\s*\d{2,6})?',
+    re.IGNORECASE
+)
 EMAIL_RE = re.compile(
     r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}'
 )
+
+def _extract_phones_from_html(html: str) -> list:
+    """Extract ALL phone numbers from HTML including tel: links and data attributes."""
+    phones = []
+    if not html:
+        return phones
+    
+    soup = BeautifulSoup(html, "html.parser")
+    
+    # 1. tel: href links (highest quality)
+    for tag in soup.find_all("a", href=True):
+        href = tag["href"].strip()
+        if href.lower().startswith("tel:"):
+            raw = href[4:].split("?")[0].strip()
+            normalized = _normalize_phone_to_e164(raw)
+            if normalized and normalized not in phones:
+                phones.append(normalized)
+    
+    # 2. data-* attributes with phone
+    for tag in soup.find_all(True):
+        for attr, val in tag.attrs.items():
+            if isinstance(val, str) and "phone" in attr.lower():
+                for m in PHONE_RE_EXTENDED.findall(val):
+                    normalized = _normalize_phone_to_e164(m)
+                    if normalized and normalized not in phones:
+                        phones.append(normalized)
+    
+    # 3. Full text regex (extended pattern)
+    text = soup.get_text(separator=" ", strip=True)
+    for m in PHONE_RE_EXTENDED.findall(text):
+        normalized = _normalize_phone_to_e164(m)
+        if normalized and normalized not in phones:
+            phones.append(normalized)
+    
+    return phones
 OWNER_PATTERNS = [
-    re.compile(r'(?:owner|ceo|president|founder|director)\s+(?:is\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)', re.IGNORECASE),
-    re.compile(r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+),?\s+(?:owner|ceo|president|founder|director)', re.IGNORECASE),
-    re.compile(r'(?:founded by|started by|owned by)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)', re.IGNORECASE),
-    re.compile(r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s*-\s*(?:owner|ceo|president)', re.IGNORECASE),
-    re.compile(r'meet\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)', re.IGNORECASE),
+    re.compile(r'(?:owner|co[-\s]?owner|founder|co[-\s]?founder|ceo|chief\s+executive|president|principal|operator|partner|managing\s+director|managing\s+partner|director)[:\s,\-–]+([A-Za-z\'\-]+(?:\s+[A-Za-z\'\-]+){1,3})', re.IGNORECASE),
+    re.compile(r'([A-Za-z\'\-]+(?:\s+[A-Za-z\'\-]+){1,3})[,\s\-–]+(?:owner|co[-\s]?owner|founder|co[-\s]?founder|ceo|chief\s+executive|president|principal|operator|partner|managing\s+director|managing\s+partner)', re.IGNORECASE),
+    re.compile(r"I(?:'m| am)\s+([A-Za-z\'\-]+\s+[A-Za-z\'\-]+),?\s*(?:owner|founder|ceo|president|principal)", re.IGNORECASE),
+    re.compile(r'(?:founded|owned|run|operated|started|led)\s+by\s+([A-Za-z\'\-]+(?:\s+[A-Za-z\'\-]+){1,2})', re.IGNORECASE),
+    re.compile(r'(?:meet|introducing)\s+([A-Za-z\'\-]+(?:\s+[A-Za-z\'\-]+){1,2})[,\s]+(?:our\s+)?(?:owner|founder|ceo|president)', re.IGNORECASE),
+    re.compile(r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s*[-–—]\s*(?:owner|ceo|president|founder|director|principal|partner)', re.IGNORECASE),
+    re.compile(r'(?:proprietor|managing\s+member|general\s+partner|executive\s+director)[:\s,\-–]+([A-Za-z\'\-]+(?:\s+[A-Za-z\'\-]+){1,3})', re.IGNORECASE),
 ]
 
-ABOUT_PAGES = ["/about", "/team", "/contact", "/about-us", "/our-team", "/our-story"]
-CONTACT_PAGES = ["/contact", "/contact-us", "/contactus", "/connect"]
+ABOUT_PAGES = ["/about", "/team", "/contact", "/about-us", "/our-team", "/our-story",
+               "/our-company", "/company", "/leadership", "/staff", "/people",
+               "/meet-the-team", "/our-people", "/management"]
+CONTACT_PAGES = ["/contact", "/contact-us", "/contactus", "/connect",
+                 "/get-in-touch", "/reach-us", "/request-quote"]
 
 
 def normalize_url(url: str) -> str:
@@ -130,7 +193,7 @@ def is_banned_url(url: str) -> bool:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 async def _scrape_website(url: str) -> dict:
-    """Scrape website for owner name, email, and phone."""
+    """Scrape website for owner name, email, and phone. Scans up to 7 pages and collects ALL candidates."""
     result = {"owner_name": "", "email": "", "phone": ""}
     
     if not url:
@@ -143,12 +206,17 @@ async def _scrape_website(url: str) -> dict:
         base_url = url.rstrip("/")
         host = httpx.URL(url).host or ""
         
+        # Collect ALL candidate emails and phones across pages, then pick best
+        all_emails = []
+        all_phones = []
+        
         async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=12.0) as client:
             pages_to_check = [base_url]
             for path in CONTACT_PAGES + ABOUT_PAGES:
                 pages_to_check.append(f"https://{host}{path}")
             
-            for page_url in pages_to_check[:4]:
+            # Scan up to 7 pages (was 4)
+            for page_url in pages_to_check[:7]:
                 try:
                     resp = await client.get(page_url, timeout=8.0)
                     if resp.status_code != 200:
@@ -156,21 +224,22 @@ async def _scrape_website(url: str) -> dict:
                     
                     text = resp.text
                     
-                    # Extract phone
-                    if not result["phone"]:
-                        phone_match = PHONE_RE.search(text)
-                        if phone_match:
-                            result["phone"] = _normalize_phone_to_e164(phone_match.group(0))
+                    # Extract ALL phones using enhanced extraction (tel: links, data attrs, extended regex)
+                    phones = _extract_phones_from_html(text)
+                    for p in phones:
+                        if p not in all_phones:
+                            all_phones.append(p)
                     
-                    # Extract emails
-                    if not result["email"]:
-                        emails = EMAIL_RE.findall(text)
-                        noise_domains = ["example.com", "domain.com", "test.com", "wix.com", "squarespace.com"]
-                        filtered = [e for e in emails if e.split("@")[-1].lower() not in noise_domains]
-                        if filtered:
-                            result["email"] = _prioritize_email(filtered)
+                    # Extract ALL emails (not just first)
+                    emails = EMAIL_RE.findall(text)
+                    noise_domains = ["example.com", "domain.com", "test.com", "wix.com", "squarespace.com",
+                                     "sentry.io", "webpack", "wixpress.com", "yourdomain.com"]
+                    for e in emails:
+                        domain_part = e.split("@")[-1].lower()
+                        if domain_part not in noise_domains and e.lower() not in all_emails:
+                            all_emails.append(e.lower())
                     
-                    # Extract owner name
+                    # Extract owner name (first plausible wins)
                     if not result["owner_name"]:
                         clean = re.sub(r'<[^>]+>', ' ', text)
                         clean = re.sub(r'\s+', ' ', clean)
@@ -182,11 +251,21 @@ async def _scrape_website(url: str) -> dict:
                                     result["owner_name"] = name
                                     break
                     
-                    if result["owner_name"] and result["email"] and result["phone"]:
+                    # Early exit only if we have ALL three fields
+                    if result["owner_name"] and all_emails and all_phones:
                         break
                         
                 except Exception:
                     continue
+        
+        # Pick best email from all collected
+        if all_emails and not result["email"]:
+            result["email"] = _prioritize_email(all_emails)
+        
+        # Pick best phone from all collected
+        if all_phones and not result["phone"]:
+            result["phone"] = all_phones[0]
+            
     except Exception as e:
         logger.debug(f"[SCRAPE] Error for {url}: {e}")
     
@@ -259,6 +338,17 @@ STATE_REGISTRY_URLS = {
     "TX": "https://direct.sos.state.tx.us/acct/acctsearch.asp",
     "FL": "https://search.sunbiz.org/Inquiry/CorporationSearch",
     "NY": "https://appext20.dos.ny.gov/pls/dosprod.search_businesses",
+    "WA": "https://ccfs.sos.wa.gov/api/BusinessSearch",
+    "CO": "https://www.sos.state.co.us/biz/BusinessSearchCriteria.do",
+    "AZ": "https://azcc.gov/search/business",
+    "GA": "https://ecorp.sos.ga.gov/BusinessSearch",
+    "NC": "https://www.sosnc.gov/online_services/search/by_title/_llc",
+    "IL": "https://www.ilsos.gov/entitysearch/",
+    "OH": "https://businesssearch.ohiosos.gov/",
+    "PA": "https://www.corporations.pa.gov/search/corpsearch",
+    "NJ": "https://www.nj.gov/lpbs/businesssearch/",
+    "MA": "https://corp.sec.state.ma.us/corpweb/CorpSearch/CorpSearch.aspx",
+    "VA": "https://cis.scc.virginia.gov/",
 }
 
 async def _state_registry_lookup(business_name: str, state: str = "") -> dict:
@@ -270,11 +360,17 @@ async def _state_registry_lookup(business_name: str, state: str = "") -> dict:
     
     # Extract state from business name if not provided
     if not state:
-        state_match = re.search(r'\b(CA|TX|FL|NY|WA|CO|AZ|GA|NC|IL)\b', business_name.upper())
+        state_match = re.search(r'\b(CA|TX|FL|NY|WA|CO|AZ|GA|NC|IL|OH|PA|NJ|MA|VA)\b', business_name.upper())
         state = state_match.group(1) if state_match else ""
     
     if state not in STATE_REGISTRY_URLS:
-        return result
+        # Try top states if no state specified
+        for fallback_state in ["CA", "TX", "FL", "NY"]:
+            if fallback_state in STATE_REGISTRY_URLS:
+                state = fallback_state
+                break
+        if state not in STATE_REGISTRY_URLS:
+            return result
     
     try:
         registry_url = STATE_REGISTRY_URLS[state]
@@ -347,7 +443,130 @@ async def _ddg_owner_verification(url: str, domain: str) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# ENRICHMENT CHAIN - Combines all 4 strategies with prioritization
+# STRATEGY 5: BBB.org Profile Lookup
+# ═══════════════════════════════════════════════════════════════════════════════
+
+async def _bbb_lookup(business_name: str, domain: str = "") -> dict:
+    """Scrape BBB.org for owner/principal name and contact info."""
+    result = {"owner_name": "", "email": "", "phone": ""}
+    
+    if not business_name:
+        return result
+    
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"
+        }
+        
+        # Search BBB for the business
+        search_url = f"https://www.bbb.org/search?find_country=USA&find_entity={quote(business_name)}"
+        
+        async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=10.0) as client:
+            resp = await client.get(search_url)
+            if resp.status_code != 200:
+                return result
+            
+            text = resp.text
+            
+            # Look for owner/principal/contact name patterns on BBB pages
+            bbb_patterns = [
+                re.compile(r'(?:Principal|Owner|Contact|Manager)[:\s]+([A-Za-z\'\-]+(?:\s+[A-Za-z\'\-]+){1,2})', re.IGNORECASE),
+                re.compile(r'(?:Business\s+Owner|Owner/Manager)[:\s]+([A-Za-z\'\-]+(?:\s+[A-Za-z\'\-]+){1,2})', re.IGNORECASE),
+            ]
+            
+            for pattern in bbb_patterns:
+                match = pattern.search(text)
+                if match:
+                    name = match.group(1).strip()
+                    if _is_plausible_name(name):
+                        result["owner_name"] = name
+                        break
+            
+            # Extract phone from BBB listing
+            phones = _extract_phones_from_html(text)
+            if phones:
+                result["phone"] = phones[0]
+            
+            # Extract email
+            emails = EMAIL_RE.findall(text)
+            noise = {"bbb.org", "example.com", "domain.com"}
+            for e in emails:
+                domain_part = e.split("@")[-1].lower()
+                if domain_part not in noise:
+                    result["email"] = e.lower()
+                    break
+                    
+    except Exception as e:
+        logger.debug(f"[BBB] Error for {business_name}: {e}")
+    
+    return result
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STRATEGY 6: Google Business Profile Lookup
+# ═══════════════════════════════════════════════════════════════════════════════
+
+async def _google_business_lookup(business_name: str, domain: str = "") -> dict:
+    """Search Google for business profile info (maps, knowledge panel)."""
+    result = {"owner_name": "", "email": "", "phone": ""}
+    
+    if not business_name:
+        return result
+    
+    try:
+        def _search():
+            with DDGS() as ddgs:
+                return list(ddgs.text(
+                    f'"{business_name}" owner OR founder OR CEO phone',
+                    max_results=5,
+                    safesearch="strict"
+                ))
+        
+        results = await asyncio.get_running_loop().run_in_executor(None, _search)
+        
+        for res in results:
+            text = res.get("body", "") + " " + res.get("title", "")
+            
+            # Extract owner name
+            if not result["owner_name"]:
+                for pattern in OWNER_PATTERNS:
+                    match = pattern.search(text)
+                    if match:
+                        name = match.group(1).strip()
+                        if _is_plausible_name(name):
+                            result["owner_name"] = name
+                            break
+            
+            # Extract phone
+            if not result["phone"]:
+                phones = PHONE_RE_EXTENDED.findall(text)
+                for p in phones:
+                    normalized = _normalize_phone_to_e164(p)
+                    if normalized:
+                        result["phone"] = normalized
+                        break
+            
+            # Extract email
+            if not result["email"]:
+                emails = EMAIL_RE.findall(text)
+                noise = {"example.com", "domain.com", "test.com"}
+                for e in emails:
+                    domain_part = e.split("@")[-1].lower()
+                    if domain_part not in noise:
+                        result["email"] = e.lower()
+                        break
+            
+            if result["owner_name"] and result["phone"]:
+                break
+                
+    except Exception as e:
+        logger.debug(f"[GBIZ] Error for {business_name}: {e}")
+    
+    return result
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ENRICHMENT CHAIN - Combines all 6 strategies with prioritization
 # ═══════════════════════════════════════════════════════════════════════════════
 
 EMAIL_PRIORITY = [
@@ -375,7 +594,7 @@ def _prioritize_email(emails: list) -> str:
 
 async def enrich_lead_4step(url: str, business_name: str = "") -> dict:
     """
-    Run 4-strategy enrichment chain and merge results.
+    Run 6-strategy enrichment chain and merge results.
     Returns clean output with owner_name, email, phone only.
     """
     domain = extract_domain(url) if url else ""
@@ -386,7 +605,9 @@ async def enrich_lead_4step(url: str, business_name: str = "") -> dict:
         _scrape_website(url),
         _whois_lookup(domain),
         _state_registry_lookup(business_name),
-        _ddg_owner_verification(url, domain)
+        _ddg_owner_verification(url, domain),
+        _bbb_lookup(business_name, domain),
+        _google_business_lookup(business_name, domain),
     ]
     
     strategy_results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -427,7 +648,55 @@ async def enrich_lead_4step(url: str, business_name: str = "") -> dict:
     # Validate final phone
     final["phone"] = _normalize_phone_to_e164(final["phone"])
     
+    # Fallback: Email guess if we have owner name + domain but no email
+    if not final["email"] and final["owner_name"] and domain:
+        final["email"] = _guess_email(final["owner_name"], domain)
+    
     return final
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# EMAIL GUESS — Generate likely email patterns when enrichment fails
+# ═══════════════════════════════════════════════════════════════════════════════
+
+EMAIL_GUESS_PATTERNS = [
+    lambda first, last, domain: f"{first}@{domain}",
+    lambda first, last, domain: f"{first}.{last}@{domain}",
+    lambda first, last, domain: f"{first[0]}{last}@{domain}",
+    lambda first, last, domain: f"{first}{last[0]}@{domain}",
+    lambda first, last, domain: f"{first}.{last[0]}@{domain}",
+    lambda first, last, domain: f"{first[0]}.{last}@{domain}",
+    lambda first, last, domain: f"{first}_{last}@{domain}",
+    lambda first, last, domain: f"{first[0]}_{last}@{domain}",
+    lambda first, last, domain: f"{last}@{domain}",
+    lambda first, last, domain: f"{first}{last}@{domain}",
+]
+
+def _guess_email(owner_name: str, domain: str) -> str:
+    """Generate likely email patterns from owner name + domain. Returns empty if can't parse name."""
+    if not owner_name or not domain:
+        return ""
+    
+    parts = owner_name.strip().lower().split()
+    if len(parts) < 2:
+        return ""
+    
+    first = parts[0]
+    last = parts[-1]
+    
+    # Remove middle initials/names for pattern generation
+    # e.g. "John A. Smith" → first="john", last="smith"
+    
+    # Clean special chars
+    first = re.sub(r'[^a-z]', '', first)
+    last = re.sub(r'[^a-z]', '', last)
+    
+    if not first or not last:
+        return ""
+    
+    # Return the most common pattern: first@domain
+    # The actual verification happens when AgentMail sends
+    return f"{first}@{domain}"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

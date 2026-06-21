@@ -69,31 +69,45 @@ def _score_and_select_email(emails: list, domain: str) -> Optional[str]:
 
 
 def _normalize_phone_to_e164(phone: str) -> str:
+    """Validate and format phone to E.164 using the `phonenumbers` library.
+    
+    Falls back to basic digit-based formatting if phonenumbers is unavailable.
+    Retains fake-number pre-checks (repeated digits, sequential, 999-prefix).
+    """
     if not phone:
         return ""
     digits = _NON_DIGIT_RE.sub('', phone)
     if len(digits) < 10:
         return ""
     
-    # Detect fake/placeholder numbers
-    raw_number = digits[-10:]  # Get last 10 digits for validation
-    
-    # Check for repeated digits (e.g., 1111111111)
+    # Pre-check: reject obvious fakes before hitting the library
+    raw_number = digits[-10:]
     if len(set(raw_number)) == 1:
         logger.warning(f"[PHONE] Rejecting fake number with repeated digits: '{phone}'")
         return ""
-    
-    # Check for sequential patterns (1234567890, 9876543210, 0123456789)
     sequential_patterns = ["1234567890", "9876543210", "0123456789", "2345678901", "0987654321"]
     if raw_number in sequential_patterns:
         logger.warning(f"[PHONE] Rejecting fake sequential number: '{phone}'")
         return ""
-    
-    # Check for numbers starting with 999 (like +19999999999)
     if raw_number.startswith("999"):
         logger.warning(f"[PHONE] Rejecting fake number starting with 999: '{phone}'")
         return ""
     
+    # ── phonenumbers library (proper validation) ──
+    try:
+        import phonenumbers
+        parsed = phonenumbers.parse(phone, "US")  # Default region US
+        if phonenumbers.is_valid_number(parsed):
+            e164 = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+            logger.debug(f"[PHONE] phonenumbers validated: {phone} → {e164}")
+            return e164
+        # Not a valid number — log and reject
+        logger.warning(f"[PHONE] phonenumbers rejected invalid: '{phone}'")
+        return ""
+    except Exception:
+        pass  # Fall through to basic formatting
+    
+    # ── Fallback: basic digit formatting (no library) ──
     if len(digits) == 10:
         return f"+1{digits}"
     elif len(digits) == 11 and digits.startswith("1"):
@@ -108,6 +122,11 @@ def _normalize_phone_to_e164(phone: str) -> str:
 
 EMAIL_REGEX = r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}'
 PHONE_REGEX = r'\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}'
+# Extended phone: international, extensions, dotted formats
+PHONE_REGEX_EXTENDED = (
+    r'(?:\+?1[\s.\-]?)?\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}'
+    r'(?:\s*(?:ext|extension|x|#)\s*\d{2,6})?'
+)
 
 JUNK_EMAIL_PATTERNS = [
     'example', '.png', '.jpg', '.gif', '.svg', '.webp', '.css', '.js',
@@ -404,6 +423,52 @@ def _extract_owner_name(html: str) -> Optional[str]:
                     surrounding = heading.find_parent().get_text(separator=" ", strip=True).lower()
                     if any(kw in surrounding for kw in TITLE_KEYWORDS):
                         return text
+
+    # 6. spaCy NER fallback — extract PERSON entities from visible text
+    #    Only runs if all 5 strategies above failed. Gracefully degrades if spaCy
+    #    or the en_core_web_sm model is not installed.
+    try:
+        import spacy
+        try:
+            nlp = spacy.load("en_core_web_sm")
+        except Exception:
+            # Model not installed — skip silently
+            logger.debug("[OWNER] spaCy model en_core_web_sm not installed, skipping NER")
+            return None
+        
+        # Extract visible text (limit to ~50KB to keep NER fast)
+        full_text = soup.get_text(separator=" ", strip=True)[:50000]
+        if not full_text:
+            return None
+        
+        doc = nlp(full_text)
+        person_entities = [
+            ent.text.strip()
+            for ent in doc.ents
+            if ent.label_ == "PERSON"
+        ]
+        
+        for name in person_entities:
+            if (
+                _is_plausible_name(name)
+                and name not in FALSE_POSITIVE_NAMES
+                and name not in LOCATION_BLACKLIST
+            ):
+                # Verify the name appears near a title keyword in the source
+                # (avoid false positives from customer testimonials, etc.)
+                name_lower = name.lower()
+                idx = full_text.lower().find(name_lower)
+                if idx >= 0:
+                    window = full_text[max(0, idx - 200):idx + len(name) + 200].lower()
+                    if any(kw in window for kw in TITLE_KEYWORDS):
+                        logger.debug(f"[OWNER] spaCy NER hit: {name}")
+                        return name
+        
+        logger.debug(f"[OWNER] spaCy NER found {len(person_entities)} PERSON entities, none passed filters")
+    except ImportError:
+        logger.debug("[OWNER] spaCy not installed, skipping NER strategy")
+    except Exception as e:
+        logger.debug(f"[OWNER] spaCy NER error (non-fatal): {e}")
 
     return None
 
@@ -838,7 +903,15 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
             
             for a_tag in soup.find_all("a", href=True):
                 href = a_tag["href"].strip()
-                if not href or href.startswith(("#", "javascript:", "mailto:", "tel:")):
+                if not href or href.startswith(("#", "javascript:", "mailto:")):
+                    # Extract phone from tel: links before skipping
+                    if href and href.lower().startswith("tel:"):
+                        raw_phone = href[4:].split("?")[0].strip()
+                        if raw_phone and not lead.get("phone"):
+                            normalized = _normalize_phone_to_e164(raw_phone)
+                            if normalized:
+                                lead["phone"] = normalized
+                                logger.info(f"[ENRICH] → Phone from tel: link on homepage: {lead['phone']}")
                     continue
                 
                 # Resolve relative links
@@ -1101,7 +1174,51 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _extract_phones(text: str) -> list:
-    return re.findall(PHONE_REGEX, text)
+    """Extract phone numbers using phonenumbers library (primary) + regex fallback."""
+    if not text:
+        return []
+    
+    phones = []
+    
+    # 1. Extract tel: links if text contains HTML
+    if "<a " in text or "href=" in text:
+        try:
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(text, "html.parser")
+            for tag in soup.find_all("a", href=True):
+                href = tag["href"].strip()
+                if href.lower().startswith("tel:"):
+                    raw = href[4:].split("?")[0].strip()
+                    digits = re.sub(r'\D', '', raw)
+                    if len(digits) >= 10:
+                        phones.append(raw)
+        except Exception:
+            pass
+    
+    # 2. phonenumbers.PhoneNumberMatcher (primary — proper validation)
+    try:
+        import phonenumbers
+        for match in phonenumbers.PhoneNumberMatcher(text, "US"):
+            e164 = phonenumbers.format_number(match.number, phonenumbers.PhoneNumberFormat.E164)
+            if e164 not in phones:
+                phones.append(e164)
+        if phones:
+            logger.debug(f"[PHONE] PhoneNumberMatcher found: {phones}")
+            return phones
+    except Exception:
+        pass  # Fall through to regex
+    
+    # 3. Extended regex (international, extensions) — fallback
+    for m in re.findall(PHONE_REGEX_EXTENDED, text, re.IGNORECASE):
+        if m not in phones:
+            phones.append(m)
+    
+    # 4. Basic regex for anything missed
+    for m in re.findall(PHONE_REGEX, text):
+        if m not in phones:
+            phones.append(m)
+    
+    return phones
 
 
 def _validate_email_domain(email: str, business_domain: str) -> bool:

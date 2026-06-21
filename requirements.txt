@@ -42,6 +42,9 @@ yagmail==0.15.293
 email-validator==2.2.0
 phonenumbers==8.13.0
 
+# [NEW] spaCy NER for owner name extraction (en_core_web_sm ~12MB disk, ~100-150MB RAM)
+spacy>=3.7,<4.0
+
 # [NEW] Email Templating & Lead Scoring (Free ML)
 jinja2==3.1.2
 # scikit-learn==1.3.2  # REMOVED: 80MB+ RAM, replace with rule-based scoring
