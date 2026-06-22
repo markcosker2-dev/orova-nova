@@ -208,6 +208,10 @@ async def _execute_approved_call(sheet, row, idx, client_id=0):
     else:
         result = await loop.run_in_executor(None, trigger_retell_call, phone, context)
 
+    if result.get("skipped"):
+        logger.info(f"⏭️ [CALL] Retell not configured — skipping call for {company}. Set RETELL_API_KEY to enable.")
+        await loop.run_in_executor(None, lambda: sheet.update_cell(idx, COL_SHEET_STATUS, "Ready for Call"))
+        return
     if result.get("success"):
         call_id = result.get("call_id")
         logger.info(f"✅ [CALL] Success! ID: {call_id}")
@@ -217,11 +221,11 @@ async def _execute_approved_call(sheet, row, idx, client_id=0):
             row.append("")
         await loop.run_in_executor(None, lambda: sheet.update_cell(idx, COL_SHEET_CALL_ID, call_id))
 
-        await loop.run_in_executor(None, lambda: send_telegram_report(
+        await send_telegram_report(
             f"📞 **Call Initiated**\n\n"
             f"I am now calling **{company}** ({contact}).\n"
             f"Call ID: `{call_id}`"
-        ))
+        )
 
         # Update SQLite metrics
         try:
@@ -235,7 +239,7 @@ async def _execute_approved_call(sheet, row, idx, client_id=0):
         with _call_counter_lock:
             daily_call_counter -= 1  # Release slot on failure
         await loop.run_in_executor(None, lambda: sheet.update_cell(idx, COL_SHEET_STATUS, "Call Failed"))
-        await loop.run_in_executor(None, lambda: send_telegram_report(f"⚠️ **Call Failed**\n\nError calling **{company}**: {error}"))
+        await send_telegram_report(f"⚠️ **Call Failed**\n\nError calling **{company}**: {error}")
 
 
 # ═══════════════════════════════════════════════════════
@@ -248,7 +252,7 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
     _reset_daily_counters()
     loop = asyncio.get_running_loop()
 
-    with _call_counter_lock:
+    with _hunt_counter_lock:
         if daily_hunt_counter >= MAX_RUNS_PER_DAY:
             logger.info(f"🌙 [SLOW LANE] [Client {client_id}] Daily limit reached. Skipping lead hunt.")
             return
@@ -258,7 +262,7 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
     metrics = await DatabaseManager.aget_metrics(client_id)
     if float(metrics.get("cost", 0)) >= MAX_DAILY_COST:
         logger.warning(f"🛑 [WALLET] Daily cost limit (${MAX_DAILY_COST}) reached for Client {client_id}. Halting.")
-        with _call_counter_lock:
+        with _hunt_counter_lock:
             daily_hunt_counter -= 1  # Release slot
         return
 
@@ -364,13 +368,27 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
                         # Send initial cold outreach email
                         if lead_email:
                             try:
+                                # Load business context for personalized outreach
+                                import json as _json
+                                _ctx_path = os.path.join(os.path.dirname(__file__), "core", "business_context.json")
+                                _biz_ctx = {}
+                                try:
+                                    with open(_ctx_path, "r") as _f:
+                                        _biz_ctx = _json.load(_f)
+                                except Exception:
+                                    pass
+                                _email_rules = _biz_ctx.get("email_rules", {})
+                                _sig = _email_rules.get("signature", "Nova @ OROVA")
+                                _tone = _email_rules.get("tone", "Casual and friendly — like a peer reaching out")
+
                                 subject = f"Quick question about {lead_biz}"
                                 body = (
                                     f"Hi {lead_owner},\n\n"
-                                    f"I came across {lead_biz} and was really impressed by what you're doing. "
-                                    f"I'd love to learn more about your operations and see if there's a way we could help streamline things.\n\n"
-                                    f"Would you be open to a quick 15-minute chat this week?\n\n"
-                                    f"Best,\nNova @ OROVA"
+                                    f"I was checking out {lead_biz} — really impressed by what you're doing in the {niche} space.\n\n"
+                                    f"We help {niche} businesses on the West Coast stop chasing bad leads. "
+                                    f"Our system qualifies every lead automatically so you only talk to people who are actually interested.\n\n"
+                                    f"Would a 10-minute call be worth it to see if this fits {lead_biz}?\n\n"
+                                    f"{_sig}"
                                 )
                                 outreach_result = await send_outreach(
                                     to=lead_email,
@@ -410,11 +428,11 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
             except Exception:
                 pass
 
-            await loop.run_in_executor(None, lambda: send_telegram_report(
+            await send_telegram_report(
                 f"☀️ **Lead Hunt Complete**\n\n"
                 f"Found **{count}** new leads for '{query}'.\n\n"
                 f"{summary_text[:500]}"
-            ))
+            )
         else:
             logger.info("   -> No leads found this shift.")
 
@@ -422,7 +440,7 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
 
     except Exception as e:
         logger.error(f"   !!! ERROR in Slow Lane: {e}")
-        await loop.run_in_executor(None, lambda: send_telegram_report(f"⚠️ **Lead Hunt Error**: {str(e)}"))
+        await send_telegram_report(f"⚠️ **Lead Hunt Error**: {str(e)}")
 
 
 # ═══════════════════════════════════════════════════════
@@ -450,7 +468,7 @@ async def run_reply_monitor(client_id=0):
                     f"📝 **Snippet:** \"{snippet}...\"\n\n"
                     f"Shall I check the calendar and propose a slot?"
                 )
-                await loop.run_in_executor(None, lambda: send_telegram_report(report))
+                await send_telegram_report(report)
 
                 # Update reply metrics
                 try:
@@ -511,12 +529,24 @@ async def run_cold_lead_escalation(client_id=0):
             # ── [PIPELINE] Try email re-engagement BEFORE phone call ──
             if email:
                 try:
+                    # Load business context for consistent signature
+                    import json as _json2
+                    _ctx_path2 = os.path.join(os.path.dirname(__file__), "core", "business_context.json")
+                    _biz_ctx2 = {}
+                    try:
+                        with open(_ctx_path2, "r") as _f2:
+                            _biz_ctx2 = _json2.load(_f2)
+                    except Exception:
+                        pass
+                    _sig2 = _biz_ctx2.get("email_rules", {}).get("signature", "Nova @ OROVA")
+
                     re_subject = f"Re: Quick question about {business}"
                     re_body = (
                         f"Hi {contact or 'there'},\n\n"
                         f"Just circling back on my earlier note about {business}. "
-                        f"I know things get busy — no pressure at all, but I'd still love to connect if you have 10 minutes this week.\n\n"
-                        f"Best,\nNova @ OROVA"
+                        f"One of our clients in a similar space just had their best month after switching to automated lead qualification — happy to share how it works.\n\n"
+                        f"No worries if the timing isn't right.\n\n"
+                        f"{_sig2}"
                     )
                     email_result = await send_outreach(
                         to=email,
@@ -567,7 +597,9 @@ async def run_cold_lead_escalation(client_id=0):
                 else:
                     result = await loop.run_in_executor(None, trigger_retell_call, phone, context)
 
-                if result.get("success"):
+                if result.get("skipped"):
+                    logger.info(f"⏭️ [ESCALATION] Retell not configured — skipping call for {business}. Set RETELL_API_KEY to enable.")
+                elif result.get("success"):
                     call_id = result.get("call_id")
                     called += 1
                     logger.info(f"✅ [ESCALATION] Cold call triggered for {business}. Call ID: {call_id}")
@@ -578,12 +610,12 @@ async def run_cold_lead_escalation(client_id=0):
                         (business.lower(), int(client_id))
                     )
 
-                    await loop.run_in_executor(None, lambda: send_telegram_report(
+                    await send_telegram_report(
                         f"📞 **Cold Lead Auto-Call** [Client {client_id}]\n\n"
                         f"**{business}** ({contact}) — no reply for {COLD_LEAD_DAYS_THRESHOLD}+ days.\n"
                         f"Phone: `{phone}`\n"
                         f"Call ID: `{call_id}`"
-                    ))
+                    )
                 else:
                     error = result.get("error", "Unknown")
                     logger.warning(f"⚠️ [ESCALATION] Cold call failed for {business}: {error}")
@@ -608,10 +640,10 @@ async def run_cold_lead_escalation(client_id=0):
         logger.info(f"📞 [ESCALATION] [Client {client_id}] Processed {escalated} cold leads, triggered {called} calls.")
 
         if called > 0:
-            await loop.run_in_executor(None, lambda: send_telegram_report(
+            await send_telegram_report(
                 f"📞 **Cold Lead Escalation Complete** [Client {client_id}]\n\n"
                 f"Triggered **{called}** auto-calls for leads that went cold after {COLD_LEAD_DAYS_THRESHOLD} days."
-            ))
+            )
 
     except Exception as e:
         logger.error(f"Cold Lead Escalation Error (Client {client_id}): {e}")

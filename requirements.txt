@@ -18,7 +18,7 @@ gspread==6.1.0
 httpx==0.26.0
 nest-asyncio==1.6.0
 openai==1.51.0
-redis==5.0.8
+# redis==5.0.8  # REMOVED: app falls back to SQLite automatically — saves ~30MB RAM
 
 python-telegram-bot==20.8
 python-dotenv==0.21.0
@@ -27,7 +27,7 @@ pydantic==2.13.0
 pydantic-settings==2.13.0
 pytz==2024.1
 
-reportlab==4.2.0
+# reportlab==4.2.0  # REMOVED: not used anywhere in app/ — saves ~15MB RAM
 requests==2.31.0
 retell-sdk==4.1.0
 schedule==1.2.1
@@ -41,6 +41,9 @@ yagmail==0.15.293
 # [NEW] Email & Phone Validation (Render-friendly, lightweight)
 email-validator==2.2.0
 phonenumbers==8.13.0
+
+# [NEW] DNS MX verification for email guess validation (free, no API key)
+dnspython==2.6.1
 
 # [NEW] spaCy NER for owner name extraction (en_core_web_sm ~12MB disk, ~100-150MB RAM)
 spacy>=3.7,<4.0

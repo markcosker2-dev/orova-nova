@@ -28,7 +28,7 @@ async def proofread_email(
 ) -> dict:
     """
     Runs outbound emails through an AI proofreading rubric.
-    Checks: grammar, tone, personalization, spam triggers, CAN-SPAM compliance.
+    Checks: grammar, tone, personalization, spam triggers, CAN-SPAM compliance, brand consistency.
     Returns:
         dict containing:
             "verdict": "pass", "rewrite", or "reject"
@@ -39,6 +39,34 @@ async def proofread_email(
     """
     logger.info(f"[PROOFREADER] Quality checking email to {to}")
     
+    # ── Load business context for brand consistency check ──
+    brand_context = ""
+    try:
+        _ctx_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "core", "business_context.json")
+        with open(_ctx_path, "r") as _f:
+            _biz = json.load(_f)
+        _co = _biz.get("company", {})
+        _services = _biz.get("services", [])
+        _icp = _biz.get("icp", {})
+        _rules = _biz.get("email_rules", {})
+        _vp = _biz.get("value_propositions", {})
+        brand_context = f"""
+BRAND CONTEXT (use to verify brand consistency):
+- Company: {_co.get('name', 'OROVA')} — {_co.get('description', 'Marketing agency')}
+- Services: {', '.join(s.get('name','') for s in _services)} (${', '.join(str(s.get('price_monthly_usd','')) for s in _services)} USD/mo)
+- Target: {_icp.get('region', 'West Coast US')} — {_icp.get('description', 'Businesses that can afford $4K-$5K/mo')}
+- Primary Verticals: {', '.join(_icp.get('primary_verticals', []))}
+- Value Prop: {_vp.get('primary', '')}
+- Email Tone: {_rules.get('tone', 'Casual and friendly')}
+- Sender: {_rules.get('sender_identity', "Nova — real person on Mark's team")}
+- Signature: {_rules.get('signature', 'Nova @ OROVA')}
+- Max Words: {_rules.get('max_words', 75)}
+- Framework: {_rules.get('framework', 'Hook-Value-Ask')}
+"""
+    except Exception as e:
+        logger.warning(f"[PROOFREADER] Could not load business_context.json: {e}")
+        brand_context = "BRAND CONTEXT: OROVA is a marketing agency specializing in Meta Ads + lead qualification. Sender is Nova. Signature: Nova @ OROVA. Tone: casual and friendly."
+    
     prompt = f"""
     You are an expert copywriter and email compliance officer. 
     Proofread and evaluate the following cold outreach email.
@@ -46,6 +74,8 @@ async def proofread_email(
     RECIPIENT INFO:
     Email address: {to}
     Recipient Context: {recipient_context}
+    
+    {brand_context}
     
     EMAIL DRAFT:
     Subject: {subject}
@@ -58,6 +88,14 @@ async def proofread_email(
     3. Spam Trigger Words: Avoid words like "free", "guaranteed", "make money", excessive punctuation.
     4. Compliance: Ensure it follows CAN-SPAM (has clear business identity, no deceptive subjects).
     5. Tone: Professional, value-driven, and non-intrusive.
+    6. Brand Consistency: Does the email accurately represent OROVA? Check:
+       - Sender identity matches (Nova, not Mark, unless booking a call)
+       - Signature matches the brand standard
+       - Value proposition is accurate (Meta Ads + lead qualification, NOT generic "AI sales" or "$20/month")
+       - Target region is West Coast US
+       - Tone is casual and friendly, not corporate or salesy
+       - Email follows Hook-Value-Ask framework
+       - Email is under 75 words
     
     VERDICT LOGIC:
     - PASS: Score >= 80 and passes all critical checks. Needs no edits.

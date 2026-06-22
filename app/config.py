@@ -65,7 +65,7 @@ class Settings(BaseSettings):
     # ── AgentMail ─────────────────────────────────────────────────────────────
     agentmail_api_key: str = ""
     agentmail_inbox_id: str = ""
-    agentmail_from_name: str = "HermesClaw"
+    agentmail_from_name: str = "Nova"
 
     # ── Google Sheets ─────────────────────────────────────────────────────────
     google_credentials_path: str = "credentials.json"
@@ -92,7 +92,7 @@ class Settings(BaseSettings):
     biz_timezone: str = "America/Los_Angeles"
 
     # ── Hunt Targets ─────────────────────────────────────────────────────────
-    hunt_targets: str = "dentists:Dallas TX,law firms:Houston TX,contractors:Austin TX"
+    hunt_targets: str = "home remodeling:California,automotive:West Coast,aviation:West Coast,real estate:West Coast"
 
     @property
     def parsed_hunt_targets(self) -> list[tuple[str, str]]:

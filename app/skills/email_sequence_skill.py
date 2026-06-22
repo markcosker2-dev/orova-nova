@@ -33,10 +33,11 @@ SEQUENCES = {
                 "subject_template": "Quick question about {company}",
                 "body_template": (
                     "Hi {first_name},\n\n"
-                    "I noticed {company} is doing great work in {industry}. "
-                    "We help businesses like yours generate 3-5x more qualified leads using AI-powered outreach.\n\n"
-                    "Would it make sense to chat for 10 minutes this week?\n\n"
-                    "— Mark, CEO of OROVA"
+                    "Saw {company} and thought of you. We help {industry} businesses on the West Coast "
+                    "stop chasing bad leads — our system qualifies every lead automatically so you only "
+                    "talk to people who are actually interested.\n\n"
+                    "Worth a 10-min chat?\n\n"
+                    "Nova @ OROVA"
                 ),
                 "purpose": "Initial introduction"
             },
@@ -45,35 +46,35 @@ SEQUENCES = {
                 "subject_template": "Re: Quick question about {company}",
                 "body_template": (
                     "Hi {first_name},\n\n"
-                    "Just circling back — I know you're busy. "
-                    "We recently helped a {industry} company increase their qualified leads by 340% in 60 days.\n\n"
-                    "Happy to share the playbook if you're interested.\n\n"
-                    "— Mark"
+                    "Just circling back. One of our {industry} clients on the West Coast went from "
+                    "wasting hours on unqualified leads to only taking calls that actually convert.\n\n"
+                    "Happy to share how it works.\n\n"
+                    "Nova @ OROVA"
                 ),
                 "purpose": "Social proof follow-up"
             },
             {
                 "delay_days": 4,
-                "subject_template": "Free audit for {company}",
+                "subject_template": "Your leads, {company}",
                 "body_template": (
                     "Hi {first_name},\n\n"
-                    "I ran a quick analysis on {company}'s online presence and found a few opportunities "
-                    "that could significantly boost your lead flow.\n\n"
-                    "Would you like me to send over the findings? No strings attached.\n\n"
-                    "— Mark"
+                    "Quick thought — what if every lead that came in was already qualified before you "
+                    "picked up the phone? That's what we do with Meta Ads + AI qualification.\n\n"
+                    "Want me to show you?\n\n"
+                    "Nova @ OROVA"
                 ),
                 "purpose": "Value-first offer"
             },
             {
                 "delay_days": 6,
-                "subject_template": "Last thought for {company}",
+                "subject_template": "Last note for {company}",
                 "body_template": (
                     "Hi {first_name},\n\n"
-                    "I don't want to be that person who keeps emailing, so this will be my last note.\n\n"
-                    "If lead generation is ever a priority for {company}, we'd love to help. "
-                    "Our AI-powered system runs 24/7 so you don't have to.\n\n"
+                    "I don't want to be that person who keeps emailing, so this is my last note.\n\n"
+                    "If getting better leads is ever a priority for {company}, we'd love to help. "
+                    "Our system runs 24/7 so you don't have to chase.\n\n"
                     "Here when you're ready.\n\n"
-                    "— Mark, OROVA"
+                    "Nova @ OROVA"
                 ),
                 "purpose": "Break-up email"
             },
@@ -82,10 +83,10 @@ SEQUENCES = {
                 "subject_template": "Update from OROVA",
                 "body_template": (
                     "Hi {first_name},\n\n"
-                    "It's been a month since I reached out. We've since launched some new AI capabilities "
-                    "that are getting incredible results for {industry} businesses.\n\n"
-                    "If you're open to a quick 10-min call, I'd love to show you what's possible.\n\n"
-                    "— Mark"
+                    "We've been getting great results for {industry} businesses on the West Coast — "
+                    "qualified leads coming in daily, no more tire-kickers.\n\n"
+                    "If you're open to a quick call, Mark would love to walk you through it.\n\n"
+                    "Nova @ OROVA"
                 ),
                 "purpose": "Re-engage after cooling period"
             }
@@ -100,27 +101,22 @@ SEQUENCES = {
                 "subject_template": "Great connecting, {first_name}",
                 "body_template": (
                     "Hi {first_name},\n\n"
-                    "Great chatting with you! As promised, here's a quick overview of how OROVA "
-                    "can help {company} scale lead generation.\n\n"
-                    "Our 3-tier approach:\n"
-                    "1. AI-powered prospecting (finds leads 24/7)\n"
-                    "2. Personalized multi-channel outreach\n"
-                    "3. Automated follow-up sequences\n\n"
-                    "Let me know if you'd like to dive deeper into any of these.\n\n"
-                    "— Mark"
+                    "Great chatting! Quick recap — we run Meta Ads that bring in leads, "
+                    "then our AI qualifies them within 60 seconds so you only talk to real prospects.\n\n"
+                    "Let me know if you want to dive deeper.\n\n"
+                    "Nova @ OROVA"
                 ),
                 "purpose": "Post-conversation recap"
             },
             {
                 "delay_days": 2,
-                "subject_template": "Case study: {industry} results",
+                "subject_template": "Results in {industry}",
                 "body_template": (
                     "Hi {first_name},\n\n"
-                    "Thought you'd find this interesting — we helped a {industry} company go from "
-                    "12 leads/month to 47 leads/month in just 8 weeks.\n\n"
-                    "The best part? It's fully automated. Their team didn't have to lift a finger.\n\n"
-                    "Would something like this work for {company}?\n\n"
-                    "— Mark"
+                    "Thought you'd find this interesting — a {industry} client of ours stopped chasing "
+                    "bad leads entirely. Every call they take now is pre-qualified by our AI.\n\n"
+                    "Could this work for {company}?\n\n"
+                    "Nova @ OROVA"
                 ),
                 "purpose": "Case study / social proof"
             },
@@ -129,10 +125,10 @@ SEQUENCES = {
                 "subject_template": "Proposal ready for {company}",
                 "body_template": (
                     "Hi {first_name},\n\n"
-                    "I put together a custom proposal for {company} based on our conversation. "
-                    "It includes specific strategies for the {industry} market in {location}.\n\n"
-                    "When's a good time to walk through it? I'm flexible this week.\n\n"
-                    "— Mark"
+                    "I put together a custom proposal for {company} based on our conversation — "
+                    "Meta Ads + AI lead qualification tailored to the {industry} space.\n\n"
+                    "Mark's free this week to walk you through it. When works?\n\n"
+                    "Nova @ OROVA"
                 ),
                 "purpose": "Proposal push"
             }
@@ -148,11 +144,9 @@ SEQUENCES = {
                 "body_template": (
                     "Hi {first_name},\n\n"
                     "We were reviewing our pipeline and {company} came up. "
-                    "I know the timing wasn't right before, but I wanted to check in.\n\n"
-                    "We've made some big upgrades to our AI engine — "
-                    "results are better than ever for {industry} businesses.\n\n"
+                    "We've upgraded our lead qualification — results are even better for {industry} businesses now.\n\n"
                     "Worth a quick call?\n\n"
-                    "— Mark"
+                    "Nova @ OROVA"
                 ),
                 "purpose": "Warm re-engagement"
             },
@@ -161,10 +155,10 @@ SEQUENCES = {
                 "subject_template": "New results in {industry}",
                 "body_template": (
                     "Hi {first_name},\n\n"
-                    "Quick update: one of our {industry} clients just hit their best month ever — "
-                    "67 qualified leads, 12 meetings booked, 3 new clients. All automated.\n\n"
-                    "If {company} is looking to grow this quarter, I'd love to help.\n\n"
-                    "— Mark"
+                    "One of our {industry} clients just had their best month after switching to automated "
+                    "lead qualification — qualified leads only, no more tire-kickers.\n\n"
+                    "If {company} is looking to grow this quarter, Mark would love to chat.\n\n"
+                    "Nova @ OROVA"
                 ),
                 "purpose": "Updated social proof"
             }
@@ -179,24 +173,24 @@ SEQUENCES = {
                 "subject_template": "Next steps for {company} + OROVA",
                 "body_template": (
                     "Hi {first_name},\n\n"
-                    "Thanks for the great conversation today! Here are the next steps we discussed:\n\n"
-                    "1. I'll send over the custom proposal by end of week\n"
-                    "2. Our team will run the initial SEO audit on {company}'s site\n"
-                    "3. We'll schedule a follow-up call to review findings\n\n"
-                    "Looking forward to working together.\n\n"
-                    "— Mark"
+                    "Thanks for the great conversation! Here's what happens next:\n\n"
+                    "1. We'll set up your Meta Ads campaigns\n"
+                    "2. Our AI starts qualifying every lead within 60 seconds\n"
+                    "3. You only take calls from real prospects\n\n"
+                    "Mark will send over the proposal by end of week.\n\n"
+                    "Nova @ OROVA"
                 ),
                 "purpose": "Meeting recap + next steps"
             },
             {
                 "delay_days": 2,
-                "subject_template": "Your {company} audit results",
+                "subject_template": "Your {company} campaign setup",
                 "body_template": (
                     "Hi {first_name},\n\n"
-                    "As promised, we ran the initial analysis on {company}. "
-                    "Found some quick wins that could boost your lead flow significantly.\n\n"
-                    "Shall I walk you through the findings on a quick call?\n\n"
-                    "— Mark"
+                    "We're getting your Meta Ads + lead qualification system set up. "
+                    "Found some quick wins that could boost your lead flow right away.\n\n"
+                    "Mark can walk you through the findings on a quick call — when works?\n\n"
+                    "Nova @ OROVA"
                 ),
                 "purpose": "Deliver audit + push for next meeting"
             }
@@ -503,7 +497,7 @@ async def check_drip_replies_and_process():
                 f"💡 **Suggested AI Reply:**\n"
                 f"```\n{ai_reply_draft}\n```"
             )
-            _send_telegram_alert(alert_msg)
+            await _send_telegram_alert(alert_msg)
 
 
 async def update_sheets_lead_status(company_name: str, new_status: str):

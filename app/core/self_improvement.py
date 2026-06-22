@@ -318,7 +318,7 @@ class StrategyOptimizer:
             
             # Save the proposal state to state_store
             await DatabaseManager.set_state("pending_prune_lead_ids", lead_ids)
-            _send_telegram_alert(proposal_msg)
+            await _send_telegram_alert(proposal_msg)
             
             return f"Proposed archiving of {len(lead_list)} stale leads."
         except Exception as e:
@@ -354,4 +354,4 @@ class ImprovementLoop:
         )
         
         # 4. Send weekly learning report to Telegram
-        _send_telegram_alert(f"📈 **Nova Learning Report**\n\n{report_text}\n\n🗑️ Stale leads: {prune_proposal}")
+        await _send_telegram_alert(f"📈 **Nova Learning Report**\n\n{report_text}\n\n🗑️ Stale leads: {prune_proposal}")

@@ -1,0 +1,52 @@
+I need you to conduct a deep-dive technical audit of my HermesClaw/OROVA codebase. This is an autonomous B2B sales engine running on Render free tier with Groq as primary LLM.
+
+## Architecture
+- Python FastAPI backend (port 18790): planning, memory, tool execution, 9-lane scheduler
+- Electron/TypeScript desktop GUI + OpenClaw gateway (port 18789)
+- HTML/CSS/JS dashboard at /mission-control/
+- Telegram bot + AgentMail + Retell AI integrations
+
+## Files to read in order
+1. app/core/ai_client.py
+2. app/core/planner.py
+3. app/core/router.py
+4. app/core/soul.py
+5. app/core/semantic_firewall.py
+6. app/core/hermesclaw_endpoints.py
+7. app/main.py
+8. app/worker.py
+9. app/core/database.py
+10. render.yaml
+11. electron/api/routes/orova.ts
+12. HermesClaw/electron/api/routes/orova.ts
+13. HermesClaw/electron/utils/store.ts
+14. electron/utils/store.ts
+15. .clinerules
+16. .gitignore
+
+## Specific things to check
+
+### Auth/security
+- Electron proxy sends X-API-Key header but require_dashboard_api_key() only reads X-Dashboard-Secret — find and confirm this mismatch
+- All instances of hardcoded key "nova_admin_2026" in TS files
+- Any use of == vs secrets.compare_digest() for API key comparison
+- Telegram /telegram webhook — any secret_token validation?
+- Router shortcuts /approve_pruning, /cancel, /status — any chat_id auth?
+
+### Functional bugs
+- Multi-turn tool calling on Gemini: do tool_calls and tool responses get properly converted to Gemini's function_call/function_response format?
+- daily_hunt_counter race: is check and increment properly locked?
+- Tool catalog in soul.py lists tools like bulk_scrape, stealth_extract, find_leads_v2 — do these exist in planner.py available_functions?
+
+### Deployment
+- render.yaml: disk section on free tier?
+- Lane 6 CEO brief schedule timezone — UTC vs PST?
+- SQLite data persistence on Render free tier (no persistent disk)?
+
+### Electron issues
+- HermesClaw/electron/api/routes/orova.ts import paths — do ../utils/config and ../utils/store resolve?
+- HermesClaw/electron/utils/store.ts — does setSetting actually save anything?
+- Missing translatePath entries between canonical and HermesClaw copies
+
+## Report format
+For each issue: file path + line number, severity (Critical/High/Medium/Low), explanation, and specific fix recommendation.

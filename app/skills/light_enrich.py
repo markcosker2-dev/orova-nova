@@ -2,9 +2,10 @@ import os
 import re
 import json
 import asyncio
-import httpx
+import socket
 import logging
 import urllib.parse
+import httpx
 from bs4 import BeautifulSoup, NavigableString
 from typing import Dict, Any, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor
@@ -12,6 +13,36 @@ from concurrent.futures import ThreadPoolExecutor
 from app.skills.notes_skill import log_skill_note
 
 logger = logging.getLogger(__name__)
+
+# ─── MX VERIFICATION (FREE, NO API KEY) ──────────────────────────
+async def _verify_mx(domain: str) -> bool:
+    """
+    Check if a domain has MX records (i.e., can receive email).
+    Uses dnspython in a thread executor to avoid blocking the event loop.
+    Returns True if MX records exist, False otherwise.
+    """
+    if not domain or "." not in domain:
+        return False
+    try:
+        import dns.resolver
+        loop = asyncio.get_running_loop()
+        def _check():
+            try:
+                answers = dns.resolver.resolve(domain, "MX", lifetime=3)
+                return bool(answers)
+            except Exception:
+                return False
+        result = await loop.run_in_executor(None, _check)
+        if result:
+            return True
+        # Fallback: try socket.gethostbyname as a basic connectivity check
+        try:
+            await loop.run_in_executor(None, lambda: socket.gethostbyname(domain))
+            return True  # Domain exists, assume it can receive mail
+        except Exception:
+            return False
+    except Exception:
+        return False
 
 # ─── SINGLETONS, EXECUTORS AND HELPERS ────────────────────────────
 _ai_client = None
@@ -535,10 +566,16 @@ async def _ddg_enrich_contact(biz_name: str, domain: str) -> Tuple[Optional[str]
         "owner": [
             f'"{biz_name}" owner OR founder OR CEO',
             f'site:linkedin.com "{biz_name}" owner OR founder',
+            f'"{biz_name}" president OR principal OR proprietor',
+            f'"owner of" "{biz_name}"',
+            f'site:bbb.org "{biz_name}" owner OR principal',
+            f'site:manta.com "{biz_name}" owner',
         ],
         "email": [
             f'"{biz_name}" "@{domain}"',
             f'"{biz_name}" contact email "{domain}"',
+            f'"{biz_name}" email OR contact',
+            f'site:{domain} contact OR email',
         ],
     }
 
@@ -1149,15 +1186,19 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
         owner = lead["owner"]
         parts = owner.lower().split()
         if len(parts) >= 2:
-            guesses = [
-                f"{parts[0]}@{domain}",
-                f"{parts[0]}.{parts[-1]}@{domain}",
-                f"{parts[0][0]}{parts[-1]}@{domain}",
-                f"info@{domain}",
-            ]
-            lead["email"] = guesses[0]
-            lead["notes"] = (lead.get("notes", "") + f" | Email guessed (verify before sending)").strip(" |")
-            logger.info(f"[ENRICH] → Guessed email: {lead['email']}")
+            # MX-verify domain before guessing (free, no API key)
+            if not await _verify_mx(domain):
+                logger.info(f"[ENRICH] → Skipping email guess — domain {domain} has no MX records")
+            else:
+                guesses = [
+                    f"{parts[0]}@{domain}",
+                    f"{parts[0]}.{parts[-1]}@{domain}",
+                    f"{parts[0][0]}{parts[-1]}@{domain}",
+                    f"info@{domain}",
+                ]
+                lead["email"] = guesses[0]
+                lead["notes"] = (lead.get("notes", "") + f" | Email guessed (verify before sending)").strip(" |")
+                logger.info(f"[ENRICH] → Guessed email: {lead['email']} (MX verified domain)")
 
     # Final Phone Normalization Guardrail
     if lead.get("phone"):

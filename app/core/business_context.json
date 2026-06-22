@@ -1,0 +1,132 @@
+{
+  "_description": "Single source of truth for OROVA business context. Loaded by email pipeline, proofreader, and drip templates. All other files (USER.md, brand_guidelines.json, config.py) should align with this.",
+  "_last_updated": "2026-06-22",
+
+  "company": {
+    "name": "OROVA",
+    "type": "Marketing Agency",
+    "description": "OROVA is a marketing agency specializing in Meta Ads (Facebook + Instagram) with integrated lead qualification and CRM. We help businesses stop chasing bad leads and only talk to qualified ones.",
+    "ceo": "Mark",
+    "ai_team_member": "Nova",
+    "timezone": "America/Los_Angeles",
+    "region": "West Coast US"
+  },
+
+  "services": [
+    {
+      "name": "Meta Ads + CRM",
+      "price_monthly_usd": 4000,
+      "description": "Full-service Meta Ads (Facebook + Instagram) management with Google Sheets CRM integration. Ad spend is separate.",
+      "ad_spend_minimum_monthly_usd": 2000,
+      "platforms": ["facebook", "instagram"]
+    },
+    {
+      "name": "Meta Ads + Retell AI Lead Qualification + CRM",
+      "price_monthly_usd": 5000,
+      "description": "Everything in the base package plus Retell AI-powered lead qualification — AI calls every lead within 60 seconds to qualify them, screens out tire-kickers, ensures no leads fall through the cracks.",
+      "ad_spend_minimum_monthly_usd": 2000,
+      "platforms": ["facebook", "instagram"]
+    }
+  ],
+
+  "value_propositions": {
+    "primary": "Stop chasing bad leads — only talk to qualified ones",
+    "secondary": [
+      "AI calls every lead within 60 seconds to qualify them",
+      "Screens out tire-kickers before they waste your time",
+      "No leads falling through the cracks — ever",
+      "Your pipeline runs 24/7 without you lifting a finger"
+    ]
+  },
+
+  "icp": {
+    "description": "Businesses on the West Coast US that can afford $4K-$5K/mo for marketing. Any industry with sufficient margins.",
+    "primary_verticals": [
+      "Home remodeling / contractors",
+      "Automotive (all spaces — dealers, repair, detailing, aftermarket)",
+      "Private aviation",
+      "Real estate"
+    ],
+    "secondary_verticals": [
+      "High-ticket service providers",
+      "Luxury / premium brands",
+      "Professional services (legal, medical, financial)"
+    ],
+    "region": "West Coast US (CA, OR, WA, NV, AZ — all states, no specific city focus)",
+    "budget_minimum_monthly_usd": 4000,
+    "key_pain_points": [
+      "Wasting time on unqualified leads",
+      "Inconsistent lead flow",
+      "Slow follow-up causing missed opportunities",
+      "No system to qualify leads before they reach the owner"
+    ]
+  },
+
+  "email_rules": {
+    "framework": "Hook-Value-Ask",
+    "max_words": 75,
+    "tone": "Casual and friendly — like a peer reaching out, not a salesperson",
+    "sender_identity": "Nova — sounds like a real person on Mark's team. NOT transparent about being AI.",
+    "signature_format": "Nova sends the emails. When it's time to book a call, Nova mentions Mark.",
+    "signature": "Nova @ OROVA",
+    "ceo_signature": "Mark, CEO @ OROVA",
+    "subject_formulas": [
+      "Quick question about {company}",
+      "Thought of {company}",
+      "{company} + OROVA",
+      "Idea for {company}"
+    ],
+    "rules": [
+      "Never use spam trigger words (free, guaranteed, make money, act now)",
+      "Always include clear business identity (OROVA)",
+      "Keep under 75 words total",
+      "Lead with a hook about THEIR business, not ours",
+      "Mention specific value in 1 sentence max",
+      "End with a low-pressure ask (10-15 min chat)",
+      "Nova is the sender — casual, peer-level, not corporate",
+      "Only mention Mark when suggesting a call"
+    ],
+    "can_spam_compliance": [
+      "Clear sender identity (Nova @ OROVA)",
+      "No deceptive subject lines",
+      "Valid physical address in footer when required",
+      "Honor opt-out requests immediately"
+    ]
+  },
+
+  "retell_pitch": {
+    "description": "Used when prospects ask what makes OROVA different. Focus on the speed and automation of lead qualification.",
+    "talking_points": [
+      "AI calls every single lead within 60 seconds of them filling out a form",
+      "Qualifies leads automatically — screens out tire-kickers and time-wasters",
+      "Your sales team only talks to people who are actually interested and have budget",
+      "No leads slip through the cracks — every single one gets a call",
+      "Works 24/7, even when you're sleeping"
+    ]
+  },
+
+  "case_studies": {
+    "_note": "No real case studies yet. Use placeholder/generic numbers when needed.",
+    "placeholder_format": {
+      "before": "X leads/month (generic, industry-appropriate number)",
+      "after": "3-5x improvement",
+      "timeframe": "60-90 days",
+      "example": "We helped a {industry} business go from 15 qualified leads/month to 47 in just 8 weeks — all automated."
+    }
+  },
+
+  "outreach": {
+    "initial_email_framework": {
+      "hook": "Mention something specific about their business — show you actually looked",
+      "value": "One sentence about what OROVA does that's relevant to them",
+      "ask": "Low-pressure invitation for a 10-15 minute chat",
+      "example": "Hi {name},\n\nI was checking out {company} — really impressed by {specific_thing}.\n\nWe help {industry} businesses on the West Coast stop chasing bad leads by qualifying every single one automatically. Most of our clients see 3-5x more qualified conversations within 60 days.\n\nWould a 10-minute call be worth it to see if this fits {company}?\n\nNova @ OROVA"
+    },
+    "follow_up_email_framework": {
+      "hook": "Reference the previous email casually",
+      "value": "Add social proof or a new insight",
+      "ask": "Even lower pressure — 'no worries if not'",
+      "example": "Hi {name},\n\nJust circling back on my note last week — I know things get busy.\n\nOne of our {industry} clients just had their best month ever after switching to automated lead qualification. Happy to share how it works if you're curious.\n\nNo worries if the timing isn't right.\n\nNova @ OROVA"
+    }
+  }
+}

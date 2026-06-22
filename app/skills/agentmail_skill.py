@@ -160,22 +160,23 @@ async def _verify_email_deliverable(email: str) -> dict:
     if _re.match(r"^(test|fake|temp|trash|dump|spam)@", email):
         return {"valid": False, "reason": "Likely test/disposable address"}
     
-    # MX record check
+    # MX record check (proper DNS MX lookup via dnspython)
     try:
         import asyncio as _aio
-        loop = _aio.get_event_loop()
-        import socket
-        
+        import dns.resolver
+
         def _check_mx():
             try:
-                result = socket.getaddrinfo(domain, 25, socket.AF_INET, socket.SOCK_STREAM)
-                return len(result) > 0
-            except (socket.gaierror, socket.error):
+                answers = dns.resolver.resolve(domain, 'MX')
+                return len(answers) > 0
+            except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN,
+                    dns.resolver.NoNameservers, dns.exception.DNSException):
                 return False
-        
+
+        loop = _aio.get_running_loop()
         mx_exists = await loop.run_in_executor(None, _check_mx)
         if not mx_exists:
-            return {"valid": False, "reason": f"No MX/A records found for domain: {domain}"}
+            return {"valid": False, "reason": f"No MX records found for domain: {domain}"}
     except Exception as e:
         logger.warning(f"[EmailVerify] MX check failed for {domain}: {e} — proceeding anyway")
     
@@ -194,20 +195,9 @@ async def send_outreach(
     client_id: int = 0
 ) -> dict:
     """
-    Sends an outreach email. Passes through the AI proofreading gate first
-    unless skip_proofread is True.
+    Sends an outreach email via AgentMail API.
+    Passes through the AI proofreading gate first unless skip_proofread is True.
     """
-    api_key = os.getenv("AGENTMAIL_API_KEY")
-    if not api_key:
-        raise EnvironmentError(
-            "AGENTMAIL_API_KEY is not set. "
-            "Add it to your Render environment variables or .env file."
-        )
-
-    client, error = _get_client()
-    if not client:
-         raise EnvironmentError(f"AgentMail client failed to initialize: {error}")
-
     # Validate email format before sending
     if not _validate_email(to):
         logger.warning(f"[AgentMail] Invalid email format: {to}. Skipping send.")
@@ -219,10 +209,19 @@ async def send_outreach(
         logger.warning(f"[AgentMail] Email verification failed for {to}: {verify_result['reason']}")
         return {"status": "error", "error": f"Email not deliverable: {verify_result['reason']}"}
 
+    return await _send_via_agentmail(to, subject, body, skip_proofread, recipient_context, lead_id, strategy, niche, client_id)
+
+
+async def _send_via_agentmail(to: str, subject: str, body: str, skip_proofread: bool, recipient_context: str, lead_id: int, strategy: str, niche: str, client_id: int) -> dict:
+    """Send email via AgentMail API (requires AGENTMAIL_API_KEY)."""
+    client, error = _get_client()
+    if not client:
+         return {"status": "error", "error": f"AgentMail client failed: {error}"}
+
     # Use Nova's default inbox
     sender = _get_nova_inbox()
     if not sender:
-        raise ValueError("No Nova inbox available. Create one first with create_inbox.")
+        return {"status": "error", "error": "No Nova inbox available."}
 
     final_subject = subject
     final_body = body
@@ -259,7 +258,7 @@ async def send_outreach(
                     f"Score: {quality_score}\n"
                     f"Reason/Fixes:\n{fixes}"
                 )
-                _send_telegram_alert(alert_msg)
+                await _send_telegram_alert(alert_msg)
                 
                 try:
                     now = datetime.now()
@@ -275,8 +274,7 @@ async def send_outreach(
                 return {"status": "rejected", "reason": fixes, "score": quality_score}
 
     try:
-        # Send using AgentMail client synchronous call wrapped inside run_in_executor in caller,
-        # but since we are async, we run in executor directly here.
+        # Send using AgentMail client synchronous call wrapped inside run_in_executor
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
             None,
@@ -292,7 +290,6 @@ async def send_outreach(
         
         try:
             now = datetime.now()
-            # Also update client quotas if needed
             await DatabaseManager.query(
                 "INSERT OR IGNORE INTO client_quotas (client_id) VALUES (?)", (client_id,)
             )
@@ -319,7 +316,7 @@ async def send_outreach(
             )
         except Exception as db_err:
             logger.error(f"Failed to log fail outcome: {db_err}")
-        raise
+        return {"status": "error", "error": str(e)}
 
 
 def _get_last_reply_check():

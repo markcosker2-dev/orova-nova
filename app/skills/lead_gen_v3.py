@@ -3,10 +3,12 @@ import logging
 import asyncio
 import re
 import json
+import socket
 import httpx
 from urllib.parse import quote
 from typing import Optional
 from duckduckgo_search import DDGS
+from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
@@ -277,41 +279,69 @@ async def _scrape_website(url: str) -> dict:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 async def _whois_lookup(domain: str) -> dict:
-    """Perform WHOIS lookup to get registrant info."""
+    """Perform WHOIS lookup via free RDAP API (no API key needed).
+    
+    RDAP (Registration Data Access Protocol) is the IETF standard
+    replacing legacy WHOIS. https://rdap.org is a free bootstrap
+    server that redirects to the correct registry — no API key,
+    no rate limit, no cost.
+    """
     result = {"owner_name": "", "email": "", "phone": ""}
     
     if not domain:
         return result
     
+    # ── Primary: Free RDAP API ──────────────────────────────────
     try:
-        whois_api = f"https://whois.domain.tools/{domain}"
+        rdap_url = f"https://rdap.org/domain/{domain}"
         headers = {
-            "User-Agent": "Mozilla/5.0 (compatible; KiloBot/1.0)",
-            "Accept": "application/json"
+            "Accept": "application/rdap+json, application/json",
+            "User-Agent": "OROVA-Enrichment/1.0",
         }
-        
-        async with httpx.AsyncClient(headers=headers, timeout=8.0) as client:
-            try:
-                resp = await client.get(whois_api)
-                if resp.status_code == 200:
-                    data = resp.json()
+        async with httpx.AsyncClient(headers=headers, timeout=8.0, follow_redirects=True) as client:
+            resp = await client.get(rdap_url)
+            if resp.status_code == 200:
+                data = resp.json()
+                
+                # Extract from entities (RDAP standard structure)
+                entities = data.get("entities", [])
+                for entity in entities:
+                    roles = entity.get("roles", [])
+                    vcard = entity.get("vcardArray", [])
                     
-                    if data.get("registrant"):
-                        result["owner_name"] = data["registrant"]
-                    elif data.get("registrant_name"):
-                        result["owner_name"] = data["registrant_name"]
+                    # Registrant is the domain owner
+                    if "registrant" in roles:
+                        # vcardArray format: ["vcard", [[fn, {}, "text", "Name"], ...]]
+                        if len(vcard) >= 2 and isinstance(vcard[1], list):
+                            for field in vcard[1]:
+                                if len(field) >= 4 and field[0] == "fn":
+                                    result["owner_name"] = str(field[3]).strip()
+                                elif len(field) >= 4 and field[0] == "email":
+                                    result["email"] = str(field[3]).strip()
+                                elif len(field) >= 4 and field[0] == "tel":
+                                    result["phone"] = str(field[3]).strip()
                     
-                    if data.get("registrant_email"):
-                        result["email"] = data["registrant_email"]
-                    
-                    if data.get("registrant_phone"):
-                        result["phone"] = data["registrant_phone"]
-            except Exception:
-                pass
+                    # Also check administrative/technical contacts
+                    if "administrative" in roles and not result["owner_name"]:
+                        if len(vcard) >= 2 and isinstance(vcard[1], list):
+                            for field in vcard[1]:
+                                if len(field) >= 4 and field[0] == "fn":
+                                    result["owner_name"] = str(field[3]).strip()
+                
+                # Fallback: check top-level name/handle fields
+                if not result["owner_name"]:
+                    ldh_name = data.get("ldhName", "")
+                    # Some registries put org name in events or notices
+                    for notice in data.get("notices", []):
+                        desc = " ".join(notice.get("description", []))
+                        if desc and len(desc) < 200 and not result["owner_name"]:
+                            # Only use short descriptions that look like names/orgs
+                            if any(c.isupper() for c in desc[:10]):
+                                result["owner_name"] = desc.strip()
     except Exception as e:
-        logger.debug(f"[WHOIS] Error for {domain}: {e}")
+        logger.debug(f"[RDAP] Error for {domain}: {e}")
     
-    # Fallback: try alternate WHOIS service
+    # ── Fallback: whois.vu (free, no key) ───────────────────────
     if not result["owner_name"]:
         try:
             alt_url = f"https://api.whois.vu/?q={domain}"
@@ -406,36 +436,56 @@ async def _state_registry_lookup(business_name: str, state: str = "") -> dict:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 async def _ddg_owner_verification(url: str, domain: str) -> dict:
-    """Use DuckDuckGo to verify owner name via site search."""
+    """Use DuckDuckGo to verify owner name via site search.
+    
+    Runs multiple query patterns to maximize hit rate:
+    1. site-scoped title search (original)
+    2. broad "owner of" query
+    3. LinkedIn / BBB / Manta cross-reference
+    """
     result = {"owner_name": "", "email": "", "phone": ""}
     
     if not domain:
         return result
     
+    # Multiple query patterns — each targets a different angle
+    search_queries = [
+        f'site:{domain} "Owner" OR "CEO" OR "Founder"',
+        f'"owner of" OR "founded by" "{domain}"',
+        f'"{domain}" owner OR president OR principal',
+        f'site:linkedin.com "{domain}" owner OR founder',
+        f'site:bbb.org "{domain}" owner OR principal',
+        f'site:manta.com "{domain}" owner',
+    ]
+    
     try:
-        def _search():
+        def _search(query):
             with DDGS() as ddgs:
-                return list(ddgs.text(
-                    f'site:{domain} "Owner" OR "CEO" OR "Founder"',
-                    max_results=5,
-                    safesearch="strict"
-                ))
+                return list(ddgs.text(query, max_results=5, safesearch="strict"))
         
-        results = await asyncio.get_running_loop().run_in_executor(None, _search)
-        
-        for res in results:
-            combined = (res.get("title", "") + " " + res.get("body", "")).lower()
-            if domain in combined and domain not in ["linkedin.com", "facebook.com"]:
-                text = res.get("body", "") + " " + res.get("title", "")
-                for pattern in OWNER_PATTERNS:
-                    match = pattern.search(text)
-                    if match:
-                        name = match.group(1).strip()
-                        if _is_plausible_name(name):
-                            result["owner_name"] = name
-                            break
-                if result["owner_name"]:
-                    break
+        for query in search_queries:
+            if result["owner_name"]:
+                break
+            try:
+                results = await asyncio.get_running_loop().run_in_executor(None, _search, query)
+                
+                for res in results:
+                    combined = (res.get("title", "") + " " + res.get("body", "")).lower()
+                    # Skip results that are just LinkedIn/Facebook directory pages
+                    if "linkedin.com/in/" in combined or "facebook.com/" in combined:
+                        continue
+                    text = res.get("body", "") + " " + res.get("title", "")
+                    for pattern in OWNER_PATTERNS:
+                        match = pattern.search(text)
+                        if match:
+                            name = match.group(1).strip()
+                            if _is_plausible_name(name):
+                                result["owner_name"] = name
+                                break
+                    if result["owner_name"]:
+                        break
+            except Exception:
+                continue
     except Exception as e:
         logger.debug(f"[DDG-VERIFY] Error for {domain}: {e}")
     
@@ -673,9 +723,20 @@ EMAIL_GUESS_PATTERNS = [
 ]
 
 def _guess_email(owner_name: str, domain: str) -> str:
-    """Generate likely email patterns from owner name + domain. Returns empty if can't parse name."""
+    """Generate likely email patterns from owner name + domain. MX-verifies domain first. Returns empty if can't parse name or domain has no MX."""
     if not owner_name or not domain:
         return ""
+    
+    # MX-verify domain before guessing (free, no API key)
+    try:
+        import dns.resolver
+        dns.resolver.resolve(domain, "MX", lifetime=3)
+    except Exception:
+        # Fallback: basic connectivity check
+        try:
+            socket.gethostbyname(domain)
+        except Exception:
+            return ""  # Domain doesn't exist or can't receive mail
     
     parts = owner_name.strip().lower().split()
     if len(parts) < 2:

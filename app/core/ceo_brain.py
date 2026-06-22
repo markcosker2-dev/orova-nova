@@ -106,7 +106,7 @@ class CEOBrain:
                 "Send time: **10:00 AM** — I'll track your best hours as you send emails.\n\n"
                 "I'll start tracking once you send your first outreach. 🚀"
             )
-            _send_telegram_alert(first_boot_msg)
+            await _send_telegram_alert(first_boot_msg)
             return first_boot_msg
         
         # 2. Query 7-day averages
@@ -201,7 +201,7 @@ class CEOBrain:
             
         report += f"\n📅 **Today's Schedule:**\n{schedule_text}"
         
-        _send_telegram_alert(report)
+        await _send_telegram_alert(report)
 
         # ── Auto-execute: schedule tasks to run in 30 min if no override ──
         await self._schedule_auto_execute(proposed_tasks, client_id)
@@ -260,7 +260,7 @@ class CEOBrain:
                 f"Alerts:\n" + "\n".join(f"• {a}" for a in alerts) + "\n\n"
                 f"Nova is auto-scheduling corrective tasks."
             )
-            _send_telegram_alert(alert_msg)
+            await _send_telegram_alert(alert_msg)
             
         # If health score drops below 70, auto-execute corrective tasks
         if health_score < 70:
@@ -390,7 +390,7 @@ class CEOBrain:
                 return  # was cancelled or already executed
             logger.info(f"[CEO_BRAIN] Auto-executing {len(proposal['tasks'])} tasks (no override received)")
             await self._execute_tasks(proposal["tasks"], proposal["client_id"])
-            _send_telegram_alert(
+            await _send_telegram_alert(
                 f"🤖 **Auto-Executed** {len(proposal['tasks'])} tasks (source: {proposal['source']})\n"
                 f"Tasks:\n" + "\n".join(f"• {t['description']} [{t['priority']}]" for t in proposal["tasks"])
             )
@@ -398,7 +398,7 @@ class CEOBrain:
         timer = asyncio.create_task(_auto_execute_callback())
         _pending_proposals[task_id]["timer"] = timer
 
-        _send_telegram_alert(
+        await _send_telegram_alert(
             f"⏰ **Schedule Proposal** (auto-execute in 30 min if no override)\n\n"
             + "\n".join(f"• {t['description']} [{t['priority']}]" for t in tasks)
             + "\n\n Reply with `/cancel {task_id}` to stop auto-execution."
@@ -412,7 +412,7 @@ class CEOBrain:
             timer = proposal.get("timer")
             if timer and not timer.done():
                 timer.cancel()
-            _send_telegram_alert(f"✅ Auto-execute cancelled for proposal `{task_id}`.")
+            await _send_telegram_alert(f"✅ Auto-execute cancelled for proposal `{task_id}`.")
             return True
         return False
 
