@@ -80,7 +80,7 @@ class _LeadRepo:
     @classmethod
     def save_lead(cls, lead: dict, default_vertical: str = None, client_id: int = 0) -> int:
         """Save a lead with automatic deduplication. Returns lead_id or -1 if duplicate.
-        Dedup check and insert happen inside a single transaction to prevent TOCTOU races."""
+        Dedup: SELECT check inside transaction + UNIQUE index as hard backstop."""
         email = lead.get("email", "").strip()
         url = lead.get("url") or lead.get("website", "")
         domain = ""
@@ -125,6 +125,12 @@ class _LeadRepo:
                 conn.commit()
                 return lead_id
             except Exception as e:
+                # Hard dedup backstop: UNIQUE index on (lower(email), client_id)
+                # catches any TOCTOU race that slipped past the SELECT check
+                import sqlite3
+                if isinstance(e, sqlite3.IntegrityError) and "idx_leads_email_client" in str(e):
+                    logger.info(f"[DEDUP-UNIQUE] Race caught by UNIQUE index: {email}")
+                    return -1
                 logger.error(f"Error saving lead: {e}")
                 return -1
 

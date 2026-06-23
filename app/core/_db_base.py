@@ -129,6 +129,8 @@ class _DBBase:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_email_client
+                ON leads(lower(email), client_id);
             CREATE TABLE IF NOT EXISTS clients (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 business_name TEXT,
