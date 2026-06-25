@@ -7,16 +7,21 @@ from app.core.ai_client import UnifiedAIClient
 logger = logging.getLogger(__name__)
 
 
-def _send_telegram_alert(message: str):
+async def _send_telegram_alert(message: str):
     """Send alert to Telegram when proofreader fails."""
     try:
-        import requests
+        import httpx
         token = os.getenv("TELEGRAM_BOT_TOKEN")
         chat_id = os.getenv("PERSONAL_CHAT_ID") or os.getenv("ADMIN_CHAT_ID")
         if not token or not chat_id:
             return
         url = f"https://api.telegram.org/bot{token}/sendMessage"
-        requests.post(url, data={"chat_id": chat_id, "text": message, "parse_mode": "Markdown"}, timeout=10)
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(url, data={"chat_id": chat_id, "text": message}, timeout=10.0)
+            if resp.status_code != 200:
+                # Sanitize: strip token from any error body before logging
+                body = resp.text.replace(token, "***") if token else resp.text
+                logger.error(f"Telegram sendMessage failed ({resp.status_code}): {body[:300]}")
     except Exception as e:
         logger.error(f"Failed to send Telegram alert: {e}")
 
@@ -144,7 +149,7 @@ BRAND CONTEXT (use to verify brand consistency):
         logger.error(f"[PROOFREADER] Evaluation failed: {e}", exc_info=True)
         # BLOCK the email — do not silently pass on failure
         alert_msg = f"⚠️ **PROOFREADER BLOCKED**\nTo: {to}\nSubject: {subject}\nReason: {e}\n*Email was NOT sent.*"
-        _send_telegram_alert(alert_msg)
+        await _send_telegram_alert(alert_msg)
         return {
             "verdict": "reject",
             "score": 0.0,

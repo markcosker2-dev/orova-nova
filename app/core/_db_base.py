@@ -38,6 +38,7 @@ class _DBBase:
             from app.core.redis_manager import redis_manager
             cls._redis_manager = redis_manager
             cls._use_redis = True
+            cls.mark_ready()
             logger.info("✅ FREE Database: Upstash Redis initialized")
         except ImportError:
             logger.info("ℹ️ Redis manager unavailable; using SQLite fallback.")
@@ -160,9 +161,13 @@ class _DBBase:
             );
             CREATE TABLE IF NOT EXISTS learned_patterns (
                 id TEXT PRIMARY KEY,
+                task_type TEXT NOT NULL DEFAULT '',
+                winning_approach TEXT NOT NULL DEFAULT '',
+                client_id INTEGER NOT NULL DEFAULT 0,
                 pattern_type TEXT,
                 content TEXT,
                 decay_score REAL DEFAULT 1.0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
             CREATE TABLE IF NOT EXISTS client_quotas (
@@ -221,6 +226,10 @@ class _DBBase:
         migrations = [
             ("leads", "updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
             ("metrics", "metric_value", "REAL DEFAULT 0"),
+            ("learned_patterns", "task_type", "TEXT"),
+            ("learned_patterns", "winning_approach", "TEXT"),
+            ("learned_patterns", "client_id", "INTEGER DEFAULT 0"),
+            ("learned_patterns", "created_at", "TIMESTAMP"),
         ]
         for table, column, col_def in migrations:
             try:
@@ -229,6 +238,86 @@ class _DBBase:
                 logger.info(f"[DB MIGRATION] Added {table}.{column}")
             except Exception:
                 pass  # Column already exists, ignore
+
+        # Backfill NULL key columns in learned_patterns so the unique index
+        # won't fail on legacy rows with NULL task_type/winning_approach/client_id.
+        # First, deduplicate: if multiple rows would collapse to the same key
+        # after backfill, keep only the one with the highest decay_score (or
+        # most recent last_used_at as tiebreaker) and delete the rest.
+        try:
+            conn.execute("""
+                DELETE FROM learned_patterns
+                WHERE id NOT IN (
+                    SELECT id FROM (
+                        SELECT id,
+                               ROW_NUMBER() OVER (
+                                   PARTITION BY
+                                       COALESCE(task_type, ''),
+                                       COALESCE(winning_approach, ''),
+                                       COALESCE(client_id, 0)
+                                   ORDER BY decay_score DESC, last_used_at DESC
+                               ) AS rn
+                        FROM learned_patterns
+                    ) WHERE rn = 1
+                )
+            """)
+            conn.commit()
+        except Exception:
+            pass  # Table empty or columns missing — safe to ignore
+
+        try:
+            conn.execute(
+                "UPDATE learned_patterns SET task_type = '' WHERE task_type IS NULL"
+            )
+            conn.execute(
+                "UPDATE learned_patterns SET winning_approach = '' WHERE winning_approach IS NULL"
+            )
+            conn.execute(
+                "UPDATE learned_patterns SET client_id = 0 WHERE client_id IS NULL"
+            )
+            conn.commit()
+        except Exception:
+            pass  # Table empty or columns missing — safe to ignore
+
+        # Backfill created_at for existing learned_patterns rows that have NULL
+        try:
+            conn.execute(
+                "UPDATE learned_patterns SET created_at = CURRENT_TIMESTAMP"
+                " WHERE created_at IS NULL"
+            )
+            conn.commit()
+        except Exception:
+            pass  # Table empty or column missing — safe to ignore
+
+        # Ensure created_at is auto-populated for new rows even on migrated DBs
+        # where ALTER TABLE couldn't add a DEFAULT. The trigger fires on INSERT
+        # only when created_at is NULL, matching the fresh-table DEFAULT behavior.
+        try:
+            conn.execute("""
+                CREATE TRIGGER IF NOT EXISTS trg_learned_patterns_created_at
+                AFTER INSERT ON learned_patterns
+                FOR EACH ROW
+                WHEN NEW.created_at IS NULL
+                BEGIN
+                    UPDATE learned_patterns SET created_at = CURRENT_TIMESTAMP
+                    WHERE id = NEW.id;
+                END
+            """)
+            conn.commit()
+        except Exception:
+            pass  # Trigger creation failure is non-fatal
+
+        # Ensure unique index exists for learned_patterns upsert conflict target
+        try:
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_learned_patterns_unique"
+                " ON learned_patterns(task_type, winning_approach, client_id)"
+            )
+            conn.commit()
+        except Exception as exc:
+            raise RuntimeError(
+                f"Failed to create unique index idx_learned_patterns_unique: {exc}"
+            ) from exc
 
     # ── Connection Pool ──────────────────────────────────────────────
     @classmethod
@@ -249,6 +338,8 @@ class _DBBase:
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA busy_timeout=5000")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            conn.execute("PRAGMA foreign_keys=ON")
             with cls._pool_lock:
                 cls._active_connections += 1
             return conn
@@ -295,6 +386,7 @@ class _DBBase:
                     conn.commit()
                     return {"status": "ok", "rows_affected": cursor.rowcount}
                 except Exception:
+                    conn.rollback()
                     raise
         return await loop.run_in_executor(None, _run)
 
@@ -333,7 +425,7 @@ class _DBBase:
     async def run_phase5_migrations(cls):
         with cls.connection() as conn:
             try:
-                for col in ["owner", "website", "email", "phone", "vertical", "icebreaker", "score"]:
+                for col in ["owner", "website", "email", "phone", "vertical", "icebreaker"]:
                     try:
                         conn.execute(f"ALTER TABLE leads ADD COLUMN {col} TEXT")
                     except Exception:

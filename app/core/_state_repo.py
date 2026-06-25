@@ -14,7 +14,7 @@ class _StateRepo:
         if row:
             try:
                 return json.loads(row["value"])
-            except: return row["value"]
+            except (json.JSONDecodeError, TypeError): return row["value"]
         return default
 
     @classmethod

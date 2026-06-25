@@ -416,7 +416,7 @@ class UnifiedAIClient:
                                     function=SimpleNamespace(name=name, arguments=json.dumps(args))
                                 ))
                                 continue
-                        except: pass
+                        except Exception: pass
 
         if not found_calls:
             for name in tool_names:
@@ -435,11 +435,12 @@ class UnifiedAIClient:
 
         return found_calls if found_calls else None
 
-    def _send_alert(self, msg: str):
+    async def _send_alert(self, msg: str):
         if not self.tg_token or not self.admin_chat_id:
             return
         try:
             import httpx
             url = f"https://api.telegram.org/bot{self.tg_token}/sendMessage"
-            httpx.post(url, json={"chat_id": self.admin_chat_id, "text": msg}, timeout=5.0)
-        except: pass
+            async with httpx.AsyncClient() as client:
+                await client.post(url, json={"chat_id": self.admin_chat_id, "text": msg}, timeout=5.0)
+        except Exception: pass

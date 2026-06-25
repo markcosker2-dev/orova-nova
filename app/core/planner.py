@@ -402,7 +402,7 @@ class TaskPlanner:
                 step_start_time = time.time()
                 try:
                     args = json.loads(tc.function.arguments) if isinstance(tc.function.arguments, str) else (tc.function.arguments or {})
-                except:
+                except (json.JSONDecodeError, TypeError, ValueError):
                     args = {}
 
                 # Repeat call detection

@@ -1,7 +1,6 @@
 import logging
 import json
 import uuid
-import numpy as np
 from datetime import datetime
 from app.core.database import DatabaseManager
 
@@ -78,6 +77,7 @@ class MemoryDistiller:
         # Update FAISS Index
         if self.index and self.encoder:
             try:
+                import numpy as np
                 embedding = self.encoder.encode([content])
                 self.index.add(np.array(embedding).astype('float32'))
                 # In a full production setup, we would save the FAISS index to disk here.
@@ -88,6 +88,7 @@ class MemoryDistiller:
         """Retrieve semantically relevant facts from the Wiki."""
         if self.index and self.encoder and self.index.ntotal > 0:
             try:
+                import numpy as np
                 # Semantic Search
                 query_vector = self.encoder.encode([current_goal])
                 distances, indices = self.index.search(np.array(query_vector).astype('float32'), k=3)

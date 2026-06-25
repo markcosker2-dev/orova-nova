@@ -4,7 +4,7 @@ import os
 import sys
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 import pytz
 import schedule
 import httpx
@@ -451,8 +451,7 @@ async def run_reply_monitor(client_id=0):
     """📬 Check AgentMail for new prospect replies."""
     logger.info(f"📬 [REPLY MONITOR] [Client {client_id}] Checking for new messages...")
     try:
-        loop = asyncio.get_running_loop()
-        res = await loop.run_in_executor(None, lambda: check_replies(limit=5))
+        res = await check_replies(limit=5, advance_checkpoint=False)
         if res.get("status") == "success" and res.get("count", 0) > 0:
             for msg in res.get("messages", []):
                 sender = msg.get("from")
@@ -478,6 +477,21 @@ async def run_reply_monitor(client_id=0):
                     }, client_id=client_id)
                 except Exception:
                     pass
+
+            # Advance checkpoint only after all side effects (alerts, metrics) succeed
+            latest_ts = res.get("latest_ts")
+            if latest_ts:
+                try:
+                    from app.skills.agentmail_skill import _set_last_reply_check
+                    ts_str = latest_ts.replace("Z", "+00:00")
+                    ts = datetime.fromisoformat(ts_str)
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=timezone.utc)
+                    ok = await _set_last_reply_check(ts)
+                    if not ok:
+                        logger.error(f"[REPLY MONITOR] Checkpoint write failed for {latest_ts} — will retry next cycle.")
+                except Exception as e:
+                    logger.error(f"[REPLY MONITOR] Failed to advance checkpoint: {e}")
     except Exception as e:
         logger.error(f"Reply Monitor Error: {e}")
 
@@ -503,9 +517,10 @@ async def run_cold_lead_escalation(client_id=0):
             logger.info(f"⏳ [ESCALATION] Outside prime calling hours ({now_pst.strftime('%I:%M %p')} PST). Suspending escalations.")
             return
 
-        if daily_call_counter >= MAX_CALLS_PER_DAY:
-            logger.info(f"📞 [ESCALATION] Daily call cap ({MAX_CALLS_PER_DAY}) reached. Skipping.")
-            return
+        with _call_counter_lock:
+            if daily_call_counter >= MAX_CALLS_PER_DAY:
+                logger.info(f"📞 [ESCALATION] Daily call cap ({MAX_CALLS_PER_DAY}) reached. Skipping.")
+                return
 
         cold_leads = await DatabaseManager.aget_cold_leads(COLD_LEAD_DAYS_THRESHOLD, client_id=client_id)
         if not cold_leads:
@@ -516,10 +531,6 @@ async def run_cold_lead_escalation(client_id=0):
         called = 0
 
         for lead in cold_leads:
-            if daily_call_counter >= MAX_CALLS_PER_DAY:
-                logger.info(f"📞 [ESCALATION] Daily call cap reached mid-batch. Stopping.")
-                break
-
             business = lead.get("business", "Unknown")
             phone = lead.get("phone", "")
             contact = lead.get("owner", "")
@@ -575,14 +586,22 @@ async def run_cold_lead_escalation(client_id=0):
                 logger.info(f"📞 [ESCALATION] Skipping {business} — no phone number on file.")
                 # Still mark as "Ready for Call" so it shows up in dashboard
                 await DatabaseManager.query(
-                    "UPDATE leads SET status = 'Ready for Call' WHERE LOWER(business) = ? AND client_id = ?",
-                    (business.lower(), int(client_id))
+                    "UPDATE leads SET status = 'Ready for Call' WHERE id = ? AND client_id = ?",
+                    (int(lead_id), int(client_id))
                 )
                 escalated += 1
                 continue
 
             # Trigger RetellAI call directly
             logger.info(f"📞 [ESCALATION] Triggering cold call for {business} ({phone})...")
+
+            # Reserve call slot atomically before invoking Retell
+            with _call_counter_lock:
+                if daily_call_counter >= MAX_CALLS_PER_DAY:
+                    logger.info(f"📞 [ESCALATION] Daily call cap reached mid-batch. Stopping.")
+                    break
+                daily_call_counter += 1
+
             context = {
                 "business_name": business,
                 "contact_name": contact,
@@ -599,6 +618,8 @@ async def run_cold_lead_escalation(client_id=0):
 
                 if result.get("skipped"):
                     logger.info(f"⏭️ [ESCALATION] Retell not configured — skipping call for {business}. Set RETELL_API_KEY to enable.")
+                    with _call_counter_lock:
+                        daily_call_counter -= 1  # Release reserved slot
                 elif result.get("success"):
                     call_id = result.get("call_id")
                     called += 1
@@ -606,8 +627,8 @@ async def run_cold_lead_escalation(client_id=0):
 
                     # Update lead status in SQLite
                     await DatabaseManager.query(
-                        "UPDATE leads SET status = 'Cold Call Initiated' WHERE LOWER(business) = ? AND client_id = ?",
-                        (business.lower(), int(client_id))
+                        "UPDATE leads SET status = 'Cold Call Initiated' WHERE id = ? AND client_id = ?",
+                        (int(lead_id), int(client_id))
                     )
 
                     await send_telegram_report(
@@ -621,14 +642,14 @@ async def run_cold_lead_escalation(client_id=0):
                     logger.warning(f"⚠️ [ESCALATION] Cold call failed for {business}: {error}")
                     # Mark as "Ready for Call" as fallback
                     await DatabaseManager.query(
-                        "UPDATE leads SET status = 'Ready for Call' WHERE LOWER(business) = ? AND client_id = ?",
-                        (business.lower(), int(client_id))
+                        "UPDATE leads SET status = 'Ready for Call' WHERE id = ? AND client_id = ?",
+                        (int(lead_id), int(client_id))
                     )
             except Exception as call_err:
                 logger.error(f"❌ [ESCALATION] Call trigger error for {business}: {call_err}")
                 await DatabaseManager.query(
-                    "UPDATE leads SET status = 'Ready for Call' WHERE LOWER(business) = ? AND client_id = ?",
-                    (business.lower(), int(client_id))
+                    "UPDATE leads SET status = 'Ready for Call' WHERE id = ? AND client_id = ?",
+                    (int(lead_id), int(client_id))
                 )
 
             escalated += 1
@@ -693,7 +714,11 @@ def cloud_backup_job():
     try:
         from app.core.database import DB_PATH
         from app.skills.drive_backup import upload_database
-        upload_database(DB_PATH)
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(loop.run_in_executor(None, upload_database, DB_PATH))
+        finally:
+            loop.close()
     except Exception as e:
         logger.error(f"[LANE 5] Backup Error: {e}")
 

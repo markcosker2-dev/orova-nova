@@ -12,6 +12,28 @@ from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
+# Shared httpx client — reuse across all enrichment calls instead of creating per-call
+_shared_http_client: Optional[httpx.AsyncClient] = None
+
+
+async def _get_http_client() -> httpx.AsyncClient:
+    """Return a shared AsyncClient, creating it lazily on first use."""
+    global _shared_http_client
+    if _shared_http_client is None or _shared_http_client.is_closed:
+        _shared_http_client = httpx.AsyncClient(timeout=15.0, follow_redirects=True)
+    return _shared_http_client
+
+
+async def _close_http_client() -> None:
+    """Close the shared httpx client and clear the module reference.
+
+    Call from app shutdown (lifespan) so the underlying connection pool is released.
+    """
+    global _shared_http_client
+    if _shared_http_client is not None and not _shared_http_client.is_closed:
+        await _shared_http_client.aclose()
+    _shared_http_client = None
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # LEAD GEN V3 — Advanced Lead Generation with 4-Strategy Enrichment Chain
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -212,53 +234,53 @@ async def _scrape_website(url: str) -> dict:
         all_emails = []
         all_phones = []
         
-        async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=12.0) as client:
-            pages_to_check = [base_url]
-            for path in CONTACT_PAGES + ABOUT_PAGES:
-                pages_to_check.append(f"https://{host}{path}")
-            
-            # Scan up to 7 pages (was 4)
-            for page_url in pages_to_check[:7]:
-                try:
-                    resp = await client.get(page_url, timeout=8.0)
-                    if resp.status_code != 200:
-                        continue
-                    
-                    text = resp.text
-                    
-                    # Extract ALL phones using enhanced extraction (tel: links, data attrs, extended regex)
-                    phones = _extract_phones_from_html(text)
-                    for p in phones:
-                        if p not in all_phones:
-                            all_phones.append(p)
-                    
-                    # Extract ALL emails (not just first)
-                    emails = EMAIL_RE.findall(text)
-                    noise_domains = ["example.com", "domain.com", "test.com", "wix.com", "squarespace.com",
-                                     "sentry.io", "webpack", "wixpress.com", "yourdomain.com"]
-                    for e in emails:
-                        domain_part = e.split("@")[-1].lower()
-                        if domain_part not in noise_domains and e.lower() not in all_emails:
-                            all_emails.append(e.lower())
-                    
-                    # Extract owner name (first plausible wins)
-                    if not result["owner_name"]:
-                        clean = re.sub(r'<[^>]+>', ' ', text)
-                        clean = re.sub(r'\s+', ' ', clean)
-                        for pattern in OWNER_PATTERNS:
-                            match = pattern.search(clean)
-                            if match:
-                                name = match.group(1).strip()
-                                if _is_plausible_name(name):
-                                    result["owner_name"] = name
-                                    break
-                    
-                    # Early exit only if we have ALL three fields
-                    if result["owner_name"] and all_emails and all_phones:
-                        break
-                        
-                except Exception:
+        client = await _get_http_client()
+        pages_to_check = [base_url]
+        for path in CONTACT_PAGES + ABOUT_PAGES:
+            pages_to_check.append(f"https://{host}{path}")
+        
+        # Scan up to 7 pages (was 4)
+        for page_url in pages_to_check[:7]:
+            try:
+                resp = await client.get(page_url, timeout=8.0, headers=headers)
+                if resp.status_code != 200:
                     continue
+                
+                text = resp.text
+                
+                # Extract ALL phones using enhanced extraction (tel: links, data attrs, extended regex)
+                phones = _extract_phones_from_html(text)
+                for p in phones:
+                    if p not in all_phones:
+                        all_phones.append(p)
+                
+                # Extract ALL emails (not just first)
+                emails = EMAIL_RE.findall(text)
+                noise_domains = ["example.com", "domain.com", "test.com", "wix.com", "squarespace.com",
+                                 "sentry.io", "webpack", "wixpress.com", "yourdomain.com"]
+                for e in emails:
+                    domain_part = e.split("@")[-1].lower()
+                    if domain_part not in noise_domains and e.lower() not in all_emails:
+                        all_emails.append(e.lower())
+                
+                # Extract owner name (first plausible wins)
+                if not result["owner_name"]:
+                    clean = re.sub(r'<[^>]+>', ' ', text)
+                    clean = re.sub(r'\s+', ' ', clean)
+                    for pattern in OWNER_PATTERNS:
+                        match = pattern.search(clean)
+                        if match:
+                            name = match.group(1).strip()
+                            if _is_plausible_name(name):
+                                result["owner_name"] = name
+                                break
+                
+                # Early exit only if we have ALL three fields
+                if result["owner_name"] and all_emails and all_phones:
+                    break
+                    
+            except Exception:
+                continue
         
         # Pick best email from all collected
         if all_emails and not result["email"]:
@@ -298,46 +320,46 @@ async def _whois_lookup(domain: str) -> dict:
             "Accept": "application/rdap+json, application/json",
             "User-Agent": "OROVA-Enrichment/1.0",
         }
-        async with httpx.AsyncClient(headers=headers, timeout=8.0, follow_redirects=True) as client:
-            resp = await client.get(rdap_url)
-            if resp.status_code == 200:
-                data = resp.json()
+        client = await _get_http_client()
+        resp = await client.get(rdap_url, headers=headers)
+        if resp.status_code == 200:
+            data = resp.json()
+            
+            # Extract from entities (RDAP standard structure)
+            entities = data.get("entities", [])
+            for entity in entities:
+                roles = entity.get("roles", [])
+                vcard = entity.get("vcardArray", [])
                 
-                # Extract from entities (RDAP standard structure)
-                entities = data.get("entities", [])
-                for entity in entities:
-                    roles = entity.get("roles", [])
-                    vcard = entity.get("vcardArray", [])
-                    
-                    # Registrant is the domain owner
-                    if "registrant" in roles:
-                        # vcardArray format: ["vcard", [[fn, {}, "text", "Name"], ...]]
-                        if len(vcard) >= 2 and isinstance(vcard[1], list):
-                            for field in vcard[1]:
-                                if len(field) >= 4 and field[0] == "fn":
-                                    result["owner_name"] = str(field[3]).strip()
-                                elif len(field) >= 4 and field[0] == "email":
-                                    result["email"] = str(field[3]).strip()
-                                elif len(field) >= 4 and field[0] == "tel":
-                                    result["phone"] = str(field[3]).strip()
-                    
-                    # Also check administrative/technical contacts
-                    if "administrative" in roles and not result["owner_name"]:
-                        if len(vcard) >= 2 and isinstance(vcard[1], list):
-                            for field in vcard[1]:
-                                if len(field) >= 4 and field[0] == "fn":
-                                    result["owner_name"] = str(field[3]).strip()
+                # Registrant is the domain owner
+                if "registrant" in roles:
+                    # vcardArray format: ["vcard", [[fn, {}, "text", "Name"], ...]]
+                    if len(vcard) >= 2 and isinstance(vcard[1], list):
+                        for field in vcard[1]:
+                            if len(field) >= 4 and field[0] == "fn":
+                                result["owner_name"] = str(field[3]).strip()
+                            elif len(field) >= 4 and field[0] == "email":
+                                result["email"] = str(field[3]).strip()
+                            elif len(field) >= 4 and field[0] == "tel":
+                                result["phone"] = str(field[3]).strip()
                 
-                # Fallback: check top-level name/handle fields
-                if not result["owner_name"]:
-                    ldh_name = data.get("ldhName", "")
-                    # Some registries put org name in events or notices
-                    for notice in data.get("notices", []):
-                        desc = " ".join(notice.get("description", []))
-                        if desc and len(desc) < 200 and not result["owner_name"]:
-                            # Only use short descriptions that look like names/orgs
-                            if any(c.isupper() for c in desc[:10]):
-                                result["owner_name"] = desc.strip()
+                # Also check administrative/technical contacts
+                if "administrative" in roles and not result["owner_name"]:
+                    if len(vcard) >= 2 and isinstance(vcard[1], list):
+                        for field in vcard[1]:
+                            if len(field) >= 4 and field[0] == "fn":
+                                result["owner_name"] = str(field[3]).strip()
+            
+            # Fallback: check top-level name/handle fields
+            if not result["owner_name"]:
+                ldh_name = data.get("ldhName", "")
+                # Some registries put org name in events or notices
+                for notice in data.get("notices", []):
+                    desc = " ".join(notice.get("description", []))
+                    if desc and len(desc) < 200 and not result["owner_name"]:
+                        # Only use short descriptions that look like names/orgs
+                        if any(c.isupper() for c in desc[:10]):
+                            result["owner_name"] = desc.strip()
     except Exception as e:
         logger.debug(f"[RDAP] Error for {domain}: {e}")
     
@@ -345,14 +367,14 @@ async def _whois_lookup(domain: str) -> dict:
     if not result["owner_name"]:
         try:
             alt_url = f"https://api.whois.vu/?q={domain}"
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(alt_url)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    if data.get("registrant"):
-                        result["owner_name"] = data["registrant"]
-                    if data.get("email"):
-                        result["email"] = data["email"]
+            client = await _get_http_client()
+            resp = await client.get(alt_url)
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("registrant"):
+                    result["owner_name"] = data["registrant"]
+                if data.get("email"):
+                    result["email"] = data["email"]
         except Exception:
             pass
     
@@ -411,20 +433,20 @@ async def _state_registry_lookup(business_name: str, state: str = "") -> dict:
         
         params = {"q": business_name}
         
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(registry_url, params=params, headers=headers)
-            if resp.status_code == 200:
-                text = resp.text
-                
-                if "registered agent" in text.lower() or "agent" in text.lower():
-                    agent_match = re.search(r'(?:Registered\s+)?Agent[:\s]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)', text, re.IGNORECASE)
-                    if agent_match:
-                        result["owner_name"] = agent_match.group(1)
-                
-                if not result["email"]:
-                    email_match = EMAIL_RE.search(text)
-                    if email_match:
-                        result["email"] = email_match.group(0)
+        client = await _get_http_client()
+        resp = await client.get(registry_url, params=params, headers=headers)
+        if resp.status_code == 200:
+            text = resp.text
+            
+            if "registered agent" in text.lower() or "agent" in text.lower():
+                agent_match = re.search(r'(?:Registered\s+)?Agent[:\s]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)', text, re.IGNORECASE)
+                if agent_match:
+                    result["owner_name"] = agent_match.group(1)
+            
+            if not result["email"]:
+                email_match = EMAIL_RE.search(text)
+                if email_match:
+                    result["email"] = email_match.group(0)
     except Exception as e:
         logger.debug(f"[REGISTRY] Error for {business_name}: {e}")
     
@@ -511,40 +533,40 @@ async def _bbb_lookup(business_name: str, domain: str = "") -> dict:
         # Search BBB for the business
         search_url = f"https://www.bbb.org/search?find_country=USA&find_entity={quote(business_name)}"
         
-        async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=10.0) as client:
-            resp = await client.get(search_url)
-            if resp.status_code != 200:
-                return result
-            
-            text = resp.text
-            
-            # Look for owner/principal/contact name patterns on BBB pages
-            bbb_patterns = [
-                re.compile(r'(?:Principal|Owner|Contact|Manager)[:\s]+([A-Za-z\'\-]+(?:\s+[A-Za-z\'\-]+){1,2})', re.IGNORECASE),
-                re.compile(r'(?:Business\s+Owner|Owner/Manager)[:\s]+([A-Za-z\'\-]+(?:\s+[A-Za-z\'\-]+){1,2})', re.IGNORECASE),
-            ]
-            
-            for pattern in bbb_patterns:
-                match = pattern.search(text)
-                if match:
-                    name = match.group(1).strip()
-                    if _is_plausible_name(name):
-                        result["owner_name"] = name
-                        break
-            
-            # Extract phone from BBB listing
-            phones = _extract_phones_from_html(text)
-            if phones:
-                result["phone"] = phones[0]
-            
-            # Extract email
-            emails = EMAIL_RE.findall(text)
-            noise = {"bbb.org", "example.com", "domain.com"}
-            for e in emails:
-                domain_part = e.split("@")[-1].lower()
-                if domain_part not in noise:
-                    result["email"] = e.lower()
+        client = await _get_http_client()
+        resp = await client.get(search_url, headers=headers)
+        if resp.status_code != 200:
+            return result
+        
+        text = resp.text
+        
+        # Look for owner/principal/contact name patterns on BBB pages
+        bbb_patterns = [
+            re.compile(r'(?:Principal|Owner|Contact|Manager)[:\s]+([A-Za-z\'\-]+(?:\s+[A-Za-z\'\-]+){1,2})', re.IGNORECASE),
+            re.compile(r'(?:Business\s+Owner|Owner/Manager)[:\s]+([A-Za-z\'\-]+(?:\s+[A-Za-z\'\-]+){1,2})', re.IGNORECASE),
+        ]
+        
+        for pattern in bbb_patterns:
+            match = pattern.search(text)
+            if match:
+                name = match.group(1).strip()
+                if _is_plausible_name(name):
+                    result["owner_name"] = name
                     break
+        
+        # Extract phone from BBB listing
+        phones = _extract_phones_from_html(text)
+        if phones:
+            result["phone"] = phones[0]
+        
+        # Extract email
+        emails = EMAIL_RE.findall(text)
+        noise = {"bbb.org", "example.com", "domain.com"}
+        for e in emails:
+            domain_part = e.split("@")[-1].lower()
+            if domain_part not in noise:
+                result["email"] = e.lower()
+                break
                     
     except Exception as e:
         logger.debug(f"[BBB] Error for {business_name}: {e}")
@@ -773,42 +795,42 @@ async def _source_google_maps(query: str, count: int) -> list:
         }
         search_url = f"https://www.google.com/maps/search/{quote(query)}"
         
-        async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=20.0) as client:
-            resp = await client.get(search_url)
-            if resp.status_code != 200:
-                return leads
-            
-            html = resp.text
-            json_match = re.search(r'window\.APP_INITIALIZATION_STATE\s*=\s*(\[.*?\]);', html, re.DOTALL)
-            if json_match:
-                try:
-                    data = json.loads(json_match.group(1))
-                    for item in data[3] if len(data) > 3 else []:
-                        if isinstance(item, list) and len(item) >= 5:
-                            business = ""
-                            phone = ""
-                            website = ""
-                            i = 0
-                            while i < len(item):
-                                val = item[i]
-                                if isinstance(val, str):
-                                    if not business and i >= 2 and not val.startswith("http"):
-                                        business = val
-                                    if PHONE_RE.match(val):
-                                        phone = val
-                                    if val.startswith("http") and "google.com" not in val:
-                                        website = val
-                                i += 1
-                            if business:
-                                leads.append({
-                                    "business": business,
-                                    "url": website or "",
-                                    "phone": phone,
-                                })
-                                if len(leads) >= count:
-                                    break
-                except Exception:
-                    pass
+        client = await _get_http_client()
+        resp = await client.get(search_url, headers=headers)
+        if resp.status_code != 200:
+            return leads
+        
+        html = resp.text
+        json_match = re.search(r'window\.APP_INITIALIZATION_STATE\s*=\s*(\[.*?\]);', html, re.DOTALL)
+        if json_match:
+            try:
+                data = json.loads(json_match.group(1))
+                for item in data[3] if len(data) > 3 else []:
+                    if isinstance(item, list) and len(item) >= 5:
+                        business = ""
+                        phone = ""
+                        website = ""
+                        i = 0
+                        while i < len(item):
+                            val = item[i]
+                            if isinstance(val, str):
+                                if not business and i >= 2 and not val.startswith("http"):
+                                    business = val
+                                if PHONE_RE.match(val):
+                                    phone = val
+                                if val.startswith("http") and "google.com" not in val:
+                                    website = val
+                            i += 1
+                        if business:
+                            leads.append({
+                                "business": business,
+                                "url": website or "",
+                                "phone": phone,
+                            })
+                            if len(leads) >= count:
+                                break
+            except Exception:
+                pass
     except Exception as e:
         logger.error(f"[GMAPS] Error: {e}")
     return leads[:count]

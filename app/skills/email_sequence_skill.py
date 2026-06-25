@@ -11,7 +11,7 @@ import logging
 import json
 import os
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import asyncio
 
 from app.core.database import DatabaseManager
@@ -423,15 +423,28 @@ async def check_drip_replies_and_process():
       3. Generates suggested AI response
       4. Notifies CEO via Telegram with details + draft response.
     """
-    from app.skills.agentmail_skill import check_replies, _send_telegram_alert
+    from app.skills.agentmail_skill import check_replies, _send_telegram_alert, _set_last_reply_check
     
     logger.info("[DRIP] Scanning for replies and processing active sequences...")
-    res = check_replies(limit=20)
+    res = await check_replies(limit=20, advance_checkpoint=False)
     if res.get("status") != "success":
         return
     
     messages = res.get("messages", [])
+    latest_ts_str = res.get("latest_ts")
     if not messages:
+        # No new messages, but still advance checkpoint so we don't re-scan
+        if latest_ts_str:
+            try:
+                ts_str = latest_ts_str.replace("Z", "+00:00")
+                ts = datetime.fromisoformat(ts_str)
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+                ok = await _set_last_reply_check(ts)
+                if not ok:
+                    logger.warning("[DRIP] Failed to persist reply checkpoint (no new messages) — may rescan next cycle")
+            except Exception as e:
+                logger.warning(f"[DRIP] Could not advance reply checkpoint (no new messages): {e}")
         return
         
     rows = await DatabaseManager.fetchall(
@@ -498,6 +511,19 @@ async def check_drip_replies_and_process():
                 f"```\n{ai_reply_draft}\n```"
             )
             await _send_telegram_alert(alert_msg)
+
+    # Advance checkpoint only after full processing loop succeeds
+    if latest_ts_str:
+        try:
+            ts_str = latest_ts_str.replace("Z", "+00:00")
+            ts = datetime.fromisoformat(ts_str)
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            ok = await _set_last_reply_check(ts)
+            if not ok:
+                logger.warning("[DRIP] Failed to persist reply checkpoint — replies may be reprocessed next cycle")
+        except Exception as e:
+            logger.warning(f"[DRIP] Could not advance reply checkpoint: {e}")
 
 
 async def update_sheets_lead_status(company_name: str, new_status: str):

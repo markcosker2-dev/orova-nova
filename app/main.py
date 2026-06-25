@@ -56,6 +56,7 @@ TOPIC_AGENT_MAP = {
 # In-memory agent queue for Mission Control (simple, volatile)
 AGENT_QUEUE = []
 BACKGROUND_LOOP = None
+_keep_alive_client = None  # Module-level sentinel for keep-alive httpx client
 _task_loop_event = asyncio.Event()  # Thread-safe event for task loop coordination
 _shutdown_event = asyncio.Event()  # Graceful shutdown signal
 
@@ -122,6 +123,14 @@ async def lifespan(app: FastAPI):
     DatabaseManager.mark_ready()
     await AgentSoul.initialize()
 
+    # [R-08] Reload persisted CEO auto-execute proposals from DB
+    try:
+        from app.core.ceo_brain import _reload_pending_proposals
+        count = await _reload_pending_proposals()
+        logger.info(f"[CEO_BRAIN] Reloaded {count} pending auto-execute proposals from DB")
+    except Exception as e:
+        logger.warning(f"[CEO_BRAIN] Could not reload pending proposals: {e}")
+
     # [SELF-LEARNING] Bootstrap learning tables for trace/pattern/skill storage
     try:
         from app.core.self_learning import ensure_tables as ensure_learning_tables
@@ -144,8 +153,23 @@ async def lifespan(app: FastAPI):
                 logger.info(f"♻️ Restored database snapshot from Drive: {restore_res.get('filename')}")
                 DatabaseManager._close_all_connections()
                 DatabaseManager._init_sqlite_fallback()
+                # Re-run Phase 5 migrations on the restored DB so schema is current
+                try:
+                    await DatabaseManager.run_phase5_migrations()
+                    logger.info("♻️ Phase 5 migrations applied to restored DB")
+                except Exception as mig_err:
+                    logger.warning(f"⚠️ Phase 5 migrations on restored DB failed: {mig_err}")
             else:
                 logger.warning(f"⚠️ No Drive backup available or restore failed: {restore_res.get('error')}")
+
+        # Re-run after restore so any pending_proposal:* rows from the restored DB
+        # are rescheduled into the CEO brain scheduler.
+        try:
+            from app.core.ceo_brain import _reload_pending_proposals
+            count = await _reload_pending_proposals()
+            logger.info(f"[CEO_BRAIN] Reloaded {count} pending auto-execute proposals after DB restore")
+        except Exception as e:
+            logger.warning(f"[CEO_BRAIN] Could not reload pending proposals after restore: {e}")
 
     # [HERMESCLAW] Register all autonomous API endpoints
     from app.core.hermesclaw_endpoints import register_hermesclaw_routes
@@ -201,6 +225,7 @@ async def lifespan(app: FastAPI):
     # Keep-alive ping for Render free tier (reuse single client)
     keep_alive_url = os.getenv("RENDER_EXTERNAL_URL")
     if keep_alive_url:
+        global _keep_alive_client
         _keep_alive_client = httpx.AsyncClient(timeout=5.0)
         async def _ping():
             while True:
@@ -235,8 +260,14 @@ async def lifespan(app: FastAPI):
     scheduler.shutdown()
     # Close keep-alive client if it exists
     try:
-        if '_keep_alive_client' in globals():
+        if _keep_alive_client is not None:
             await _keep_alive_client.aclose()
+    except Exception:
+        pass
+    # Close shared lead-gen httpx client
+    try:
+        from app.skills.lead_gen_v3 import _close_http_client
+        await _close_http_client()
     except Exception:
         pass
     logger.info("🛑 NOVA Gateway Offline — graceful shutdown complete")
@@ -450,12 +481,12 @@ async def api_health_check(authorized: bool = Depends(require_dashboard_api_key)
 
     breaker_status = {k: {"state": "open" if v["open_until"] > time.time() else "closed", "failures": v["failures"]} for k, v in _BREAKER.items()}
     try: q_depth = tg_queue._q.qsize()
-    except: q_depth = -1
+    except Exception: q_depth = -1
 
     try:
         row = await DatabaseManager.fetchone("SELECT COUNT(*) as cnt, AVG(decay_score) as avg_score FROM learned_patterns WHERE last_used_at >= ?", (window_24h.isoformat(),))
         learning_stats = {"patterns_reinforced": row["cnt"], "avg_confidence": row["avg_score"]}
-    except: learning_stats = {}
+    except Exception: learning_stats = {}
 
     memory_status = await memory_monitor.check_memory()
     hardening_health = await health_checks.run_all()
@@ -1136,7 +1167,7 @@ async def action_hunt_leads(authorized: bool = Depends(require_dashboard_api_key
 @app.post("/api/actions/send-emails")
 async def action_send_emails(authorized: bool = Depends(require_dashboard_api_key)):
     try:
-        res = check_replies(limit=5)
+        res = await check_replies(limit=5, advance_checkpoint=False)
         if res.get("status") == "error":
             return {"status": "error", "message": res.get("message", "AgentMail check failed")}
         return {"status": "ok", "message": res.get("message", f"Outreach process checked. Found {res.get('count', 0)} replies.")}

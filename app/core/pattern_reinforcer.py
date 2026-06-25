@@ -22,9 +22,13 @@ class PatternReinforcer:
     Reads metrics → Identifies winners → Updates learned_patterns.
     """
 
+    def __init__(self):
+        self._reinforced_this_cycle: set = set()
+
     async def run_cycle(self):
         """Scheduled reinforcement cycle."""
         logger.info("🧠 [HERMES] Starting autonomous learning cycle...")
+        self._reinforced_this_cycle = set()  # reset idempotency guard
         try:
             await self._decay_stale_patterns()
             winners = await self._identify_winners()
@@ -42,10 +46,9 @@ class PatternReinforcer:
 
     async def _decay_stale_patterns(self):
         """Stale patterns lose confidence over time."""
-        cutoff = datetime.utcnow() - timedelta(hours=48)
         await DatabaseManager.query(
-            "UPDATE learned_patterns SET decay_score = MAX(0.0, decay_score - ?) WHERE last_used_at < ?",
-            (DECAY_RATE, cutoff.isoformat())
+            "UPDATE learned_patterns SET decay_score = MAX(0.0, decay_score - ?) WHERE last_used_at < datetime('now', '-48 hours')",
+            (DECAY_RATE,)
         )
 
     async def _identify_winners(self) -> list:
@@ -76,9 +79,21 @@ class PatternReinforcer:
         await send_admin_message(msg)
 
     async def _upsert_pattern(self, task_type: str, approach: str, score: float, client_id: int = 0):
+        # Idempotency guard: skip if already reinforced this cycle
+        key = (task_type, approach, client_id)
+        if key in self._reinforced_this_cycle:
+            return
+        self._reinforced_this_cycle.add(key)
+
+        # Atomic upsert: INSERT new pattern or UPDATE existing one
+        # Uses unique index idx_learned_patterns_unique on (task_type, winning_approach, client_id)
         await DatabaseManager.query(
-            "UPDATE learned_patterns SET decay_score = MIN(1.0, decay_score + ?), last_used_at = CURRENT_TIMESTAMP WHERE task_type = ? AND winning_approach = ? AND client_id = ?",
-            (0.1, task_type, approach, client_id)
+            """INSERT INTO learned_patterns (id, task_type, winning_approach, client_id, pattern_type, content, decay_score, created_at, last_used_at)
+               VALUES (?, ?, ?, ?, ?, ?, 0.1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+               ON CONFLICT (task_type, winning_approach, client_id) DO UPDATE SET
+                   decay_score = MIN(1.0, decay_score + 0.1),
+                   last_used_at = CURRENT_TIMESTAMP""",
+            (f"{task_type}:{approach}:{client_id}", task_type, approach, client_id, task_type, approach)
         )
         await self._maybe_notify_insight(task_type, approach, score, client_id)
 

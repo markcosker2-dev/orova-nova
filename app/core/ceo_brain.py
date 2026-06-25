@@ -24,6 +24,149 @@ _pending_proposals: dict = {}  # task_id -> {"tasks": [...], "created_at": datet
 _AUTO_EXECUTE_TIMEOUT = 1800  # 30 minutes in seconds
 
 
+async def _persist_proposal(task_id: str, proposal: dict):
+    """Persist a proposal to state_store so it survives restarts. Raises on failure."""
+    payload = {
+        "tasks": proposal["tasks"],
+        "client_id": proposal["client_id"],
+        "source": proposal.get("source", "morning_brief"),
+        "created_at": proposal["created_at"].isoformat(),
+    }
+    try:
+        await DatabaseManager.query(
+            "INSERT OR REPLACE INTO state_store (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
+            (f"pending_proposal:{task_id}", json.dumps(payload)),
+        )
+    except Exception as e:
+        logger.error(f"[CEO_BRAIN] Failed to persist proposal {task_id}: {e}")
+        raise
+
+
+async def _delete_persisted_proposal(task_id: str):
+    """Remove a persisted proposal from state_store. Raises on failure."""
+    try:
+        await DatabaseManager.query(
+            "DELETE FROM state_store WHERE key = ?",
+            (f"pending_proposal:{task_id}",),
+        )
+    except Exception as e:
+        logger.error(f"[CEO_BRAIN] Failed to delete persisted proposal {task_id}: {e}")
+        raise
+
+
+async def _mark_proposal_executed(task_id: str):
+    """Mark a persisted proposal as executed so it won't be retried on restart."""
+    try:
+        await DatabaseManager.query(
+            "UPDATE state_store SET value = ? WHERE key = ?",
+            (json.dumps({"status": "executed"}), f"pending_proposal:{task_id}"),
+        )
+    except Exception as e:
+        logger.error(f"[CEO_BRAIN] Failed to mark proposal {task_id} as executed: {e}")
+        raise
+
+
+async def _run_proposal(task_id: str, context: str, execute_fn):
+    """Shared auto-execute logic: execute tasks, clean up, alert.
+
+    After execute_fn succeeds the persisted record is marked as executed
+    so a restart won't re-run already-completed work. Deletion is then
+    best-effort — a failed delete just leaves a harmless "executed" row.
+    """
+    proposal = _pending_proposals.get(task_id)
+    if not proposal:
+        return
+    logger.info(f"[CEO_BRAIN] Auto-executing {len(proposal['tasks'])} tasks ({context})")
+    try:
+        await execute_fn(proposal["tasks"], proposal["client_id"])
+    except Exception as e:
+        logger.error(f"[CEO_BRAIN] execute_fn failed for {task_id}: {e}")
+        return  # keep proposal in memory + DB for retry
+    # Execution succeeded — mark persisted record so restarts won't re-run it
+    persisted_ok = False
+    try:
+        await _mark_proposal_executed(task_id)
+        persisted_ok = True
+    except Exception:
+        logger.warning(f"[CEO_BRAIN] Failed to mark {task_id} as executed; attempting delete instead")
+    # Best-effort cleanup of persisted record
+    try:
+        await _delete_persisted_proposal(task_id)
+        persisted_ok = True
+    except Exception:
+        if not persisted_ok:
+            # Last resort: write executed status directly so reload won't re-schedule
+            try:
+                await DatabaseManager.query(
+                    "INSERT OR REPLACE INTO state_store (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
+                    (f"pending_proposal:{task_id}", json.dumps({"status": "executed"})),
+                )
+                logger.warning(f"[CEO_BRAIN] Mark-executed and delete both failed for {task_id}; wrote terminal status directly")
+            except Exception as write_err:
+                logger.error(f"[CEO_BRAIN] All persistence attempts failed for {task_id}: {write_err}")
+                # No terminal checkpoint confirmed — keep in-memory entry so the
+                # DB row (still non-executed) won't be re-scheduled on restart
+                # while the timer is already dead. A future restart will retry.
+                return
+        else:
+            logger.warning(f"[CEO_BRAIN] Persisted delete failed for {task_id}, but proposal is marked executed")
+    # Terminal checkpoint confirmed — safe to remove from memory
+    _pending_proposals.pop(task_id, None)
+    await _send_telegram_alert(
+        f"🤖 **Auto-Executed** {len(proposal['tasks'])} tasks (source: {proposal['source']})\n"
+        f"Tasks:\n" + "\n".join(f"• {t['description']} [{t['priority']}]" for t in proposal["tasks"])
+    )
+
+
+async def _reload_pending_proposals() -> int:
+    """Reload pending proposals from DB on startup and re-schedule timers."""
+    restored = 0
+    try:
+        rows = await DatabaseManager.fetchall(
+            "SELECT key, value FROM state_store WHERE key LIKE 'pending_proposal:%'"
+        )
+        if not rows:
+            return restored
+        brain = CEOBrain()
+        for row in rows:
+            task_id = row["key"].split(":", 1)[1]
+            try:
+                payload = json.loads(row["value"])
+                # Skip proposals already executed (leftover from a failed delete)
+                if isinstance(payload, dict) and payload.get("status") == "executed":
+                    logger.info(f"[CEO_BRAIN] Skipping already-executed proposal {task_id}, cleaning up")
+                    try:
+                        await _delete_persisted_proposal(task_id)
+                    except Exception as cleanup_err:
+                        logger.warning(f"[CEO_BRAIN] Cleanup delete failed for executed proposal {task_id}: {cleanup_err}")
+                    continue
+                created_at = datetime.datetime.fromisoformat(payload["created_at"])
+                elapsed = (datetime.datetime.now() - created_at).total_seconds()
+                remaining = max(0, _AUTO_EXECUTE_TIMEOUT - elapsed)
+
+                _pending_proposals[task_id] = {
+                    "tasks": payload["tasks"],
+                    "client_id": payload.get("client_id", 0),
+                    "created_at": created_at,
+                    "source": payload.get("source", "morning_brief"),
+                }
+
+                async def _make_callback(tid, delay):
+                    await asyncio.sleep(delay)
+                    await _run_proposal(tid, "restored proposal", brain._execute_tasks)
+
+                timer = asyncio.create_task(_make_callback(task_id, remaining))
+                _pending_proposals[task_id]["timer"] = timer
+                logger.info(f"[CEO_BRAIN] Restored proposal {task_id} ({remaining:.0f}s remaining)")
+                restored += 1
+            except Exception as e:
+                logger.error(f"[CEO_BRAIN] Failed to restore proposal {task_id}: {e}")
+                await _delete_persisted_proposal(task_id)
+    except Exception as e:
+        logger.error(f"[CEO_BRAIN] Failed to reload pending proposals: {e}")
+    return restored
+
+
 class CEOBrain:
     def __init__(self):
         self.ai = UnifiedAIClient()
@@ -143,7 +286,7 @@ class CEOBrain:
         # 3. Check for HOT Replies
         hot_replies_text = "None"
         try:
-            inbox_res = check_replies(limit=5)
+            inbox_res = await check_replies(limit=5, advance_checkpoint=False)
             if inbox_res.get("status") == "success" and inbox_res.get("messages"):
                 # We can check recent emails or DB status
                 hot_list = []
@@ -381,19 +524,18 @@ class CEOBrain:
             "created_at": datetime.datetime.now(),
             "source": source,
         }
+        try:
+            await _persist_proposal(task_id, _pending_proposals[task_id])
+        except Exception:
+            # Persistence failed — remove in-memory entry and skip the proposal alert
+            _pending_proposals.pop(task_id, None)
+            logger.warning(f"[CEO_BRAIN] Proposal {task_id} not persisted; skipping auto-execute schedule")
+            return
 
         # Schedule auto-execution after 30 minutes
         async def _auto_execute_callback():
             await asyncio.sleep(_AUTO_EXECUTE_TIMEOUT)
-            proposal = _pending_proposals.pop(task_id, None)
-            if not proposal:
-                return  # was cancelled or already executed
-            logger.info(f"[CEO_BRAIN] Auto-executing {len(proposal['tasks'])} tasks (no override received)")
-            await self._execute_tasks(proposal["tasks"], proposal["client_id"])
-            await _send_telegram_alert(
-                f"🤖 **Auto-Executed** {len(proposal['tasks'])} tasks (source: {proposal['source']})\n"
-                f"Tasks:\n" + "\n".join(f"• {t['description']} [{t['priority']}]" for t in proposal["tasks"])
-            )
+            await _run_proposal(task_id, "no override received", self._execute_tasks)
 
         timer = asyncio.create_task(_auto_execute_callback())
         _pending_proposals[task_id]["timer"] = timer
@@ -412,6 +554,7 @@ class CEOBrain:
             timer = proposal.get("timer")
             if timer and not timer.done():
                 timer.cancel()
+            await _delete_persisted_proposal(task_id)
             await _send_telegram_alert(f"✅ Auto-execute cancelled for proposal `{task_id}`.")
             return True
         return False

@@ -10,7 +10,7 @@ import asyncio
 import logging
 import json
 from typing import Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 import httpx
 from app.core.database import DatabaseManager
 
@@ -319,46 +319,42 @@ async def _send_via_agentmail(to: str, subject: str, body: str, skip_proofread: 
         return {"status": "error", "error": str(e)}
 
 
-def _get_last_reply_check():
-    """Read last-processed reply timestamp from state_store via sync SQLite."""
+_LAST_REPLY_READ_ERROR = object()
+
+async def _get_last_reply_check():
+    """Read last-processed reply timestamp from state_store via DatabaseManager.
+    Returns:
+        datetime if checkpoint exists
+        None if checkpoint is missing (first run)
+        _LAST_REPLY_READ_ERROR sentinel if a read error occurs
+    """
     try:
-        import sqlite3
-        from app.core.database import DB_PATH
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row
-        try:
-            row = conn.execute(
-                "SELECT value FROM state_store WHERE key = 'last_reply_check_at'"
-            ).fetchone()
-            if row and row["value"]:
-                return datetime.fromisoformat(row["value"])
-        finally:
-            conn.close()
+        val = await DatabaseManager.get_state('last_reply_check_at', None)
+        if val:
+            return datetime.fromisoformat(val)
+        return None
     except Exception as e:
         logger.warning(f"Could not read last_reply_check_at: {e}")
-    return None
+        return _LAST_REPLY_READ_ERROR
 
 
-def _set_last_reply_check(ts: datetime) -> None:
-    """Persist last-processed reply timestamp to state_store."""
+async def _set_last_reply_check(ts: datetime) -> bool:
+    """Persist last-processed reply timestamp to state_store via DatabaseManager.
+
+    Returns:
+        True if the checkpoint was persisted successfully, False otherwise.
+        Callers should treat a False return as a write failure and react
+        accordingly (retry, skip advancement, or return an error).
+    """
     try:
-        import sqlite3
-        from app.core.database import DB_PATH
-        conn = sqlite3.connect(DB_PATH)
-        try:
-            conn.execute(
-                "INSERT OR REPLACE INTO state_store (key, value, updated_at) "
-                "VALUES ('last_reply_check_at', ?, CURRENT_TIMESTAMP)",
-                (ts.isoformat(),),
-            )
-            conn.commit()
-        finally:
-            conn.close()
+        await DatabaseManager.set_state('last_reply_check_at', ts.isoformat())
+        return True
     except Exception as e:
         logger.warning(f"Could not persist last_reply_check_at: {e}")
+        return False
 
 
-def check_replies(inbox_id: str = None, limit: int = 10) -> Dict[str, Any]:
+async def check_replies(inbox_id: str = None, limit: int = 10, advance_checkpoint: bool = True) -> Dict[str, Any]:
     """
     Check Nova's inbox for new INBOUND messages since last check.
 
@@ -367,6 +363,14 @@ def check_replies(inbox_id: str = None, limit: int = 10) -> Dict[str, Any]:
        Now filtered to labels=["INBOX"].
     2. No checkpoint meant the same messages re-alerted every 5min cycle.
        Now tracks last_reply_check_at in state_store.
+
+    Args:
+        advance_checkpoint: If True (default), advance the checkpoint after
+            fetching. Read-only callers (morning_brief, categorize, etc.)
+            should pass False so the owning flow (run_reply_monitor) can
+            advance the checkpoint only after its side effects succeed.
+            The latest_ts is always returned in the response dict so the
+            owning flow can call _set_last_reply_check manually if needed.
     """
     client, error = _get_client()
     if not client:
@@ -376,47 +380,81 @@ def check_replies(inbox_id: str = None, limit: int = 10) -> Dict[str, Any]:
     if not inbox:
         return {"status": "error", "message": "No inbox available."}
 
-    last_checked = _get_last_reply_check()
-    now = datetime.utcnow()
+    last_checked = await _get_last_reply_check()
+
+    # Read error — return error without advancing checkpoint
+    if last_checked is _LAST_REPLY_READ_ERROR:
+        return {"status": "error", "message": "Database read error — cannot determine last check time."}
+
+    now = datetime.now(timezone.utc)
 
     # First run: set checkpoint, return empty — don't alert on backlog
     if last_checked is None:
-        _set_last_reply_check(now)
+        if advance_checkpoint:
+            ok = await _set_last_reply_check(now)
+            if not ok:
+                return {"status": "error", "message": "Failed to persist initial checkpoint — database write error."}
         logger.info("[AgentMail] First check — checkpoint set, no backlog alert.")
-        return {"status": "success", "inbox": inbox, "count": 0, "messages": []}
+        return {"status": "success", "inbox": inbox, "count": 0, "messages": [], "latest_ts": now.isoformat()}
 
     try:
-        result = client.inboxes.messages.list(
-            inbox_id=inbox,
-            limit=limit,
-            labels=["INBOX"],
-            after=last_checked,
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
+            None,
+            lambda: client.inboxes.messages.list(
+                inbox_id=inbox,
+                limit=limit,
+                labels=["INBOX"],
+                after=last_checked,
+            )
         )
         messages = []
+        latest_ts = last_checked  # track newest message actually processed
+        if latest_ts is not None and latest_ts.tzinfo is None:
+            latest_ts = latest_ts.replace(tzinfo=timezone.utc)
         if hasattr(result, 'messages') and result.messages:
             for msg in result.messages[:limit]:
+                msg_ts = getattr(msg, 'created_at', None)
+                if msg_ts:
+                    try:
+                        parsed = datetime.fromisoformat(str(msg_ts)) if isinstance(msg_ts, str) else msg_ts
+                        if parsed.tzinfo is None:
+                            parsed = parsed.replace(tzinfo=timezone.utc)
+                        if parsed > latest_ts:
+                            latest_ts = parsed
+                    except (ValueError, TypeError):
+                        pass
                 messages.append({
                     "message_id": getattr(msg, 'message_id', 'unknown'),
                     "from": getattr(msg, 'from_', getattr(msg, 'sender', 'unknown')),
                     "subject": getattr(msg, 'subject', 'No subject'),
                     "snippet": str(getattr(msg, 'text', getattr(msg, 'snippet', '')))[:200],
-                    "date": str(getattr(msg, 'created_at', ''))
+                    "date": str(msg_ts or '')
                 })
 
-        # Advance checkpoint on success only
-        _set_last_reply_check(now)
+        # Advance checkpoint to latest processed message timestamp (not `now`)
+        # so messages arriving between last_checked and now but beyond `limit`
+        # are not skipped on the next check cycle.
+        # Only advance when the owning flow requests it; read-only callers
+        # pass advance_checkpoint=False so run_reply_monitor can advance
+        # after its side effects (alerts, metrics) succeed.
+        if advance_checkpoint:
+            ok = await _set_last_reply_check(latest_ts)
+            if not ok:
+                return {"status": "error", "message": "Messages fetched but failed to persist checkpoint — database write error."}
 
         return {
             "status": "success",
             "inbox": inbox,
             "count": len(messages),
             "messages": messages,
+            "latest_ts": latest_ts.isoformat() if latest_ts else None,
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
 
-def reply_to_email(message_id: str, body: str, inbox_id: str = None) -> Dict[str, Any]:
+async def reply_to_email(message_id: str, body: str, inbox_id: str = None) -> Dict[str, Any]:
     """Reply to a specific email in Nova's inbox."""
     client, error = _get_client()
     if not client:
@@ -427,10 +465,14 @@ def reply_to_email(message_id: str, body: str, inbox_id: str = None) -> Dict[str
         return {"status": "error", "message": "No inbox available."}
 
     try:
-        result = client.inboxes.messages.reply(
-            inbox_id=inbox,
-            message_id=message_id,
-            text=body
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
+            None,
+            lambda: client.inboxes.messages.reply(
+                inbox_id=inbox,
+                message_id=message_id,
+                text=body
+            )
         )
         logger.info(f"[+] Replied to message {message_id}")
         return {
@@ -451,7 +493,7 @@ async def summarize_and_categorize_inbox(inbox_id: str = None, limit: int = 10) 
     logger.info("[AGENTMAIL] Running inbox categorization check...")
     
     # 1. Fetch recent messages
-    raw_inbox = check_replies(inbox_id, limit)
+    raw_inbox = await check_replies(inbox_id, limit, advance_checkpoint=False)
     if raw_inbox["status"] != "success" or not raw_inbox["messages"]:
         return raw_inbox
 
