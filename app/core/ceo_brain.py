@@ -554,7 +554,10 @@ class CEOBrain:
             timer = proposal.get("timer")
             if timer and not timer.done():
                 timer.cancel()
-            await _delete_persisted_proposal(task_id)
+            try:
+                await _delete_persisted_proposal(task_id)
+            except Exception:
+                logger.warning(f"[CEO_BRAIN] Failed to delete persisted proposal {task_id} on cancel; in-memory entry already removed")
             await _send_telegram_alert(f"✅ Auto-execute cancelled for proposal `{task_id}`.")
             return True
         return False
