@@ -87,7 +87,7 @@ async def compose_premium_outreach(lead: Dict[str, Any], niche: str = "", client
         "4ps": "Promise-Picture-Proof-Push: bold promise, vivid picture, credibility, clear ask.",
     }
 
-    prompt = f"""You are the best cold-email writer alive, writing for OROVA — an AI system that finds, qualifies, and books sales appointments for high-ticket local businesses.
+    prompt = f"""You are the best cold-email writer alive, writing for OROVA — a marketing agency that runs Meta ads (Facebook + Instagram) for luxury and premium West Coast businesses: we generate the leads with AI-crafted ad creatives, and our AI qualifies every lead and books the serious ones onto the owner's calendar.
 
 Write ONE cold email to this exact person:
 - Name: {owner or 'Unknown (address as "there", never "Sir/Madam")'}
@@ -138,8 +138,8 @@ Subject: under 6 words, lowercase-casual, curiosity-driven, no clickbait."""
     body = (
         f"Hi {first_name},\n\n"
         f"{opener}\n\n"
-        f"We build AI that finds and qualifies high-ticket leads for businesses like {business}, "
-        f"so you only talk to people ready to buy.\n\n"
+        f"We run Meta ads for premium businesses like {business} — our AI makes the creatives, "
+        f"generates the leads, and qualifies every one so you only talk to people ready to buy.\n\n"
         f"Worth a 10-minute call to see if it fits?\n\n"
         f"Nova @ OROVA"
     )

@@ -30,6 +30,7 @@ except ImportError:
 ROOT = Path(__file__).resolve().parents[1]
 LEADS_DIR = ROOT / "vault" / "30-leads"
 BRIEFS_DIR = ROOT / "vault" / "20-ops" / "briefs"
+STRATEGY_NOTE = ROOT / "vault" / "10-brain" / "strategy-snapshot.md"
 
 BASE_URL = (os.getenv("VAULT_PULL_URL") or os.getenv("RENDER_EXTERNAL_URL") or "").rstrip("/")
 API_KEY = os.getenv("DASHBOARD_API_KEY", "")
@@ -95,6 +96,37 @@ def _brief_markdown(entry: dict) -> str:
     )
 
 
+def _strategy_markdown(strategies: list) -> str:
+    """Curated snapshot of what Nova has LEARNED — the Obsidian side of the
+    self-improvement loop. Not a DB mirror: active strategies only, ranked."""
+    lines = [
+        "---",
+        "name: strategy-snapshot",
+        "description: What Nova has learned — active strategies ranked by Wilson score",
+        "type: brain",
+        f"created: {datetime.now().strftime('%Y-%m-%d')}",
+        "status: active",
+        "---",
+        "",
+        "# Strategy Snapshot (auto-synced)",
+        "",
+        "What the self-improvement loop currently believes, ranked by the",
+        "small-sample-safe Wilson bound. Synced by `scripts/vault_pull.py` —",
+        "do not edit by hand.",
+        "",
+        "| Type | Strategy | Win rate | Sample | Wilson | Confidence |",
+        "|---|---|---|---|---|---|",
+    ]
+    for s in sorted(strategies, key=lambda x: x.get("wilson_score") or 0, reverse=True):
+        lines.append(
+            f"| {s.get('strategy_type', '')} | {s.get('strategy_value', '')} "
+            f"| {round((s.get('win_rate') or 0) * 100, 1)}% | {s.get('sample_size', 0)} "
+            f"| {round(s.get('wilson_score') or 0, 3)} | {s.get('confidence', '')} |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
 def main() -> int:
     if not BASE_URL or not API_KEY:
         print("ERROR: set RENDER_EXTERNAL_URL (or VAULT_PULL_URL) and DASHBOARD_API_KEY in .env")
@@ -134,7 +166,21 @@ def main() -> int:
         except Exception as e:
             print(f"WARN: briefs pull failed: {e}")
 
-    print(f"vault_pull: {new_leads} lead file(s) updated, {new_briefs} brief(s) updated")
+        # Learned strategies -> vault/10-brain/strategy-snapshot.md
+        strategies_updated = False
+        try:
+            res = client.get(f"{BASE_URL}/api/learned_strategies")
+            res.raise_for_status()
+            strategies = res.json().get("strategies", [])
+            if strategies:
+                strategies_updated = _write_if_changed(STRATEGY_NOTE, _strategy_markdown(strategies))
+        except Exception as e:
+            print(f"WARN: strategies pull failed: {e}")
+
+    print(
+        f"vault_pull: {new_leads} lead file(s) updated, {new_briefs} brief(s) updated, "
+        f"strategy snapshot {'updated' if strategies_updated else 'unchanged'}"
+    )
     return 0
 
 
