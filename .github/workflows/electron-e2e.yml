@@ -9,6 +9,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   electron-e2e:
     name: Electron E2E (${{ matrix.os }})

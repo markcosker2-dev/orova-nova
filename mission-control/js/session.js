@@ -1,13 +1,15 @@
 async function requestSessionToken(ttl) {
     ttl = ttl || 3600;
-    let dashboardSecret = localStorage.getItem('OROVA_DASHBOARD_SECRET');
+    let dashboardSecret = sessionStorage.getItem('OROVA_DASHBOARD_SECRET')
+        || localStorage.getItem('OROVA_DASHBOARD_SECRET');
     if (!dashboardSecret) {
-        dashboardSecret = 'bypassed';
+        dashboardSecret = window.prompt('Enter the dashboard secret:') || '';
         if (!dashboardSecret) {
             showToast('Dashboard secret is required to issue a session token.', 'error');
             return null;
         }
-        localStorage.setItem('OROVA_DASHBOARD_SECRET', dashboardSecret);
+        sessionStorage.setItem('OROVA_DASHBOARD_SECRET', dashboardSecret);
+        localStorage.removeItem('OROVA_DASHBOARD_SECRET');
     }
 
     const baseUrl = (window.location.origin === 'null' || window.location.protocol === 'file:')

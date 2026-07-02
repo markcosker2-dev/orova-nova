@@ -1071,7 +1071,8 @@ async def create_client(request: Request, authorized: bool = Depends(require_das
         return {"status": "ok", "client": {"id": new_id, "name": name, "niche": niche, "location": location}}
     except Exception as e:
         logger.error(f"Error creating client: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"[API] Internal error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/api/tasks")
 async def get_tasks(authorized: bool = Depends(require_dashboard_api_key)):
@@ -1118,7 +1119,8 @@ async def save_tasks(request: Request, authorized: bool = Depends(require_dashbo
             json.dump(current_tasks, f, indent=2)
         return {"status": "ok", "message": "Tasks saved successfully"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"[API] Internal error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/api/tasks/delete")
 async def delete_task(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
@@ -1137,7 +1139,8 @@ async def delete_task(request: Request, authorized: bool = Depends(require_dashb
                 json.dump(tasks, f, indent=2)
             return {"status": "ok", "message": "Task deleted"}
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            logger.error(f"[API] Internal error: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Internal server error")
     return {"status": "ok", "message": "No tasks to delete"}
 
 @app.get("/api/content")
@@ -1185,7 +1188,8 @@ async def save_content(request: Request, authorized: bool = Depends(require_dash
             json.dump(current_content, f, indent=2)
         return {"status": "ok", "message": "Content saved"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"[API] Internal error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/api/content/delete")
 async def delete_content(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
@@ -1204,7 +1208,8 @@ async def delete_content(request: Request, authorized: bool = Depends(require_da
                 json.dump(content, f, indent=2)
             return {"status": "ok", "message": "Content deleted"}
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            logger.error(f"[API] Internal error: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Internal server error")
     return {"status": "ok", "message": "No content to delete"}
 
 @app.get("/api/memory")
@@ -1252,7 +1257,8 @@ async def save_memory(request: Request, authorized: bool = Depends(require_dashb
             json.dump(current_memories, f, indent=2)
         return {"status": "ok", "message": "Memory saved"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"[API] Internal error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/api/memory/delete")
 async def delete_memory(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
@@ -1271,7 +1277,8 @@ async def delete_memory(request: Request, authorized: bool = Depends(require_das
                 json.dump(memories, f, indent=2)
             return {"status": "ok", "message": "Memory deleted"}
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            logger.error(f"[API] Internal error: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Internal server error")
     return {"status": "ok", "message": "No memory to delete"}
 
 @app.get("/api/chat/history")
@@ -1289,7 +1296,7 @@ async def chat_with_agent(request: Request, authorized: bool = Depends(require_d
         return {"status": "ok", "response": response}
     except Exception as e:
         logger.error(f"Error in chat endpoint: {e}")
-        return {"status": "error", "response": f"Chat system error: {str(e)}"}
+        return {"status": "error", "response": "Chat system error — see server logs"}
 
 @app.post("/api/actions/hunt-leads")
 async def action_hunt_leads(authorized: bool = Depends(require_dashboard_api_key)):
@@ -1312,7 +1319,8 @@ async def action_send_emails(authorized: bool = Depends(require_dashboard_api_ke
             return {"status": "error", "message": res.get("message", "AgentMail check failed")}
         return {"status": "ok", "message": res.get("message", f"Outreach process checked. Found {res.get('count', 0)} replies.")}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        logger.error(f"[API] Internal error: {e}", exc_info=True)
+        return {"status": "error", "message": "Internal error — see server logs"}
 
 @app.post("/api/actions/generate-report")
 async def action_generate_report(authorized: bool = Depends(require_dashboard_api_key)):
@@ -1320,7 +1328,8 @@ async def action_generate_report(authorized: bool = Depends(require_dashboard_ap
         res = await backup_database()
         return {"status": "ok", "report": res.get("message", f"CEO report and vault snapshot complete: {res.get('filename', 'orova.db')}")}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        logger.error(f"[API] Internal error: {e}", exc_info=True)
+        return {"status": "error", "message": "Internal error — see server logs"}
 
 @app.get("/api/notifications")
 async def get_notifications(authorized: bool = Depends(require_dashboard_api_key)):
@@ -1353,7 +1362,8 @@ async def read_notifications(request: Request, authorized: bool = Depends(requir
                 json.dump(notifications, f, indent=2)
             return {"status": "ok", "message": "Notifications updated"}
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            logger.error(f"[API] Internal error: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Internal server error")
     return {"status": "ok"}
 
 @app.get("/api/pending-emails")

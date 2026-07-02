@@ -79,12 +79,13 @@ const DASHBOARD_SECRET_KEY = 'OROVA_DASHBOARD_SECRET';
 const SESSION_TOKEN_KEY = 'OROVA_SESSION_TOKEN';
 
 function getDashboardSecret() {
-    return localStorage.getItem(DASHBOARD_SECRET_KEY) || '';
+    return sessionStorage.getItem(DASHBOARD_SECRET_KEY) || localStorage.getItem(DASHBOARD_SECRET_KEY) || '';
 }
 
 function setDashboardSecret(secret) {
     if (secret) {
-        localStorage.setItem(DASHBOARD_SECRET_KEY, secret);
+        sessionStorage.setItem(DASHBOARD_SECRET_KEY, secret);
+        localStorage.removeItem(DASHBOARD_SECRET_KEY);
     }
 }
 

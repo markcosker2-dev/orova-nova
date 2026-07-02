@@ -354,7 +354,9 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
                     lead["icebreaker"] = "Pending review..."
 
                     # Populate CRM Metadata
-                    lead["source"] = lead.get("source_type", "Yelp Direct" if "yelp.com" in (lead.get("url") or "") else "Web Search")
+                    from urllib.parse import urlparse as _urlparse
+                    _host = _urlparse(lead.get("url") or "").netloc.lower()
+                    lead["source"] = lead.get("source_type", "Yelp Direct" if _host.endswith("yelp.com") else "Web Search")
                     lead["date"] = datetime.now().strftime("%Y-%m-%d")
                     lead["vertical"] = niche
                     

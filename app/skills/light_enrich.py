@@ -80,6 +80,20 @@ _crawl_semaphore = asyncio.Semaphore(10)
 _NON_DIGIT_RE = re.compile(r'\D')
 
 
+
+def _mask_email(email: str) -> str:
+    """j***@domain.com — enough to debug, no PII in third-party log storage."""
+    if not email or "@" not in email:
+        return "<none>"
+    local, _, domain = email.partition("@")
+    return f"{local[:1]}***@{domain}"
+
+
+def _mask_phone(phone: str) -> str:
+    """Last 4 digits only."""
+    digits = _NON_DIGIT_RE.sub("", phone or "")
+    return f"***{digits[-4:]}" if len(digits) >= 4 else "<invalid>"
+
 def _score_and_select_email(emails: list, domain: str) -> Optional[str]:
     if not emails:
         return None
@@ -114,14 +128,14 @@ def _normalize_phone_to_e164(phone: str) -> str:
     # Pre-check: reject obvious fakes before hitting the library
     raw_number = digits[-10:]
     if len(set(raw_number)) == 1:
-        logger.warning(f"[PHONE] Rejecting fake number with repeated digits: '{phone}'")
+        logger.warning(f"[PHONE] Rejecting fake number with repeated digits: {_mask_phone(phone)}")
         return ""
     sequential_patterns = ["1234567890", "9876543210", "0123456789", "2345678901", "0987654321"]
     if raw_number in sequential_patterns:
-        logger.warning(f"[PHONE] Rejecting fake sequential number: '{phone}'")
+        logger.warning(f"[PHONE] Rejecting fake sequential number: {_mask_phone(phone)}")
         return ""
     if raw_number.startswith("999"):
-        logger.warning(f"[PHONE] Rejecting fake number starting with 999: '{phone}'")
+        logger.warning(f"[PHONE] Rejecting fake number starting with 999: {_mask_phone(phone)}")
         return ""
     
     # ── phonenumbers library (proper validation) ──
@@ -130,10 +144,10 @@ def _normalize_phone_to_e164(phone: str) -> str:
         parsed = phonenumbers.parse(phone, "US")  # Default region US
         if phonenumbers.is_valid_number(parsed):
             e164 = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
-            logger.debug(f"[PHONE] phonenumbers validated: {phone} → {e164}")
+            logger.debug(f"[PHONE] phonenumbers validated: {_mask_phone(e164)}")
             return e164
         # Not a valid number — log and reject
-        logger.warning(f"[PHONE] phonenumbers rejected invalid: '{phone}'")
+        logger.warning(f"[PHONE] phonenumbers rejected invalid: {_mask_phone(phone)}")
         return ""
     except Exception:
         pass  # Fall through to basic formatting
@@ -732,7 +746,7 @@ async def _ddg_enrich_contact(biz_name: str, domain: str) -> Tuple[Optional[str]
             if extracted_email and "@" in extracted_email:
                 if not any(j in extracted_email.lower() for j in JUNK_EMAIL_PATTERNS):
                     found_email = extracted_email
-                    logger.info(f"[HAWK AI ENRICH] Email extracted via LLM: {found_email}")
+                    logger.info(f"[HAWK AI ENRICH] Email extracted via LLM: {_mask_email(found_email)}")
                     
         except Exception as e:
             logger.warning(f"[HAWK AI ENRICH] LLM snippet parsing failed: {e}")
@@ -783,11 +797,11 @@ async def _ddg_enrich_contact(biz_name: str, domain: str) -> Tuple[Optional[str]
             domain_match = next((e for e in emails if domain in e.lower()), None)
             if domain_match:
                 found_email = domain_match
-                logger.info(f"[ENRICH Fallback] Validated email: {found_email}")
+                logger.info(f"[ENRICH Fallback] Validated email: {_mask_email(found_email)}")
                 break
             elif emails:
                 found_email = emails[0]
-                logger.info(f"[ENRICH Fallback] Fallback email: {found_email}")
+                logger.info(f"[ENRICH Fallback] Fallback email: {_mask_email(found_email)}")
                 break
 
     return found_owner, found_email
@@ -900,7 +914,7 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
                         normalized = _normalize_phone_to_e164(phones[0])
                         if normalized:
                             lead["phone"] = normalized
-                            logger.info(f"[ENRICH] → Phone from Yelp: {lead['phone']}")
+                            logger.info(f"[ENRICH] → Phone from Yelp: {_mask_phone(lead['phone'])}")
 
                 # Extract website using dual HTML + Markdown parser
                 if not real_website:
@@ -949,7 +963,7 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
                             normalized = _normalize_phone_to_e164(raw_phone)
                             if normalized:
                                 lead["phone"] = normalized
-                                logger.info(f"[ENRICH] → Phone from tel: link on homepage: {lead['phone']}")
+                                logger.info(f"[ENRICH] → Phone from tel: link on homepage: {_mask_phone(lead['phone'])}")
                     continue
                 
                 # Resolve relative links
@@ -1028,7 +1042,7 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
                         normalized_phone = _normalize_phone_to_e164(phones[0])
                         if normalized_phone:
                             lead["phone"] = normalized_phone
-                            logger.info(f"[BBB] Phone from BBB: {lead['phone']}")
+                            logger.info(f"[BBB] Phone from BBB: {_mask_phone(lead['phone'])}")
                 continue
 
             page_emails = _extract_emails(content_for_extraction)
@@ -1038,7 +1052,7 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
                 if best_email:
                     lead["email"] = best_email
                     lead["email_status"] = "found"
-                    logger.info(f"[ENRICH] → Email from {page_url}: {lead['email']}")
+                    logger.info(f"[ENRICH] → Email from {page_url}: {_mask_email(lead['email'])}")
 
             if not lead.get("phone"):
                 phones = _extract_phones(content_for_extraction)
@@ -1046,7 +1060,7 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
                     normalized_phone = _normalize_phone_to_e164(phones[0])
                     if normalized_phone:
                         lead["phone"] = normalized_phone
-                        logger.info(f"[ENRICH] → Phone from {page_url}: {lead['phone']}")
+                        logger.info(f"[ENRICH] → Phone from {page_url}: {_mask_phone(lead['phone'])}")
 
             if not lead.get("owner"):
                 owner = _extract_owner_name(content_for_extraction)
@@ -1065,13 +1079,13 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
                 
                 if ai_contacts.get("email") and not lead.get("email"):
                     lead["email"] = ai_contacts["email"]
-                    logger.info(f"[HAWK AI] → Email extracted: {lead['email']}")
+                    logger.info(f"[HAWK AI] → Email extracted: {_mask_email(lead['email'])}")
                 
                 if ai_contacts.get("phone") and not lead.get("phone"):
                     normalized = _normalize_phone_to_e164(ai_contacts["phone"])
                     if normalized:
                         lead["phone"] = normalized
-                        logger.info(f"[HAWK AI] → Phone extracted: {lead['phone']}")
+                        logger.info(f"[HAWK AI] → Phone extracted: {_mask_phone(lead['phone'])}")
 
             if lead.get("email") and lead.get("phone") and lead.get("owner"):
                 break
@@ -1096,7 +1110,7 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
                 if emails:
                     lead["email"] = emails[0].get("value")
                     lead["email_status"] = "verified" if emails[0].get("verification", {}).get("result") == "deliverable" else "found"
-                    logger.info(f"[ENRICH] → Email from Hunter: {lead['email']}")
+                    logger.info(f"[ENRICH] → Email from Hunter: {_mask_email(lead['email'])}")
                     
                     if not lead.get("owner") and emails[0].get("first_name"):
                         fn = emails[0].get("first_name")
@@ -1138,11 +1152,11 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
                     if not lead.get("email") and p.get("email"):
                         lead["email"] = p.get("email")
                         lead["email_status"] = "verified"  # Apollo emails are pre-verified B2B data
-                        logger.info(f"[ENRICH] → Email from Apollo: {lead['email']}")
+                        logger.info(f"[ENRICH] → Email from Apollo: {_mask_email(lead['email'])}")
                         found_fields.append("email")
                     if not lead.get("phone") and p.get("phone_numbers"):
                         lead["phone"] = _normalize_phone_to_e164(p.get("phone_numbers")[0].get("raw_number"))
-                        logger.info(f"[ENRICH] → Phone from Apollo: {lead['phone']}")
+                        logger.info(f"[ENRICH] → Phone from Apollo: {_mask_phone(lead['phone'])}")
                         found_fields.append("phone")
                     if found_fields:
                         log_skill_note(
@@ -1201,7 +1215,7 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
                 lead["email_status"] = "guessed"
                 alt = ", ".join(guesses[1:4])
                 lead["notes"] = (lead.get("notes", "") + f" | Email guessed (alternates: {alt})").strip(" |")
-                logger.info(f"[ENRICH] → Guessed email: {lead['email']} (MX ok; alternates: {alt})")
+                logger.info(f"[ENRICH] → Guessed email: {_mask_email(lead['email'])} (MX ok)")
 
     # ─── STEP 6: LinkedIn Title Enrichment ────────────────────
     # Free DDG search + public profile scrape. Adds the owner's title and
@@ -1233,8 +1247,8 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
     logger.info(
         f"[ENRICH] ═══ Done: {biz_name} | "
         f"Owner: {lead.get('owner', '—')} | "
-        f"Phone: {lead.get('phone', '—')} | "
-        f"Email: {lead.get('email', '—')} | "
+        f"Phone: {_mask_phone(lead.get('phone', ''))} | "
+        f"Email: {_mask_email(lead.get('email', ''))} | "
         f"Website: {lead.get('website', '—')} ═══"
     )
     return lead
