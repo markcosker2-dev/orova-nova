@@ -755,7 +755,7 @@ schedule.every(APPROVAL_CHECK_MINUTES).minutes.do(fast_lane_job)      # Lane 1: 
 schedule.every(HUNT_INTERVAL_MINUTES).minutes.do(slow_lane_job)        # Lane 2: Lead hunting
 schedule.every(REPLY_CHECK_MINUTES).minutes.do(reply_and_drip_check_job) # Lane 3: Reply + Drip monitoring
 schedule.every(COLD_CALL_CHECK_MINUTES).minutes.do(cold_escalation_job)  # Lane 4: Cold lead → call
-schedule.every(6).hours.do(cloud_backup_job)                           # Lane 5: Google Drive Backup
+schedule.every(3).hours.do(cloud_backup_job)                           # Lane 5: Google Drive Backup (3h: caps learning-data loss on Render restarts)
 schedule.every().day.at("17:00").do(ceo_brain_job)                     # Lane 6: CEO Morning Brief (17:00 UTC = ~9-10 AM Pacific)
 schedule.every(2).hours.do(health_check_job)                           # Lane 7: Pipeline Health Check
 schedule.every(6).hours.do(self_improvement_job)                       # Lane 8: Strategy Self-Improvement
