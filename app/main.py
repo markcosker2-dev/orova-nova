@@ -432,8 +432,27 @@ async def health_check():
         checks["memory"] = "unknown"
     return checks
 
+async def _is_valid_session_token(token: str) -> bool:
+    """Validate a token issued by /api/keys/new against the stored map.
+
+    This was the missing half of the session-token feature: tokens were
+    issued and stored but never checked anywhere, so any browser holding
+    one got 403 on every call.
+    """
+    if not token:
+        return False
+    try:
+        tokens = await DatabaseManager.get_state('dashboard_tokens') or {}
+        entry = tokens.get(token)
+        return bool(entry and entry.get('expires_at', '') > datetime.utcnow().isoformat())
+    except Exception as e:
+        logger.warning(f"Session token validation failed: {e}")
+        return False
+
+
 async def require_dashboard_api_key(request: Request):
-    """Validate dashboard API key. Accepts X-Dashboard-Secret, X-API-Key, or ?dashboard_key=...
+    """Validate dashboard auth. Accepts X-Dashboard-Secret, X-API-Key,
+    ?dashboard_key=..., or a valid X-Session-Token from /api/keys/new.
     Raises 403 if missing or invalid — endpoints receive True if passed.
     Uses constant-time comparison to prevent timing attacks.
     """
@@ -448,11 +467,13 @@ async def require_dashboard_api_key(request: Request):
         or request.headers.get("X-API-Key")
         or request.query_params.get("dashboard_key")
     )
+    if provided and _secrets.compare_digest(provided, expected):
+        return True
+    if await _is_valid_session_token(request.headers.get("X-Session-Token", "")):
+        return True
     if not provided:
         raise HTTPException(status_code=403, detail="Unauthorized: missing API key header")
-    if not _secrets.compare_digest(provided, expected):
-        raise HTTPException(status_code=403, detail="Unauthorized: invalid API key")
-    return True
+    raise HTTPException(status_code=403, detail="Unauthorized: invalid API key")
 
 @app.post('/api/keys/new')
 async def issue_dashboard_token(request: Request, authorized: bool = Depends(require_dashboard_api_key)):

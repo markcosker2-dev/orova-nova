@@ -3,14 +3,14 @@
    ───────────────────────────────────────────── */
 :root,
 [data-theme="dark"] {
-    --bg-deep: #060a13;
-    --bg-base: #0b1120;
-    --bg-surface: #111827;
-    --bg-card: #1a2236;
-    --bg-card-hover: #212c42;
-    --bg-glass: rgba(17, 24, 39, 0.75);
-    --border: rgba(99, 102, 241, 0.35);
-    --border-subtle: rgba(255, 255, 255, 0.14);
+    --bg-deep: #0f172a;
+    --bg-base: #0f172a;
+    --bg-surface: #1e293b;
+    --bg-card: #1e293b;
+    --bg-card-hover: #2a3a52;
+    --bg-glass: #16223a;
+    --border: #4356a0;
+    --border-subtle: #334155;
     --accent: #6366f1;
     --accent-light: #818cf8;
     --accent-glow: rgba(99, 102, 241, 0.25);
@@ -19,9 +19,9 @@
     --warning: #f59e0b;
     --danger: #ef4444;
     --info: #3b82f6;
-    --text: #f1f5f9;
-    --text-dim: #b3c0d4;
-    --text-muted: #8fa0b8;
+    --text: #f8fafc;
+    --text-dim: #cbd5e1;
+    --text-muted: #94a3b8;
     --radius: 12px;
     --radius-sm: 8px;
     --radius-xs: 6px;
@@ -2788,3 +2788,77 @@ body {
         grid-template-columns: 1fr;
     }
 }
+
+/* ═══════════ STRUCTURE OVERHAUL (Tabler-style) ═══════════
+   Solid surfaces, visible borders, consistent rhythm. */
+
+body { line-height: 1.5; }
+
+.top-bar {
+    background: var(--bg-surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+#sidebar {
+    background: var(--bg-surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+/* Cards & panels: one consistent elevated surface */
+.kanban-column,
+.stat-card,
+.analytics-panel,
+.pipeline-stage,
+.agent-card,
+.lead-card,
+.memory-card,
+.content-card,
+.lane-card,
+.panel,
+.office-room {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+}
+
+.kanban-column h3,
+.panel-header,
+.stat-label {
+    color: var(--text-dim);
+    letter-spacing: 0.3px;
+}
+
+/* Buttons: consistent sizing + clear affordance */
+button { font-family: inherit; }
+.btn-secondary,
+.btn-tertiary,
+.action-btn {
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-card);
+    color: var(--text-dim);
+    border-radius: var(--radius-sm);
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition);
+}
+.btn-secondary:hover,
+.btn-tertiary:hover,
+.action-btn:hover {
+    border-color: var(--accent);
+    color: var(--text);
+    background: var(--bg-card-hover);
+}
+
+/* Tables & log lines readable on the new surface */
+table { border-collapse: collapse; }
+th { color: var(--text-dim); font-weight: 600; }
+td, th { border-bottom: 1px solid var(--border-subtle); padding: 10px 12px; }
+.log-line { padding: 6px 0; border-bottom: 1px solid var(--border-subtle); color: var(--text-dim); }
+
+/* Empty states shouldn't look broken */
+.agent-queue-item, .empty-state { color: var(--text-dim); }
