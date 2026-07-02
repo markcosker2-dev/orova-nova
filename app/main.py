@@ -140,27 +140,30 @@ async def lifespan(app: FastAPI):
         logger.warning(f"[SELF_LEARN] Table init failed: {e}")
 
     if await DatabaseManager.is_empty():
-        logger.info("♻️ Database appears empty. Checking Google Sheets for restoration source of truth...")
-        leads = await restore_leads_from_sheets()
-        if leads:
-            for lead in leads:
-                await DatabaseManager.asave_lead(lead)
-            logger.info(f"♻️ Restored {len(leads)} leads from Google Sheets")
+        # Drive snapshot FIRST: it restores everything (leads, outcomes,
+        # learned strategies, memories). Sheets only holds leads, so trying
+        # it first silently discards all learning data on every cold boot.
+        logger.info("♻️ Database appears empty. Attempting Google Drive snapshot restore (full fidelity)...")
+        restore_res = await restore_latest()
+        if restore_res.get("ok"):
+            logger.info(f"♻️ Restored database snapshot from Drive: {restore_res.get('filename')}")
+            DatabaseManager._close_all_connections()
+            DatabaseManager._init_sqlite_fallback()
+            # Re-run Phase 5 migrations on the restored DB so schema is current
+            try:
+                await DatabaseManager.run_phase5_migrations()
+                logger.info("♻️ Phase 5 migrations applied to restored DB")
+            except Exception as mig_err:
+                logger.warning(f"⚠️ Phase 5 migrations on restored DB failed: {mig_err}")
         else:
-            logger.warning("⚠️ No leads found in Google Sheets. Attempting Google Drive backup restore...")
-            restore_res = await restore_latest()
-            if restore_res.get("ok"):
-                logger.info(f"♻️ Restored database snapshot from Drive: {restore_res.get('filename')}")
-                DatabaseManager._close_all_connections()
-                DatabaseManager._init_sqlite_fallback()
-                # Re-run Phase 5 migrations on the restored DB so schema is current
-                try:
-                    await DatabaseManager.run_phase5_migrations()
-                    logger.info("♻️ Phase 5 migrations applied to restored DB")
-                except Exception as mig_err:
-                    logger.warning(f"⚠️ Phase 5 migrations on restored DB failed: {mig_err}")
+            logger.warning(f"⚠️ No Drive backup ({restore_res.get('error')}). Falling back to Google Sheets leads...")
+            leads = await restore_leads_from_sheets()
+            if leads:
+                for lead in leads:
+                    await DatabaseManager.asave_lead(lead)
+                logger.info(f"♻️ Restored {len(leads)} leads from Google Sheets (leads only — learning data starts fresh)")
             else:
-                logger.warning(f"⚠️ No Drive backup available or restore failed: {restore_res.get('error')}")
+                logger.warning("⚠️ No restoration source available. Starting with an empty database.")
 
         # Re-run after restore so any pending_proposal:* rows from the restored DB
         # are rescheduled into the CEO brain scheduler.
@@ -252,6 +255,14 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 NOVA Gateway Online | Swarm Survivability Layer Active")
     yield
     # ── Graceful Shutdown ──
+    # Flush a DB snapshot to Drive first: Render's disk is ephemeral, so
+    # anything since the last 3-hourly backup is lost unless we save now.
+    # Render allows ~30s after SIGTERM; cap well under that.
+    try:
+        backup_res = await asyncio.wait_for(backup_database(), timeout=20)
+        logger.info(f"💾 Shutdown backup: {backup_res.get('ok', False)}")
+    except Exception as e:
+        logger.warning(f"⚠️ Shutdown backup failed (non-fatal): {e}")
     _shutdown_event.set()
     _task_loop_event.set()  # Signal task loop to exit
     stop_worker_scheduler()  # Signal worker daemon thread to exit
@@ -933,6 +944,26 @@ async def retell_webhook(request: Request):
         except Exception as e:
             logger.warning(f"[Retell] Lead update failed: {e}")
 
+    # Booked appointment → put it on Mark's Google Calendar automatically so
+    # a Nova-promised slot can never be silently missed or double-booked.
+    calendar_note = ""
+    if booked:
+        when = custom.get("appointment date and time", "")
+        try:
+            from app.skills.calendar_skill import create_event
+            prospect = custom.get("name") or call.get("to_number", "prospect")
+            loop = asyncio.get_running_loop()
+            cal_res = await loop.run_in_executor(None, lambda: create_event(
+                summary=f"OROVA demo — {prospect}",
+                start_time=when,
+                duration_minutes=15,
+                description=f"Booked by Nova on a cold call.\nPhone: {custom.get('contact number', call.get('to_number', ''))}\nCall summary: {summary[:400]}",
+            ))
+            calendar_note = "\n📅 Calendar event created" if cal_res.get("success") else f"\n⚠️ Calendar event failed ({cal_res.get('error', 'unparseable time')}) — book manually!"
+        except Exception as e:
+            logger.warning(f"[Retell] Calendar booking failed: {e}")
+            calendar_note = "\n⚠️ Calendar event failed — book manually!"
+
     if booked or temperature == "hot":
         try:
             from app.worker import send_telegram_report
@@ -941,6 +972,7 @@ async def retell_webhook(request: Request):
                 f"{custom.get('name', '')} — {custom.get('contact number', call.get('to_number', ''))}\n"
                 f"When: {custom.get('appointment date and time', 'n/a')}\n"
                 f"Summary: {summary[:300]}"
+                f"{calendar_note}"
             )
         except Exception as e:
             logger.warning(f"[Retell] Telegram alert failed: {e}")
