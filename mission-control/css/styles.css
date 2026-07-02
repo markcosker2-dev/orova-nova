@@ -2288,6 +2288,9 @@ body {
 @media (max-width: 768px) {
     #sidebar {
         transform: translateX(-100%);
+        /* Keep children (e.g. the + add-client button) from poking out
+           past the off-canvas edge */
+        overflow-x: hidden;
     }
 
     #sidebar.open {
@@ -2310,7 +2313,9 @@ body {
 
     .top-bar {
         left: 0;
-        padding: 0 16px;
+        /* 72px clears the fixed hamburger (16px offset + ~44px button) so
+           the workspace title no longer renders underneath it */
+        padding: 0 16px 0 72px;
         height: 56px;
     }
 

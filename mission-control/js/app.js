@@ -115,12 +115,18 @@ async function apiFetch(path, opts) {
         fetchPath += `${separator}client_id=${currentClientId}`;
 
         const res = await fetch(API + fetchPath, opts);
-        if (false) {
-            const newSecret = prompt("Unauthorized. Enter your dashboard secret to authenticate:");
-            if (newSecret) {
-                setDashboardSecret(newSecret);
-                window.location.reload();
+        if (res.status === 401 || res.status === 403) {
+            // Prompt once per page load — dozens of parallel calls fail
+            // together and must not stack prompts
+            if (!window.__reauthPrompted) {
+                window.__reauthPrompted = true;
+                const newSecret = prompt("Unauthorized. Enter your dashboard secret to authenticate:");
+                if (newSecret) {
+                    setDashboardSecret(newSecret);
+                    window.location.reload();
+                }
             }
+            return null;
         }
         return await res.json();
     } catch (e) {
@@ -1427,6 +1433,7 @@ document.querySelectorAll('.lane-trigger').forEach(function (btn) {
 
 // Auto-refresh live feed, notifications, agents, drafts, health, and chart every 15s
 setInterval(function () {
+    if (document.hidden) return; // don't hammer the free-tier backend from background tabs
     refreshLiveFeed();
     refreshNotifications();
     refreshAgents();
@@ -1442,6 +1449,7 @@ setInterval(function () {
 
 // Refresh chart and leads every 60s (less frequent since data changes slowly)
 setInterval(function () {
+    if (document.hidden) return;
     refreshMetricsChart();
     renderLeads();
 }, 60000);

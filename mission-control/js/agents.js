@@ -59,12 +59,13 @@ async function fetchAndRenderLogs() {
     } catch (e) { console.warn('Logs fetch failed', e); }
 }
 
-// Start polling every 2.5s
+// Poll every 10s (2.5s was ~2,900 req/hour per tab — starves the
+// free-tier backend that also runs the agent), and never from hidden tabs
 function startAgentMonitoring() {
     fetchAndRenderQueue();
     fetchAndRenderLogs();
-    setInterval(fetchAndRenderQueue, 2500);
-    setInterval(fetchAndRenderLogs, 2500);
+    setInterval(function () { if (!document.hidden) fetchAndRenderQueue(); }, 10000);
+    setInterval(function () { if (!document.hidden) fetchAndRenderLogs(); }, 10000);
 }
 
 // Launch when DOM ready
