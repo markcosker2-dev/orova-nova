@@ -34,23 +34,38 @@ KEEP_N = 5
 BACKUP_INTERVAL_SECONDS = 12 * 3600 # 12 hours
 
 def _get_drive_service():
-    """Build a Google Drive v3 service client."""
-    # Prioritizing environment variables for Render compatibility
+    """Build a Google Drive v3 service client.
+
+    Tries user OAuth env vars first, then falls back to the service-account
+    file (GOOGLE_APPLICATION_CREDENTIALS) that drive_backup.py and the
+    Sheets integration already use — one set of Render credentials powers
+    every Drive feature.
+    """
     refresh_token = os.getenv("GOOGLE_REFRESH_TOKEN")
     client_id = os.getenv("GOOGLE_CLIENT_ID")
     client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
-    
-    if not all([refresh_token, client_id, client_secret]):
-        raise ValueError("Google OAuth2 credentials missing from env vars.")
 
-    creds = Credentials(
-        token=None,
-        refresh_token=refresh_token,
-        token_uri="https://oauth2.googleapis.com/token",
-        client_id=client_id,
-        client_secret=client_secret,
+    if all([refresh_token, client_id, client_secret]):
+        creds = Credentials(
+            token=None,
+            refresh_token=refresh_token,
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=client_id,
+            client_secret=client_secret,
+        )
+        return build("drive", "v3", credentials=creds, cache_discovery=False)
+
+    creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "credentials.json")
+    if os.path.exists(creds_path):
+        sa_creds = service_account.Credentials.from_service_account_file(
+            creds_path, scopes=["https://www.googleapis.com/auth/drive"]
+        )
+        return build("drive", "v3", credentials=sa_creds, cache_discovery=False)
+
+    raise ValueError(
+        "No Google Drive credentials: set GOOGLE_REFRESH_TOKEN/GOOGLE_CLIENT_ID/"
+        "GOOGLE_CLIENT_SECRET or GOOGLE_APPLICATION_CREDENTIALS."
     )
-    return build("drive", "v3", credentials=creds, cache_discovery=False)
 
 def _get_or_create_folder(service) -> str:
     """Return the Drive folder ID for OROVA_BACKUPS, creating it if absent."""

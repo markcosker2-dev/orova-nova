@@ -584,7 +584,8 @@ def _clean_ddg_url(href: str) -> str:
         href = "https:" + href
     try:
         parsed = urllib.parse.urlparse(href)
-        if "duckduckgo.com" in parsed.netloc and "uddg" in parsed.query:
+        host = parsed.netloc.lower()
+        if (host == "duckduckgo.com" or host.endswith(".duckduckgo.com")) and "uddg" in parsed.query:
             qs = urllib.parse.parse_qs(parsed.query)
             if "uddg" in qs:
                 return urllib.parse.unquote(qs["uddg"][0])

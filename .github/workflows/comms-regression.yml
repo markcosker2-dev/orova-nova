@@ -17,6 +17,9 @@ on:
       - 'tests/unit/gateway-events.test.ts'
       - '.github/workflows/comms-regression.yml'
 
+permissions:
+  contents: read
+
 jobs:
   comms-regression:
     runs-on: ubuntu-latest

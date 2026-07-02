@@ -102,7 +102,9 @@ def enrich_lead_apollo(
             "raw_response": contact
         }
         
-        logger.info(f"[Apollo] Enriched: {enriched['person_name']} ({enriched['email']})")
+        email = enriched['email'] or ''
+        local, _, domain = email.partition('@')
+        logger.info(f"[Apollo] Enriched: {enriched['person_name']} ({local[:1]}***@{domain})")
         return enriched
     
     except Exception as e:

@@ -220,7 +220,8 @@ async def api_revenue_metrics(client_id: int = 0):
         }
     except Exception as e:
         logger.error(f"[RevenueMetrics] Error: {e}")
-        raise HTTPException(status_code=500, detail=f"Revenue metrics error: {str(e)}")
+        logger.error(f"[HERMESCLAW] Revenue metrics error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/linkedin_enrich")
