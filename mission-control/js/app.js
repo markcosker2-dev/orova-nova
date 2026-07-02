@@ -97,13 +97,12 @@ async function apiFetch(path, opts) {
         opts = opts || {};
         opts.headers = opts.headers || {};
 
+        // Send both credentials when available — a stale session token must
+        // never mask a valid secret (tokens expire after 1h)
         const _sess = localStorage.getItem(SESSION_TOKEN_KEY);
         const secret = getDashboardSecret();
-        if (_sess) {
-            opts.headers['X-Session-Token'] = _sess;
-        } else if (secret) {
-            opts.headers['X-Dashboard-Secret'] = secret;
-        }
+        if (_sess) opts.headers['X-Session-Token'] = _sess;
+        if (secret) opts.headers['X-Dashboard-Secret'] = secret;
 
         // Set Content-Type automatically for JSON requests
         if (opts.body && typeof opts.body === 'string') {
@@ -114,16 +113,28 @@ async function apiFetch(path, opts) {
         const separator = fetchPath.includes('?') ? '&' : '?';
         fetchPath += `${separator}client_id=${currentClientId}`;
 
-        const res = await fetch(API + fetchPath, opts);
+        let res = await fetch(API + fetchPath, opts);
+        if (res.status === 401 || res.status === 403) {
+            // A rejected call with a token means the token expired — drop it
+            // and retry once with just the secret
+            if (_sess) {
+                localStorage.removeItem(SESSION_TOKEN_KEY);
+                delete opts.headers['X-Session-Token'];
+                if (secret) res = await fetch(API + fetchPath, opts);
+            }
+        }
         if (res.status === 401 || res.status === 403) {
             // Prompt once per page load — dozens of parallel calls fail
             // together and must not stack prompts
             if (!window.__reauthPrompted) {
                 window.__reauthPrompted = true;
-                const newSecret = prompt("Unauthorized. Enter your dashboard secret to authenticate:");
-                if (newSecret) {
-                    setDashboardSecret(newSecret);
+                const newSecret = prompt("Unauthorized. Paste your DASHBOARD_API_KEY (from Render environment settings):");
+                if (newSecret && newSecret.trim()) {
+                    setDashboardSecret(newSecret.trim());
                     window.location.reload();
+                } else {
+                    showToast('Dashboard is locked — click any button to enter your key', 'error');
+                    window.__reauthPrompted = false; // allow retry on next click
                 }
             }
             return null;

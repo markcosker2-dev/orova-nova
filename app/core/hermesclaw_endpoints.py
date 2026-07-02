@@ -14,6 +14,8 @@ async def _require_api_key(request: Request):
 
     The Request type annotation is load-bearing: without it FastAPI treats
     `request` as a required query parameter and every endpoint 422s.
+    Accepts the same credentials as main.require_dashboard_api_key,
+    including session tokens issued by /api/keys/new.
     """
     import os
     import secrets
@@ -21,9 +23,12 @@ async def _require_api_key(request: Request):
     if not expected:
         raise HTTPException(status_code=500, detail="API key not configured")
     api_key = request.headers.get("X-Dashboard-Secret") or request.headers.get("X-API-Key") or ""
-    if not secrets.compare_digest(api_key.strip(), expected):
-        raise HTTPException(status_code=403, detail="Unauthorized")
-    return True
+    if api_key and secrets.compare_digest(api_key.strip(), expected):
+        return True
+    from app.main import _is_valid_session_token
+    if await _is_valid_session_token(request.headers.get("X-Session-Token", "")):
+        return True
+    raise HTTPException(status_code=403, detail="Unauthorized")
 
 
 router = APIRouter(prefix="/api", tags=["hermesclaw"], dependencies=[Depends(_require_api_key)])

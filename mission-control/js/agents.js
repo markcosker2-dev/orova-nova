@@ -2,6 +2,24 @@
 document.addEventListener('click', async function (e) {
     const el = e.target;
     if (!el) return;
+    if (el.classList && el.classList.contains('config-agent')) {
+        // Config = run this agent with a custom goal
+        const agent = el.dataset.agent || 'nova';
+        const goal = prompt(`Custom goal for ${agent}:`, `Find 5 new leads in our target niche`);
+        if (!goal || !goal.trim()) return;
+        showToast(`🔁 Queued ${agent} with custom goal...`, 'info');
+        try {
+            const res = await apiFetch('/api/agents/run', {
+                method: 'POST',
+                body: JSON.stringify({ agent: agent, goal: goal.trim() })
+            });
+            if (res && res.status === 'queued') showToast(`✅ ${agent} queued (${res.task_id})`, 'success');
+            else showToast('❌ Failed to queue agent — check your dashboard key', 'error');
+        } catch (err) {
+            showToast('❌ Agent run failed', 'error');
+        }
+        return;
+    }
     if (el.classList && el.classList.contains('run-agent')) {
         const agent = el.dataset.agent || 'nova';
         showToast(`🔁 Queued ${agent}...`, 'info');
@@ -14,7 +32,7 @@ document.addEventListener('click', async function (e) {
             if (res && res.status === 'queued') {
                 showToast(`✅ ${agent} queued (${res.task_id})`, 'success');
             } else {
-                showToast('❌ Failed to queue agent', 'error');
+                showToast('❌ Failed to queue — click again and enter your DASHBOARD_API_KEY when prompted', 'error');
             }
         } catch (err) {
             console.warn('Agent run failed', err);
