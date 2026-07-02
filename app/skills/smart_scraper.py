@@ -424,6 +424,19 @@ def score_lead_for_orova(lead: dict) -> dict:
     if source == "apollo_browser":
         score += 1
         reasons.append("apollo verified")
+
+    # Email verification status (set by enrichment waterfall)
+    email_status = lead.get("email_status", "")
+    if email_status == "verified":
+        score += 1
+        reasons.append("email verified")
+    elif email_status == "guessed":
+        score -= 1
+        reasons.append("email guessed")
+
+    if lead.get("owner_title"):
+        score += 0.5
+        reasons.append("title known")
     
     score = min(10, max(0, score))
     

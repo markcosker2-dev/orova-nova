@@ -51,6 +51,101 @@ AB_SUBJECT_TEMPLATES = [
 ]
 
 
+async def compose_premium_outreach(lead: Dict[str, Any], niche: str = "", client_id: int = 0) -> Dict[str, str]:
+    """Compose a personalized, world-class cold email for a lead.
+
+    - Framework is picked by the champion/challenger loop (select_strategy),
+      so every send feeds real A/B data back into learned_strategies.
+    - Personalization uses everything enrichment found: owner name, title,
+      business, niche, website, LinkedIn, and any icebreaker research.
+    - Returns {subject, body, framework}. Falls back to a clean template if
+      the AI is unavailable — never blocks the pipeline.
+    """
+    owner = (lead.get("owner") or lead.get("owner_name") or "").strip()
+    first_name = owner.split()[0] if owner else "there"
+    business = lead.get("business", "your business")
+    title = lead.get("owner_title", "")
+    website = lead.get("website") or lead.get("url") or ""
+    icebreaker = lead.get("icebreaker", "")
+    if icebreaker.lower().startswith("pending"):
+        icebreaker = ""
+
+    framework = "pas"
+    try:
+        from app.core.self_improvement import OutcomeTracker
+        pick = await OutcomeTracker.select_strategy("email_framework", client_id=client_id)
+        if pick.get("strategy_value"):
+            framework = pick["strategy_value"]
+    except Exception as e:
+        logger.debug(f"[OUTREACH] Strategy selection fallback to pas: {e}")
+
+    framework_notes = {
+        "pas": "Problem-Agitate-Solve: name the specific pain, twist it, then present the fix.",
+        "bab": "Before-After-Bridge: paint their current state, the ideal state, and OROVA as the bridge.",
+        "aida": "Attention-Interest-Desire-Action: hook hard in line one, build want, single CTA.",
+        "story_brand": "StoryBrand: they are the hero, OROVA is the guide with a plan.",
+        "4ps": "Promise-Picture-Proof-Push: bold promise, vivid picture, credibility, clear ask.",
+    }
+
+    prompt = f"""You are the best cold-email writer alive, writing for OROVA — an AI system that finds, qualifies, and books sales appointments for high-ticket local businesses.
+
+Write ONE cold email to this exact person:
+- Name: {owner or 'Unknown (address as "there", never "Sir/Madam")'}
+- Title: {title or 'Owner (assumed)'}
+- Business: {business}
+- Industry: {niche or 'local business'}
+- Website: {website or 'n/a'}
+- Research note: {icebreaker or 'none — open with a sharp industry-specific observation instead'}
+
+Framework: {framework.upper()} — {framework_notes.get(framework, 'direct and concise')}
+
+HARD RULES:
+- Under 90 words. Sounds like a sharp human peer, not marketing.
+- Line 1 must be specific to THEM (their business/industry/research note) — never "I hope this finds you well" or "My name is".
+- No buzzwords (synergy, revolutionize, leverage, cutting-edge, streamline).
+- Exactly one CTA: a low-friction question about a 10-minute call.
+- No placeholder brackets. No links. Sign off as "Nova @ OROVA".
+- Write at a 6th-grade reading level. Short sentences.
+
+Return ONLY JSON: {{"subject": "...", "body": "..."}}
+Subject: under 6 words, lowercase-casual, curiosity-driven, no clickbait."""
+
+    try:
+        from app.core.ai_client import UnifiedAIClient
+        import json as _json
+        import re as _re
+        ai = UnifiedAIClient()
+        raw = await ai.write(prompt)
+        match = _re.search(r'\{.*\}', raw or "", _re.DOTALL)
+        if match:
+            data = _json.loads(match.group(0))
+            subject = (data.get("subject") or "").strip()
+            body = (data.get("body") or "").strip()
+            if subject and body and "{" not in body:
+                return {"subject": subject[:78], "body": body, "framework": framework}
+    except Exception as e:
+        logger.warning(f"[OUTREACH] Premium composer failed, using fallback: {e}")
+
+    # Fallback: still personalized, never generic filler
+    subject = generate_ab_subject(business, owner, icebreaker)
+    market = niche or "your market"
+    if icebreaker:
+        opener = icebreaker[0].upper() + icebreaker[1:]
+        if opener[-1] not in ".!?":
+            opener += " — impressive."
+    else:
+        opener = f"Noticed {business} while researching {market} — impressive operation."
+    body = (
+        f"Hi {first_name},\n\n"
+        f"{opener}\n\n"
+        f"We build AI that finds and qualifies high-ticket leads for businesses like {business}, "
+        f"so you only talk to people ready to buy.\n\n"
+        f"Worth a 10-minute call to see if it fits?\n\n"
+        f"Nova @ OROVA"
+    )
+    return {"subject": subject, "body": body, "framework": framework}
+
+
 def generate_ab_subject(business_name: str, owner_name: str = "", icebreaker: str = "") -> str:
     """
     Generate a randomized A/B subject line.
@@ -73,7 +168,7 @@ async def get_best_send_timing() -> int:
     try:
         from app.core.database import DatabaseManager
         row = await DatabaseManager.fetchone(
-            "SELECT strategy_value FROM learned_strategies WHERE strategy_type = 'send_timing' AND active = 1 ORDER BY win_rate DESC LIMIT 1"
+            "SELECT strategy_value FROM learned_strategies WHERE strategy_type = 'send_timing' AND active = 1 ORDER BY wilson_score DESC, win_rate DESC LIMIT 1"
         )
         if row and row.get("strategy_value"):
             hour = int(row["strategy_value"])

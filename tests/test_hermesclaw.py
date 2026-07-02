@@ -181,11 +181,22 @@ class TestPlannerRegistration:
             f"proofread_email not found in OUTREACH_TOOLS. Found: {outreach_tools_content[:200]}"
 
     def test_planner_imports_proofread(self):
-        """Verify the planner imports proofread_email."""
+        """Verify the planner imports proofread_email.
+
+        The planner lazy-loads skills via _LazyModule for startup performance,
+        so accept either a direct import or the lazy-module registration.
+        """
         import inspect
         from app.core import planner
         src = inspect.getsource(planner)
-        assert "from app.skills.email_proofreader import proofread_email" in src
+        direct_import = "from app.skills.email_proofreader import proofread_email" in src
+        lazy_import = (
+            '_LazyModule("app.skills.email_proofreader"' in src
+            and '"proofread_email"' in src
+        )
+        assert direct_import or lazy_import, (
+            "planner must import proofread_email (directly or via _LazyModule)"
+        )
 
 
 # ── Worker Lanes ───────────────────────────────────────────────────

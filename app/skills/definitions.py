@@ -891,6 +891,63 @@ TOOLS = [
                 "required": ['topic'],
             },
         }
+    },
+{
+        "type": "function",
+        "function": {
+            "name": "propose_skill",
+            "description": "Skill Forge: draft a NEW reusable Python skill. Code must define run(**kwargs), use only safe stdlib/httpx imports, and passes a sandboxed test. Activation requires Mark's Telegram approval.",
+            "parameters": {
+                "type": 'object',
+                "properties": {
+                    "name": {'type': 'string', 'description': 'Skill name (python identifier, e.g. parse_pricing_table)'},
+                    "description": {'type': 'string', 'description': 'One-line description of what the skill does'},
+                    "code": {'type': 'string', 'description': 'Python source defining run(**kwargs) (sync or async)'},
+                },
+                "required": ['name', 'description', 'code'],
+            },
+        }
+    },
+{
+        "type": "function",
+        "function": {
+            "name": "activate_skill",
+            "description": "Skill Forge: activate a drafted skill AFTER Mark approved it on Telegram. Fails safely if not approved.",
+            "parameters": {
+                "type": 'object',
+                "properties": {
+                    "name": {'type': 'string', 'description': 'Name of the drafted skill'},
+                },
+                "required": ['name'],
+            },
+        }
+    },
+{
+        "type": "function",
+        "function": {
+            "name": "use_forged_skill",
+            "description": "Skill Forge: run an ACTIVATED forged skill by name with JSON-encoded kwargs.",
+            "parameters": {
+                "type": 'object',
+                "properties": {
+                    "name": {'type': 'string', 'description': 'Activated skill name'},
+                    "kwargs_json": {'type': 'string', 'description': 'JSON object of keyword arguments, e.g. {"url": "..."}'},
+                },
+                "required": ['name'],
+            },
+        }
+    },
+{
+        "type": "function",
+        "function": {
+            "name": "list_forged_skills",
+            "description": "Skill Forge: list activated forged skills and drafts awaiting approval.",
+            "parameters": {
+                "type": 'object',
+                "properties": {},
+                "required": [],
+            },
+        }
     }
 ]
 

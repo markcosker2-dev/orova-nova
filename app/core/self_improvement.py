@@ -18,6 +18,21 @@ from app.skills.agentmail_skill import _send_telegram_alert
 logger = logging.getLogger(__name__)
 
 
+def wilson_lower_bound(successes: int, n: int, z: float = 1.96) -> float:
+    """Wilson score interval lower bound.
+
+    Ranks strategies by the worst-case plausible win rate, so a 1/1=100%
+    fluke (bound ~0.21) never beats a proven 30/100=30% (bound ~0.22+).
+    """
+    if n <= 0:
+        return 0.0
+    p = successes / n
+    denom = 1 + z * z / n
+    centre = p + z * z / (2 * n)
+    margin = z * ((p * (1 - p) + z * z / (4 * n)) / n) ** 0.5
+    return max(0.0, (centre - margin) / denom)
+
+
 class OutcomeTracker:
     @classmethod
     async def record_outcome(cls, action: str, strategy: str, result: str, recipient: str = "", lead_id: int = 0, quality_score: float = 100.0, client_id: int = 0, metadata: dict = None):
@@ -73,6 +88,44 @@ class OutcomeTracker:
             return []
 
     @classmethod
+    async def select_strategy(cls, strategy_type: str, client_id: int = 0, epsilon: float = 0.15) -> dict:
+        """Champion/challenger selection (epsilon-greedy).
+
+        85% of the time returns the champion (best Wilson bound); 15% of the
+        time returns a random other active strategy so challengers keep
+        collecting sample on a small cohort instead of starving.
+        """
+        import random
+        try:
+            rows = await DatabaseManager.fetchall(
+                """SELECT strategy_value, win_rate, sample_size, confidence, wilson_score
+                   FROM learned_strategies
+                   WHERE strategy_type = ? AND client_id = ? AND active = 1
+                   ORDER BY wilson_score DESC, sample_size DESC""",
+                (strategy_type, client_id)
+            )
+            if not rows:
+                return {"strategy_value": None, "win_rate": 0.0, "sample_size": 0, "confidence": "none", "role": "none"}
+            champion = rows[0]
+            challengers = rows[1:]
+            if challengers and random.random() < epsilon:
+                pick = random.choice(challengers)
+                role = "challenger"
+            else:
+                pick = champion
+                role = "champion"
+            return {
+                "strategy_value": pick["strategy_value"],
+                "win_rate": pick["win_rate"],
+                "sample_size": pick["sample_size"],
+                "confidence": pick["confidence"],
+                "role": role,
+            }
+        except Exception as e:
+            logger.error(f"[OUTCOME_TRACKER] select_strategy failed: {e}")
+            return {"strategy_value": None, "win_rate": 0.0, "sample_size": 0, "confidence": "error", "role": "none"}
+
+    @classmethod
     async def get_best_strategy(cls, strategy_type: str, client_id: int = 0) -> dict:
         """Get the top performing strategy with confidence interval."""
         logger.info(f"[OUTCOME_TRACKER] Getting best strategy for {strategy_type}")
@@ -81,7 +134,7 @@ class OutcomeTracker:
                 """SELECT strategy_value, win_rate, sample_size, confidence
                    FROM learned_strategies
                    WHERE strategy_type = ? AND client_id = ? AND active = 1
-                   ORDER BY win_rate DESC, sample_size DESC
+                   ORDER BY wilson_score DESC, sample_size DESC
                    LIMIT 1""",
                 (strategy_type, client_id)
             )
@@ -160,8 +213,9 @@ class StrategyOptimizer:
             f"- Optimal email framework: {best_framework.upper()}\n"
             f"- Optimal send hour: {best_hour}:00\n"
             f"- Best performing niche: {best_niche or 'N/A'}\n\n"
-            f"Explain in 3-4 sentences why these strategies are winning and what it means "
-            f"for the business. Use a professional but punchy tone suitable for a CEO Telegram update."
+            f"Write like the operator of a $100M company reviewing test results: state which "
+            f"strategy is winning, what the data says, and the one change being shipped because "
+            f"of it. 3-4 blunt sentences. No hedging, no filler, decisions over descriptions."
         )
         try:
             report = await self.ai.write(prompt)
@@ -206,23 +260,25 @@ class StrategyOptimizer:
                 sent = row["total_sent"]
                 replies = row["replies"] or 0
                 win_rate = replies / sent if sent > 0 else 0.0
-                
+                wilson = wilson_lower_bound(replies, sent)
+
                 confidence = "low"
                 if sent >= 20:
                     confidence = "high"
                 elif sent >= 5:
                     confidence = "medium"
-                    
+
                 # Insert or update learned strategies
                 strat_id = f"email_framework_{strategy}"
                 await DatabaseManager.query(
-                    """INSERT OR REPLACE INTO learned_strategies (id, strategy_type, strategy_value, win_rate, sample_size, confidence, active, client_id)
-                       VALUES (?, 'email_framework', ?, ?, ?, ?, 1, ?)""",
-                    (strat_id, strategy, win_rate, sent, confidence, client_id)
+                    """INSERT OR REPLACE INTO learned_strategies (id, strategy_type, strategy_value, win_rate, sample_size, confidence, active, client_id, wilson_score)
+                       VALUES (?, 'email_framework', ?, ?, ?, ?, 1, ?, ?)""",
+                    (strat_id, strategy, win_rate, sent, confidence, client_id, wilson)
                 )
-                
-                if win_rate > best_win_rate:
-                    best_win_rate = win_rate
+
+                # Champion by Wilson bound, not raw rate (small-sample safe)
+                if wilson > best_win_rate:
+                    best_win_rate = wilson
                     best_framework = strategy
                     
             logger.info(f"[STRATEGY_OPTIMIZER] Optimized email framework: {best_framework} (win rate: {best_win_rate:.2f})")
@@ -253,22 +309,23 @@ class StrategyOptimizer:
                 sent = row["total_sent"]
                 replies = row["replies"] or 0
                 win_rate = replies / sent if sent > 0 else 0.0
-                
+                wilson = wilson_lower_bound(replies, sent)
+
                 confidence = "low"
                 if sent >= 15:
                     confidence = "high"
                 elif sent >= 5:
                     confidence = "medium"
-                    
+
                 strat_id = f"send_timing_{hour}"
                 await DatabaseManager.query(
-                    """INSERT OR REPLACE INTO learned_strategies (id, strategy_type, strategy_value, win_rate, sample_size, confidence, active, client_id)
-                       VALUES (?, 'send_timing', ?, ?, ?, ?, 1, ?)""",
-                    (strat_id, str(hour), win_rate, sent, confidence, client_id)
+                    """INSERT OR REPLACE INTO learned_strategies (id, strategy_type, strategy_value, win_rate, sample_size, confidence, active, client_id, wilson_score)
+                       VALUES (?, 'send_timing', ?, ?, ?, ?, 1, ?, ?)""",
+                    (strat_id, str(hour), win_rate, sent, confidence, client_id, wilson)
                 )
-                
-                if win_rate > best_win_rate:
-                    best_win_rate = win_rate
+
+                if wilson > best_win_rate:
+                    best_win_rate = wilson
                     best_hour = hour
                     
             logger.info(f"[STRATEGY_OPTIMIZER] Optimized optimal send hour: {best_hour}:00")
@@ -331,16 +388,58 @@ class ImprovementLoop:
         self.optimizer = StrategyOptimizer()
         self.ai = UnifiedAIClient()
 
+    async def evaluate_challengers(self, strategy_type: str, client_id: int = 0) -> list:
+        """Promote-or-retire cycle for the champion/challenger system.
+
+        A challenger with enough sample (>=20 sends) whose Wilson bound is
+        less than half the champion's gets retired (active=0) — it stops
+        receiving the exploration traffic. Promotion is implicit: rankings
+        use the Wilson bound, so a challenger that beats the champion simply
+        becomes the champion on the next selection.
+        """
+        retired = []
+        try:
+            rows = await DatabaseManager.fetchall(
+                """SELECT id, strategy_value, sample_size, wilson_score
+                   FROM learned_strategies
+                   WHERE strategy_type = ? AND client_id = ? AND active = 1
+                   ORDER BY wilson_score DESC""",
+                (strategy_type, client_id)
+            )
+            if len(rows) < 2:
+                return retired
+            champion_wilson = rows[0]["wilson_score"] or 0.0
+            if champion_wilson <= 0:
+                return retired
+            for row in rows[1:]:
+                sample = row["sample_size"] or 0
+                wilson = row["wilson_score"] or 0.0
+                if sample >= 20 and wilson < champion_wilson * 0.5:
+                    await DatabaseManager.query(
+                        "UPDATE learned_strategies SET active = 0 WHERE id = ?",
+                        (row["id"],)
+                    )
+                    retired.append(row["strategy_value"])
+                    logger.info(f"[IMPROVEMENT_LOOP] Retired underperforming {strategy_type} '{row['strategy_value']}' (wilson {wilson:.3f} vs champion {champion_wilson:.3f}, n={sample})")
+        except Exception as e:
+            logger.error(f"[IMPROVEMENT_LOOP] evaluate_challengers failed: {e}")
+        return retired
+
     async def run(self, client_id: int = 0):
         """Main self-improvement loop runner.
         Aggregates outcomes → runs optimizations → persists strategies → logs changes.
         """
         logger.info("[IMPROVEMENT_LOOP] Running self-improvement cycle...")
-        
+
         # 1. Run optimizations
         best_framework = await self.optimizer.optimize_email_framework(client_id)
         best_hour = await self.optimizer.optimize_send_timing(client_id)
         best_niche = await self.optimizer.optimize_niche_targeting(client_id)
+
+        # 1.5 Evaluate challengers: retire proven losers, keep exploring the rest
+        retired = []
+        for stype in ("email_framework", "send_timing"):
+            retired.extend(await self.evaluate_challengers(stype, client_id))
         
         # 2. Propose stale leads for pruning
         prune_proposal = await self.optimizer.prune_dead_leads(threshold_days=14, client_id=client_id)
@@ -354,4 +453,5 @@ class ImprovementLoop:
         )
         
         # 4. Send weekly learning report to Telegram
-        await _send_telegram_alert(f"📈 **Nova Learning Report**\n\n{report_text}\n\n🗑️ Stale leads: {prune_proposal}")
+        retired_note = f"\n\n🧪 Retired strategies: {', '.join(retired)}" if retired else ""
+        await _send_telegram_alert(f"📈 **Nova Learning Report**\n\n{report_text}\n\n🗑️ Stale leads: {prune_proposal}{retired_note}")

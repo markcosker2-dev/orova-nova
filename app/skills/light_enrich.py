@@ -876,6 +876,7 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
 
     biz_name = lead.get("business", "Unknown")
     domain = _get_domain(lead.get("website") or lead.get("url") or "")
+    observed_emails: list = []  # every email seen at this domain — used for pattern learning
     logger.info(f"[ENRICH] ═══ Starting enrichment for: {biz_name} ═══")
 
     real_website = lead.get("website") or None
@@ -1030,11 +1031,13 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
                             logger.info(f"[BBB] Phone from BBB: {lead['phone']}")
                 continue
 
+            page_emails = _extract_emails(content_for_extraction)
+            observed_emails.extend(page_emails)
             if not lead.get("email"):
-                emails = _extract_emails(content_for_extraction)
-                best_email = _score_and_select_email(emails, domain)
+                best_email = _score_and_select_email(page_emails, domain)
                 if best_email:
                     lead["email"] = best_email
+                    lead["email_status"] = "found"
                     logger.info(f"[ENRICH] → Email from {page_url}: {lead['email']}")
 
             if not lead.get("phone"):
@@ -1092,6 +1095,7 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
                 emails = data.get("emails", [])
                 if emails:
                     lead["email"] = emails[0].get("value")
+                    lead["email_status"] = "verified" if emails[0].get("verification", {}).get("result") == "deliverable" else "found"
                     logger.info(f"[ENRICH] → Email from Hunter: {lead['email']}")
                     
                     if not lead.get("owner") and emails[0].get("first_name"):
@@ -1133,6 +1137,7 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
                         found_fields.append("owner")
                     if not lead.get("email") and p.get("email"):
                         lead["email"] = p.get("email")
+                        lead["email_status"] = "verified"  # Apollo emails are pre-verified B2B data
                         logger.info(f"[ENRICH] → Email from Apollo: {lead['email']}")
                         found_fields.append("email")
                     if not lead.get("phone") and p.get("phone_numbers"):
@@ -1175,6 +1180,7 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
             )
         if ddg_email and not lead.get("email"):
             lead["email"] = ddg_email
+            lead["email_status"] = "found"
             log_skill_note(
                 "ddg_enrichment",
                 f"DDG enrichment found email for {biz_name or domain}: {ddg_email}.",
@@ -1182,27 +1188,47 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
             )
 
     # ─── STEP 5: Email Guess (Last Resort) ────────────────────
+    # Pattern-learned, ranked guesses. Guessed emails are flagged with
+    # email_status='guessed' so outreach can route them to the call lane
+    # instead of risking bounces that damage sender reputation.
     if not lead.get("email") and lead.get("owner") and domain and "yelp.com" not in domain:
-        owner = lead["owner"]
-        parts = owner.lower().split()
-        if len(parts) >= 2:
-            # MX-verify domain before guessing (free, no API key)
-            if not await _verify_mx(domain):
-                logger.info(f"[ENRICH] → Skipping email guess — domain {domain} has no MX records")
-            else:
-                guesses = [
-                    f"{parts[0]}@{domain}",
-                    f"{parts[0]}.{parts[-1]}@{domain}",
-                    f"{parts[0][0]}{parts[-1]}@{domain}",
-                    f"info@{domain}",
-                ]
+        if not await _verify_mx(domain):
+            logger.info(f"[ENRICH] → Skipping email guess — domain {domain} has no MX records")
+        else:
+            guesses = _guess_emails_ranked(lead["owner"], domain, observed_emails)
+            if guesses:
                 lead["email"] = guesses[0]
-                lead["notes"] = (lead.get("notes", "") + f" | Email guessed (verify before sending)").strip(" |")
-                logger.info(f"[ENRICH] → Guessed email: {lead['email']} (MX verified domain)")
+                lead["email_status"] = "guessed"
+                alt = ", ".join(guesses[1:4])
+                lead["notes"] = (lead.get("notes", "") + f" | Email guessed (alternates: {alt})").strip(" |")
+                logger.info(f"[ENRICH] → Guessed email: {lead['email']} (MX ok; alternates: {alt})")
+
+    # ─── STEP 6: LinkedIn Title Enrichment ────────────────────
+    # Free DDG search + public profile scrape. Adds the owner's title and
+    # LinkedIn URL for personalized icebreakers and call prep.
+    if lead.get("owner") and not lead.get("owner_title"):
+        try:
+            from app.skills.lead_enrichment import enrich_with_linkedin
+            li = await asyncio.wait_for(
+                enrich_with_linkedin(biz_name, lead["owner"], domain or ""),
+                timeout=8.0,
+            )
+            if li.get("linkedin_url"):
+                lead["linkedin_url"] = li["linkedin_url"]
+            if li.get("title"):
+                lead["owner_title"] = li["title"]
+                logger.info(f"[ENRICH] → LinkedIn title: {lead['owner_title']}")
+        except asyncio.TimeoutError:
+            logger.debug("[ENRICH] LinkedIn enrichment timed out (non-fatal)")
+        except Exception as e:
+            logger.debug(f"[ENRICH] LinkedIn enrichment skipped: {e}")
 
     # Final Phone Normalization Guardrail
     if lead.get("phone"):
         lead["phone"] = _normalize_phone_to_e164(lead["phone"])
+
+    if lead.get("email") and not lead.get("email_status"):
+        lead["email_status"] = "found"
 
     logger.info(
         f"[ENRICH] ═══ Done: {biz_name} | "
@@ -1260,6 +1286,62 @@ def _extract_phones(text: str) -> list:
             phones.append(m)
     
     return phones
+
+
+CATCHALL_EMAIL_PREFIXES = frozenset({
+    'info', 'contact', 'hello', 'support', 'noreply', 'no-reply', 'admin',
+    'webmaster', 'sales', 'marketing', 'team', 'office', 'mail',
+})
+
+
+def _guess_emails_ranked(owner: str, domain: str, observed_emails: list) -> list:
+    """Rank email guesses for owner@domain.
+
+    If any observed email at this domain matches a known naming pattern,
+    apply that same pattern to the owner's name first — businesses almost
+    always use one consistent format. Otherwise fall back to frequency-ranked
+    common patterns (first@, first.last@, flast@, firstlast@).
+    """
+    parts = [p for p in re.sub(r"[^a-z\s'-]", "", owner.lower()).split() if p]
+    if len(parts) < 2:
+        return []
+    first, last = parts[0], parts[-1]
+
+    patterns = {
+        "first": f"{first}@{domain}",
+        "first.last": f"{first}.{last}@{domain}",
+        "flast": f"{first[0]}{last}@{domain}",
+        "firstlast": f"{first}{last}@{domain}",
+        "first_last": f"{first}_{last}@{domain}",
+        "last": f"{last}@{domain}",
+    }
+
+    # Learn the domain's pattern from any observed same-domain email
+    learned_order = []
+    for e in observed_emails:
+        el = e.lower()
+        if not el.endswith(f"@{domain}"):
+            continue
+        local = el.split("@")[0]
+        if local in CATCHALL_EMAIL_PREFIXES or any(j in el for j in JUNK_EMAIL_PATTERNS):
+            continue
+        if "." in local:
+            learned_order.append("first.last")
+        elif "_" in local:
+            learned_order.append("first_last")
+        elif len(local) <= 6:
+            learned_order.append("first")
+        else:
+            learned_order.append("flast")
+
+    order = learned_order + ["first", "first.last", "flast", "firstlast"]
+    seen, ranked = set(), []
+    for key in order:
+        candidate = patterns.get(key)
+        if candidate and candidate not in seen:
+            seen.add(candidate)
+            ranked.append(candidate)
+    return ranked
 
 
 def _validate_email_domain(email: str, business_domain: str) -> bool:

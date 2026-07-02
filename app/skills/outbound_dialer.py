@@ -25,14 +25,24 @@ async def trigger_retell_call(phone: str, context: Dict[str, str]) -> Dict[str, 
         return {"success": False, "skipped": True, "error": f"Missing env vars: {', '.join(missing)}. Cold calling is disabled — set these to enable."}
 
     url = "https://api.retellai.com/v2/create-phone-call"
+    owner_name = context.get("owner_name") or ""
     payload = {
         "from_number": from_number,
         "to_number": phone,
         "agent_id": agent_id,
+        # Every variable the Nova voice prompt references — an unset variable
+        # renders as a literal "{{name}}" on the call, which kills credibility.
         "retell_llm_dynamic_variables": {
-            "business_name": context.get("business_name"),
-            "icebreaker": context.get("icebreaker"),
+            "business_name": context.get("business_name") or "your business",
+            "icebreaker": context.get("icebreaker") or "",
+            "name": owner_name.split()[0] if owner_name else "there",
+            "full_name": owner_name,
+            "owner_title": context.get("owner_title") or "owner",
+            "niche": context.get("niche") or "your industry",
         },
+        # lead_id round-trips through Retell's post-call webhook so outcomes
+        # land on the right lead in the DB.
+        "metadata": {"lead_id": context.get("lead_id"), "client_id": context.get("client_id", 0)},
     }
     headers = {
         "Authorization": f"Bearer {api_key}",

@@ -48,6 +48,7 @@ import { browserOAuthManager } from '../utils/browser-oauth';
 import { whatsAppLoginManager } from '../utils/whatsapp-login';
 import { syncAllProviderAuthToRuntime } from '../services/providers/provider-runtime-sync';
 import { scheduleRuntimeStartupSync } from './runtime-startup-sync';
+import { getFirewallIntegration } from '../runtime/security/firewall-integration';
 
 const WINDOWS_APP_USER_MODEL_ID = 'app.hermesclaw.desktop';
 const isE2EMode = process.env.HERMESCLAW_E2E === '1';
@@ -676,6 +677,11 @@ if (gotTheLock) {
   gatewayManager = new GatewayManager();
   clawHubService = new ClawHubService();
   hostEventBus = new HostEventBus();
+
+  // Semantic firewall: guards agent-originated tool/RPC calls (injection
+  // detection, parameter allowlists, action budgets, HITL for destructive
+  // operations). Agent call sites use firewallRpc() on this integration.
+  getFirewallIntegration().setGatewayManager(gatewayManager);
 
   // Register builtin extensions and load manifest
   registerAllBuiltinExtensions();

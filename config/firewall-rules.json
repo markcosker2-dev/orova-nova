@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "description": "Shared Semantic Firewall policy loaded by BOTH runtimes: app/core/semantic_firewall.py (Python agent) and electron/runtime/security/semantic-firewall.ts (HermesClaw GUI). Edit here, not in code.",
+  "maxToolCallsPerTask": 20,
+  "maxAgentDepth": 3,
+  "defaultTaskTimeoutMs": 300000,
+  "highImpactTools": [
+    "shell",
+    "write",
+    "delete",
+    "execute_code",
+    "send_email",
+    "send_message",
+    "api_request",
+    "database_write",
+    "trigger_retell_call"
+  ],
+  "delegationTools": [
+    "delegate_task",
+    "dispatch_task",
+    "spawn_agent",
+    "create_sub_agent"
+  ]
+}
