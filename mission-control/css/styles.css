@@ -9,8 +9,8 @@
     --bg-card: #1a2236;
     --bg-card-hover: #212c42;
     --bg-glass: rgba(17, 24, 39, 0.75);
-    --border: rgba(99, 102, 241, 0.15);
-    --border-subtle: rgba(255, 255, 255, 0.06);
+    --border: rgba(99, 102, 241, 0.35);
+    --border-subtle: rgba(255, 255, 255, 0.14);
     --accent: #6366f1;
     --accent-light: #818cf8;
     --accent-glow: rgba(99, 102, 241, 0.25);
@@ -20,8 +20,8 @@
     --danger: #ef4444;
     --info: #3b82f6;
     --text: #f1f5f9;
-    --text-dim: #94a3b8;
-    --text-muted: #64748b;
+    --text-dim: #b3c0d4;
+    --text-muted: #8fa0b8;
     --radius: 12px;
     --radius-sm: 8px;
     --radius-xs: 6px;
@@ -41,7 +41,7 @@
     --border-subtle: rgba(0, 0, 0, 0.08);
     --text: #1e293b;
     --text-dim: #475569;
-    --text-muted: #94a3b8;
+    --text-muted: #64748b;
     --shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
 }
 
@@ -241,7 +241,7 @@ body {
 }
 
 .brand-sub {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 1.5px;
@@ -344,7 +344,7 @@ body {
 }
 
 .pulse-label {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -352,7 +352,7 @@ body {
 }
 
 .pulse-status {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-dim);
     white-space: nowrap;
     overflow: hidden;
@@ -462,7 +462,7 @@ body {
 
 .agent-role {
     color: var(--text-dim);
-    font-size: 12px;
+    font-size: 13px;
 }
 
 .agent-actions {
@@ -523,7 +523,7 @@ body {
 .agent-logs-list {
     max-height: 120px;
     overflow: auto;
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-dim);
 }
 
@@ -541,7 +541,7 @@ body {
 }
 
 .log-line {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
     padding: 4px 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.02);
@@ -737,7 +737,7 @@ body {
     right: 0;
     background: var(--danger);
     color: #fff;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 700;
     min-width: 18px;
     height: 18px;
@@ -781,7 +781,7 @@ body {
     background: none;
     border: none;
     color: var(--accent-light);
-    font-size: 12px;
+    font-size: 13px;
     cursor: pointer;
     font-family: inherit;
 }
@@ -814,12 +814,12 @@ body {
 
 .notif-item-body {
     color: var(--text-muted);
-    font-size: 12px;
+    font-size: 13px;
 }
 
 .notif-item-time {
     color: var(--text-muted);
-    font-size: 11px;
+    font-size: 12px;
     margin-top: 4px;
 }
 
@@ -945,7 +945,7 @@ body {
     background: var(--bg-card);
     padding: 2px 8px;
     border-radius: 10px;
-    font-size: 12px;
+    font-size: 13px;
 }
 
 .column-cards {
@@ -989,7 +989,7 @@ body {
 }
 
 .task-card-desc {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-muted);
     margin-bottom: 10px;
     line-height: 1.5;
@@ -1009,7 +1009,7 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-dim);
 }
 
@@ -1020,7 +1020,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 700;
 }
 
@@ -1035,7 +1035,7 @@ body {
 }
 
 .task-priority {
-    font-size: 10px;
+    font-size: 12px;
     padding: 2px 8px;
     border-radius: 10px;
     font-weight: 600;
@@ -1075,7 +1075,7 @@ body {
     background: none;
     border: 1px solid var(--border-subtle);
     color: var(--text-muted);
-    font-size: 11px;
+    font-size: 12px;
     padding: 4px 10px;
     border-radius: var(--radius-xs);
     cursor: pointer;
@@ -1132,7 +1132,7 @@ body {
 }
 
 .stat-label {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 1px;
@@ -1209,7 +1209,7 @@ body {
 .funnel-val {
     margin-left: auto;
     color: var(--text-muted);
-    font-size: 12px;
+    font-size: 13px;
 }
 
 /* Live Feed */
@@ -1217,7 +1217,7 @@ body {
     max-height: 280px;
     overflow-y: auto;
     font-family: 'Inter', monospace;
-    font-size: 12px;
+    font-size: 13px;
 }
 
 .feed-entry {
@@ -1308,7 +1308,7 @@ body {
 }
 
 .content-card-type {
-    font-size: 10px;
+    font-size: 12px;
     text-transform: uppercase;
     letter-spacing: 0.8px;
     color: var(--accent-light);
@@ -1323,7 +1323,7 @@ body {
 }
 
 .content-card-snippet {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
     line-height: 1.5;
     display: -webkit-box;
@@ -1383,7 +1383,7 @@ body {
 .cal-day-header {
     padding: 12px;
     text-align: center;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     color: var(--text-muted);
     text-transform: uppercase;
@@ -1423,7 +1423,7 @@ body {
 }
 
 .cal-event {
-    font-size: 10px;
+    font-size: 12px;
     padding: 3px 6px;
     border-radius: 4px;
     margin-bottom: 3px;
@@ -1504,7 +1504,7 @@ body {
     color: var(--text-dim);
     border-bottom: 1px solid var(--border-subtle);
     text-transform: uppercase;
-    font-size: 11px;
+    font-size: 12px;
     letter-spacing: 0.5px;
 }
 
@@ -1529,7 +1529,7 @@ body {
 }
 
 .lead-status {
-    font-size: 10px;
+    font-size: 12px;
     padding: 3px 10px;
     border-radius: 10px;
     font-weight: 600;
@@ -1630,7 +1630,7 @@ body {
 
 .memory-card-tag {
     display: inline-block;
-    font-size: 10px;
+    font-size: 12px;
     text-transform: uppercase;
     letter-spacing: 1px;
     font-weight: 600;
@@ -1677,7 +1677,7 @@ body {
 }
 
 .memory-card-date {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
     margin-top: 12px;
 }
@@ -1699,7 +1699,7 @@ body {
 }
 
 .org-tier-label {
-    font-size: 11px;
+    font-size: 12px;
     text-transform: uppercase;
     letter-spacing: 1.5px;
     color: var(--text-muted);
@@ -1759,14 +1759,14 @@ body {
 }
 
 .agent-role {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--accent-light);
     font-weight: 600;
     margin-bottom: 2px;
 }
 
 .agent-dept {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -1774,7 +1774,7 @@ body {
 }
 
 .agent-desc {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-dim);
     line-height: 1.5;
     margin-bottom: 12px;
@@ -1784,7 +1784,7 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    font-size: 11px;
+    font-size: 12px;
     padding: 4px 12px;
     border-radius: 10px;
     font-weight: 600;
@@ -1860,7 +1860,7 @@ body {
 }
 
 .desk-role {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
 }
 
@@ -1876,7 +1876,7 @@ body {
 .desk-monitor-content {
     color: var(--success);
     font-family: 'Inter', monospace;
-    font-size: 10px;
+    font-size: 12px;
     white-space: pre-line;
     line-height: 1.6;
     text-align: left;
@@ -1896,13 +1896,13 @@ body {
 }
 
 .desk-current-task {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-dim);
     margin-top: 4px;
 }
 
 .desk-status-label {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     display: flex;
     align-items: center;
@@ -2145,7 +2145,7 @@ body {
 
 .chat-header-info small {
     color: var(--text-muted);
-    font-size: 11px;
+    font-size: 12px;
 }
 
 .chat-close {
@@ -2382,7 +2382,7 @@ body {
     }
 
     .leads-table {
-        font-size: 12px;
+        font-size: 13px;
     }
 
     .leads-table th,
@@ -2590,7 +2590,7 @@ body {
 }
 
 .skill-status {
-    font-size: 10px;
+    font-size: 12px;
 }
 
 .skill-name {
@@ -2604,7 +2604,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -2653,7 +2653,7 @@ body {
 }
 
 .pipeline-steps {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-muted);
     background: rgba(255, 255, 255, 0.05);
     padding: 4px 10px;
@@ -2763,7 +2763,7 @@ body {
 }
 
 .lane-desc {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-dim);
     flex: 1;
 }
