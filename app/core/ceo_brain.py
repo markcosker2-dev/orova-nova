@@ -300,31 +300,60 @@ class CEOBrain:
         except Exception as e:
             logger.error(f"[CEO_BRAIN] Error checking HOT replies: {e}")
 
+        # 3.5 Audit recent task failures recorded by the planner's outcome
+        # verification, so the brief surfaces what went wrong — not just wins.
+        failed_audits_text = "None"
+        try:
+            audit_rows = await DatabaseManager.fetchall(
+                """SELECT content FROM memories
+                   WHERE content LIKE 'TASK AUDIT FAIL%' AND client_id = ?
+                     AND datetime(created_at) >= datetime('now', '-1 day')
+                   ORDER BY created_at DESC LIMIT 5""",
+                (client_id,)
+            )
+            if audit_rows:
+                failed_audits_text = "\n".join(f"• {r['content'][:200]}" for r in audit_rows)
+        except Exception as e:
+            logger.debug(f"[CEO_BRAIN] Audit fetch skipped: {e}")
+
         # 4. Propose Tasks and Schedule
         proposed_tasks = await self.propose_tasks(metrics, client_id)
         schedule_text = await self.auto_schedule_day()
 
         # 5. Generate AI Executive Summary
         prompt = f"""
-        You are the OROVA CEO Brain. Write a concise, premium daily executive summary based on the following stats:
-        
+        You are the CEO Brain of OROVA — think like the operator of a $100M revenue machine reviewing a daily P&L, not an assistant writing a status update.
+
+        Voice: direct, numbers-first, zero fluff. Every observation must end in a decision or an action. Call out what's broken before what's working. If a metric is trending down, say so bluntly and say what you're doing about it. Money and booked meetings are the only scoreboard — leads and emails are inputs, not wins.
+
+        Structure your summary as:
+        1. THE NUMBER THAT MATTERS TODAY (one line: closest thing to revenue)
+        2. WHAT'S WORKING (max 2 bullets, with the metric that proves it)
+        3. WHAT'S BROKEN (be blunt; include the fix you're executing)
+        4. TODAY'S ONE BIG BET (the single highest-leverage action)
+
+        Base it on the following stats:
+
         PIPELINE METRICS:
         - Total Leads Found: {metrics.get('leads_found')}
         - Emails Sent: {metrics.get('emails_sent')}
         - Replies Received: {metrics.get('replies_received')}
         - Meetings Booked: {metrics.get('meetings_booked')}
         - Calls Made: {metrics.get('calls_made')}
-        
+
         PERFORMANCE COMPARISON (Yesterday vs. 7-Day Average):
         - Yesterday sends: {yesterday_sends} (7-Day Avg: {avg_7day_sends:.1f})
         - Yesterday replies: {yesterday_replies} (7-Day Avg: {avg_7day_replies:.1f})
-        
+
         HOT REPLIES NEEDING ATTENTION:
         {hot_replies_text}
-        
+
+        FAILED TASK AUDITS (last 24h — call these out with a fix suggestion):
+        {failed_audits_text}
+
         PROPOSED SCHEDULE:
         {schedule_text}
-        
+
         Format it in a clear, professional style suitable for a high-end CEO briefing on Telegram. Make it punchy and highlight any critical actions.
         """
         

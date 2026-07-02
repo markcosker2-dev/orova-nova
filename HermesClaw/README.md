@@ -9,6 +9,13 @@ HermesClaw is a graphical AI assistant application based on [OpenClaw](https://g
 - **extensions/** - HermesClaw extension configuration
 - **runtime/** - HermesClaw runtime integration services
 
+> **Note:** the files in this folder are reference mirrors. The canonical,
+> compiled sources live in the repository root: runtime services under
+> `../electron/runtime/services/`, the semantic firewall under
+> `../electron/runtime/security/`, and its unit tests under
+> `../tests/unit/`. Edit the canonical files and copy them here to keep the
+> mirrors in sync.
+
 ## Related Projects
 
 - [OpenClaw](https://github.com/openclaw/openclaw) - Core AI assistant runtime

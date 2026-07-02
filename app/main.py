@@ -824,7 +824,18 @@ async def process_telegram_message(data: dict):
         agent_role = TOPIC_AGENT_MAP.get(topic_id, "nova")
         
         logger.info(f"[Telegram] Processing: chat_id={chat_id}, text={text[:50]}..., agent={agent_role}")
-        
+
+        # Intercept firewall approval replies ('approve APPROVAL-0001' etc.)
+        # before routing to the brain — these must be deterministic.
+        try:
+            from app.skills.approval_workflow import handle_approval_response
+            approval_reply = await handle_approval_response(text)
+            if approval_reply:
+                await tg_queue.add_message(chat_id, f"🛡️ {approval_reply}")
+                return
+        except Exception as e:
+            logger.warning(f"[Telegram] Approval intercept failed (continuing to brain): {e}")
+
         # Route to Brain
         result = await router.handle_message(text, chat_id=chat_id, history=None)
         
@@ -839,6 +850,103 @@ async def process_telegram_message(data: dict):
             await tg_queue.add_message(chat_id, "🤖 I processed your message but didn't generate a response. Try asking again?")
     except Exception as e:
         logger.error(f"[Swarm] Worker failed: {e}", exc_info=True)
+
+@app.post("/api/retell/webhook")
+async def retell_webhook(request: Request):
+    """Post-call ingest from Retell (directly or relayed via Make).
+
+    Records call outcomes into the self-improvement loop, updates the lead,
+    and pings Telegram on hot leads / booked appointments.
+    """
+    raw_body = await request.body()
+
+    # Signature check when called directly by Retell; Make relays instead
+    # send X-API-Key (same dashboard secret used by other internal callers).
+    api_key = os.getenv("RETELL_API_KEY", "")
+    signature = request.headers.get("x-retell-signature", "")
+    relay_key = request.headers.get("x-api-key", "")
+    verified = False
+    if relay_key and secrets.compare_digest(relay_key, os.getenv("DASHBOARD_API_KEY", "")):
+        verified = True
+    elif api_key and signature:
+        try:
+            from retell.lib.webhook_auth import verify as retell_verify
+            verified = retell_verify(raw_body.decode("utf-8"), api_key, signature)
+        except Exception as e:
+            logger.warning(f"[Retell] Signature verification error: {e}")
+    if not verified:
+        return JSONResponse(status_code=401, content={"status": "unauthorized"})
+
+    data = await request.json()
+    event = data.get("event", "")
+    call = data.get("call", data) or {}
+
+    # Forward a copy to the Make.com CRM scenario (Sheets logging) so the
+    # existing OROVA|Nova CRM flow keeps working now that Retell points here.
+    make_hook = os.getenv("MAKE_CRM_WEBHOOK_URL", "")
+    if make_hook:
+        async def _forward():
+            try:
+                async with httpx.AsyncClient(timeout=10) as client:
+                    await client.post(make_hook, json=data)
+            except Exception as e:
+                logger.debug(f"[Retell] Make forward failed (non-fatal): {e}")
+        _schedule_background(_forward())
+
+    if event not in ("call_analyzed", "call_ended"):
+        return {"status": "ignored", "event": event}
+    # call_ended fires before analysis; only act on the analyzed payload
+    if event == "call_ended":
+        return {"status": "ok", "awaiting": "call_analyzed"}
+
+    metadata = call.get("metadata") or {}
+    lead_id = metadata.get("lead_id")
+    client_id = int(metadata.get("client_id") or 0)
+    analysis = call.get("call_analysis") or {}
+    custom = analysis.get("custom_analysis_data") or {}
+    temperature = (custom.get("lead temperature") or "").strip().lower()
+    booked = bool(custom.get("appointment booked"))
+    summary = analysis.get("call_summary", "")
+
+    result = "meeting" if booked else (
+        "replied" if temperature == "hot" else (
+            "answered" if analysis.get("call_successful") else "no_answer"))
+
+    try:
+        from app.core.self_improvement import OutcomeTracker
+        await OutcomeTracker.record_outcome(
+            action="call", strategy="cold_call", result=result,
+            recipient=call.get("to_number", ""), lead_id=int(lead_id or 0),
+            client_id=client_id,
+            metadata={"temperature": temperature, "booked": booked, "objection": custom.get("specific objection", "")},
+        )
+    except Exception as e:
+        logger.warning(f"[Retell] Outcome record failed: {e}")
+
+    if lead_id:
+        try:
+            new_status = "Meeting Booked" if booked else ("Hot Lead" if temperature == "hot" else "Called")
+            await DatabaseManager.query(
+                "UPDATE leads SET status = ?, notes = notes || ? WHERE id = ? AND client_id = ?",
+                (new_status, f" | Call: {summary[:200]}", int(lead_id), client_id),
+            )
+        except Exception as e:
+            logger.warning(f"[Retell] Lead update failed: {e}")
+
+    if booked or temperature == "hot":
+        try:
+            from app.worker import send_telegram_report
+            await send_telegram_report(
+                f"🔥 **{'APPOINTMENT BOOKED' if booked else 'HOT LEAD'}** (call)\n\n"
+                f"{custom.get('name', '')} — {custom.get('contact number', call.get('to_number', ''))}\n"
+                f"When: {custom.get('appointment date and time', 'n/a')}\n"
+                f"Summary: {summary[:300]}"
+            )
+        except Exception as e:
+            logger.warning(f"[Retell] Telegram alert failed: {e}")
+
+    return {"status": "ok", "result": result}
+
 
 @app.post("/telegram")
 async def telegram_webhook(request: Request):

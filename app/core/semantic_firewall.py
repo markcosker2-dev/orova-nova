@@ -11,6 +11,7 @@ Addresses vulnerability assessment categories:
 4. Resource Exhaustion (Infinite Loops)
 """
 
+import os
 import re
 import json
 import time
@@ -127,7 +128,35 @@ class FirewallConfig:
 # DEFAULT CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════════
 
-DEFAULT_FIREWALL_CONFIG = FirewallConfig()
+def _load_shared_firewall_policy() -> dict:
+    """Load config/firewall-rules.json — the single policy file shared with
+    the TypeScript firewall (electron/runtime/security/semantic-firewall.ts).
+    Returns {} when missing so dataclass defaults apply."""
+    try:
+        from pathlib import Path
+        policy_path = Path(__file__).resolve().parents[2] / "config" / "firewall-rules.json"
+        if policy_path.exists():
+            with open(policy_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"[FIREWALL] Shared policy load failed, using defaults: {e}")
+    return {}
+
+
+_shared_policy = _load_shared_firewall_policy()
+
+DEFAULT_FIREWALL_CONFIG = FirewallConfig(
+    max_tool_calls_per_task=int(_shared_policy.get("maxToolCallsPerTask", 20)),
+    max_agent_depth=int(_shared_policy.get("maxAgentDepth", 3)),
+    default_task_timeout_ms=int(_shared_policy.get("defaultTaskTimeoutMs", 5 * 60 * 1000)),
+    high_impact_tools=list(_shared_policy.get("highImpactTools") or [
+        "shell", "write", "delete", "execute_code", "send_email",
+        "send_message", "api_request", "database_write", "trigger_retell_call"
+    ]),
+    delegation_tools=list(_shared_policy.get("delegationTools") or [
+        "delegate_task", "spawn_agent", "create_sub_agent", "dispatch_task"
+    ]),
+)
 
 # Define parameter schemas for known tools
 DEFAULT_FIREWALL_CONFIG.parameter_schemas = {
@@ -456,9 +485,25 @@ async def rule_goal_alignment(ctx: ToolCallContext, config: FirewallConfig) -> F
     """Check if tool call aligns with stated goal"""
     if not ctx.current_goal or not ctx.current_goal.strip():
         return FirewallRuleResult(decision=FirewallDecision.ALLOW, reason="No goal specified")
-    
-    score = compute_goal_match_score(ctx.current_goal, ctx.tool_name, ctx.parameters)
-    
+
+    score = None
+    # Semantic path: Gemini embeddings (free tier, cached in SQLite). Opt-out
+    # via FIREWALL_SEMANTIC_ALIGNMENT=0; falls back to keywords on any failure.
+    if os.getenv("FIREWALL_SEMANTIC_ALIGNMENT", "1") == "1":
+        try:
+            from app.core.embeddings import semantic_similarity
+            action_text = f"{ctx.tool_name}: {json.dumps(ctx.parameters, default=str)[:500]}"
+            sim = await semantic_similarity(ctx.current_goal, action_text)
+            if sim is not None:
+                # Embedding cosine for unrelated text sits around ~0.45;
+                # rescale so the existing 0.15 review threshold keeps working.
+                score = max(0.0, min(1.0, (sim - 0.45) / 0.4))
+        except Exception:
+            score = None
+
+    if score is None:
+        score = compute_goal_match_score(ctx.current_goal, ctx.tool_name, ctx.parameters)
+
     if score < 0.15:
         return FirewallRuleResult(
             decision=FirewallDecision.REQUIRE_REVIEW,
@@ -939,11 +984,27 @@ async def firewall_guard(
         eval_result["decision"] = FirewallDecision.DENY
         eval_result["reason"] += " (auto-denied: review required)"
     
-    # Handle require_human_approval - must be externally resolved
+    # Handle require_human_approval — closed loop via Telegram:
+    # if Mark already approved this exact action, consume the approval and
+    # execute; otherwise persist a request, ping Telegram, and block with a
+    # reason that tells Nova to retry after approval.
     if eval_result["decision"] == FirewallDecision.REQUIRE_HUMAN_APPROVAL:
         should_execute = False
-        # Don't auto-deny - caller must handle the approval flow
-    
+        try:
+            from app.skills.approval_workflow import is_action_approved, request_firewall_approval
+            if await is_action_approved(tool_name, params):
+                should_execute = True
+                eval_result["decision"] = FirewallDecision.ALLOW
+                eval_result["reason"] += " (human-approved via Telegram)"
+            else:
+                request_id = await request_firewall_approval(tool_name, params, eval_result["reason"])
+                eval_result["reason"] += (
+                    f" | Approval requested ({request_id}). Ask Mark to reply"
+                    f" 'approve {request_id}' on Telegram, then retry this exact action."
+                )
+        except Exception as e:
+            logger.warning(f"[FIREWALL] Approval flow error (action stays blocked): {e}")
+
     return {
         "should_execute": should_execute,
         "decision": eval_result["decision"],

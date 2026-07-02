@@ -130,8 +130,6 @@ class _DBBase:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_email_client
-                ON leads(lower(email), client_id);
             CREATE TABLE IF NOT EXISTS clients (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 business_name TEXT,
@@ -218,14 +216,56 @@ class _DBBase:
             );
         """)
         conn.commit()
+        cls._ensure_leads_unique_index(conn)
         cls._migrate_columns(conn)
+
+    @classmethod
+    def _ensure_leads_unique_index(cls, conn):
+        """Create the leads dedup index, self-healing pre-existing duplicates.
+
+        Databases created before the UNIQUE index was introduced may already
+        contain duplicate (lower(email), client_id) rows, which makes the
+        CREATE UNIQUE INDEX fail and aborts the whole init. Dedupe first
+        (keeping the oldest row), then create the index. Rows with NULL
+        email/client_id are left alone — SQLite UNIQUE treats NULLs as
+        distinct, so they never conflict with the index.
+        """
+        import sqlite3
+        create_sql = (
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_email_client "
+            "ON leads(lower(email), client_id)"
+        )
+        try:
+            conn.execute(create_sql)
+        except sqlite3.IntegrityError:
+            removed = conn.execute(
+                """
+                DELETE FROM leads
+                WHERE email IS NOT NULL AND client_id IS NOT NULL
+                  AND id NOT IN (
+                    SELECT MIN(id) FROM leads
+                    WHERE email IS NOT NULL AND client_id IS NOT NULL
+                    GROUP BY lower(email), client_id
+                  )
+                """
+            ).rowcount
+            logger.warning(
+                f"⚠️ Removed {removed} duplicate lead(s) blocking idx_leads_email_client; keeping oldest row per (email, client)"
+            )
+            conn.execute(create_sql)
+        conn.commit()
 
     @classmethod
     def _migrate_columns(cls, conn):
         """Add missing columns to existing tables (safe, idempotent)."""
         migrations = [
             ("leads", "updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
+            ("leads", "email_status", "TEXT DEFAULT ''"),
+            ("leads", "owner_title", "TEXT DEFAULT ''"),
+            ("leads", "linkedin_url", "TEXT DEFAULT ''"),
+            ("memories", "embedding", "TEXT"),
             ("metrics", "metric_value", "REAL DEFAULT 0"),
+            ("learned_strategies", "wilson_score", "REAL DEFAULT 0"),
             ("learned_patterns", "task_type", "TEXT"),
             ("learned_patterns", "winning_approach", "TEXT"),
             ("learned_patterns", "client_id", "INTEGER DEFAULT 0"),

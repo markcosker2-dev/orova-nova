@@ -15,7 +15,10 @@ google-api-python-client==2.126.0
 google-generativeai==0.8.3
 gspread==6.1.0
 
-httpx==0.26.0
+# 0.27.2: newest release that still works with starlette 0.27 TestClient while
+# satisfying mcp (>=0.27.1) and ollama (>=0.27) installed alongside in the
+# hermes-agent venv. Do not bump to 0.28 until fastapi/starlette are upgraded.
+httpx==0.27.2
 nest-asyncio==1.6.0
 openai==1.51.0
 # redis==5.0.8  # REMOVED: app falls back to SQLite automatically — saves ~30MB RAM

@@ -105,6 +105,7 @@ _skills_cal_booking = _LazyModule("app.skills.cal_booking", ["handle_cal_booking
 _skills_email_proof = _LazyModule("app.skills.email_proofreader", ["proofread_email"])
 _skills_lead_gen_v2 = _LazyModule("app.skills.lead_gen_v2", ["find_leads_v2"])
 _skills_scrapling = _LazyModule("app.skills.scrapling_scraper", ["stealth_search", "stealth_extract", "bulk_scrape"])
+_skills_forge = _LazyModule("app.skills.skill_forge", ["propose_skill", "activate_skill", "use_forged_skill", "list_forged_skills"])
 
 # Safe imports for elite components (already guarded, keep as-is)
 try:
@@ -266,13 +267,18 @@ class TaskPlanner:
             "stealth_search": _skills_scrapling.stealth_search,
             "stealth_extract": _skills_scrapling.stealth_extract,
             "bulk_scrape": _skills_scrapling.bulk_scrape,
+            # ── Skill Forge: dynamic tool acquisition (approval-gated) ──
+            "propose_skill": _skills_forge.propose_skill,
+            "activate_skill": _skills_forge.activate_skill,
+            "use_forged_skill": _skills_forge.use_forged_skill,
+            "list_forged_skills": _skills_forge.list_forged_skills,
         }
         self.firewall = get_semantic_firewall(self.config.get("firewall_config"))
         logger.info("[PLANNER] Semantic Firewall integrated.")
 
     HUNTING_TOOLS = ["sgai_search_and_extract", "sgai_deep_extract", "find_leads", "find_leads_v2", "google_search", "research_lead", "hunt_hiring_signals", "enrich_lead_ai"]
     OUTREACH_TOOLS = ["send_outreach", "send_email", "write_cold_email", "create_drip_campaign", "generate_sequence", "check_replies", "reply_to_email", "get_inbox", "trigger_retell_call", "generate_hiring_outreach", "enrich_lead_apollo", "is_business_hours", "composio_action", "proofread_email", "morning_brief", "pipeline_health_check"]
-    LIGHT_RESEARCH_TOOLS = ["deep_research", "browse_agent", "run_seo_audit", "bulk_enrich_leads", "next_business_hours_slot", "generate_cal_booking_link", "elite_scrape", "vision_browse", "stealth_search", "stealth_extract", "bulk_scrape"]
+    LIGHT_RESEARCH_TOOLS = ["deep_research", "browse_agent", "run_seo_audit", "bulk_enrich_leads", "next_business_hours_slot", "generate_cal_booking_link", "elite_scrape", "vision_browse", "stealth_search", "stealth_extract", "bulk_scrape", "propose_skill", "activate_skill", "use_forged_skill", "list_forged_skills"]
 
     def _scope_tools(self, goal: str) -> list:
         if not TOOLS:
@@ -287,6 +293,53 @@ class TaskPlanner:
         if not scoped:
             logger.warning(f"[PLANNER] No tools matched scope for goal: {goal[:80]!r}")
         return scoped
+
+    async def _decompose_goal(self, goal: str) -> str:
+        """Hierarchical planning: break a complex goal into subgoals with
+        verifiable success criteria. One cheap LLM call, only for goals that
+        look multi-step; returns '' on any failure so execution never blocks.
+        """
+        looks_complex = len(goal) > 120 or " and " in goal.lower() or goal.count(".") >= 2
+        if not looks_complex:
+            return ""
+        try:
+            plan = await self.ai.quick(
+                "Decompose this goal into 2-5 numbered subgoals. For each, add "
+                "'DONE WHEN: <observable success criterion>'. Be terse.\n\nGOAL: " + goal[:600]
+            )
+            return (plan or "").strip()[:1200]
+        except Exception as e:
+            logger.debug(f"[PLANNER] Decomposition skipped: {e}")
+            return ""
+
+    async def _verify_outcome(self, goal: str, plan: str, tool_call_history: list, final_result: str, client_id: int):
+        """Subgoal verification: judge whether the execution actually met the
+        goal. Failures are stored as memory fragments so the CEO brain audit
+        and semantic recall learn from them.
+        """
+        try:
+            actions = "; ".join(
+                f"{h['tool_name']}({h.get('decision','')})" for h in tool_call_history[-8:]
+            ) or "no tool calls"
+            verdict = await self.ai.quick(
+                "You are auditing an autonomous agent run. Reply with exactly "
+                "'PASS: <reason>' or 'FAIL: <reason>' in one line.\n\n"
+                f"GOAL: {goal[:400]}\n"
+                + (f"PLAN: {plan[:400]}\n" if plan else "")
+                + f"ACTIONS: {actions}\n"
+                f"FINAL RESULT: {str(final_result)[:400]}"
+            )
+            verdict = (verdict or "").strip()
+            if verdict.upper().startswith("FAIL"):
+                logger.warning(f"[PLANNER] Outcome verification FAILED: {verdict[:200]}")
+                await self.distiller._store_fragment(
+                    f"TASK AUDIT FAIL — goal: {goal[:200]} | verdict: {verdict[:300]}",
+                    client_id,
+                )
+            else:
+                logger.info(f"[PLANNER] Outcome verification: {verdict[:120]}")
+        except Exception as e:
+            logger.debug(f"[PLANNER] Outcome verification skipped: {e}")
 
     async def execute(self, goal: str, client_id: int = 0, conversation_history: list = None, agent_id: str = "nova", _already_intercepted: bool = False):
         normalised_goal = _normalise_for_probe(goal)
@@ -344,6 +397,11 @@ class TaskPlanner:
                 system_content += f"\n\nUSER PREFERENCES: {prefs_flat}"
         except Exception as e:
             logger.debug(f"[PLANNER] Self-learning context injection skipped: {e}")
+        # Hierarchical planning: decompose complex goals into verifiable subgoals
+        subgoal_plan = await self._decompose_goal(goal)
+        if subgoal_plan:
+            system_content += f"\n\n=== EXECUTION PLAN (follow in order, each subgoal has a DONE-WHEN check) ===\n{subgoal_plan}\n==="
+
         messages = [{"role": "system", "content": system_content}]
         if history:
             safe_history = _sanitise_history(history, n=6)
@@ -524,12 +582,14 @@ class TaskPlanner:
                     execution_circuit_breaker.complete_session(session_id, "completed")
                     efficiency_optimizer.complete_session(session_id)
                     await self._record_learning_trace(session_id, agent_id, goal, tool_call_history, client_id, "completed", step, task_start_time)
+                    await self._verify_outcome(goal, subgoal_plan, tool_call_history, str(tool_result), client_id)
                     return {"status": "ok", "agent": agent_id, "steps": step, "action": fn_name, "result": tool_result}
 
         trace_manager.complete_trace(session_id, "max_steps", response="Step limit reached.")
         execution_circuit_breaker.complete_session(session_id, "max_steps")
         efficiency_optimizer.complete_session(session_id)
         await self._record_learning_trace(session_id, agent_id, goal, tool_call_history, client_id, "max_steps", MAX_STEPS, task_start_time)
+        await self._verify_outcome(goal, subgoal_plan, tool_call_history, "Step limit reached without terminal action", client_id)
         return {"status": "max_steps", "agent": agent_id, "steps": MAX_STEPS, "response": "Step limit reached."}
 
     async def _compress_context(self, messages: list) -> list:

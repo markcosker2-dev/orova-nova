@@ -197,8 +197,10 @@ async def _execute_approved_call(sheet, row, idx, client_id=0):
     context = {
         "business_name": company,
         "contact_name": contact,
+        "owner_name": contact,
         "icebreaker": intel,
         "offer_gap": "",
+        "client_id": client_id,
     }
 
     # Run trigger_retell_call (check if async/coroutine, else run in thread pool executor)
@@ -364,39 +366,27 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
                         lead_phone = lead.get("phone", "").strip()
                         lead_owner = lead.get("owner") or lead.get("owner_name") or "there"
                         lead_biz = lead.get("business", "your business")
+                        email_status = lead.get("email_status", "")
 
-                        # Send initial cold outreach email
-                        if lead_email:
+                        # Guessed emails bounce ~40% of the time and poison sender
+                        # reputation — route those leads to the call lane instead.
+                        if lead_email and email_status == "guessed":
+                            logger.info(f"   -> ⏭️ Email for lead {lead_id} is guessed ({lead_email}); skipping cold email, call lane will pick it up")
+
+                        # Send initial cold outreach email — AI-personalized,
+                        # framework picked by the champion/challenger loop so
+                        # every send feeds real A/B data back into learning.
+                        if lead_email and email_status != "guessed":
                             try:
-                                # Load business context for personalized outreach
-                                import json as _json
-                                _ctx_path = os.path.join(os.path.dirname(__file__), "core", "business_context.json")
-                                _biz_ctx = {}
-                                try:
-                                    with open(_ctx_path, "r") as _f:
-                                        _biz_ctx = _json.load(_f)
-                                except Exception:
-                                    pass
-                                _email_rules = _biz_ctx.get("email_rules", {})
-                                _sig = _email_rules.get("signature", "Nova @ OROVA")
-                                _tone = _email_rules.get("tone", "Casual and friendly — like a peer reaching out")
-
-                                subject = f"Quick question about {lead_biz}"
-                                body = (
-                                    f"Hi {lead_owner},\n\n"
-                                    f"I was checking out {lead_biz} — really impressed by what you're doing in the {niche} space.\n\n"
-                                    f"We help {niche} businesses on the West Coast stop chasing bad leads. "
-                                    f"Our system qualifies every lead automatically so you only talk to people who are actually interested.\n\n"
-                                    f"Would a 10-minute call be worth it to see if this fits {lead_biz}?\n\n"
-                                    f"{_sig}"
-                                )
+                                from app.skills.outreach_orchestrator import compose_premium_outreach
+                                composed = await compose_premium_outreach(lead, niche=niche, client_id=client_id)
                                 outreach_result = await send_outreach(
                                     to=lead_email,
-                                    subject=subject,
-                                    body=body,
-                                    recipient_context=f"Owner of {lead_biz} in {niche} vertical",
+                                    subject=composed["subject"],
+                                    body=composed["body"],
+                                    recipient_context=f"{lead_owner} ({lead.get('owner_title') or 'Owner'}) of {lead_biz} in {niche} vertical",
                                     lead_id=lead_id,
-                                    strategy="cold_intro",
+                                    strategy=composed["framework"],
                                     niche=niche,
                                     client_id=client_id,
                                 )
@@ -605,8 +595,14 @@ async def run_cold_lead_escalation(client_id=0):
             context = {
                 "business_name": business,
                 "contact_name": contact,
-                "icebreaker": f"Following up on our email about improving your online presence",
+                "owner_name": contact,
+                "owner_title": lead.get("owner_title", ""),
+                "niche": lead.get("vertical", ""),
+                "icebreaker": (lead.get("icebreaker") or "").replace("Pending review...", "")
+                    or "we emailed about qualifying leads automatically and wanted to reach out directly",
                 "call_type": "cold_escalation",
+                "lead_id": lead_id,
+                "client_id": client_id,
             }
 
             try:
