@@ -33,7 +33,7 @@ pydantic-settings==2.13.0
 pytz==2024.1
 
 # reportlab==4.2.0  # REMOVED: not used anywhere in app/ — saves ~15MB RAM
-requests==2.31.0
+requests==2.33.0
 retell-sdk==4.1.0
 schedule==1.2.1
 tenacity==8.3.0
