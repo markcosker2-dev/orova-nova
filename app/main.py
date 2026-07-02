@@ -285,6 +285,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="OROVA Indestructible Agency Bridge", lifespan=lifespan)
 
+# HermesClaw autonomous-feature endpoints (/api/morning_brief, /api/learned_strategies,
+# /api/improvement_loop, /api/proofread, /api/worker/trigger/lane/{n}, ...).
+# This router was defined but never mounted — the dashboard's CEO Brain,
+# Self-Improvement, Proofreader, and Worker Lanes screens 404'd without it.
+from app.core.hermesclaw_endpoints import router as hermesclaw_router
+app.include_router(hermesclaw_router)
+
 # [S-06] Request body size limit — reject bodies > 1MB to prevent OOM on 512MB tier
 MAX_BODY_BYTES = 1 * 1024 * 1024  # 1 MB
 

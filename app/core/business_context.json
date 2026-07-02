@@ -1,31 +1,35 @@
 {
   "_description": "Single source of truth for OROVA business context. Loaded by email pipeline, proofreader, and drip templates. All other files (USER.md, brand_guidelines.json, config.py) should align with this.",
-  "_last_updated": "2026-06-22",
+  "_last_updated": "2026-07-03",
 
   "company": {
     "name": "OROVA",
     "type": "Marketing Agency",
-    "description": "OROVA is a marketing agency specializing in Meta Ads (Facebook + Instagram) with integrated lead qualification and CRM. We help businesses stop chasing bad leads and only talk to qualified ones.",
+    "description": "OROVA runs Meta ads (Facebook + Instagram) for luxury and premium businesses on the US West Coast — lead generation plus AI-crafted ad creatives, with optional AI lead qualification and appointment setting so owners only talk to buyers.",
     "ceo": "Mark",
     "ai_team_member": "Nova",
     "timezone": "America/Los_Angeles",
-    "region": "West Coast US"
+    "region": "West Coast US",
+    "creative_tooling": "Higgsfield (AI ad creatives)"
   },
 
   "services": [
     {
-      "name": "Meta Ads + CRM",
+      "name": "Package 1 — Meta Lead Gen + Ad Creatives",
       "price_monthly_usd": 4000,
-      "description": "Full-service Meta Ads (Facebook + Instagram) management with Google Sheets CRM integration. Ad spend is separate.",
-      "ad_spend_minimum_monthly_usd": 2000,
-      "platforms": ["facebook", "instagram"]
+      "description": "Meta ads (Facebook + Instagram) lead generation with ad creatives produced via Higgsfield AI. Client handles the leads themselves. Ad spend is separate.",
+      "ad_spend_recommended_monthly_usd": "2000-2500",
+      "platforms": ["facebook", "instagram"],
+      "includes_crm": false
     },
     {
-      "name": "Meta Ads + Retell AI Lead Qualification + CRM",
+      "name": "Package 2 — Lead Gen + AI Qualification + CRM + Appointments",
       "price_monthly_usd": 5000,
-      "description": "Everything in the base package plus Retell AI-powered lead qualification — AI calls every lead within 60 seconds to qualify them, screens out tire-kickers, ensures no leads fall through the cracks.",
-      "ad_spend_minimum_monthly_usd": 2000,
-      "platforms": ["facebook", "instagram"]
+      "description": "Everything in Package 1, plus Retell AI cold-call qualification of every lead, client CRM kept current (Google Sheets or the client's CRM via Make.com), and appointment booking when the business runs on appointments.",
+      "ad_spend_recommended_monthly_usd": "2000-2500",
+      "platforms": ["facebook", "instagram"],
+      "includes_crm": true,
+      "includes_appointments": "optional — only when the business monetizes via appointments"
     }
   ],
 
@@ -40,17 +44,17 @@
   },
 
   "icp": {
-    "description": "Businesses on the West Coast US that can afford $4K-$5K/mo for marketing. Any industry with sufficient margins.",
+    "description": "Luxury and premium businesses on the US West Coast that can afford $4K-$5K/mo for marketing plus $2K-$2.5K/mo ad spend.",
     "primary_verticals": [
-      "Home remodeling / contractors",
-      "Automotive (all spaces — dealers, repair, detailing, aftermarket)",
-      "Private aviation",
-      "Real estate"
+      "Luxury / premium brands (the core focus)",
+      "Exotic and luxury automotive (dealers, rentals, tuning, detailing, storage, restoration)",
+      "Custom home builders / high-end remodeling",
+      "Private aviation and yacht charter"
     ],
     "secondary_verticals": [
       "High-ticket service providers",
-      "Luxury / premium brands",
-      "Professional services (legal, medical, financial)"
+      "Luxury real estate",
+      "Premium professional services"
     ],
     "region": "West Coast US (CA, OR, WA, NV, AZ — all states, no specific city focus)",
     "budget_minimum_monthly_usd": 4000,
@@ -66,7 +70,7 @@
     "framework": "Hook-Value-Ask",
     "max_words": 75,
     "tone": "Casual and friendly — like a peer reaching out, not a salesperson",
-    "sender_identity": "Nova — sounds like a real person on Mark's team. NOT transparent about being AI.",
+    "sender_identity": "Nova — a member of Mark's team. Doesn't volunteer being AI in email, but NEVER denies it if asked directly (the voice agent openly discloses; CA bot-disclosure law applies to sales bots).",
     "signature_format": "Nova sends the emails. When it's time to book a call, Nova mentions Mark.",
     "signature": "Nova @ OROVA",
     "ceo_signature": "Mark, CEO @ OROVA",
