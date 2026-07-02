@@ -29,7 +29,7 @@ openai==1.51.0
 python-dotenv==1.2.2
 python-multipart==0.0.6
 pydantic==2.13.0
-pydantic-settings==2.13.0
+pydantic-settings==2.14.2
 pytz==2024.1
 
 # reportlab==4.2.0  # REMOVED: not used anywhere in app/ — saves ~15MB RAM
