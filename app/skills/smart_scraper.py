@@ -495,15 +495,26 @@ async def _save_to_lead_wiki(url: str, extracted_data: dict):
         return
 
     logger.info(f"[LEAD WIKI] Generating wiki for {b_name}...")
-    wiki_dir = Path("leads")
-    wiki_dir.mkdir(exist_ok=True)
+    # Lead wikis live in the Obsidian vault (see CLAUDE.md / ADR-0001)
+    wiki_dir = Path(os.getenv("LEAD_WIKI_DIR", "vault/30-leads"))
+    wiki_dir.mkdir(parents=True, exist_ok=True)
 
     safe_name = "".join([c for c in b_name if c.isalpha() or c.isdigit() or c==' ']).rstrip()
     safe_name = safe_name.replace(' ', '_').lower()
     wiki_path = wiki_dir / f"{safe_name}.md"
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    md_content = f"# Lead Wiki: {b_name}\n"
+    # Frontmatter matches the vault convention (vault/_templates/lead.md)
+    md_content = (
+        "---\n"
+        f"name: lead-{safe_name.replace('_', '-')}\n"
+        f"description: Lead wiki for {b_name}\n"
+        "type: lead\n"
+        f"created: {datetime.now().strftime('%Y-%m-%d')}\n"
+        "status: active\n"
+        "---\n\n"
+    )
+    md_content += f"# Lead Wiki: {b_name}\n"
     md_content += f"> **Hunted On:** {now}\n> **Source URL:** {url}\n> **Confidence Score:** {extracted_data.get('confidence_score', 'N/A')}/10\n\n"
     md_content += "## Owner / Decision Maker\n"
     md_content += f"- **Name:** {extracted_data.get('owner_name', 'Unknown')}\n"

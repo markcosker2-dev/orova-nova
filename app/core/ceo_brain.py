@@ -372,13 +372,47 @@ class CEOBrain:
             report += f"- {task['description']} (Priority: {task['priority']})\n"
             
         report += f"\n📅 **Today's Schedule:**\n{schedule_text}"
-        
+
         await _send_telegram_alert(report)
+
+        # Persist the brief so /api/memory can serve it — otherwise it
+        # evaporates into Telegram. scripts/vault_pull.py syncs these into
+        # the Obsidian vault (vault/20-ops/briefs/). Ephemeral on Render's
+        # disk by design: briefs are point-in-time documents.
+        self._persist_brief(report, client_id)
 
         # ── Auto-execute: schedule tasks to run in 30 min if no override ──
         await self._schedule_auto_execute(proposed_tasks, client_id)
 
         return report
+
+    @staticmethod
+    def _persist_brief(report: str, client_id: int = 0) -> None:
+        try:
+            import json as _json
+            from pathlib import Path
+            root = Path(__file__).resolve().parents[2]
+            memory_file = root / "memories.json"
+            memories = []
+            if memory_file.exists():
+                try:
+                    memories = _json.loads(memory_file.read_text(encoding="utf-8"))
+                except Exception:
+                    memories = []
+            date_str = datetime.datetime.now().strftime("%Y-%m-%d")
+            brief_id = f"brief-{date_str}-c{client_id}"
+            entry = {
+                "id": brief_id,
+                "type": "brief",
+                "date": date_str,
+                "client_id": client_id,
+                "content": report,
+            }
+            memories = [m for m in memories if m.get("id") != brief_id] + [entry]
+            memory_file.write_text(_json.dumps(memories, indent=2, ensure_ascii=False), encoding="utf-8")
+            logger.info(f"[CEO_BRAIN] Brief persisted to memories.json ({brief_id})")
+        except Exception as e:
+            logger.warning(f"[CEO_BRAIN] Brief persistence failed (non-fatal): {e}")
 
     async def pipeline_health_check(self, client_id: int = 0) -> dict:
         """

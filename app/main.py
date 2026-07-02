@@ -643,10 +643,13 @@ async def get_leads(limit: int = 100, authorized: bool = Depends(require_dashboa
             COALESCE(phone, '') as phone, 
             vertical, status, 
             COALESCE(notes, '') as notes, 
-            COALESCE(icebreaker, 'Pending...') as icebreaker, 
-            COALESCE(score, 0) as score, 
+            COALESCE(icebreaker, 'Pending...') as icebreaker,
+            COALESCE(score, 0) as score,
+            COALESCE(email_status, '') as email_status,
+            COALESCE(owner_title, '') as owner_title,
+            COALESCE(linkedin_url, '') as linkedin_url,
             client_id, created_at
-        FROM leads 
+        FROM leads
         ORDER BY id DESC LIMIT ?
     """
     leads = await DatabaseManager.query(query, (limit,), fetchall=True)

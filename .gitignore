@@ -104,3 +104,8 @@ content.json
 
 # OneDrive temp files
 H
+# Obsidian — commit vault config, ignore per-machine/volatile state
+vault/.obsidian/workspace.json
+vault/.obsidian/workspace-mobile.json
+vault/.obsidian/cache/
+vault/.obsidian/graph.json
