@@ -4,16 +4,19 @@ These endpoints allow the mission-control dashboard, Telegram bot, and HermesCla
 desktop UI to trigger the new self-improvement infrastructure.
 """
 import logging
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from app.core.database import DatabaseManager
 
 logger = logging.getLogger(__name__)
 
-async def _require_api_key(request):
-    """Auth dependency for HermesClaw endpoints. Uses DASHBOARD_API_KEY env var."""
+async def _require_api_key(request: Request):
+    """Auth dependency for HermesClaw endpoints. Uses DASHBOARD_API_KEY env var.
+
+    The Request type annotation is load-bearing: without it FastAPI treats
+    `request` as a required query parameter and every endpoint 422s.
+    """
     import os
     import secrets
-    from fastapi import Request
     expected = os.getenv("DASHBOARD_API_KEY") or os.getenv("NOVA_API_KEY")
     if not expected:
         raise HTTPException(status_code=500, detail="API key not configured")
