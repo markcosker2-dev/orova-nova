@@ -3,7 +3,7 @@
 
 # Data / parsing
 pandas==2.2.2
-lxml==5.3.0
+lxml==6.1.0
 
 # Stealth scraping / browser automation
 scrapling==0.2.95
