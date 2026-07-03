@@ -77,7 +77,9 @@ def _lead_markdown(lead: dict) -> str:
         f"- **Website:** {lead.get('website') or ''}\n\n"
         "## Notes\n\n"
         f"{lead.get('notes') or '-'}\n\n"
-        "---\n*Synced from production by scripts/vault_pull.py*\n"
+        "---\n"
+        "Part of the pipeline — see [[product-context]] · [[Home]]\n\n"
+        "*Synced from production by scripts/vault_pull.py*\n"
     )
 
 

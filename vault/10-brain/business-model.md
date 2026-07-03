@@ -38,4 +38,4 @@ Luxury/premium West Coast businesses (CA, OR, WA, NV, AZ) that can afford $6–7
 ## Linked
 
 - [[active-context]] — current operational state
-- [[../40-decisions/0001-adopt-obsidian|ADR-0001]] — knowledge layer
+- [[0001-adopt-obsidian|ADR-0001]] — knowledge layer

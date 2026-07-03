@@ -37,5 +37,5 @@ vault holds what's worth *reading*, not a database mirror.
 
 ## Reference
 
-- `90-docs/` — deployment guides, audits, setup docs
+- [[docs-index|Reference Docs]] — deployment guides, audits, setup (all of `90-docs/`)
 - Agent personas & tools: `../HermesClaw/context/AGENTS.hermesclaw.md`, `../HermesClaw/context/TOOLS.hermesclaw.md`
