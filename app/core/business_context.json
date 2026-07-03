@@ -1,6 +1,6 @@
 {
   "_description": "Single source of truth for OROVA business context. Loaded by email pipeline, proofreader, and drip templates. All other files (USER.md, brand_guidelines.json, config.py) should align with this.",
-  "_last_updated": "2026-07-03",
+  "_last_updated": "2026-07-04",
 
   "company": {
     "name": "OROVA",
@@ -17,6 +17,7 @@
     {
       "name": "Package 1 — Meta Lead Gen + Ad Creatives",
       "price_monthly_usd": 4000,
+      "pricing_tiers_usd": { "1_month": 4000, "3_month": 10000, "6_month": 22000 },
       "description": "Meta ads (Facebook + Instagram) lead generation with ad creatives produced via Higgsfield AI. Client handles the leads themselves. Ad spend is separate.",
       "ad_spend_recommended_monthly_usd": "2000-2500",
       "platforms": ["facebook", "instagram"],
@@ -25,13 +26,52 @@
     {
       "name": "Package 2 — Lead Gen + AI Qualification + CRM + Appointments",
       "price_monthly_usd": 5000,
-      "description": "Everything in Package 1, plus Retell AI cold-call qualification of every lead, client CRM kept current (Google Sheets or the client's CRM via Make.com), and appointment booking when the business runs on appointments.",
+      "pricing_tiers_usd": { "1_month": 5000, "3_month": 13000, "6_month": 28000 },
+      "description": "Everything in Package 1, plus OROVA handles the leads: Retell AI cold-call qualification so the client only speaks to leads ready to pay, client CRM kept current (Google Sheets or the client's CRM via Make.com), and appointment booking when the business runs on appointments. The core promise is fewer, higher-quality leads.",
       "ad_spend_recommended_monthly_usd": "2000-2500",
       "platforms": ["facebook", "instagram"],
       "includes_crm": true,
       "includes_appointments": "optional — only when the business monetizes via appointments"
     }
   ],
+
+  "commercial_terms": {
+    "new_client_policy": "New clients start on a 1-month trial, then choose 1, 3, or 6 months.",
+    "payment_method": "Invoice paid via Wise bank transfer or ACH.",
+    "ad_spend_billing": "Client pays Meta directly for ad spend. Ad budget NEVER flows through OROVA.",
+    "onboarding": "After the Google Meet, Mark sends agreement + invoice, then an onboarding call to get added to the client's ad manager and CRM."
+  },
+
+  "sales_funnel": {
+    "steps": [
+      "Nova sends a high-quality personalized cold email",
+      "If no reply, Nova (Retell AI) cold-calls to book an appointment with Mark",
+      "Google Meet with Mark",
+      "Mark sends agreement + invoice",
+      "Onboarding call — get added to client's ad manager + CRM"
+    ],
+    "booking_target": "Book the appointment with Mark (human closes the deal).",
+    "signature_objection": {
+      "question": "How do I know the AI caller is any good?",
+      "answer": "You already spoke to Nova and got her emails — that's Nova, our AI sales assistant. You've already experienced the product."
+    },
+    "qualified_lead_definition": "A lead is qualified only when they booked an appointment AND actually show up / buy — not merely a booking."
+  },
+
+  "automation_policy": {
+    "_note": "What the agents may do autonomously vs. what requires Mark's approval. Approval gates loosen only as the AI proves itself.",
+    "fully_autonomous": ["lead scraping"],
+    "requires_approval_now": ["send cold email", "make cold call"],
+    "always_requires_approval": ["publish ad creatives", "spend ad budget", "sign a client"],
+    "never_unsupervised_risks": [
+      "Scraping leads outside the ICP",
+      "Sending the wrong outreach to the wrong person",
+      "Booking an appointment on the wrong date/time",
+      "Creating the wrong ads or spending money incorrectly"
+    ]
+  },
+
+  "differentiator": "Every other agency emails you leads. OROVA hands you conversations with people already ready to buy — and you've seen it work, because that's exactly how we reached you. The product demos itself (the prospect is a lead in OROVA's own AI machine before they pay), every lead is contacted in minutes and qualified, and it's AI-operated and luxury-focused — not a spray-and-pray generalist shop.",
 
   "value_propositions": {
     "primary": "Stop chasing bad leads — only talk to qualified ones",
