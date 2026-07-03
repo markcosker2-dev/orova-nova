@@ -136,7 +136,22 @@ def main() -> int:
     new_leads = 0
     new_briefs = 0
 
-    with httpx.Client(timeout=30, headers=headers) as client:
+    # Render free tier spins the service down after ~15 min idle, and a cold
+    # start can take well over a minute. Poll /health a few times to wake it
+    # before the real calls, so the sync doesn't fail just because the service
+    # was asleep. Total wake budget ~5 min.
+    with httpx.Client(timeout=120, headers=headers) as client:
+        awake = False
+        for attempt in range(5):
+            try:
+                r = client.get(f"{BASE_URL}/health")
+                if r.status_code == 200:
+                    awake = True
+                    break
+            except Exception as e:
+                print(f"WARN: warmup ping {attempt + 1}/5 failed: {e}")
+        if not awake:
+            print("WARN: service did not wake in time; sync may return nothing.")
         # Leads -> vault/30-leads/
         try:
             res = client.get(f"{BASE_URL}/api/leads")
