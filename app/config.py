@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     scheduler_llm_api_key: str = ""
 
     research_llm_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai"
-    research_llm_model: str = "gemini-2.0-flash"
+    research_llm_model: str = "gemini-2.5-flash"
     research_llm_api_key: str = ""
 
     fallback_llm_base_url: str = "https://openrouter.ai/api/v1"

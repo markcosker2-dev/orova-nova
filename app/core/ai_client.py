@@ -28,7 +28,9 @@ _BREAKER_COOLDOWN  = 60.0   # seconds before half-open retry
 
 # ── [P6] ECONOMICS (Cost per 1M tokens) ──
 MODEL_COSTS = {
-    "google/gemini-2.0-flash-lite-preview-02-05:free": (0.0, 0.0), # Free tier
+    "meta-llama/llama-3.3-70b-instruct:free": (0.0, 0.0), # Free tier
+    "qwen/qwen3-next-80b-a3b-instruct:free": (0.0, 0.0), # Free tier
+    "qwen/qwen3-coder:free": (0.0, 0.0), # Free tier
     "openai/gpt-4o": (5.0, 15.0),
     "openai/gpt-4o-mini": (0.15, 0.60),
     "anthropic/claude-3-5-sonnet": (3.0, 15.0),
@@ -74,9 +76,9 @@ class UnifiedAIClient:
     """
 
     FLAVORS = {
-        "fast":   "google/gemini-2.0-flash-lite-preview-02-05:free",
-        "smart":  "meta-llama/llama-3.3-70b-instruct:free",
-        "genius": "qwen/qwen-2.5-coder-32b-instruct:free",
+        "fast":   "meta-llama/llama-3.3-70b-instruct:free",
+        "smart":  "qwen/qwen3-next-80b-a3b-instruct:free",
+        "genius": "qwen/qwen3-coder:free",
     }
 
     FLAVOR_FILE = "app/data/model_flavor.json"
@@ -92,14 +94,14 @@ class UnifiedAIClient:
             logger.warning(f"[AI] set_flavor failed: {e}")
 
     ROLE_MODELS = {
-        "default":   "google/gemini-2.0-flash-lite-preview-02-05:free",
-        "nova":      "google/gemini-2.0-flash-lite-preview-02-05:free",
+        "default":   "meta-llama/llama-3.3-70b-instruct:free",
+        "nova":      "meta-llama/llama-3.3-70b-instruct:free",
     }
 
     FALLBACK_CHAIN = [
-        "google/gemini-2.0-flash-lite-preview-02-05:free",
         "meta-llama/llama-3.3-70b-instruct:free",
-        "qwen/qwen-2.5-coder-32b-instruct:free",
+        "qwen/qwen3-next-80b-a3b-instruct:free",
+        "qwen/qwen3-coder:free",
     ]
 
     GROQ_MODEL = "llama-3.3-70b-versatile"
@@ -204,7 +206,7 @@ class UnifiedAIClient:
                     "max_output_tokens": max_tokens
                 }
 
-                gemini_model_name = "gemini-2.0-flash-001" if tools else "gemini-2.0-flash-lite"
+                gemini_model_name = "gemini-2.5-flash" if tools else "gemini-2.5-flash-lite"
                 model = self.google_client.GenerativeModel(
                     model_name=gemini_model_name,
                     system_instruction=system_instruction if system_instruction else None

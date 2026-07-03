@@ -121,7 +121,7 @@ EXTRACTION_PROMPT = (
 
 SGAI_GRAPH_CONFIG = {
     "llm": {
-        "model": "groq/llama3-8b-8192",
+        "model": "groq/llama-3.1-8b-instant",
         "api_key": os.getenv("GROQ_API_KEY", ""),
     },
     "browser_config": {
@@ -153,7 +153,7 @@ async def sgai_search_and_extract(query: str, count: int = 3) -> dict:
             prompt=EXTRACTION_PROMPT,
             config={
                 "llm": {
-                    "model": "groq/llama3-8b-8192",
+                    "model": "groq/llama-3.1-8b-instant",
                     "api_key": groq_key,
                 },
                 "verbose": False,
@@ -189,7 +189,7 @@ async def sgai_deep_extract(url: str) -> dict:
             source=url,
             config={
                 "llm": {
-                    "model": "groq/llama3-8b-8192",
+                    "model": "groq/llama-3.1-8b-instant",
                     "api_key": groq_key,
                 },
                 "verbose": False,
