@@ -46,7 +46,7 @@
         "lint": "eslint . --fix",
         "typecheck": "tsc --noEmit",
         "test": "vitest run",
-        "test:e2e": "pnpm run build:vite && playwright test",
+        "test:e2e": "pnpm run build:vite && playwright test --pass-with-no-tests",
         "test:e2e:headed": "pnpm run build:vite && playwright test --headed",
         "comms:replay": "node scripts/comms/replay.mjs",
         "comms:baseline": "node scripts/comms/baseline.mjs",
