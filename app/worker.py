@@ -960,8 +960,21 @@ def health_check_job():
 def self_improvement_job():
     logger.info("[LANE 8] Triggering Self-Improvement Loop...")
     from app.core.self_improvement import ImprovementLoop
-    loop = ImprovementLoop()
-    _run_async(loop.run())
+    _run_async(ImprovementLoop().run())
+    # Also run the two learning loops that existed but were never scheduled:
+    # SelfLearningLoop crystallizes repeated tool-sequences into reusable skills;
+    # PatternReinforcer decays stale patterns and reinforces winners. Best-effort —
+    # a failure in one must not stop the lane.
+    try:
+        from app.core.self_learning import SelfLearningLoop
+        _run_async(SelfLearningLoop().run_cycle())
+    except Exception as e:
+        logger.error(f"[LANE 8] SelfLearningLoop failed: {e}")
+    try:
+        from app.core.pattern_reinforcer import PatternReinforcer
+        _run_async(PatternReinforcer().run_cycle())
+    except Exception as e:
+        logger.error(f"[LANE 8] PatternReinforcer failed: {e}")
 
 def sequence_drip_job():
     logger.info("[LANE 9] Triggering Drip Sequence Sender...")
