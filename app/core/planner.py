@@ -167,6 +167,25 @@ except ImportError:
         "You are Mark's elite AI partner. You don't just 'assist' — you lead."
     )
 _PERSONA_LOCK = _NOVA_PERSONA
+
+# Sub-agent personas (Hawk, Quill, Closer, …) live in app/personas/<name>.md.
+# When Nova delegates via dispatch_task, the planner runs under that persona.
+_AGENT_PERSONA_CACHE: dict = {}
+def _get_agent_persona(agent_id: str) -> str:
+    """Load a sub-agent's persona text (cached). '' for Nova or when missing."""
+    key = (agent_id or "").lower()
+    if not key or key == "nova":
+        return ""
+    if key in _AGENT_PERSONA_CACHE:
+        return _AGENT_PERSONA_CACHE[key]
+    try:
+        from app.core.soul import _load_persona_file
+        text = _load_persona_file(f"{key}.md") or ""
+    except Exception:
+        text = ""
+    _AGENT_PERSONA_CACHE[key] = text
+    return text
+
 from app.core.identity import IDENTITY_PROBE_RE as _IDENTITY_PROBE_RE, IDENTITY_DEFLECT as _IDENTITY_DEFLECT, normalise_for_probe as _normalise_for_probe
 
 def _sanitise_history(history: list, n: int = 6) -> list:
@@ -280,6 +299,22 @@ class TaskPlanner:
     OUTREACH_TOOLS = ["send_outreach", "send_email", "write_cold_email", "create_drip_campaign", "generate_sequence", "check_replies", "reply_to_email", "get_inbox", "trigger_retell_call", "generate_hiring_outreach", "enrich_lead_apollo", "is_business_hours", "composio_action", "proofread_email", "morning_brief", "pipeline_health_check"]
     LIGHT_RESEARCH_TOOLS = ["deep_research", "browse_agent", "run_seo_audit", "bulk_enrich_leads", "next_business_hours_slot", "generate_cal_booking_link", "elite_scrape", "vision_browse", "stealth_search", "stealth_extract", "bulk_scrape", "propose_skill", "activate_skill", "use_forged_skill", "list_forged_skills"]
 
+    def _scope_tools_for_agent(self, agent_id: str, goal: str) -> list:
+        """Scope tools to a sub-agent's role. Hawk hunts, Quill/Closer do outreach,
+        Atlas builds. Unknown agents (and Nova) fall back to goal-based scoping."""
+        role_scopes = {
+            "hawk": self.HUNTING_TOOLS + self.LIGHT_RESEARCH_TOOLS,
+            "quill": self.OUTREACH_TOOLS,
+            "closer": self.OUTREACH_TOOLS,
+            "atlas": self.LIGHT_RESEARCH_TOOLS,
+        }
+        scope = role_scopes.get((agent_id or "").lower())
+        if scope:
+            scoped = [t for t in TOOLS if t["function"]["name"] in scope]
+            if scoped:
+                return scoped
+        return self._scope_tools(goal)
+
     def _scope_tools(self, goal: str) -> list:
         if not TOOLS:
             logger.critical("[PLANNER] TOOLS list is empty — check app/skills/definitions.py")
@@ -289,6 +324,9 @@ class TaskPlanner:
         elif any(k in goal_lower for k in ["find leads", "search for", "hunt", "prospect"]): scope = self.HUNTING_TOOLS
         elif any(k in goal_lower for k in ["send", "email", "outreach", "reply", "follow up"]): scope = self.OUTREACH_TOOLS
         else: scope = self.OUTREACH_TOOLS + self.LIGHT_RESEARCH_TOOLS + self.HUNTING_TOOLS
+        # Nova (broad goals) can delegate to sub-agents. Sub-agent role scopes
+        # never include dispatch_task, so delegations can't recurse.
+        scope = scope + ["dispatch_task"]
         scoped = [t for t in TOOLS if t["function"]["name"] in scope]
         if not scoped:
             logger.warning(f"[PLANNER] No tools matched scope for goal: {goal[:80]!r}")
@@ -370,12 +408,16 @@ class TaskPlanner:
             logger.warning(f"[PLANNER] Context retrieval failed: {e}")
             relevant_facts = ""
 
-        tools = self._scope_tools(goal)
+        tools = self._scope_tools_for_agent(agent_id, goal)
         tool_names = [t["function"]["name"] for t in tools]
         system_content = _PERSONA_LOCK
+        agent_persona = _get_agent_persona(agent_id)
+        if agent_persona:
+            system_content += "\n\n=== YOUR ROLE (sub-agent) ===\n" + agent_persona
         if relevant_facts:
             system_content += "\n" + relevant_facts
-        system_content += f"\nYou are Nova. Available tools: {tool_names}"
+        who = "Nova" if (not agent_id or agent_id.lower() == "nova") else agent_id.capitalize()
+        system_content += f"\nYou are {who}, operating as part of OROVA's team. Available tools: {tool_names}"
         # Inject tool catalog and agent roster so Nova understands full context
         from app.core.soul import AgentSoul
         system_content += "\n\n" + AgentSoul.get_tool_catalog()

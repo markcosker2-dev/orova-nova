@@ -51,10 +51,35 @@ async def route_task(task_description: str):
     """[P8] New: Surgically route or score tasks."""
     return {"status": "ok", "action": "nova_direct"}
 
-async def dispatch_task(task: str, agent: str = "nova"):
-    """[LEGACY] Compatibility for Planner tool-use."""
-    logger.info(f"[Router] Dispatching {task} to {agent} (Unified Mode)")
-    return f"Task '{task}' is being handled by Nova's unified brain."
+_KNOWN_AGENTS = {"nova", "atlas", "pixel", "quill", "hawk", "closer",
+                 "sentinel", "echo", "oracle", "viper"}
+
+async def dispatch_task(task: str = "", agent: str = "nova", client_id: int = 0,
+                        task_description: str = ""):
+    """Delegate a task to a specialised sub-agent.
+
+    Each sub-agent is a scoped run of the planner: its persona
+    (app/personas/<agent>.md) is injected and its toolset is restricted to its
+    role (Hawk hunts, Quill/Closer do outreach, Atlas builds). Single-process —
+    no extra RAM — so it runs fine on Render free tier. `task_description` is
+    accepted as an alias for `task` (older tool schema).
+    """
+    task = task or task_description
+    agent = (agent or "nova").strip().lower()
+    if not task:
+        return {"status": "error", "agent": agent, "response": "No task provided."}
+    if agent not in _KNOWN_AGENTS:
+        return {"status": "error", "agent": agent,
+                "response": f"Unknown agent '{agent}'. Known: {sorted(_KNOWN_AGENTS)}"}
+    logger.info(f"[Router] Dispatching to sub-agent '{agent}': {task[:80]}")
+    try:
+        from app.core.planner import TaskPlanner
+        from app.core.ai_client import UnifiedAIClient
+        planner = TaskPlanner(UnifiedAIClient())
+        return await planner.execute(task, client_id=client_id, agent_id=agent)
+    except Exception as e:
+        logger.error(f"[Router] Sub-agent dispatch failed for '{agent}': {e}", exc_info=True)
+        return {"status": "error", "agent": agent, "response": "Sub-agent dispatch failed."}
 
 def get_all_statuses():
     """[LEGACY] Compatibility for Planner imports."""

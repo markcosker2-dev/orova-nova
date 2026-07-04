@@ -252,13 +252,15 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "dispatch_task",
-            "description": "Route a task to the correct specialized sub-agent (Atlas, Pixel, Quill, Hawk, Closer, Sentinel, Echo, Oracle, Viper).",
+            "description": "Delegate a task to a specialized sub-agent. Use hawk for finding/enriching leads, quill for writing outreach, closer for cold calls, atlas for dev/skills. The sub-agent runs with its own persona and a toolset scoped to its role.",
             "parameters": {
                 "type": 'object',
                 "properties": {
-                    "task_description": {'type': 'string', 'description': 'Description of the task to route'},
+                    "task": {'type': 'string', 'description': 'The task for the sub-agent to execute'},
+                    "agent": {'type': 'string', 'description': 'Which sub-agent to run',
+                              'enum': ['hawk', 'quill', 'closer', 'atlas', 'pixel', 'sentinel', 'echo', 'oracle', 'viper']},
                 },
-                "required": ['task_description'],
+                "required": ['task', 'agent'],
             },
         }
     },
