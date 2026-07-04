@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import re
 import sys
 import threading
 import time
@@ -450,25 +451,133 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
 # LANE 3: REPLY MONITOR — Check for prospect responses
 # Runs every 5 minutes
 # ═══════════════════════════════════════════════════════
+# HOT replies auto-progress to a booking-link reply, but the send is gated on
+# Mark's approval (unless REPLIES_AUTOPILOT=1). Because the reply monitor advances
+# a checkpoint and never re-reads a message, we can't rely on the outreach lane's
+# "re-scan pending leads each cycle" pattern — so HOT replies are parked in a
+# durable state-store queue and drained by process_pending_booking_replies().
+_BOOKING_QUEUE_KEY = "pending_booking_replies"
+_BOOKING_QUEUE_TTL_S = 3 * 24 * 3600     # give up auto-sending after 3 days
+_MAX_BOOKING_ATTEMPTS = 6                 # ~one lane cycle apart; caps failures
+
+_FROM_EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+
+
+def _parse_email(from_field: str) -> str:
+    """Pull the bare address out of a From header like 'Jane <jane@acme.com>'."""
+    m = _FROM_EMAIL_RE.search(from_field or "")
+    return m.group(0).lower() if m else ""
+
+
+def _parse_name(from_field: str) -> str:
+    """Pull the display name out of a From header, '' if it's just an address."""
+    if not from_field:
+        return ""
+    name = from_field.split("<")[0].strip().strip('"').strip()
+    return "" if ("@" in name or not name) else name
+
+
+async def _lookup_lead_by_email(email: str):
+    """Qualify a reply: match the sender to a known lead row, or None."""
+    if not email:
+        return None
+    try:
+        row = await DatabaseManager.query(
+            "SELECT id, business, owner, email, client_id, status FROM leads "
+            "WHERE lower(email) = lower(?) ORDER BY id DESC LIMIT 1",
+            (email,), fetchone=True,
+        )
+        return dict(row) if row else None
+    except Exception as e:
+        logger.warning(f"[REPLY MONITOR] Lead lookup failed for {email}: {e}")
+        return None
+
+
+async def _enqueue_booking_replies(items):
+    """Append HOT-reply booking jobs to the durable queue, de-duped by message_id.
+
+    Callers must invoke this sequentially (never inside an asyncio.gather) so the
+    read-modify-write of the shared state key can't race — reply_monitor_job runs
+    the per-client monitors one at a time for exactly this reason.
+    """
+    if not items:
+        return
+    queue = await DatabaseManager.get_state(_BOOKING_QUEUE_KEY, []) or []
+    existing = {i.get("message_id") for i in queue}
+    added = 0
+    for it in items:
+        mid = it.get("message_id")
+        if mid and mid not in existing:
+            queue.append(it)
+            existing.add(mid)
+            added += 1
+    if added:
+        await DatabaseManager.set_state(_BOOKING_QUEUE_KEY, queue)
+        logger.info(f"[REPLY MONITOR] Queued {added} HOT reply(ies) for booking-link send.")
+
+
 async def run_reply_monitor(client_id=0):
-    """📬 Check AgentMail for new prospect replies."""
+    """📬 Check AgentMail for new prospect replies; auto-progress HOT ones.
+
+    Every new reply is classified (HOT/WARM/COLD) and Mark is alerted. HOT replies
+    are qualified against the lead DB and queued for a booking-link auto-reply.
+    Returns the list of HOT items queued (used by tests / callers).
+    """
     logger.info(f"📬 [REPLY MONITOR] [Client {client_id}] Checking for new messages...")
+    hot_items = []
     try:
         res = await check_replies(limit=5, advance_checkpoint=False)
         if res.get("status") == "success" and res.get("count", 0) > 0:
+            from app.skills.agentmail_skill import classify_reply_intent
             for msg in res.get("messages", []):
-                sender = msg.get("from")
-                subject = msg.get("subject")
-                snippet = msg.get("snippet")
+                sender = msg.get("from") or ""
+                subject = msg.get("subject") or ""
+                snippet = msg.get("snippet") or ""
+                message_id = msg.get("message_id")
 
-                logger.info(f"✨ New reply from {sender}: {subject}")
+                try:
+                    intent = await classify_reply_intent(subject, snippet, sender)
+                except Exception as e:
+                    logger.warning(f"[REPLY MONITOR] Classify failed ({e}); defaulting WARM.")
+                    intent = "WARM"
 
+                logger.info(f"✨ New reply from {sender}: {subject} [{intent}]")
+
+                email = _parse_email(sender)
+                lead = await _lookup_lead_by_email(email)
+
+                if intent == "HOT" and message_id:
+                    hot_items.append({
+                        "message_id": message_id,
+                        "sender": sender,
+                        "email": email,
+                        "name": (lead or {}).get("owner") or _parse_name(sender) or "there",
+                        "business": (lead or {}).get("business", ""),
+                        "lead_id": (lead or {}).get("id", 0),
+                        "client_id": (lead or {}).get("client_id", client_id),
+                        "subject": subject,
+                        "created_at": time.time(),
+                        "attempts": 0,
+                    })
+                    action_line = "🔥 HOT — queued a booking-link reply (sends on approval / autopilot)."
+                    if lead:
+                        try:
+                            await DatabaseManager.query(
+                                "UPDATE leads SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                                ("Hot Reply", lead["id"]),
+                            )
+                        except Exception:
+                            pass
+                else:
+                    action_line = "Review and reply manually if it's worth pursuing."
+
+                emoji = {"HOT": "🔥", "WARM": "🌤️", "COLD": "❄️"}.get(intent, "📬")
                 report = (
-                    f"📬 **New Outreach Reply!** [Client {client_id}]\n\n"
+                    f"{emoji} **New Reply — {intent}** [Client {client_id}]\n\n"
                     f"👤 **From:** {sender}\n"
                     f"📧 **Subject:** {subject}\n"
-                    f"📝 **Snippet:** \"{snippet}...\"\n\n"
-                    f"Shall I check the calendar and propose a slot?"
+                    f"📝 **Snippet:** \"{snippet[:200]}...\"\n\n"
+                    f"{action_line}"
                 )
                 await send_telegram_report(report)
 
@@ -480,6 +589,9 @@ async def run_reply_monitor(client_id=0):
                     }, client_id=client_id)
                 except Exception:
                     pass
+
+            # Queue HOT items (sequential caller → race-free) before advancing.
+            await _enqueue_booking_replies(hot_items)
 
             # Advance checkpoint only after all side effects (alerts, metrics) succeed
             latest_ts = res.get("latest_ts")
@@ -497,6 +609,87 @@ async def run_reply_monitor(client_id=0):
                     logger.error(f"[REPLY MONITOR] Failed to advance checkpoint: {e}")
     except Exception as e:
         logger.error(f"Reply Monitor Error: {e}")
+    return hot_items
+
+
+async def process_pending_booking_replies():
+    """Drain the HOT-reply queue: send each a booking-link reply once Mark approves
+    (or REPLIES_AUTOPILOT is on). The Google Calendar event itself is created later,
+    when the prospect actually books via the link (Cal.com webhook → cal_booking).
+
+    Single sequential coroutine (its own worker pass) so the state read-modify-write
+    can't race with the enqueue side.
+    """
+    queue = await DatabaseManager.get_state(_BOOKING_QUEUE_KEY, []) or []
+    if not queue:
+        return
+
+    from app.core.approval_gate import gate_allows
+    from app.skills.cal_booking import generate_meeting_intro_email, get_booking_link
+    from app.skills.agentmail_skill import reply_to_email
+
+    now = time.time()
+    remaining = []
+    for item in queue:
+        message_id = item.get("message_id")
+        if not message_id:
+            continue  # malformed — drop
+        if now - item.get("created_at", 0) > _BOOKING_QUEUE_TTL_S:
+            logger.info(f"[BOOKING] Expiring stale HOT reply {message_id}.")
+            continue
+        if item.get("attempts", 0) >= _MAX_BOOKING_ATTEMPTS:
+            logger.warning(f"[BOOKING] Giving up on {message_id} after {item['attempts']} tries.")
+            await send_telegram_report(
+                f"⚠️ Couldn't auto-send a booking link to {item.get('sender')} "
+                f"after {item.get('attempts')} tries — please reply manually."
+            )
+            continue
+
+        params = {"message_id": message_id, "to": item.get("email", "")}
+        reason = (
+            f"Booking-link reply to HOT lead "
+            f"{item.get('business') or item.get('name') or item.get('sender')} "
+            f"<{item.get('email')}>"
+        )
+        try:
+            allowed = await gate_allows("reply", params, reason)
+        except Exception as e:
+            logger.error(f"[BOOKING] Gate error for {message_id} ({e}); will retry.")
+            item["attempts"] = item.get("attempts", 0) + 1
+            remaining.append(item)
+            continue
+
+        if not allowed:
+            # Gate already pinged Mark (deduped). Keep for the next cycle.
+            remaining.append(item)
+            continue
+
+        booking_link = get_booking_link(item.get("name", ""), item.get("business", ""))
+        body = generate_meeting_intro_email(item.get("name", "there"), item.get("business", ""), booking_link)
+        result = await reply_to_email(message_id, body)
+
+        if result.get("status") == "success":
+            logger.info(f"[BOOKING] Sent booking link to {item.get('email')} (lead {item.get('lead_id')}).")
+            if item.get("lead_id"):
+                try:
+                    await DatabaseManager.query(
+                        "UPDATE leads SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                        ("Booking Sent", item["lead_id"]),
+                    )
+                except Exception:
+                    pass
+            link_note = f"\n🔗 {booking_link}" if booking_link else "\n(No booking link configured — asked them for times.)"
+            await send_telegram_report(
+                f"📅 **Booking link sent** to {item.get('name') or item.get('sender')}"
+                f"{(' — ' + item.get('business')) if item.get('business') else ''}.{link_note}"
+            )
+            # success → do not re-queue
+        else:
+            logger.warning(f"[BOOKING] Reply send failed for {message_id}: {result.get('message') or result.get('error')}")
+            item["attempts"] = item.get("attempts", 0) + 1
+            remaining.append(item)
+
+    await DatabaseManager.set_state(_BOOKING_QUEUE_KEY, remaining)
 
 
 # ═══════════════════════════════════════════════════════
@@ -716,8 +909,13 @@ def reply_monitor_job():
     clients = DatabaseManager.get_clients()
     client_list = [{"id": 0}] + (clients if clients else [])
     async def run_all():
-        tasks = [run_reply_monitor(client_id=c.get("id", 0)) for c in client_list]
-        await asyncio.gather(*tasks, return_exceptions=True)
+        # Sequential (not gather) so per-client enqueues to the shared booking
+        # queue can't race. Reply monitoring is light and runs every 5 min.
+        for c in client_list:
+            try:
+                await run_reply_monitor(client_id=c.get("id", 0))
+            except Exception as e:
+                logger.error(f"[REPLY MONITOR] Client {c.get('id', 0)} failed: {e}")
     _run_async(run_all())
 
 def cold_escalation_job():
@@ -767,6 +965,8 @@ def sequence_drip_job():
 def reply_and_drip_check_job():
     logger.info("[REPLY & DRIP CHECK] Checking replies and processing drips...")
     reply_monitor_job()
+    # Drain the HOT-reply booking queue (send booking links for approved replies).
+    _run_async(process_pending_booking_replies())
     from app.skills.email_sequence_skill import check_drip_replies_and_process
     _run_async(check_drip_replies_and_process())
 

@@ -725,14 +725,30 @@ def _prioritize_email(emails: list) -> str:
     return sorted(cleaned, key=email_score)[0]
 
 
-async def enrich_lead_4step(url: str, business_name: str = "") -> dict:
+async def enrich_lead_4step(url: str, business_name: str = "", state: str = "", score: float = 0.0) -> dict:
     """
-    Run 6-strategy enrichment chain and merge results.
+    Owner-name-FIRST enrichment: try the public-registry resolver before the
+    6-strategy text-mining chain (see app/skills/owner_finder.py). Registry
+    hits are real officer/agent names from a legal filing — short-circuit
+    the free-text owner_name strategies below on a hit, but still run them
+    for email/phone since those aren't the registry's job.
     Returns clean output with owner_name, email, phone only.
     """
     domain = extract_domain(url) if url else ""
+
+    registry_owner = ""
+    registry_title = ""
+    try:
+        from app.skills.owner_finder import resolve_owner
+        hit = await resolve_owner(business_name, state=state, domain=domain, score=score)
+        if hit.get("owner"):
+            registry_owner = hit["owner"]
+            registry_title = hit.get("title", "")
+    except Exception as e:
+        logger.debug(f"[ENRICH] owner_finder registry lookup failed for {business_name}: {e}")
+
     results = []
-    
+
     # Run all strategies concurrently
     tasks = [
         _scrape_website(url),
@@ -742,16 +758,16 @@ async def enrich_lead_4step(url: str, business_name: str = "") -> dict:
         _bbb_lookup(business_name, domain),
         _google_business_lookup(business_name, domain),
     ]
-    
+
     strategy_results = await asyncio.gather(*tasks, return_exceptions=True)
-    
+
     for i, res in enumerate(strategy_results):
         if isinstance(res, dict):
             results.append(res)
-    
+
     # Merge results with priority
-    final = {"owner_name": "", "email": "", "phone": ""}
-    
+    final = {"owner_name": registry_owner, "owner_title": registry_title, "email": "", "phone": ""}
+
     # Priority 1: Website scraping (most reliable for contact info)
     for res in results:
         if res.get("email") and not final["email"]:
@@ -760,31 +776,31 @@ async def enrich_lead_4step(url: str, business_name: str = "") -> dict:
             final["phone"] = res["phone"]
         if res.get("owner_name") and not final["owner_name"]:
             final["owner_name"] = res["owner_name"]
-    
+
     # Priority 2: WHOIS (good for owner name)
     for res in results:
         if res.get("owner_name") and not final["owner_name"]:
             final["owner_name"] = res["owner_name"]
-    
+
     # Priority 3: State registry
     for res in results:
         if res.get("owner_name") and not final["owner_name"]:
             final["owner_name"] = res["owner_name"]
         if res.get("email") and not final["email"]:
             final["email"] = res["email"]
-    
+
     # Priority 4: DDG verification
     for res in results:
         if res.get("owner_name") and not final["owner_name"]:
             final["owner_name"] = res["owner_name"]
-    
+
     # Validate final phone
     final["phone"] = _normalize_phone_to_e164(final["phone"])
-    
+
     # Fallback: Email guess if we have owner name + domain but no email
     if not final["email"] and final["owner_name"] and domain:
         final["email"] = _guess_email(final["owner_name"], domain)
-    
+
     return final
 
 
@@ -928,6 +944,21 @@ async def _source_duckduckgo(query: str, count: int) -> list:
     return leads
 
 
+# West Coast ICP state names as they appear in the free-text hunt query
+# (e.g. "exotic car dealer california") — the only jurisdiction signal
+# available at this call site today. Best-effort only; owner_finder routes
+# to OpenCorporates when no state match is found.
+_QUERY_STATE_HINTS = {"california": "CA", "washington": "WA", "oregon": "OR"}
+
+
+def _infer_state_from_query(query: str) -> str:
+    q = (query or "").lower()
+    for name, code in _QUERY_STATE_HINTS.items():
+        if name in q:
+            return code
+    return ""
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # MAIN ENTRY POINT
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -939,6 +970,7 @@ async def find_leads_v3(count: int = 5, query: str = "business leads") -> dict:
     """
     count = int(count)
     query = (query or "business leads").strip()
+    state = _infer_state_from_query(query)
     logger.info(f"[LEAD GEN V3] Searching for {count} leads: '{query}'")
     
     all_leads = []
@@ -976,7 +1008,7 @@ async def find_leads_v3(count: int = 5, query: str = "business leads") -> dict:
     
     async def _enrich(lead):
         async with semaphore:
-            result = await enrich_lead_4step(lead.get("url", ""), lead.get("business", ""))
+            result = await enrich_lead_4step(lead.get("url", ""), lead.get("business", ""), state=state)
             result["business"] = lead.get("business", "") or extract_domain(lead.get("url", "")) or "Unknown"
             result["phone"] = lead.get("phone", "") or result.get("phone", "")
             return result
@@ -997,6 +1029,7 @@ async def find_leads_v3(count: int = 5, query: str = "business leads") -> dict:
         clean_output.append({
             "business": lead.get("business", ""),
             "owner_name": lead.get("owner_name", ""),
+            "owner_title": lead.get("owner_title", ""),
             "email": lead.get("email", ""),
             "phone": lead.get("phone", ""),
             "website": lead.get("website", ""),

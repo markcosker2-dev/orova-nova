@@ -1011,6 +1011,39 @@ async def retell_webhook(request: Request):
     return {"status": "ok", "result": result}
 
 
+@app.post("/api/cal/webhook")
+async def cal_webhook(request: Request):
+    """Inbound booking events from Cal.com (BOOKING_CREATED/CANCELLED/RESCHEDULED).
+
+    Completes the reply→qualify→booking funnel (WP4): when a HOT lead books via the
+    link Nova sent, this creates the Google Calendar hold and alerts Mark.
+    """
+    raw_body = await request.body()
+
+    # Cal.com signs the raw body with HMAC-SHA256 (X-Cal-Signature-256) when a
+    # webhook secret is configured. Verify it when we have one; warn if we don't.
+    secret = os.getenv("CAL_WEBHOOK_SECRET", "")
+    if secret:
+        import hmac
+        import hashlib
+        sig = request.headers.get("x-cal-signature-256", "")
+        expected = hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
+        if not (sig and secrets.compare_digest(sig, expected)):
+            logger.warning("[Cal.com] Rejected webhook with invalid signature")
+            return JSONResponse(status_code=401, content={"status": "unauthorized"})
+    else:
+        logger.warning("[Cal.com] CAL_WEBHOOK_SECRET not set — processing webhook unverified")
+
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"status": "bad_request"})
+
+    from app.skills.cal_booking import handle_cal_booking_webhook
+    result = await handle_cal_booking_webhook(payload)
+    return {"status": "ok", "result": result}
+
+
 @app.post("/telegram")
 async def telegram_webhook(request: Request):
     """Ingest point for Telegram via Queue."""

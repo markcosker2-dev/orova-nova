@@ -43,9 +43,21 @@ which funds better tooling (paid Anthropic, paid enrichment, Render paid tier).
   pass, and fixed `_prioritize_email` (was preferring `info@` over personal).
 - **WP3 done** — real sub-agents: `dispatch_task` now runs a scoped planner with
   the agent's persona + role tools (was a hardcoded string).
-- **WP4 pending** — enforce the approval gates in code (email/calls need approval)
-  + wire the reply → qualify → booking middle-mile.
+- **WP4 done** — approval gates enforced in code (cold email/calls need approval,
+  fail-closed) **and** the reply → qualify → booking middle-mile is wired: replies
+  are classified HOT/WARM/COLD, HOT ones are qualified and auto-progressed to a
+  booking-link reply (approval-gated via `REPLIES_AUTOPILOT`, durable retry queue),
+  and a Cal.com webhook (`/api/cal/webhook`) creates the Google Calendar event on
+  booking. All degrade gracefully with no LLM key / no booking link. 124 tests
+  pass. See [[session-2026-07-04-wp4-booking-funnel]].
 - Vault learning bridge live (`scripts/vault_pull.py`).
+- **Owner-name engine (2026-07-04, [[0003-owner-name-first-lead-engine]])** — replaced
+  low-yield website /about scraping with a registry-FIRST resolver
+  (`app/skills/owner_finder.py`): WA SoS (keyless) → CA (gated) → OR → OpenCorporates
+  → website → SerpAPI, all $0/HTTP-only/LLM-optional. ⚠️ Live endpoints are unverified
+  — they no-op until checked + free keys set (WA is the keyless first candidate). Also
+  fixed 2 latent bugs (gmail_skill NameError, sheets_sync await). **150 tests pass.**
+  Audits: [[lead-engine-research]] · [[skill-health-audit]].
 
 ## 🚨 The #1 blocker: no working LLM key
 

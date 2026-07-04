@@ -485,6 +485,66 @@ async def reply_to_email(message_id: str, body: str, inbox_id: str = None) -> Di
         return {"status": "error", "message": str(e)}
 
 
+# ── Single-reply intent classification (drives the HOT-reply booking funnel) ──
+# Interest signals that mark a reply HOT when the LLM is unavailable.
+_HOT_REPLY_SIGNALS = (
+    "interested", "sounds good", "let's talk", "lets talk", "call me", "book",
+    "schedule", "set up a call", "set up a time", "demo", "pricing", "price",
+    "how much", "quote", "tell me more", "learn more", "meeting", "available",
+    "when can", "keen", "let's do", "lets do", "get started", "sign up",
+)
+# Opt-out language — a hard COLD regardless of anything else (never auto-reply).
+_OPTOUT_REPLY_SIGNALS = (
+    "unsubscribe", "not interested", "no thanks", "no thank you", "remove me",
+    "stop emailing", "take me off", "opt out", "opt-out", "do not contact",
+    "leave me alone", "wrong person", "please stop",
+)
+
+
+def _keyword_classify_reply(subject: str, snippet: str) -> str:
+    """Offline heuristic used when the LLM can't be reached."""
+    text = f"{subject or ''} {snippet or ''}".lower()
+    if any(sig in text for sig in _OPTOUT_REPLY_SIGNALS):
+        return "COLD"
+    if any(sig in text for sig in _HOT_REPLY_SIGNALS):
+        return "HOT"
+    return "WARM"
+
+
+async def classify_reply_intent(subject: str, snippet: str, sender: str = "") -> str:
+    """Classify one inbound reply as HOT / WARM / COLD.
+
+    Tries the LLM first (same taxonomy as summarize_and_categorize_inbox); on any
+    failure — including no live LLM key, the current blocker — it falls back to a
+    keyword heuristic so the reply funnel keeps working. Opt-out language always
+    resolves to COLD *before* the LLM runs, so we never auto-send a booking link
+    to someone who asked to be left alone.
+    """
+    # Opt-out is a hard stop — don't even spend an LLM call on it.
+    if _keyword_classify_reply(subject, snippet) == "COLD":
+        return "COLD"
+    try:
+        from app.core.ai_client import UnifiedAIClient
+        ai = UnifiedAIClient()
+        prompt = (
+            "Classify this inbound reply to a B2B sales outreach email as exactly "
+            "one word: HOT, WARM, or COLD.\n"
+            "- HOT: wants to talk/meet, asks about pricing, says yes/interested, "
+            "requests a call or demo.\n"
+            "- WARM: mild interest, a question, 'maybe later', not urgent.\n"
+            "- COLD: not interested, opt-out, auto-reply, irrelevant.\n\n"
+            f"From: {sender}\nSubject: {subject}\nBody: {snippet}\n\n"
+            "Answer with ONE word only."
+        )
+        verdict = (await ai.write(prompt) or "").strip().upper()
+        for label in ("HOT", "WARM", "COLD"):
+            if label in verdict:
+                return label
+    except Exception as e:
+        logger.info(f"[classify_reply] LLM unavailable ({e}); using keyword heuristic.")
+    return _keyword_classify_reply(subject, snippet)
+
+
 async def summarize_and_categorize_inbox(inbox_id: str = None, limit: int = 10) -> Dict[str, Any]:
     """
     Scans the inbox and categorizes leads based on the Sales Guide logic.
