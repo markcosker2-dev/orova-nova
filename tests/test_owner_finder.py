@@ -54,6 +54,7 @@ def _no_cache_no_ration():
 # ── fallback order: WA registry hit short-circuits everything else ─────────
 
 def test_wa_hit_short_circuits_other_stages(monkeypatch):
+    monkeypatch.setenv("WA_SOS_ENABLED", "1")  # WA is dormant by default (anti-bot gated)
     monkeypatch.delenv("CA_SOS_API_KEY", raising=False)
     monkeypatch.delenv("OPENCORPORATES_API_KEY", raising=False)
     monkeypatch.delenv("SERPAPI_KEY", raising=False)
@@ -231,6 +232,28 @@ def test_serpapi_used_for_high_score_lead_under_cap(monkeypatch):
     assert result["source"] == "serpapi"
 
 
+def test_serpapi_does_not_overcapture_trailing_word(monkeypatch):
+    """Regression (live-observed 2026-07-04): a snippet like '...Founder Kim
+    Malek Built the...' must extract 'Kim Malek', not 'Kim Malek Built' — the
+    role-prefixed patterns now cap at first+last."""
+    monkeypatch.setenv("SERPAPI_KEY", "serp-test-key")
+    db = MagicMock()
+    db.get_state = AsyncMock(return_value=None)
+    db.set_state = AsyncMock()
+
+    serp_json = {"organic_results": [
+        {"title": "How Salt & Straw Founder Kim Malek Built an Empire",
+         "snippet": "Salt & Straw Founder Kim Malek Built the ice cream brand from scratch."}
+    ]}
+    client = _client_returning(get_return=_resp(200, serp_json))
+
+    with patch("app.skills.owner_finder.httpx.AsyncClient", return_value=client), \
+         patch("app.skills.owner_finder._get_db", AsyncMock(return_value=db)):
+        result = asyncio.run(owner_finder._serpapi_fallback("Salt & Straw", score=95.0))
+
+    assert result["owner"] == "Kim Malek"
+
+
 # ── cache: second call doesn't re-request ──────────────────────────────────
 
 def test_cache_hit_skips_second_lookup(monkeypatch):
@@ -312,6 +335,7 @@ def test_resolve_owner_works_with_no_ai_available(monkeypatch):
     # Simulate the documented dead-LLM state: even if ai_client.UnifiedAIClient
     # raises when constructed, resolve_owner must still work since it never
     # touches it.
+    monkeypatch.setenv("WA_SOS_ENABLED", "1")  # WA is dormant by default (anti-bot gated)
     monkeypatch.delenv("CA_SOS_API_KEY", raising=False)
     with patch("app.core.ai_client.UnifiedAIClient", side_effect=RuntimeError("no key")):
         wa_json = {"Rows": [{"GovernorName": "Pat Reilly"}]}

@@ -38,6 +38,7 @@ from bs4 import BeautifulSoup
 logger = logging.getLogger(__name__)
 
 _HTTP_TIMEOUT = 8.0
+_SERP_TIMEOUT = 20.0                         # SerpAPI runs a live Google search — slower
 CACHE_TTL_SECONDS = 30 * 24 * 3600           # 30 days
 OPENCORPORATES_DAILY_CAP = 50
 SERPAPI_MONTHLY_CAP = 250
@@ -120,16 +121,20 @@ def _is_plausible_name(text: str) -> bool:
 # ═══════════════════════════════════════════════════════════════════════════
 
 async def _wa_registry_lookup(business: str) -> dict:
-    """WA SoS corporations search — keyless JSON endpoint.
+    """WA SoS corporations search — DORMANT by default (anti-bot gated).
 
-    Returns the registered-agent name (always present) or a governor/officer
-    name when the search result surfaces one. No address (suppressed by WA
-    since 2017) — name + title only.
+    Verified live 2026-07-04: WA's real API host (ccfs-api.prod.sos.wa.gov)
+    returns "System verification in progress, please wait." to any non-browser
+    client — it is anti-bot gated and cannot be used server-side (Render has no
+    browser). So this source only runs when WA_SOS_ENABLED=1; otherwise it
+    returns empty immediately and the chain falls through (no wasted call).
+    Re-enabling for real needs a browser-obtained verification token + a POST to
+    the ccfs-api host — the GET stub here just keeps the flag path exercisable.
     """
-    if not business:
+    if not business or os.getenv("WA_SOS_ENABLED", "0") != "1":
         return dict(_EMPTY)
     try:
-        url = "https://ccfs.sos.wa.gov/api/BusinessSearch/GetBusinessSearchList"
+        url = "https://ccfs-api.prod.sos.wa.gov/api/BusinessSearch/GetBusinessSearchList"
         params = {
             "SearchEntityName": business,
             "SearchType": "BusinessName",
@@ -338,7 +343,7 @@ async def _serpapi_fallback(business: str, score: float) -> dict:
             "engine": "google",
             "num": 5,
         }
-        async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=_SERP_TIMEOUT) as client:
             resp = await client.get(url, params=params)
         if resp.status_code != 200:
             return dict(_EMPTY)
@@ -352,9 +357,15 @@ async def _serpapi_fallback(business: str, score: float) -> dict:
         # a real title-case name inside a full sentence (same reasoning as
         # the OR-registry pattern above) — case-insensitive matching lets
         # the capture run on into surrounding lowercase words like "of"/"by".
+        # Role-prefixed patterns (1 & 2) capture exactly first+last (2 words):
+        # a live SerpAPI test returned "Kim Malek Built" from "...Founder Kim
+        # Malek Built the..." — the {1,3} let a trailing title-case verb ride
+        # along. Capping at {1} kills that over-capture (we lose rare 3-word
+        # names, but a wrong name in outreach is worse than a shorter one).
+        # Pattern 3 keeps {1,2} — the trailing role keyword bounds it safely.
         _serp_owner_patterns = [
-            re.compile(r'(?:[Oo]wner|[Ff]ounder|CEO|[Pp]resident|[Pp]rincipal)[:\s,\-–]+([A-Z][a-zA-Z\'\-]+(?:\s+[A-Z][a-zA-Z\'\-]+){1,3})'),
-            re.compile(r'(?:[Ff]ounded|[Oo]wned|[Rr]un|[Oo]perated|[Ss]tarted|[Ll]ed)\s+by\s+([A-Z][a-zA-Z\'\-]+(?:\s+[A-Z][a-zA-Z\'\-]+){1,2})'),
+            re.compile(r'(?:[Oo]wner|[Ff]ounder|CEO|[Pp]resident|[Pp]rincipal)[:\s,\-–]+([A-Z][a-zA-Z\'\-]+(?:\s+[A-Z][a-zA-Z\'\-]+){1})'),
+            re.compile(r'(?:[Ff]ounded|[Oo]wned|[Rr]un|[Oo]perated|[Ss]tarted|[Ll]ed)\s+by\s+([A-Z][a-zA-Z\'\-]+(?:\s+[A-Z][a-zA-Z\'\-]+){1})'),
             re.compile(r'([A-Z][a-zA-Z\'\-]+(?:\s+[A-Z][a-zA-Z\'\-]+){1,2}),?\s+(?:[Oo]wner|[Ff]ounder|CEO|[Pp]resident|[Pp]rincipal)'),
         ]
         for res in results:

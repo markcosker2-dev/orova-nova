@@ -51,13 +51,16 @@ which funds better tooling (paid Anthropic, paid enrichment, Render paid tier).
   booking. All degrade gracefully with no LLM key / no booking link. 124 tests
   pass. See [[session-2026-07-04-wp4-booking-funnel]].
 - Vault learning bridge live (`scripts/vault_pull.py`).
-- **Owner-name engine (2026-07-04, [[0003-owner-name-first-lead-engine]])** — replaced
-  low-yield website /about scraping with a registry-FIRST resolver
-  (`app/skills/owner_finder.py`): WA SoS (keyless) → CA (gated) → OR → OpenCorporates
-  → website → SerpAPI, all $0/HTTP-only/LLM-optional. ⚠️ Live endpoints are unverified
-  — they no-op until checked + free keys set (WA is the keyless first candidate). Also
-  fixed 2 latent bugs (gmail_skill NameError, sheets_sync await). **150 tests pass.**
-  Audits: [[lead-engine-research]] · [[skill-health-audit]].
+- **Owner-name engine (2026-07-04, [[0003-owner-name-first-lead-engine]])** — new
+  registry-FIRST resolver (`app/skills/owner_finder.py`). **Live-verified the sources**:
+  WA SoS is **anti-bot gated → unusable server-side** (now dormant behind
+  `WA_SOS_ENABLED`); OpenCorporates free tier is open-data-only (paid for us); CA
+  key-gated. **SerpAPI is the one working free source** (validated live — found "Kim
+  Malek" for Salt & Straw; 250/mo, score-gated; fixed an over-capture bug + 20s
+  timeout). Upshot: free registries are a dead end — **SerpAPI + the website/AI scrape
+  are the real free owner sources, so a live LLM key is the top lever.** SerpAPI key is
+  set (local + Render). Also fixed 2 latent bugs (gmail_skill, sheets_sync). **151 tests
+  pass.** Audits: [[lead-engine-research]] · [[skill-health-audit]].
 
 ## 🚨 The #1 blocker: no working LLM key
 
