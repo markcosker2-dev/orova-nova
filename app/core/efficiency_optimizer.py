@@ -66,7 +66,7 @@ class EfficiencyOptimizer:
     # Tool calls that typically return large payloads
     HIGH_VOLUME_TOOLS = {
         "get_inbox", "summarize_and_categorize_inbox", "deep_research",
-        "browse_agent", "elite_scrape", "vision_browse",
+        "browse_agent",
     }
 
     def __init__(self):

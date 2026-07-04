@@ -1128,9 +1128,6 @@ async function renderSkillsHub() {
         data = {
             skills: [
                 { name: 'find_leads', category: 'Search', status: 'active', agent: 'Hawk' },
-                { name: 'stealth_search', category: 'Search', status: 'active', agent: 'Viper' },
-                { name: 'stealth_extract', category: 'Search', status: 'active', agent: 'Viper' },
-                { name: 'bulk_scrape', category: 'Search', status: 'active', agent: 'Viper' },
                 { name: 'deep_research', category: 'Research', status: 'active', agent: 'Hawk' },
                 { name: 'run_seo_audit', category: 'Research', status: 'active', agent: 'Hawk' },
                 { name: 'analyze_competitor', category: 'Research', status: 'active', agent: 'Hawk' },

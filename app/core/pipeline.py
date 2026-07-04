@@ -112,20 +112,12 @@ PIPELINES = {
     },
     "lead_enrich": {
         "name": "Lead Enrichment Pipeline",
-        "description": "Stealth extract contact info → Score leads → Add to Google Sheet",
+        "description": "Research lead → Save to Google Sheet",
         "steps": [
-            {
-                "id": "extract",
-                "name": "Stealth Extract",
-                "skill": "stealth_extract",
-                "default_args": {},
-                "description": "Extract contact info with anti-bot bypass"
-            },
             {
                 "id": "research",
                 "name": "Research Lead",
                 "skill": "research_lead",
-                "uses_previous": True,
                 "default_args": {},
                 "description": "Deep-dive and score the lead"
             },
@@ -281,8 +273,6 @@ def _get_skill_args(skill_name: str) -> list:
         "find_leads": ["query", "count"],
         "deep_research": ["topic", "depth"],
         "research_lead": ["url"],
-        "stealth_search": ["query", "count"],
-        "stealth_extract": ["url", "selectors"],
         "write_cold_email": ["prospect", "framework"],
         "run_seo_audit": ["url"],
         "analyze_competitor": ["company_name"],
@@ -291,7 +281,6 @@ def _get_skill_args(skill_name: str) -> list:
         "pipeline_report": [],
         "weekly_report": [],
         "append_to_sheet": ["sheet_name", "rows"],
-        "bulk_scrape": ["urls", "objective"],
     }
     return arg_map.get(skill_name, [])
 
@@ -303,9 +292,6 @@ async def _execute_skill(skill_name: str, args: dict):
         "find_leads": ("app.skills.lead_finder", "find_leads"),
         "deep_research": ("app.skills.deep_research", "deep_research"),
         "research_lead": ("app.skills.lead_finder", "research_lead"),
-        "stealth_search": ("app.skills.scrapling_scraper", "stealth_search"),
-        "stealth_extract": ("app.skills.scrapling_scraper", "stealth_extract"),
-        "bulk_scrape": ("app.skills.scrapling_scraper", "bulk_scrape"),
         "write_cold_email": ("app.skills.copywriting_skill", "write_cold_email"),
         "run_seo_audit": ("app.skills.seo_audit", "run_seo_audit"),
         "analyze_competitor": ("app.skills.competitive_intel", "analyze_competitor"),

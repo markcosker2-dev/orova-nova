@@ -1,18 +1,15 @@
 # LeadScraper Skill
 
-**Description**: Systematically searches for, extracts, and qualifies potential sales leads using a free, AI-powered pipeline.
+**Description**: Systematically searches for, extracts, and qualifies potential sales leads using a free, Render-safe pipeline (no browser/Playwright dependency).
 
 ## Pipeline (Free — $0/month)
 
 ```
-Search Query → DDG/Google Maps → Find Business URLs
+Search Query → Tavily/Firecrawl/DDG/SerpAPI Maps → Find Business URLs
         │
         ▼
-  ScrapeGraphAI + Groq (AI extraction)
+  lead_enrichment.enrich_leads_batch (regex + UnifiedAIClient extraction)
         │  Owner name, email, phone
-        ▼
-  HTML fallback scrape (regex extraction)
-        │
         ▼
   Semantic Firewall (filter data leakage)
         │
@@ -26,27 +23,22 @@ Search Query → DDG/Google Maps → Find Business URLs
 ## Procedure
 
 1. **Search & Discovery**:
-   - Use `find_leads` / `find_leads_v2` for DDG + Google Maps search
+   - Use `find_leads` (`app/skills/lead_finder.py`) — multi-source: Tavily, Firecrawl, DDG, BBB.org, SerpAPI Google Maps
    - Find business URLs with owner names, phones, websites
 
-2. **AI-Powered Extraction (ScrapeGraphAI + Groq)**:
-   - `sgai_deep_extract(url)` — Deep scrape a single URL with AI
-   - Uses Groq's free tier (30K requests/day)
+2. **Enrichment**:
+   - `find_leads` auto-enriches results via `app.skills.lead_enrichment.enrich_leads_batch`
+   - For existing lead rows, use `app.skills.light_enrich.enrich_lead_lite(lead)`
    - Extracts: owner name, email, phone, business name
-   - Three-tier fallback: AI extract → AI search → HTML regex scrape
 
-3. **Unified Enrichment**:
-   - `enrich_lead_ai(business_name, url)` — Single call, tries all methods
-   - Returns: `{business_name, owner_name, email, phone, source}`
-
-4. **Qualification**:
-   - Score lead 0.0–1.0 against ICP in `USER.md`
+3. **Qualification**:
+   - Score lead against ICP in `USER.md` (see `app/skills/lead_validator.py`)
    - Filter through Semantic Firewall (no data leakage or injection)
 
-5. **Reporting & Approval**:
+4. **Reporting & Approval**:
    - Format qualified leads → send to user via Telegram/WhatsApp
    - **Guardrail**: Required explicit approval before outreach
 
-6. **Feedback Loop**:
+5. **Feedback Loop**:
    - Record outcome in `app/core/self_learning.py`
    - Learn which search patterns and niches work best

@@ -108,7 +108,6 @@ async def require_client(x_client_id: Optional[str] = Header(None), client_id: O
 
 from app.skills.agentmail_skill import check_replies
 from app.skills.vault_skill import backup_database, restore_latest, vault_scheduler_loop
-from app.skills.crawl_skill import cleanup_crawler
 from app.skills.sheets_sync import restore_leads_from_sheets, update_lead_status_sheets
 
 @asynccontextmanager
@@ -267,7 +266,6 @@ async def lifespan(app: FastAPI):
     _task_loop_event.set()  # Signal task loop to exit
     stop_worker_scheduler()  # Signal worker daemon thread to exit
     await tg_queue.stop()
-    await cleanup_crawler()
     scheduler.shutdown()
     # Close keep-alive client if it exists
     try:
@@ -1443,9 +1441,6 @@ async def get_metrics_history(authorized: bool = Depends(require_dashboard_api_k
 async def get_skills_list(authorized: bool = Depends(require_dashboard_api_key)):
     return {"status": "ok", "skills": [
         { "name": "find_leads", "category": "Search", "status": "active", "agent": "Hawk" },
-        { "name": "stealth_search", "category": "Search", "status": "active", "agent": "Viper" },
-        { "name": "stealth_extract", "category": "Search", "status": "active", "agent": "Viper" },
-        { "name": "bulk_scrape", "category": "Search", "status": "active", "agent": "Viper" },
         { "name": "deep_research", "category": "Research", "status": "active", "agent": "Hawk" },
         { "name": "run_seo_audit", "category": "Research", "status": "active", "agent": "Hawk" },
         { "name": "analyze_competitor", "category": "Research", "status": "active", "agent": "Hawk" },

@@ -66,21 +66,6 @@ TOOLS = [
 {
         "type": "function",
         "function": {
-            "name": "bulk_scrape",
-            "description": "Scrape multiple URLs in parallel with stealth anti-bot bypass. Max 20 URLs per run.",
-            "parameters": {
-                "type": 'object',
-                "properties": {
-                    "urls": {'type': 'string', 'description': 'Comma-separated list of URLs to scrape'},
-                    "objective": {'type': 'string', 'description': 'What to extract from each page'},
-                },
-                "required": ['urls'],
-            },
-        }
-    },
-{
-        "type": "function",
-        "function": {
             "name": "check_replies",
             "description": "Check Nova's AgentMail inbox for new messages and replies from leads.",
             "parameters": {
@@ -267,37 +252,6 @@ TOOLS = [
 {
         "type": "function",
         "function": {
-            "name": "elite_scrape",
-            "description": "High-fidelity scraping via Crawl4AI. Bypasses anti-bots and returns clean Markdown.",
-            "parameters": {
-                "type": 'object',
-                "properties": {
-                    "url": {'type': 'string', 'description': 'The URL to scrape'},
-                    "objective": {'type': 'string', 'description': 'What to extract from the page'},
-                },
-                "required": ['url'],
-            },
-        }
-    },
-{
-        "type": "function",
-        "function": {
-            "name": "enrich_lead_ai",
-            "description": "AI-powered lead enrichment using ScrapeGraphAI + Groq (free). Takes a business name + URL, extracts owner name, email, and phone via multi-strategy pipeline.",
-            "parameters": {
-                "type": 'object',
-                "properties": {
-                    "business_name": {'type': 'string', 'description': 'The business name to enrich'},
-                    "url": {'type': 'string', 'description': 'The business website URL (optional but recommended)'},
-                    "query": {'type': 'string', 'description': 'Custom search query override (optional)'},
-                },
-                "required": ['business_name'],
-            },
-        }
-    },
-{
-        "type": "function",
-        "function": {
             "name": "find_leads",
             "description": "Search the web for business leads. Returns a list of titles, URLs, and snippets.",
             "parameters": {
@@ -305,21 +259,6 @@ TOOLS = [
                 "properties": {
                     "query": {'type': 'string', 'description': "The search query (e.g., 'plumbers in Miami')"},
                     "count": {'type': 'integer', 'description': 'Number of results to return (default 5)'},
-                },
-                "required": ['query'],
-            },
-        }
-    },
-{
-        "type": "function",
-        "function": {
-            "name": "find_leads_v2",
-            "description": "Search Google Maps and the web for business leads with owner names, phone numbers, and email addresses. Returns scored, enriched leads ready to act on.",
-            "parameters": {
-                "type": 'object',
-                "properties": {
-                    "query": {'type': 'string', 'description': "The search query (e.g., 'auto detailing in Los Angeles' or 'luxury car dealers Beverly Hills')"},
-                    "count": {'type': 'integer', 'description': 'Number of leads to return (default 5)'},
                 },
                 "required": ['query'],
             },
@@ -702,65 +641,6 @@ TOOLS = [
 {
         "type": "function",
         "function": {
-            "name": "sgai_deep_extract",
-            "description": "Uses ScrapeGraphAI to perform deep JSON extraction on a specific URL to find owner, email, and phone.",
-            "parameters": {
-                "type": 'object',
-                "properties": {
-                    "url": {'type': 'string', 'description': 'The specific URL to extract data from'},
-                },
-                "required": ['url'],
-            },
-        }
-    },
-{
-        "type": "function",
-        "function": {
-            "name": "sgai_search_and_extract",
-            "description": "Uses ScrapeGraphAI to search the web and extract structured JSON data about high-ticket leads and owners.",
-            "parameters": {
-                "type": 'object',
-                "properties": {
-                    "query": {'type': 'string', 'description': "Search query (e.g., 'luxury remodeling contractors in LA')"},
-                    "count": {'type': 'integer', 'description': 'Number of results to extract (default 3)'},
-                },
-                "required": ['query'],
-            },
-        }
-    },
-{
-        "type": "function",
-        "function": {
-            "name": "stealth_extract",
-            "description": "Visit a URL with full anti-bot bypass and extract contact info (phones, emails, owner names). Use for protected sites.",
-            "parameters": {
-                "type": 'object',
-                "properties": {
-                    "url": {'type': 'string', 'description': 'Target URL to extract from'},
-                    "selectors": {'type': 'string', 'description': 'Optional CSS selectors (comma-separated)'},
-                },
-                "required": ['url'],
-            },
-        }
-    },
-{
-        "type": "function",
-        "function": {
-            "name": "stealth_search",
-            "description": "Search the web using anti-bot stealth mode (Scrapling). Bypasses Cloudflare and other protections. Use for sites that block regular scrapers.",
-            "parameters": {
-                "type": 'object',
-                "properties": {
-                    "query": {'type': 'string', 'description': 'Search query'},
-                    "count": {'type': 'integer', 'description': 'Number of results (default 10)'},
-                },
-                "required": ['query'],
-            },
-        }
-    },
-{
-        "type": "function",
-        "function": {
             "name": "sync_to_notion_via_make",
             "description": "Manually trigger lead state synchronization to the Notion CRM via Make.com webhook relay.",
             "parameters": {
@@ -815,21 +695,6 @@ TOOLS = [
                     "start_time": {'type': 'string', 'description': 'New start time'},
                 },
                 "required": ['event_id'],
-            },
-        }
-    },
-{
-        "type": "function",
-        "function": {
-            "name": "vision_browse",
-            "description": "Autonomous vision browsing via Browser-use. Nova 'sees' the site and interacts with it.",
-            "parameters": {
-                "type": 'object',
-                "properties": {
-                    "objective": {'type': 'string', 'description': 'What to achieve on the site'},
-                    "url": {'type': 'string', 'description': 'Target URL to start from'},
-                },
-                "required": ['objective'],
             },
         }
     },
