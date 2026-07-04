@@ -282,19 +282,20 @@ async def start_drip_campaign(lead_id: int, sequence_type: str = "cold_intro_dri
         return {"status": "error", "message": f"Active drip campaign already exists for lead {lead_id}."}
         
     now = datetime.now()
-    # Schedule first send for right now
+    # Start at the FIRST FOLLOW-UP (step 1), 2 days out. Step 0 is the initial
+    # cold email, which the worker already sends separately through the approval
+    # gate — sending the drip's step 0 too would (a) double-send two cold emails
+    # on day 0 and (b) bypass the approval gate entirely (the drip send isn't gated).
+    first_followup = (now + timedelta(days=2)).isoformat()
     await DatabaseManager.query(
         """INSERT OR REPLACE INTO drip_campaigns (lead_id, sequence_type, status, current_step, last_sent_at, next_send_at, client_id)
-           VALUES (?, ?, 'active', 0, NULL, ?, ?)""",
-        (lead_id, sequence_type, now.isoformat(), lead.get("client_id", 0))
+           VALUES (?, ?, 'active', 1, ?, ?, ?)""",
+        (lead_id, sequence_type, now.isoformat(), first_followup, lead.get("client_id", 0))
     )
-    
-    logger.info(f"[DRIP] Drip campaign '{sequence_type}' started for lead {lead_id} ({lead.get('business')})")
-    
-    # Process pending drip campaigns immediately to send the first email
-    await send_pending_drip_emails()
-    
-    return {"status": "success", "message": f"Drip campaign started and first step processed."}
+
+    logger.info(f"[DRIP] Drip '{sequence_type}' scheduled from first follow-up (day 2) for lead {lead_id} ({lead.get('business')})")
+    # Do NOT send immediately — the gated initial cold email is the only day-0 touch.
+    return {"status": "success", "message": "Drip scheduled from first follow-up (day 2)."}
 
 
 async def send_pending_drip_emails():

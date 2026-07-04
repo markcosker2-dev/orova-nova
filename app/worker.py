@@ -276,17 +276,23 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
 
     if not niche:
         niches = [
+            # Exotic / luxury automotive
             'exotic car dealer california',
             'luxury car dealership california',
-            'high end car tuning california',
             'exotic car rental california',
-            'custom vehicle wrapping california',
-            'hypercar dealer california',
-            'luxury car storage california',
             'high end car restoration california',
+            # Custom homes / high-end remodeling
             'custom home builder california',
-            'private jet california',
-            'yacht charter california'
+            'luxury home remodeling california',
+            'high end kitchen remodeler california',
+            # Private aviation & yachting
+            'private jet charter california',
+            'yacht charter california',
+            # Luxury real estate & high-ticket services
+            'luxury real estate agent california',
+            'luxury interior designer california',
+            'high end landscape design california',
+            'luxury med spa california',
         ]
         query = random.choice(niches)
     else:

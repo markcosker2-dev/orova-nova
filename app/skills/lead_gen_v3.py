@@ -749,12 +749,14 @@ async def enrich_lead_4step(url: str, business_name: str = "", state: str = "", 
 
     results = []
 
-    # Run all strategies concurrently
+    # Run all strategies concurrently. Removed three junk producers (live-verified
+    # 2026-07-05): _state_registry_lookup returned the registry's own contact email
+    # (bizfile@sos.ca.gov), _whois_lookup returned WHOIS boilerplate as an "owner"
+    # ("Service subject to Terms of Use"), and _ddg_owner_verification uses the
+    # deprecated duckduckgo_search. Real owner names come from owner_finder (above)
+    # + _scrape_website; email/phone from the site and Google Business.
     tasks = [
         _scrape_website(url),
-        _whois_lookup(domain),
-        _state_registry_lookup(business_name),
-        _ddg_owner_verification(url, domain),
         _bbb_lookup(business_name, domain),
         _google_business_lookup(business_name, domain),
     ]
@@ -944,6 +946,53 @@ async def _source_duckduckgo(query: str, count: int) -> list:
     return leads
 
 
+async def _source_serpapi_maps(query: str, count: int) -> list:
+    """Reliable discovery via SerpAPI's Google Maps engine.
+
+    Returns real business name + phone + website + address. The DDG/Maps-scrape
+    sources are deprecated/blocked server-side and return junk (WHOIS text,
+    image filenames), which is why owner/email/phone yield was near zero. This
+    shares the one SerpAPI monthly quota (250/mo) with owner_finder's SerpAPI
+    fallback — it rations against the same counter and skips cleanly when the
+    quota is spent or SERPAPI_KEY is unset (falls back to the legacy sources).
+    """
+    api_key = os.getenv("SERPAPI_KEY")
+    if not api_key:
+        return []
+    try:
+        from app.skills.owner_finder import _ration_check_and_increment, SERPAPI_MONTHLY_CAP
+        if not await _ration_check_and_increment("owner_finder:serp_monthly", SERPAPI_MONTHLY_CAP, "month"):
+            logger.info("[SERPMAPS] SerpAPI monthly quota reached — skipping discovery this run.")
+            return []
+    except Exception as e:
+        logger.debug(f"[SERPMAPS] ration check unavailable ({e}); proceeding.")
+
+    leads = []
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get("https://serpapi.com/search", params={
+                "engine": "google_maps", "q": query, "type": "search", "api_key": api_key,
+            })
+        if resp.status_code != 200:
+            logger.warning(f"[SERPMAPS] SerpAPI status {resp.status_code} for '{query}'")
+            return []
+        for b in (resp.json().get("local_results") or [])[:count]:
+            website = (b.get("website") or "").strip()
+            if not website:
+                continue  # need a site to enrich email/owner; skip phone-only listings
+            leads.append({
+                "business": (b.get("title") or "").strip(),
+                "url": website,
+                "phone": (b.get("phone") or "").strip(),
+                "address": (b.get("address") or "").strip(),
+                "source": "serpapi_maps",
+            })
+        logger.info(f"[SERPMAPS] {len(leads)} businesses w/ websites for '{query}'")
+    except Exception as e:
+        logger.error(f"[SERPMAPS] Error: {e}")
+    return leads
+
+
 # West Coast ICP state names as they appear in the free-text hunt query
 # (e.g. "exotic car dealer california") — the only jurisdiction signal
 # available at this call site today. Best-effort only; owner_finder routes
@@ -974,19 +1023,28 @@ async def find_leads_v3(count: int = 5, query: str = "business leads") -> dict:
     logger.info(f"[LEAD GEN V3] Searching for {count} leads: '{query}'")
     
     all_leads = []
-    
-    # Get leads from sources
+
+    # PRIMARY: SerpAPI Google Maps — reliable, structured business data.
     try:
-        maps_leads = await _source_google_maps(query, count * 2)
-        all_leads.extend(maps_leads)
+        serp_leads = await _source_serpapi_maps(query, count * 3)
+        all_leads.extend(serp_leads)
     except Exception as e:
-        logger.warning(f"[V3] Google Maps failed: {e}")
-    
-    try:
-        ddg_leads = await _source_duckduckgo(query, count * 2)
-        all_leads.extend(ddg_leads)
-    except Exception as e:
-        logger.warning(f"[V3] DuckDuckGo failed: {e}")
+        logger.warning(f"[V3] SerpAPI Maps failed: {e}")
+
+    # FALLBACK: legacy scrape/DDG sources only if SerpAPI came up short
+    # (no key / quota exhausted). These are unreliable server-side.
+    if len(all_leads) < count:
+        try:
+            maps_leads = await _source_google_maps(query, count * 2)
+            all_leads.extend(maps_leads)
+        except Exception as e:
+            logger.warning(f"[V3] Google Maps failed: {e}")
+
+        try:
+            ddg_leads = await _source_duckduckgo(query, count * 2)
+            all_leads.extend(ddg_leads)
+        except Exception as e:
+            logger.warning(f"[V3] DuckDuckGo failed: {e}")
     
     # Deduplicate
     seen_domains = set()
@@ -1010,7 +1068,9 @@ async def find_leads_v3(count: int = 5, query: str = "business leads") -> dict:
         async with semaphore:
             result = await enrich_lead_4step(lead.get("url", ""), lead.get("business", ""), state=state)
             result["business"] = lead.get("business", "") or extract_domain(lead.get("url", "")) or "Unknown"
-            result["phone"] = lead.get("phone", "") or result.get("phone", "")
+            # Prefer the Maps phone (normalized to E.164 so the call lane can dial it).
+            result["phone"] = _normalize_phone_to_e164(lead.get("phone", "")) or result.get("phone", "")
+            result["website"] = result.get("website", "") or lead.get("url", "")
             return result
     
     tasks = [_enrich(lead) for lead in unique_leads[:count * 2]]
