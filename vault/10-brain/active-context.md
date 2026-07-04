@@ -35,21 +35,31 @@ which funds better tooling (paid Anthropic, paid enrichment, Render paid tier).
 - **Vault** — this knowledge layer (ADR-0001); brain refreshed to match reality
   and wired to pull production learning each session (see [[strategy-snapshot]]).
 
-## In progress
+## Nova buildout (PR #21, in progress — see [[0002-lead-engine-and-subagents]])
 
-- **Vault ↔ HermesClaw learning bridge** — `scripts/vault_pull.py` pulls leads,
-  CEO briefs, and learned strategies from production into this vault so Claude
-  reads Nova's latest learning at the start of every session.
+- **WP1 done** — fixed the CEO's broken auto-hunt (`run_planner` ghost) + added a
+  Render-safe AI extraction path to the scraper.
+- **WP2 done** — lead engine: scan owner pages (/about,/team) first, AI extraction
+  pass, and fixed `_prioritize_email` (was preferring `info@` over personal).
+- **WP3 done** — real sub-agents: `dispatch_task` now runs a scoped planner with
+  the agent's persona + role tools (was a hardcoded string).
+- **WP4 pending** — enforce the approval gates in code (email/calls need approval)
+  + wire the reply → qualify → booking middle-mile.
+- Vault learning bridge live (`scripts/vault_pull.py`).
 
-## Blocking the first client (owner actions — only Mark can do these)
+## 🚨 The #1 blocker: no working LLM key
 
-1. **`DASHBOARD_API_KEY` in local `.env`** — needed for vault sync to run. Paste
-   the same value that's set on Render.
-2. **Confirm `GROQ_API_KEY` on Render is fresh** — the local copy returns 401.
-   If Render has the dead key, tier-1 brain silently fails every call.
-3. `TARGET_NICHE` + `TARGET_LOCATION` set on Render (done).
-4. Deliverability check (mail-tester) once the first real outreach sends.
-5. Confirm vault restore in Render boot log (`♻️ Restored database snapshot`).
+A live test showed **all three providers are dead**: Groq 401, OpenRouter 401
+("User not found"), Google empty. Nova has **no working AI brain** — every AI call
+falls back to non-AI paths. The buildout code degrades gracefully, but nothing
+AI-driven works until Mark sets **one** live key (OpenRouter / Groq / Gemini) on
+Render. This gates real-world results more than any code.
+
+## Other owner actions
+
+1. `DASHBOARD_API_KEY` in local `.env` (vault sync). 2. `TARGET_NICHE` /
+`TARGET_LOCATION` on Render (done). 3. Deliverability check on first send.
+4. Confirm vault restore in Render boot log.
 
 ## Not needed (settled)
 
