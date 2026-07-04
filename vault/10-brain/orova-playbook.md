@@ -33,10 +33,25 @@ Ad spend is **separate** and **paid by the client directly to Meta** (~$2–2.5K
 recommended). To start, the client provides everything needed to generate leads
 (offer details, brand assets, ad-account + CRM access — see onboarding).
 
-> ⚠️ **Pricing quirk to revisit:** the 3-month per-month rate ($3,333 P1 /
-> $4,333 P2) is *lower* than the 6-month rate ($3,667 P1 / $4,667 P2). Normally
-> longer commitments cost less per month. Worth re-checking so the 6-month isn't
-> a worse deal than the 3-month.
+### Proposed pricing correction (pending Mark's OK)
+
+The current 6-month is a *worse* per-month deal than the 3-month, so no rational
+client picks it. Proposed fix — a clean descending ladder where longer = cheaper
+per month:
+
+| Term | Package 1 | /mo | Package 2 | /mo |
+|---|---|---|---|---|
+| 1 month | $4,000 | $4,000 | $5,000 | $5,000 |
+| 3 months | $10,000 | $3,333 | $13,000 | $4,333 |
+| 6 months | **$18,000** | **$3,000** | **$24,000** | **$4,000** |
+
+(Only the 6-month numbers change: $22K→$18K, $28K→$24K.)
+
+**Margin still holds.** OROVA's monthly cost per client (Twilio number + usage,
+Retell pay-as-you-go, Make.com, Higgsfield, hosting/LLM/email) is roughly
+$60–500/mo depending on call/creative volume — well under 20% of even the lowest
+per-month price ($3,000). So the 75–80% margin target is comfortably met at every
+tier. Ad spend is NOT an OROVA cost (client pays Meta directly).
 
 ## 2. ICP & Targeting
 
@@ -97,6 +112,24 @@ move. First client has no prior case study — Nova's own outreach is the proof.
 - **Ad spend:** **client pays Meta directly** (never routed through OROVA).
 - **Brand:** agency is **OROVA**. Nova **does not say she's an AI unless asked
   directly** (then she's honest).
+
+### Costs OROVA bears (per client, monthly)
+
+Twilio number + call usage · Retell.ai (pay-as-you-go per minute) · Make.com plan
+· Higgsfield plan · hosting / LLM / email. Roughly **$60–500/mo** depending on
+call and creative volume. **Ad spend is not a cost — the client pays Meta.**
+
+### Margin target
+
+**75–80% profit** after the above expenses. Pricing is set to protect this at
+every tier (see the proposed pricing correction in §1).
+
+### Refund policy
+
+**Partial refunds only — never the full amount.** OROVA builds/sets up the
+system for the client (ad account, creatives, automation, CRM wiring), and that
+setup/build work is non-refundable. A refund returns the unused portion of the
+retainer minus the build/setup already delivered.
 
 ## Why OROVA is different (positioning)
 
