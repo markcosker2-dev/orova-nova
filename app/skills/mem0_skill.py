@@ -26,7 +26,7 @@ class MegaMemory:
                 "provider": "openai",
                 "config": {
                     "api_key": os.getenv("OPENROUTER_API_KEY"),
-                    "model": "google/gemini-2.0-flash-lite-preview-02-05",
+                    "model": "meta-llama/llama-3.3-70b-instruct:free",
                     "openai_base_url": "https://openrouter.ai/api/v1",
                 }
             },

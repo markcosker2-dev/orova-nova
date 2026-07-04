@@ -121,7 +121,7 @@ EXTRACTION_PROMPT = (
 
 SGAI_GRAPH_CONFIG = {
     "llm": {
-        "model": "groq/llama3-8b-8192",
+        "model": "groq/llama-3.1-8b-instant",
         "api_key": os.getenv("GROQ_API_KEY", ""),
     },
     "browser_config": {
@@ -153,7 +153,7 @@ async def sgai_search_and_extract(query: str, count: int = 3) -> dict:
             prompt=EXTRACTION_PROMPT,
             config={
                 "llm": {
-                    "model": "groq/llama3-8b-8192",
+                    "model": "groq/llama-3.1-8b-instant",
                     "api_key": groq_key,
                 },
                 "verbose": False,
@@ -189,7 +189,7 @@ async def sgai_deep_extract(url: str) -> dict:
             source=url,
             config={
                 "llm": {
-                    "model": "groq/llama3-8b-8192",
+                    "model": "groq/llama-3.1-8b-instant",
                     "api_key": groq_key,
                 },
                 "verbose": False,
@@ -297,26 +297,61 @@ def enrich_and_score(result: dict) -> dict:
     return result
 
 
-# ─── FALLBACK: HTML SCRAPE (NO LLM REQUIRED) ──────────────────────────────
+# ─── RENDER-SAFE AI EXTRACTION (UnifiedAIClient, no browser/Groq-direct) ────
+
+async def _ai_extract_contacts(page_text: str, business_name: str) -> dict:
+    """Extract owner/email/phone from raw page text via UnifiedAIClient.
+
+    This is the Render-safe AI path: ScrapeGraphAI needs a browser and the old
+    Groq-direct config used a now-dead key. UnifiedAIClient falls Groq -> Gemini
+    -> OpenRouter free models, so extraction works whenever any key is live.
+    Returns {} on any failure so callers fall back to regex.
+    """
+    page_text = (page_text or "").strip()
+    if not page_text:
+        return {}
+    try:
+        from app.core.ai_client import UnifiedAIClient
+        ai = UnifiedAIClient()
+        prompt = (
+            f"{EXTRACTION_PROMPT}\n\nBusiness: {business_name}\n\n"
+            "Page text:\n" + page_text[:6000] + "\n\n"
+            "Return ONLY a JSON object with keys: owner_name, owner_role, "
+            "personal_email, direct_phone. Use null for anything not clearly present."
+        )
+        resp = await ai.chat(prompt, role="hawk", temperature=0.1, max_tokens=200)
+        content = getattr(resp, "content", None) or (resp if isinstance(resp, str) else "")
+        m = re.search(r"\{.*\}", content, re.DOTALL)
+        if not m:
+            return {}
+        data = json.loads(m.group(0))
+        return data if isinstance(data, dict) else {}
+    except Exception as e:
+        logger.debug(f"[SMART SCRAPER] AI extract failed (falling back to regex): {e}")
+        return {}
+
+
+# ─── FALLBACK: HTML SCRAPE (regex + Render-safe AI pass) ───────────────────
 
 async def _html_scrape_fallback(url: str) -> dict:
     """
-    Basic HTML scrape + regex extraction. No LLM needed.
-    Scans homepage + /contact + /about pages for email, phone, owner names.
+    HTML scrape + regex extraction, with a UnifiedAIClient pass to catch owner
+    names/emails the regex misses. Scans homepage + /contact + /about + /team.
     """
     try:
         import httpx
         from bs4 import BeautifulSoup
 
         pages_to_check = [url]
-        # Try common subpages
+        # Try common subpages where owner/contact info actually lives
         base = url.rstrip("/")
-        for path in ["/contact", "/about", "/about-us", "/team"]:
+        for path in ["/contact", "/about", "/about-us", "/team", "/our-story"]:
             pages_to_check.append(base + path)
 
         emails = set()
         phones = set()
         names = set()
+        all_text = []  # accumulate for the AI pass
 
         async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
             for page_url in pages_to_check:
@@ -326,6 +361,8 @@ async def _html_scrape_fallback(url: str) -> dict:
                         continue
                     soup = BeautifulSoup(resp.text, "html.parser")
                     text = soup.get_text(separator=" ")
+                    if len(" ".join(all_text)) < 6000:
+                        all_text.append(text)
 
                     # Extract emails
                     for m in re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', resp.text):
@@ -347,16 +384,28 @@ async def _html_scrape_fallback(url: str) -> dict:
                 except Exception:
                     continue
 
+        # Prefer a personal-looking email over generic inbox addresses
+        def _rank_email(e: str) -> int:
+            return 0 if e.split("@", 1)[0] in ("info", "contact", "support", "hello", "admin", "sales", "office") else 1
+        best_email = sorted(emails, key=_rank_email, reverse=True)[0] if emails else None
+
         result = {
             "business_name": url.split("//")[-1].split("/")[0],
             "owner_name": list(names)[0] if names else None,
-            "personal_email": list(emails)[0] if emails else None,
+            "personal_email": best_email,
             "direct_phone": list(phones)[0] if phones else None,
             "is_verified_mobile": False,
             "confidence_score": 3 if emails else 1,
         }
 
-        if names or emails or phones:
+        # AI pass fills gaps regex missed (owner name especially)
+        if all_text and not (result["owner_name"] and result["personal_email"]):
+            ai_data = await _ai_extract_contacts(" ".join(all_text), result["business_name"])
+            result["owner_name"] = result["owner_name"] or ai_data.get("owner_name")
+            result["personal_email"] = result["personal_email"] or ai_data.get("personal_email")
+            result["direct_phone"] = result["direct_phone"] or ai_data.get("direct_phone")
+
+        if result["owner_name"] or result["personal_email"] or result["direct_phone"]:
             await _save_to_lead_wiki(url, result)
         return {"status": "success", "data": result}
     except Exception as e:

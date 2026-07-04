@@ -11,7 +11,7 @@
 
 `vault/` is an Obsidian vault and the project's curated knowledge base.
 
-- **At session start** on product/strategy/architecture work, read `vault/10-brain/active-context.md`.
+- **At session start** on product/strategy/architecture work: run `python scripts/vault_pull.py` to pull Nova's latest production learning into the vault, then read `vault/10-brain/active-context.md` and `vault/10-brain/strategy-snapshot.md`. This is the learning bridge — every session begins with what the agent has learned since last time. (Sync needs `DASHBOARD_API_KEY` + `RENDER_EXTERNAL_URL` in `.env`; it's idempotent and safe to re-run.)
 - **Write session notes** worth keeping to `vault/20-ops/sessions/YYYY-MM-DD-topic.md` (use `vault/_templates/session.md`).
 - **Record architectural decisions** as ADRs in `vault/40-decisions/NNNN-title.md` (template: `_templates/decision.md`).
 - **Keep `vault/10-brain/active-context.md` current** when the project direction changes materially.

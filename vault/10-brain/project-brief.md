@@ -1,23 +1,49 @@
-# HermesClaw Project Brief
+---
+name: project-brief
+description: What OROVA / HermesClaw is and why it exists
+type: brain
+created: 2026-07-03
+status: active
+---
 
-## Overview
-HermesClaw is a "split-brain" synthesis architecture where:
-- **OpenClaw** serves as the sensory-motor layer (messaging channels, canvas, websockets)
-- **Hermes Agent** serves as the cognitive kernel (planning, memory, self-improvement loops)
+# Project Brief
 
-## Core Objective
-Build an autonomous AI agency platform (OROVA) that operates as a single-user tool, generating revenue by finding leads, sending outreach, booking meetings, and closing deals — all autonomously.
+## The goal
 
-## Architecture
-- **Gateway Port:** 18789 (OpenClaw gateway)
-- **Dashboard Port:** 18790 (OROVA Mission Control)
-- **Hermes Dashboard Port:** 9119 (Hermes standalone)
-- **Dev Server Port:** 6969 (HermesClaw GUI dev)
-- **Production GUI Port:** 3100 (HermesClaw GUI prod)
+Build a **1–2 person, AI-operated marketing agency** (OROVA) that runs Meta ads
+for luxury West Coast businesses. Get the first paying client so revenue funds
+better tooling; long-term ambition is a very small team running a very large
+business. See [[business-model]] for the commercial detail.
 
-## Key Components
-1. **Nova** — CEO Agent (cognitive kernel)
-2. **9 Specialized Agents** — Atlas, Pixel, Quill, Hawk, Closer, Sentinel, Echo, Oracle, Viper
-3. **9 Worker Lanes** — Fast Lane, Lead Hunt, Reply Monitor, Cold Escalation, Cloud Backup, CEO Brief, Health Monitor, Self-Improvement, Drip Sequence
-4. **Semantic Firewall** — Tool call validation before execution
-5. **Memory Bank** — Persistent context across sessions
+## The two codebases
+
+This repo is a hybrid of two things (see repo `CLAUDE.md`):
+
+- **`app/` — "Nova"** — the autonomous agent that *is* the agency. Python/FastAPI,
+  deployed on Render free tier at `orova-nova.onrender.com`. 9 scheduled worker
+  lanes do the hunting, outreach, calling, briefing, backups, health checks, and
+  self-improvement. This is where ~all the live value is. Also serves the
+  `mission-control/` dashboard.
+- **`electron/` + `src/` — the HermesClaw desktop GUI** (OpenClaw-based). The
+  local cockpit. Canonical GUI code lives in `electron/`; the `HermesClaw/` folder
+  holds reference mirrors only. Doesn't typecheck as one unit (esbuild build);
+  `pnpm typecheck` is clean for `src/`.
+
+The original "split-brain" framing (OpenClaw sensory-motor layer + Hermes
+cognitive kernel) is the design lineage. In practice today the running product is
+the FastAPI agent; the Electron GUI is the operator surface.
+
+## Key components
+
+1. **Nova** — the orchestrating agent (planning, tool routing, memory).
+2. **9 worker lanes** — see [[system-patterns]] for the schedule.
+3. **Semantic Firewall** — validates tool calls before execution (Python core +
+   TS mirror, shared `config/firewall-rules.json`).
+4. **Learning loop** — Wilson-ranked champion/challenger strategy selection; the
+   agency literally gets better at outreach over time. See [[claude-brain]].
+5. **The vault** — this Obsidian knowledge layer; the curated shared brain for
+   Mark and Claude. Synced from production each session.
+
+## Linked
+
+- [[business-model]] · [[product-context]] · [[system-patterns]] · [[tech-context]] · [[claude-brain]]

@@ -36,7 +36,7 @@ async def vision_browse(objective: str, url: str = None) -> str:
     
     # [P0] FIXED: Use OPENROUTER_API_KEY for OpenRouter calls via ChatOpenAI
     llm = ChatOpenAI(
-        model="google/gemini-2.0-flash-lite-preview-02-05",
+        model="meta-llama/llama-3.3-70b-instruct:free",
         api_key=os.getenv("OPENROUTER_API_KEY"),
         base_url="https://openrouter.ai/api/v1"
     )
