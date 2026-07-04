@@ -381,22 +381,33 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
                         if lead_email and email_status != "guessed":
                             try:
                                 from app.skills.outreach_orchestrator import compose_premium_outreach
+                                from app.core.approval_gate import gate_allows
                                 composed = await compose_premium_outreach(lead, niche=niche, client_id=client_id)
-                                outreach_result = await send_outreach(
-                                    to=lead_email,
-                                    subject=composed["subject"],
-                                    body=composed["body"],
-                                    recipient_context=f"{lead_owner} ({lead.get('owner_title') or 'Owner'}) of {lead_biz} in {niche} vertical",
-                                    lead_id=lead_id,
-                                    strategy=composed["framework"],
-                                    niche=niche,
-                                    client_id=client_id,
-                                )
-                                if outreach_result.get("status") == "success":
-                                    logger.info(f"   -> ✅ Outreach email sent to {lead_email} (lead {lead_id})")
-                                    lead["status"] = "Email Sent"
+                                # Approval gate: cold email needs Mark's OK unless
+                                # OUTREACH_AUTOPILOT=1. Skips send until approved.
+                                if not await gate_allows(
+                                    "email",
+                                    {"lead_id": lead_id, "to": lead_email},
+                                    reason=f"Cold email to {lead_biz} <{lead_email}> — subject: {composed['subject']}",
+                                ):
+                                    logger.info(f"   -> 🛡️ Cold email to {lead_email} awaiting approval; sends once Mark approves")
+                                    lead["status"] = "Awaiting Approval"
                                 else:
-                                    logger.warning(f"   -> ⚠️ Outreach email failed for {lead_email}: {outreach_result.get('error','unknown')}")
+                                    outreach_result = await send_outreach(
+                                        to=lead_email,
+                                        subject=composed["subject"],
+                                        body=composed["body"],
+                                        recipient_context=f"{lead_owner} ({lead.get('owner_title') or 'Owner'}) of {lead_biz} in {niche} vertical",
+                                        lead_id=lead_id,
+                                        strategy=composed["framework"],
+                                        niche=niche,
+                                        client_id=client_id,
+                                    )
+                                    if outreach_result.get("status") == "success":
+                                        logger.info(f"   -> ✅ Outreach email sent to {lead_email} (lead {lead_id})")
+                                        lead["status"] = "Email Sent"
+                                    else:
+                                        logger.warning(f"   -> ⚠️ Outreach email failed for {lead_email}: {outreach_result.get('error','unknown')}")
                             except Exception as email_err:
                                 logger.warning(f"   -> ⚠️ Outreach email error for {lead_email}: {email_err}")
 
@@ -586,6 +597,16 @@ async def run_cold_lead_escalation(client_id=0):
 
             # Trigger RetellAI call directly
             logger.info(f"📞 [ESCALATION] Triggering cold call for {business} ({phone})...")
+
+            # Approval gate: cold calls need Mark's OK unless CALLS_AUTOPILOT=1.
+            from app.core.approval_gate import gate_allows
+            if not await gate_allows(
+                "call",
+                {"lead_id": lead_id, "phone": phone},
+                reason=f"Cold call to {business} ({phone})",
+            ):
+                logger.info(f"📞 [ESCALATION] Call to {phone} awaiting approval; calls once Mark approves")
+                continue
 
             # Reserve call slot atomically before invoking Retell
             with _call_counter_lock:
