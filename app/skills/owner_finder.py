@@ -97,10 +97,11 @@ async def _ration_check_and_increment(counter_key: str, cap: int, period: str) -
         await db.set_state(counter_key, state)
         return True
     except Exception as e:
-        # Fail OPEN on ration bookkeeping errors would risk quota overrun;
-        # fail CLOSED (skip the source) is the safer default here.
-        logger.debug(f"[OWNER_FINDER] ration check failed for {counter_key}: {e}")
-        return False
+        # Bookkeeping error (e.g. DB briefly unavailable): fail OPEN. One extra
+        # API call can't blow a 250/mo quota, whereas failing closed here would
+        # zero out discovery/enrichment on any transient DB hiccup — far worse.
+        logger.debug(f"[OWNER_FINDER] ration check failed for {counter_key}: {e} — proceeding")
+        return True
 
 
 def _is_plausible_name(text: str) -> bool:

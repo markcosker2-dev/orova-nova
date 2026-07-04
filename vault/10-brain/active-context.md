@@ -62,7 +62,32 @@ which funds better tooling (paid Anthropic, paid enrichment, Render paid tier).
   set (local + Render). Also fixed 2 latent bugs (gmail_skill, sheets_sync). **151 tests
   pass.** Audits: [[lead-engine-research]] · [[skill-health-audit]].
 
-## 🚨 The #1 blocker: no working LLM key
+## Lead scraping overhaul (2026-07-05) — discovery FIXED, extraction next
+
+Live-tested the real pipeline and found the discovery layer was the root problem:
+`find_leads_v3` used the **deprecated** `duckduckgo_search` + Google-Maps HTML scrape,
+returning junk (WHOIS text as owner, image filenames as email). Fixes shipped:
+
+- **Discovery → SerpAPI Google Maps engine** (`_source_serpapi_maps` in `lead_gen_v3`).
+  Live result: **business + phone (E.164) + website at 100%** on real luxury dealers
+  (Lamborghini Beverly Hills, Marshall Goldman, DRIVE LA). Uses the existing SerpAPI
+  key; ~15 businesses/search; shares the 250/mo quota (fail-OPEN so a DB hiccup can't
+  zero out lead-gen). Legacy scrape/DDG kept only as fallback.
+- **Groq**: the key in `.env` was INVALID (401); Mark provided a valid one
+  (`gsk_IdJ…`). AI client now returns real output. ⚠️ **Render `GROQ_API_KEY` must be
+  updated to this same key.**
+- Removed 3 junk enrichment sources (`_state_registry_lookup` → `bizfile@sos.ca.gov`,
+  `_whois_lookup` → ToS boilerplate, `_ddg_owner_verification` → deprecated DDG).
+- Outreach: fixed a **double-send + approval-gate bypass** (drip now starts at the
+  day-2 follow-up, not a day-0 second email). Broadened the hunt niches across the ICP.
+
+**Still open (the hard part): email + owner-name extraction.** The AI path
+(`enrich_lead_lite`) times out at the 25s Render ceiling and returns empty; needs a
+fast, focused rewrite (homepage + /about + /contact only, short per-page timeout,
+one Groq extraction call). This is the next task. Local-test note: scripts must
+`load_dotenv(<repo>/.env, override=True)` — the shell has an empty `SERPAPI_KEY`.
+
+## 🚨 The #1 blocker: ~~no working LLM key~~ RESOLVED 2026-07-05 (valid Groq key)
 
 A live test showed **all three providers are dead**: Groq 401, OpenRouter 401
 ("User not found"), Google empty. Nova has **no working AI brain** — every AI call
