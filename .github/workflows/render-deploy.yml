@@ -21,8 +21,8 @@ jobs:
           RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
         run: |
           if [ -z "$RENDER_API_KEY" ] || [ -z "$RENDER_SERVICE_ID" ]; then
-            echo "ERROR: RENDER_API_KEY and RENDER_SERVICE_ID must be configured in GitHub Secrets." >&2
-            exit 1
+            echo "RENDER_API_KEY/RENDER_SERVICE_ID not set — skipping. Render already auto-deploys from main; set these secrets only if you also want this workflow to trigger a deploy."
+            exit 0
           fi
 
           echo "Triggering Render deploy for service $RENDER_SERVICE_ID"

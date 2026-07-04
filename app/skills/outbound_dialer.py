@@ -24,6 +24,12 @@ async def trigger_retell_call(phone: str, context: Dict[str, str]) -> Dict[str, 
         logger.warning(f"[Retell] Skipping call — missing env vars: {', '.join(missing)}")
         return {"success": False, "skipped": True, "error": f"Missing env vars: {', '.join(missing)}. Cold calling is disabled — set these to enable."}
 
+    # ── DNC/consent gate: never dial a suppressed number (TCPA guardrail) ──
+    from app.core.dnc import is_suppressed
+    if await is_suppressed(phone):
+        logger.warning("[Retell] Blocked call — number is on the DNC/suppression list.")
+        return {"success": False, "skipped": True, "error": "Number on DNC/suppression list — call blocked."}
+
     url = "https://api.retellai.com/v2/create-phone-call"
     owner_name = context.get("owner_name") or ""
     payload = {
