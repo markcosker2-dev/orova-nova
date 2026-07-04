@@ -23,31 +23,20 @@ is *higher-quality leads* — fewer, better conversations.
 
 **Terms & pricing** (new clients start on a **1-month trial**, then choose 1/3/6):
 
-| Term | Package 1 | Package 2 |
-|---|---|---|
-| 1 month | $4,000 | $5,000 |
-| 3 months | $10,000 | $13,000 |
-| 6 months | $22,000 | $28,000 |
+| Term | Package 1 | /mo | Package 2 | /mo |
+|---|---|---|---|---|
+| 1 month | $4,000 | $4,000 | $5,000 | $5,000 |
+| 3 months | $10,000 | $3,333 | $13,000 | $4,333 |
+| 6 months | $18,000 | $3,000 | $24,000 | $4,000 |
+
+_Pricing corrected 2026-07-04_ — the 6-month is now the best per-month rate
+(was $22K/$28K, which made longer commitments *more* expensive per month).
 
 Ad spend is **separate** and **paid by the client directly to Meta** (~$2–2.5K/mo
 recommended). To start, the client provides everything needed to generate leads
 (offer details, brand assets, ad-account + CRM access — see onboarding).
 
-### Proposed pricing correction (pending Mark's OK)
-
-The current 6-month is a *worse* per-month deal than the 3-month, so no rational
-client picks it. Proposed fix — a clean descending ladder where longer = cheaper
-per month:
-
-| Term | Package 1 | /mo | Package 2 | /mo |
-|---|---|---|---|---|
-| 1 month | $4,000 | $4,000 | $5,000 | $5,000 |
-| 3 months | $10,000 | $3,333 | $13,000 | $4,333 |
-| 6 months | **$18,000** | **$3,000** | **$24,000** | **$4,000** |
-
-(Only the 6-month numbers change: $22K→$18K, $28K→$24K.)
-
-**Margin still holds.** OROVA's monthly cost per client (Twilio number + usage,
+**Margin holds.** OROVA's monthly cost per client (Twilio number + usage,
 Retell pay-as-you-go, Make.com, Higgsfield, hosting/LLM/email) is roughly
 $60–500/mo depending on call/creative volume — well under 20% of even the lowest
 per-month price ($3,000). So the 75–80% margin target is comfortably met at every

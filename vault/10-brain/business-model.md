@@ -32,7 +32,9 @@ to Meta**.
 |---|---|---|
 | 1 month | $4,000 | $5,000 |
 | 3 months | $10,000 | $13,000 |
-| 6 months | $22,000 | $28,000 |
+| 6 months | $18,000 | $24,000 |
+
+(6-month corrected 2026-07-04 so longer = cheaper per month: P1 $3,000/mo, P2 $4,000/mo.)
 
 Full operating detail — sales funnel, delivery, automation/approval split — is in
 [[orova-playbook]].
