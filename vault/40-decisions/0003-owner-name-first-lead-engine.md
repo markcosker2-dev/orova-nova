@@ -57,9 +57,35 @@ audit (`gmail_skill` missing `logging` import → NameError on bounces;
   so removal is its own scoped refactor (deferred, tracked in [[roadmap]]).
 - Tests: **150 passing** (+26: `test_owner_finder.py`, `test_skill_bugfixes.py`).
 
+## Live verification (2026-07-04) — the sobering reality
+
+Probed the live endpoints before relying on them:
+
+- **WA SoS** — the "keyless" backbone the research assumed **does not work
+  server-side**. The real host (`ccfs-api.prod.sos.wa.gov`) returns *"System
+  verification in progress, please wait."* to every non-browser request, even
+  with SPA headers, a warm-up GET, and retries — it's **anti-bot gated** and
+  needs a browser. Now **dormant by default** behind `WA_SOS_ENABLED` (off).
+- **OpenCorporates** — free tier is **open-data/non-commercial only**; a private
+  commercial CRM doesn't qualify, so it's effectively **paid** for OROVA.
+- **CA CALICO** — still key-gated, cost unconfirmed (left off).
+- **SerpAPI** — **works** ✅. Validated live: `"Salt & Straw" owner OR founder`
+  returned "Kim Malek". Free plan = 250/mo, score-gated (≥70). One bug found &
+  fixed: the owner regex over-captured trailing title-case words ("Kim Malek
+  Built"); role-prefixed patterns now cap at first+last, and its timeout was
+  bumped to 20s (live search is slow).
+
+**Strategic upshot:** free *authoritative registries* are largely a dead end for
+automated server-side lookup (gated or paid). The working free owner-name sources
+are **SerpAPI** (rationed) and the existing **website + AI scrape** — which makes
+getting a live **LLM key** (the standing #1 blocker) the highest-value lever, not
+more registries. Registry clients stay in-tree but dormant (activate with keys /
+a browser worker). Tests now **151 passing**.
+
 ## Follow-ups
 
-- Verify WA/CA/OR/OpenCorporates live and set the free keys (see [[roadmap]]).
-- Consider a paid people-match fallback slot (Apollo/Hunter) later — behind a key.
+- ~~Verify WA/CA/OR/OpenCorporates live~~ ✅ done — see above (mostly unusable free).
+- **Get a live LLM key** so the website AI-extraction path actually resolves names.
+- Consider a paid people-match slot (Apollo/Hunter) or a browser-worker for WA later.
 - Full `enrich_lead_4step` + `enrich_lead_lite` merge (TODO in `light_enrich.py`).
 - Scoped removal of the dead scraper modules + their wiring.
