@@ -22,6 +22,21 @@ status: active
 | Appointment booking | — | ✅ when the business monetizes via appointments |
 | Ad spend (client-paid, separate) | $2,000–$2,500/mo recommended | $2,000–$2,500/mo recommended |
 
+### Term pricing
+
+New clients start on a **1-month trial**, then choose 1 / 3 / 6 months. Payment
+by invoice via **Wise transfer or ACH**. Ad spend is paid by the client **directly
+to Meta**.
+
+| Term | Package 1 | Package 2 |
+|---|---|---|
+| 1 month | $4,000 | $5,000 |
+| 3 months | $10,000 | $13,000 |
+| 6 months | $22,000 | $28,000 |
+
+Full operating detail — sales funnel, delivery, automation/approval split — is in
+[[orova-playbook]].
+
 ## ICP
 
 Luxury/premium West Coast businesses (CA, OR, WA, NV, AZ) that can afford $6–7.5K/mo all-in: exotic/luxury automotive, custom home builders, private aviation, yacht charter, luxury real estate, high-ticket services.
@@ -38,4 +53,4 @@ Luxury/premium West Coast businesses (CA, OR, WA, NV, AZ) that can afford $6–7
 ## Linked
 
 - [[active-context]] — current operational state
-- [[../40-decisions/0001-adopt-obsidian|ADR-0001]] — knowledge layer
+- [[0001-adopt-obsidian|ADR-0001]] — knowledge layer
