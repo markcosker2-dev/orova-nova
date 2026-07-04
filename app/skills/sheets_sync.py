@@ -364,7 +364,8 @@ async def sync_lead_outcome_to_sheets(lead_id: int, action: str, result: str, de
         # Append notes
         if details:
             notes_col = headers.index("Notes") + 1
-            existing_notes = await asyncio.to_thread(worksheet.cell, row_idx, notes_col).value or ""
+            existing_cell = await asyncio.to_thread(worksheet.cell, row_idx, notes_col)
+            existing_notes = existing_cell.value or ""
             timestamp = datetime.now().strftime("%m/%d %H:%M")
             new_notes = f"{existing_notes}\n[{timestamp}] {action}: {result} - {details}" if existing_notes else f"[{timestamp}] {action}: {result} - {details}"
             await asyncio.to_thread(worksheet.update_cell, row_idx, notes_col, new_notes)

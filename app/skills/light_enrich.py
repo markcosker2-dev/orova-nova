@@ -873,6 +873,21 @@ async def _ai_extract_contacts(text: str, biz_name: str) -> Dict[str, Optional[s
 
 ENRICH_TOTAL_TIMEOUT = 25.0  # Hard ceiling below Render's 30s kill
 
+# TODO(double-enrichment): worker.py's run_lead_hunt_slow_lane() calls
+# find_leads() (app/skills/lead_gen_v3.py :: find_leads_v3), which already
+# runs its own full enrich_lead_4step() per lead, THEN calls enrich_lead_lite
+# here on the same lead. Every per-field step below is individually guarded
+# (`if not lead.get(...)`) so already-populated fields aren't re-derived, and
+# Step 2's website crawl now short-circuits entirely when owner+email+phone
+# are all already set (see the guard above). That closes the unconditional
+# duplicate-work path. What's intentionally NOT done here: a true single-pass
+# merge of enrich_lead_4step + enrich_lead_lite into one function/module.
+# That's a bigger, riskier refactor — the two pipelines have different data
+# shapes (dict-in/dict-out vs. mutate-in-place) and enrich_lead_lite has
+# Yelp/Hunter.io/Apollo.io/LinkedIn-title logic enrich_lead_4step doesn't
+# have at all — so merging them for real needs its own careful pass rather
+# than a guess made alongside the owner_finder integration. Tracked here per
+# vault/20-ops/sessions/2026-07-04-lead-engine-research.md Job 1 finding 6.
 async def enrich_lead_lite(lead: Dict[str, Any]) -> Dict[str, Any]:
     url = lead.get("url")
     if not url or not url.startswith("http"):
@@ -941,7 +956,13 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
             lead["website"] = url
 
     # ─── STEP 2: Website Crawl ────────────────────────────────
-    if real_website and "yelp.com" not in real_website:
+    # Guard mirrors Step 1's: find_leads_v3 already ran its own 6-strategy
+    # enrichment (app/skills/lead_gen_v3.py :: enrich_lead_4step) before this
+    # function is ever called from worker.py, so a lead can already be fully
+    # populated here — re-crawling would be a second full page-fetch pass for
+    # zero new yield. See vault/20-ops/sessions/2026-07-04-lead-engine-research.md
+    # Job 1 finding 6 (the "double-enrichment" issue) and TODO below.
+    if real_website and "yelp.com" not in real_website and not (lead.get("owner") and lead.get("email") and lead.get("phone")):
         logger.info(f"[ENRICH] Step 2: Crawling business website: {real_website}")
 
         pages_to_crawl = [real_website]

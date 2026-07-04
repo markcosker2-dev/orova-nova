@@ -24,6 +24,11 @@ def autopilot_enabled(kind: str) -> bool:
         return os.getenv("OUTREACH_AUTOPILOT", "0") == "1"
     if kind == "call":
         return os.getenv("CALLS_AUTOPILOT", "0") == "1"
+    if kind == "reply":
+        # Auto-replying to a warm inbound (e.g. a booking-link reply to a HOT
+        # lead) is lower risk than cold outreach, so it has its own flag —
+        # Mark can enable fast reply autopilot while still approving cold sends.
+        return os.getenv("REPLIES_AUTOPILOT", "0") == "1"
     return False
 
 

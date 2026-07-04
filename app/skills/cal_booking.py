@@ -69,23 +69,78 @@ async def handle_cal_booking_webhook(payload: Dict[str, Any]) -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
+def _duration_minutes(event_data: Dict, default: int = 30) -> int:
+    """Meeting length from start/end times, falling back to `default`."""
+    start = event_data.get("startTime")
+    end = event_data.get("endTime")
+    if start and end:
+        try:
+            from dateutil import parser as date_parser
+            mins = int((date_parser.parse(end) - date_parser.parse(start)).total_seconds() // 60)
+            if mins > 0:
+                return mins
+        except Exception:
+            pass
+    return default
+
+
 async def _handle_booking_created(event_data: Dict, attendee: Dict) -> Dict[str, Any]:
     """
-    When a prospect books a meeting, store it and trigger Closer's confirmation sequence.
+    When a prospect books a meeting, put it on Mark's Google Calendar and alert him.
+
+    This is the far side of the reply→qualify→booking funnel: Nova sends a HOT lead
+    a booking link, the prospect self-schedules, Cal.com fires this webhook, and we
+    create the real calendar hold so a Nova-promised slot is never silently missed.
+    Mirrors the Retell cold-call booking path in app/main.py.
     """
     prospect_email = attendee.get("email")
-    prospect_name = attendee.get("name")
+    prospect_name = attendee.get("name") or "there"
     start_time = event_data.get("startTime")
-    title = event_data.get("title", "Meeting")
-    
+    title = event_data.get("title", "OROVA consultation")
+
     logger.info(f"[Cal.com] Booking created: {prospect_name} <{prospect_email}> at {start_time}")
-    
-    # In production, this would:
-    # 1. Store meeting in database (app/models/core.py::Meeting)
-    # 2. Send confirmation email via "Closer"
-    # 3. Schedule follow-up reminder (Nova task)
-    # 4. Log in Telegram
-    
+
+    # Create the Google Calendar event (calendar_skill is sync → run off-thread).
+    calendar_note = ""
+    event_id = None
+    if start_time:
+        try:
+            import asyncio
+            from app.skills.calendar_skill import create_event
+            loop = asyncio.get_running_loop()
+            cal_res = await loop.run_in_executor(None, lambda: create_event(
+                summary=f"OROVA demo — {prospect_name}",
+                start_time=start_time,
+                duration_minutes=_duration_minutes(event_data),
+                description=(
+                    f"Booked via {title}.\n"
+                    f"Prospect: {prospect_name} <{prospect_email}>"
+                ),
+            ))
+            if cal_res.get("success"):
+                event_id = cal_res.get("event_id")
+                calendar_note = "\n📅 Calendar event created"
+            else:
+                calendar_note = f"\n⚠️ Calendar event failed ({cal_res.get('error', 'unparseable time')}) — add it manually!"
+        except Exception as e:
+            logger.warning(f"[Cal.com] Calendar create failed: {e}")
+            calendar_note = "\n⚠️ Calendar event failed — add it manually!"
+    else:
+        calendar_note = "\n⚠️ No start time in payload — add the event manually!"
+
+    # Alert Mark on Telegram (best-effort; never crash the webhook).
+    try:
+        from app.worker import send_telegram_report
+        await send_telegram_report(
+            f"📅 **Appointment Booked** (inbound)\n\n"
+            f"👤 {prospect_name} <{prospect_email}>\n"
+            f"🕐 {start_time}\n"
+            f"📝 {title}"
+            f"{calendar_note}"
+        )
+    except Exception as e:
+        logger.warning(f"[Cal.com] Telegram alert failed: {e}")
+
     return {
         "success": True,
         "action": "store_meeting",
@@ -93,12 +148,8 @@ async def _handle_booking_created(event_data: Dict, attendee: Dict) -> Dict[str,
         "prospect_name": prospect_name,
         "scheduled_time": start_time,
         "title": title,
-        "next_steps": [
-            "Store meeting record in database",
-            "Send confirmation email",
-            "Schedule pre-meeting research task",
-            "Alert CEO via Telegram"
-        ]
+        "calendar_event_id": event_id,
+        "confirmation_email": generate_meeting_confirmation(prospect_name, start_time),
     }
 
 

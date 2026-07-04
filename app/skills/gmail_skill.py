@@ -1,5 +1,9 @@
+import logging
 import re
 from app.core.database import DatabaseManager
+
+logger = logging.getLogger(__name__)
+
 
 async def process_incoming_email(email_data: dict, client_id: int):
     """[P7] Scans incoming mail for bounces before passing to the AI."""

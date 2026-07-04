@@ -39,6 +39,6 @@ Your auto-memory directory is for your own recall. Anything Mark should be able 
 
 ## Practical notes
 
-- Python tests: `python -m pytest tests -q` (98 passing baseline). TS tests: `npx vitest run`. Typecheck: `pnpm typecheck`.
+- Python tests: `python -m pytest tests -q` (150 passing baseline). TS tests: `npx vitest run`. Typecheck: `pnpm typecheck`.
 - httpx must stay 0.27.2 (starlette 0.27 TestClient vs mcp/ollama constraints — see requirements.txt comment).
 - Production knowledge (CEO briefs, leads) is pulled into the vault with `python scripts/vault_pull.py` (needs `RENDER_EXTERNAL_URL` + `DASHBOARD_API_KEY` in `.env`).
