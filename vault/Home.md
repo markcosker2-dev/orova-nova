@@ -18,6 +18,7 @@ vault holds what's worth *reading*, not a database mirror.
 - [[10-brain/project-brief|Project Brief]] — what OROVA/HermesClaw is and why
 - [[10-brain/business-model|Business Model]] — packages, pricing, ICP (commercial source of truth)
 - [[10-brain/orova-playbook|OROVA Playbook]] — the deep operating manual HermesClaw runs on
+- [[10-brain/roadmap|Roadmap]] — what to execute next, split by Mark / Claude / Nova
 - [[10-brain/system-patterns|System Patterns]] — how the 9 worker lanes, agent loop, and firewall fit
 - [[10-brain/claude-brain|The Brain]] — LLM routing, current models, and how Nova learns
 - [[10-brain/strategy-snapshot|Strategy Snapshot]] — what Nova has learned (auto-synced from production)
