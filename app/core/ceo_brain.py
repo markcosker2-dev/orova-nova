@@ -632,9 +632,12 @@ class CEOBrain:
             try:
                 if action == "hunt":
                     logger.info(f"[CEO_BRAIN] Executing hunt task: {task['description']}")
-                    # Trigger a lead hunt via the planner
-                    from app.core.planner import run_planner
-                    await run_planner(task["description"], client_id=client_id)
+                    # Trigger a lead hunt via the planner (run_planner never
+                    # existed — instantiate TaskPlanner like the API endpoints do).
+                    from app.core.planner import TaskPlanner
+                    from app.core.ai_client import UnifiedAIClient
+                    planner = TaskPlanner(UnifiedAIClient())
+                    await planner.execute(task["description"], client_id=client_id)
                 elif action == "drip":
                     logger.info(f"[CEO_BRAIN] Executing drip task: {task['description']}")
                     from app.skills.email_sequence_skill import drip_send_pending

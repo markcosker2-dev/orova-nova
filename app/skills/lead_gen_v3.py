@@ -216,6 +216,39 @@ def is_banned_url(url: str) -> bool:
 # STRATEGY 1: Website Scraping (homepage, contact, about pages)
 # ═══════════════════════════════════════════════════════════════════════════════
 
+async def _ai_extract_owner(page_text: str, host: str) -> dict:
+    """Extract owner/email/phone from page text via UnifiedAIClient.
+
+    Render-safe (no browser). UnifiedAIClient falls Groq -> Gemini -> OpenRouter
+    free models, so this works whenever any provider key is live. Returns {} on
+    any failure so the caller keeps its regex result.
+    """
+    page_text = (page_text or "").strip()
+    if not page_text:
+        return {}
+    try:
+        from app.core.ai_client import UnifiedAIClient
+        ai = UnifiedAIClient()
+        prompt = (
+            "From the website text below, extract the business OWNER / founder / "
+            "principal's full name, a personal-looking email (prefer a named address "
+            "over info@/contact@), and a direct phone. "
+            f"Business domain: {host}\n\nText:\n{page_text[:6000]}\n\n"
+            "Return ONLY JSON: {\"owner_name\": str|null, \"email\": str|null, "
+            "\"phone\": str|null}. Use null when not clearly present — never guess."
+        )
+        resp = await ai.chat(prompt, role="hawk", temperature=0.1, max_tokens=180)
+        content = getattr(resp, "content", None) or (resp if isinstance(resp, str) else "")
+        m = re.search(r"\{.*\}", content or "", re.DOTALL)
+        if not m:
+            return {}
+        data = json.loads(m.group(0))
+        return data if isinstance(data, dict) else {}
+    except Exception as e:
+        logger.debug(f"[SCRAPE] AI owner extract failed: {e}")
+        return {}
+
+
 async def _scrape_website(url: str) -> dict:
     """Scrape website for owner name, email, and phone. Scans up to 7 pages and collects ALL candidates."""
     result = {"owner_name": "", "email": "", "phone": ""}
@@ -235,25 +268,30 @@ async def _scrape_website(url: str) -> dict:
         all_phones = []
         
         client = await _get_http_client()
-        pages_to_check = [base_url]
-        for path in CONTACT_PAGES + ABOUT_PAGES:
-            pages_to_check.append(f"https://{host}{path}")
-        
-        # Scan up to 7 pages (was 4)
-        for page_url in pages_to_check[:7]:
+        # Owner names live on about/team/leadership pages — check those FIRST so
+        # they are not cut off by the page cap (contact pages mainly give email/phone).
+        ordered_paths = []
+        for path in ABOUT_PAGES + CONTACT_PAGES:
+            if path not in ordered_paths:
+                ordered_paths.append(path)
+        pages_to_check = [base_url] + [f"https://{host}{path}" for path in ordered_paths]
+
+        all_text = []  # accumulate cleaned text for the AI pass
+        # Scan up to 9 pages (homepage + about/team + contact)
+        for page_url in pages_to_check[:9]:
             try:
                 resp = await client.get(page_url, timeout=8.0, headers=headers)
                 if resp.status_code != 200:
                     continue
-                
+
                 text = resp.text
-                
+
                 # Extract ALL phones using enhanced extraction (tel: links, data attrs, extended regex)
                 phones = _extract_phones_from_html(text)
                 for p in phones:
                     if p not in all_phones:
                         all_phones.append(p)
-                
+
                 # Extract ALL emails (not just first)
                 emails = EMAIL_RE.findall(text)
                 noise_domains = ["example.com", "domain.com", "test.com", "wix.com", "squarespace.com",
@@ -262,11 +300,14 @@ async def _scrape_website(url: str) -> dict:
                     domain_part = e.split("@")[-1].lower()
                     if domain_part not in noise_domains and e.lower() not in all_emails:
                         all_emails.append(e.lower())
-                
+
+                clean = re.sub(r'<[^>]+>', ' ', text)
+                clean = re.sub(r'\s+', ' ', clean)
+                if len(" ".join(all_text)) < 6000:
+                    all_text.append(clean)
+
                 # Extract owner name (first plausible wins)
                 if not result["owner_name"]:
-                    clean = re.sub(r'<[^>]+>', ' ', text)
-                    clean = re.sub(r'\s+', ' ', clean)
                     for pattern in OWNER_PATTERNS:
                         match = pattern.search(clean)
                         if match:
@@ -274,22 +315,36 @@ async def _scrape_website(url: str) -> dict:
                             if _is_plausible_name(name):
                                 result["owner_name"] = name
                                 break
-                
+
                 # Early exit only if we have ALL three fields
                 if result["owner_name"] and all_emails and all_phones:
                     break
-                    
+
             except Exception:
                 continue
-        
+
         # Pick best email from all collected
         if all_emails and not result["email"]:
             result["email"] = _prioritize_email(all_emails)
-        
+
         # Pick best phone from all collected
         if all_phones and not result["phone"]:
             result["phone"] = all_phones[0]
-            
+
+        # AI pass (Render-safe UnifiedAIClient) fills what regex missed —
+        # owner names phrased in ways the patterns don't catch.
+        if all_text and not (result["owner_name"] and result["email"]):
+            ai_data = await _ai_extract_owner(" ".join(all_text), host)
+            if not result["owner_name"] and ai_data.get("owner_name"):
+                if _is_plausible_name(ai_data["owner_name"]):
+                    result["owner_name"] = ai_data["owner_name"]
+            if not result["email"] and ai_data.get("email"):
+                result["email"] = ai_data["email"].lower()
+            if not result["phone"] and ai_data.get("phone"):
+                norm = _normalize_phone_to_e164(ai_data["phone"])
+                if norm:
+                    result["phone"] = norm
+
     except Exception as e:
         logger.debug(f"[SCRAPE] Error for {url}: {e}")
     
@@ -641,27 +696,33 @@ async def _google_business_lookup(business_name: str, domain: str = "") -> dict:
 # ENRICHMENT CHAIN - Combines all 6 strategies with prioritization
 # ═══════════════════════════════════════════════════════════════════════════════
 
-EMAIL_PRIORITY = [
-    "info@", "contact@", "hello@", "sales@", "support@",
-    "admin@", "office@", "manager@", "owner@"
+# Generic inbox local-parts, best-to-worst. A PERSONAL address (not in this set)
+# always beats these — we want to reach the owner, not a shared inbox.
+_GENERIC_LOCALPARTS = [
+    "owner", "founder", "ceo", "president", "principal",   # decision-maker inboxes
+    "manager", "office", "admin",
+    "sales", "hello", "contact", "enquiries", "inquiries",
+    "info", "support", "help", "team",
 ]
+_JUNK_LOCALPARTS = {"noreply", "no-reply", "donotreply", "do-not-reply", "mailer-daemon", "postmaster"}
 
 def _prioritize_email(emails: list) -> str:
-    """Prioritize emails by role importance."""
-    if not emails:
+    """Pick the best email: personal address first, then the most useful generic
+    inbox. Junk (noreply etc.) is dropped entirely."""
+    cleaned = [e for e in emails if e and e.split("@", 1)[0].lower() not in _JUNK_LOCALPARTS]
+    if not cleaned:
         return ""
-    if len(emails) == 1:
-        return emails[0]
-    
-    # Sort by priority
-    def email_score(email):
-        for i, prefix in enumerate(EMAIL_PRIORITY):
-            if email.lower().startswith(prefix):
-                return i
-        return len(EMAIL_PRIORITY)
-    
-    sorted_emails = sorted(emails, key=email_score)
-    return sorted_emails[0]
+    if len(cleaned) == 1:
+        return cleaned[0]
+
+    def email_score(email: str) -> int:
+        local = email.split("@", 1)[0].lower()
+        for i, prefix in enumerate(_GENERIC_LOCALPARTS):
+            if local == prefix or local.startswith(prefix + "."):
+                return 1 + i  # generic inbox, ranked by usefulness
+        return 0  # personal-looking address — best
+
+    return sorted(cleaned, key=email_score)[0]
 
 
 async def enrich_lead_4step(url: str, business_name: str = "") -> dict:
