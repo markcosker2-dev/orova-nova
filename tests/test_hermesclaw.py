@@ -233,7 +233,7 @@ class TestWorkerLanes:
 
 class TestLeadScoring:
     def test_good_lead_passes(self):
-        from app.skills.smart_scraper import score_lead_for_orova
+        from app.skills.lead_validator import score_lead_for_orova
         lead = {
             "name": "John Smith",
             "email": "john@luxurytile.com",
@@ -246,7 +246,7 @@ class TestLeadScoring:
 
     def test_minimal_lead_gets_lower_score(self):
         """A lead with minimal info should score lower than a fully qualified lead."""
-        from app.skills.smart_scraper import score_lead_for_orova
+        from app.skills.lead_validator import score_lead_for_orova
         good_lead = {
             "name": "John Smith",
             "email": "john@luxurytile.com",

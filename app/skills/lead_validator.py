@@ -144,3 +144,72 @@ def score_lead(company_name: str, company_size: str = "unknown", industry: str =
         "recommendation": recommendation,
         "company": company_name
     }
+
+
+def score_lead_for_orova(lead: dict) -> dict:
+    """
+    Score a raw lead dict 0-10 for OROVA's luxury/high-ticket targeting.
+    Returns the lead dict augmented with orova_score, score_reasons, filter_decision.
+    """
+    score = 5
+    reasons = []
+
+    # Contact quality
+    email = (lead.get("email") or "").lower()
+    phone = lead.get("phone") or ""
+    name = lead.get("owner_name") or lead.get("name") or ""
+
+    has_personal_email = email and not email.startswith(("info@", "contact@", "support@", "hello@", "admin@"))
+    has_name = len(name.split()) >= 2
+    has_phone = len(phone) >= 10
+
+    if has_personal_email:
+        score += 2
+        reasons.append("personal email")
+    elif email:
+        score += 0.5
+        reasons.append("generic email")
+
+    if has_name:
+        score += 1.5
+        reasons.append("owner name found")
+
+    if has_phone:
+        score += 1
+        reasons.append("phone number")
+
+    # Source quality bonus
+    source = lead.get("source", "")
+    if source == "apollo_browser":
+        score += 1
+        reasons.append("apollo verified")
+
+    # Email verification status (set by enrichment waterfall)
+    email_status = lead.get("email_status", "")
+    if email_status == "verified":
+        score += 1
+        reasons.append("email verified")
+    elif email_status == "guessed":
+        score -= 1
+        reasons.append("email guessed")
+
+    if lead.get("owner_title"):
+        score += 0.5
+        reasons.append("title known")
+
+    score = min(10, max(0, score))
+
+    # Filter decision
+    if score >= 7 and (has_personal_email or has_name):
+        decision = "PASS"
+    elif score >= 5 and email:
+        decision = "PASS"
+    elif score >= 4:
+        decision = "BORDERLINE"
+    else:
+        decision = "REJECT"
+
+    lead["orova_score"] = round(score, 1)
+    lead["score_reasons"] = reasons
+    lead["filter_decision"] = decision
+    return lead

@@ -91,7 +91,6 @@ _skills_proposal = _LazyModule("app.skills.proposal_gen", ["generate_proposal", 
 _skills_perf = _LazyModule("app.skills.perf_dashboard", ["generate_weekly_report", "track_metric"])
 _skills_agent_router = _LazyModule("app.core.agent_router", ["dispatch_task", "get_all_statuses"])
 _skills_notion = _LazyModule("app.skills.notion_crm", ["sync_to_notion_via_make"])
-_skills_smart_scraper = _LazyModule("app.skills.smart_scraper", ["sgai_search_and_extract", "sgai_deep_extract", "enrich_lead_ai"])
 _skills_email_seq = _LazyModule("app.skills.email_sequence_skill", ["create_drip_campaign"])
 _skills_copywriting = _LazyModule("app.skills.copywriting_skill", ["write_cold_email", "write_ad_copy"])
 _skills_analytics = _LazyModule("app.skills.analytics_skill", ["pipeline_report", "conversion_analysis", "roi_calculator"])
@@ -103,33 +102,7 @@ _skills_apollo = _LazyModule("app.skills.apollo_enrichment", ["enrich_lead_apoll
 _skills_timezone = _LazyModule("app.skills.timezone_scheduler", ["is_business_hours", "next_business_hours_slot"])
 _skills_cal_booking = _LazyModule("app.skills.cal_booking", ["handle_cal_booking_webhook", "generate_cal_booking_link"])
 _skills_email_proof = _LazyModule("app.skills.email_proofreader", ["proofread_email"])
-_skills_lead_gen_v2 = _LazyModule("app.skills.lead_gen_v2", ["find_leads_v2"])
-_skills_scrapling = _LazyModule("app.skills.scrapling_scraper", ["stealth_search", "stealth_extract", "bulk_scrape"])
 _skills_forge = _LazyModule("app.skills.skill_forge", ["propose_skill", "activate_skill", "use_forged_skill", "list_forged_skills"])
-
-# Safe imports for elite components (already guarded, keep as-is)
-try:
-    from app.skills.mem0_skill import mega_memory
-    MEGA_CLAW_ONLINE = True
-except Exception as e:
-    logger = logging.getLogger(__name__)
-    logger.warning(f"⚠️ Mega-Claw mem0 component offline: {e}")
-    MEGA_CLAW_ONLINE = False
-    mega_memory = None
-
-try:
-    from app.skills.crawl_skill import elite_scrape
-except Exception as e:
-    logger = logging.getLogger(__name__)
-    logger.warning(f"⚠️ elite_scrape import failed: {e}")
-    elite_scrape = None
-
-try:
-    from app.skills.browser_use_skill import vision_browse
-except Exception as e:
-    logger = logging.getLogger(__name__)
-    logger.warning(f"⚠️ vision_browse import failed: {e}")
-    vision_browse = None
 
 composio_action = None
 
@@ -215,13 +188,8 @@ class TaskPlanner:
         ceo_brain = CEOBrain()
         self.available_functions = {
             # ── Guarded imports (already resolved at module level) ──
-            "elite_scrape": elite_scrape or make_disabled_tool_fallback("elite_scrape", "crawl4ai dependency is not installed"),
-            "vision_browse": vision_browse or make_disabled_tool_fallback("vision_browse", "browser_use dependency is not installed"),
             "composio_action": make_disabled_tool_fallback("composio_action", "Composio integration is not configured"),
             # ── Lazy-loaded skills (imported on first call via _LazyModule proxy) ──
-            "sgai_search_and_extract": _skills_smart_scraper.sgai_search_and_extract,
-            "sgai_deep_extract": _skills_smart_scraper.sgai_deep_extract,
-            "enrich_lead_ai": _skills_smart_scraper.enrich_lead_ai,
             "find_leads": _skills_lead_finder.find_leads,
             "browse_agent": _skills_browser_ops.browse_and_extract,
             "google_search": _skills_browser_ops.google_search_scrape,
@@ -282,10 +250,6 @@ class TaskPlanner:
             "proofread_email": _skills_email_proof.proofread_email,
             "morning_brief": ceo_brain.morning_brief,
             "pipeline_health_check": ceo_brain.pipeline_health_check,
-            "find_leads_v2": _skills_lead_gen_v2.find_leads_v2,
-            "stealth_search": _skills_scrapling.stealth_search,
-            "stealth_extract": _skills_scrapling.stealth_extract,
-            "bulk_scrape": _skills_scrapling.bulk_scrape,
             # ── Skill Forge: dynamic tool acquisition (approval-gated) ──
             "propose_skill": _skills_forge.propose_skill,
             "activate_skill": _skills_forge.activate_skill,
@@ -295,9 +259,9 @@ class TaskPlanner:
         self.firewall = get_semantic_firewall(self.config.get("firewall_config"))
         logger.info("[PLANNER] Semantic Firewall integrated.")
 
-    HUNTING_TOOLS = ["sgai_search_and_extract", "sgai_deep_extract", "find_leads", "find_leads_v2", "google_search", "research_lead", "hunt_hiring_signals", "enrich_lead_ai"]
+    HUNTING_TOOLS = ["find_leads", "google_search", "research_lead", "hunt_hiring_signals"]
     OUTREACH_TOOLS = ["send_outreach", "send_email", "write_cold_email", "create_drip_campaign", "generate_sequence", "check_replies", "reply_to_email", "get_inbox", "trigger_retell_call", "generate_hiring_outreach", "enrich_lead_apollo", "is_business_hours", "composio_action", "proofread_email", "morning_brief", "pipeline_health_check"]
-    LIGHT_RESEARCH_TOOLS = ["deep_research", "browse_agent", "run_seo_audit", "bulk_enrich_leads", "next_business_hours_slot", "generate_cal_booking_link", "elite_scrape", "vision_browse", "stealth_search", "stealth_extract", "bulk_scrape", "propose_skill", "activate_skill", "use_forged_skill", "list_forged_skills"]
+    LIGHT_RESEARCH_TOOLS = ["deep_research", "browse_agent", "run_seo_audit", "bulk_enrich_leads", "next_business_hours_slot", "generate_cal_booking_link", "propose_skill", "activate_skill", "use_forged_skill", "list_forged_skills"]
 
     def _scope_tools_for_agent(self, agent_id: str, goal: str) -> list:
         """Scope tools to a sub-agent's role. Hawk hunts, Quill/Closer do outreach,

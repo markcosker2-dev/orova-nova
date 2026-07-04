@@ -20,8 +20,7 @@ def _make_test_client():
          patch("app.main.DatabaseManager.query", new_callable=AsyncMock) as mock_query, \
          patch("app.main.tg_queue.start", new_callable=AsyncMock) as mock_tg_start, \
          patch("app.main.tg_queue.stop", new_callable=AsyncMock) as mock_tg_stop, \
-         patch("app.main.vault_scheduler_loop", new_callable=AsyncMock) as mock_vault_scheduler, \
-         patch("app.main.cleanup_crawler", new_callable=AsyncMock) as mock_cleanup_crawler:
+         patch("app.main.vault_scheduler_loop", new_callable=AsyncMock) as mock_vault_scheduler:
         mock_restore_sheets.return_value = []
         mock_restore_latest.return_value = {"ok": False}
         mock_agent_initialize.return_value = None
@@ -32,7 +31,6 @@ def _make_test_client():
         mock_tg_start.return_value = None
         mock_tg_stop.return_value = None
         mock_vault_scheduler.return_value = None
-        mock_cleanup_crawler.return_value = None
         # Use starlette TestClient wrapped with httpx streaming
         from starlette.testclient import TestClient
         with TestClient(app) as client:

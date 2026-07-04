@@ -645,7 +645,7 @@ class CEOBrain:
                 elif action == "routine":
                     logger.info(f"[CEO_BRAIN] Executing routine task: {task['description']}")
                     # Default: run enrichment on existing leads
-                    from app.skills.smart_scraper import enrich_lead_ai
+                    from app.skills.light_enrich import enrich_lead_lite
                     # Enrich up to 5 leads
                     from app.core.database import DatabaseManager
                     leads = await DatabaseManager.fetchall(
@@ -653,7 +653,7 @@ class CEOBrain:
                         (client_id,)
                     )
                     for lead in leads:
-                        await enrich_lead_ai(lead)
+                        await enrich_lead_lite(lead)
                 else:
                     logger.info(f"[CEO_BRAIN] Unknown action '{action}', skipping task: {task['description']}")
             except Exception as e:

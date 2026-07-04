@@ -376,11 +376,11 @@ class SelfLearningLoop:
     def _categorize_ngram(self, ngram: Tuple[str, ...]) -> str:
         """Derive a category label from the tool sequence."""
         tools = set(ngram)
-        if tools & {"find_leads", "sgai_search_and_extract", "google_search", "research_lead"}:
+        if tools & {"find_leads", "google_search", "research_lead"}:
             return "lead_generation"
         if tools & {"send_outreach", "send_email", "create_drip_campaign", "generate_sequence"}:
             return "outreach"
-        if tools & {"browse_agent", "elite_scrape", "stealth_extract", "sgai_deep_extract"}:
+        if tools & {"browse_agent", "deep_research"}:
             return "research"
         if tools & {"write_content", "write_cold_email", "write_ad_copy"}:
             return "content"
@@ -398,7 +398,6 @@ class SelfLearningLoop:
             "send_outreach": "Outreach",
             "send_email": "Email",
             "browse_agent": "Browse",
-            "elite_scrape": "Scrape",
             "deep_research": "DeepResearch",
             "write_cold_email": "ColdEmail",
             "create_drip_campaign": "Drip",
