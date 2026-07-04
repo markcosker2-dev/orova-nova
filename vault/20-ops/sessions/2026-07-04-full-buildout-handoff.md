@@ -15,11 +15,14 @@ fresh chat with no context lost. This covers everything we did and discussed.
 
 Nova (the OROVA agent) is live on Render free tier. This session hardened the
 brain, fixed the lead engine, built real sub-agents, added approval gates,
-corrected pricing, and populated the Obsidian vault. **All work is in
-[PR #21](https://github.com/markcosker2-dev/orova-nova/pull/21)** (bundles the
-older #19 + #20). Tests: **112 passing.**
+corrected pricing, and populated the Obsidian vault. **All work is MERGED to
+`main` via [PR #21](https://github.com/markcosker2-dev/orova-nova/pull/21)** on
+2026-07-04 (#19 and #20 auto-resolved into it). Render auto-deploys from main.
+Tests: **112 passing on main.**
 
-**The #1 blocker:** no working LLM key (Groq 401, OpenRouter 401, Google empty).
+**The #1 blocker:** no working LLM key (Groq 401, OpenRouter 401, Google empty) —
+**must be a FREE key** (Groq / Google AI Studio / OpenRouter free tier; no paid
+models). Nothing AI-driven works until one live free key is set on Render.
 Nothing AI-driven works until Mark sets one live key on Render.
 
 ## What OROVA is (business)
@@ -93,8 +96,10 @@ Full detail: [[orova-playbook]] · machine twin the agents obey:
 
 ## Open blockers (owner actions) — see [[roadmap]]
 
-Set one LLM key on Render · merge PR #21 · sending domain + SPF/DKIM · Meta app
-creds · Higgsfield + Stripe/Wise + one-page site · `DASHBOARD_API_KEY` in `.env`.
+~~merge PR #21~~ ✅ done 2026-07-04. Remaining: **set one FREE LLM key on Render**
+(Groq is easiest: console.groq.com → API Keys → set `GROQ_API_KEY`) · sending
+domain + SPF/DKIM · Meta app creds · Higgsfield + Stripe/Wise + one-page site ·
+`DASHBOARD_API_KEY` in `.env`.
 
 ## How to resume in a new chat
 

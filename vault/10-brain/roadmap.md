@@ -14,11 +14,13 @@ and [[active-context]] for current state.
 
 ## 🔴 Mark (owner-only — these unblock everything)
 
-1. **Set ONE live LLM key on Render** — the #1 blocker. All three are dead (Groq
-   401, OpenRouter 401, Google empty). Cheapest: fresh free key from
-   openrouter.ai/keys → Render env `OPENROUTER_API_KEY`. *Nothing AI works until
-   this is done.*
-2. **Merge [PR #21]** (bundles model IDs + vault brain + WP1–WP4). Close #19/#20.
+1. **Set ONE FREE LLM key on Render** — the #1 blocker. All three are dead (Groq
+   401, OpenRouter 401, Google empty). Use a **free tier** — easiest is Groq:
+   console.groq.com → API Keys → set Render env `GROQ_API_KEY` (free, no card,
+   supports tool-calling). Or Google AI Studio (`GOOGLE_API_KEY`) / OpenRouter
+   free models (`OPENROUTER_API_KEY`). *Nothing AI works until this is done.*
+2. ~~Merge PR #21~~ ✅ **done 2026-07-04** — merged to main, #19/#20 resolved,
+   Render auto-deploys from main.
 3. **`DASHBOARD_API_KEY`** in local `.env` (for vault sync).
 4. **Sending domain + SPF/DKIM** (e.g. getorova.com) — biggest deliverability lever.
 5. **Meta app creds** (`META_ACCESS_TOKEN/APP_ID/APP_SECRET`) — to run client ads.
