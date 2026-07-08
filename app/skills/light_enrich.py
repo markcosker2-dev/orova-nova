@@ -246,7 +246,7 @@ async def _fetch_page(url: str) -> Optional[Dict[str, str]]:
                 "Connection": "keep-alive",
                 "Upgrade-Insecure-Requests": "1",
             }
-            resp = await _client.get(url, headers=headers)
+            resp = await _client.get(url, headers=headers, timeout=12.0)
 
             if resp.status_code not in (200, 203):
                 logger.debug(f"[FETCH] HTTP {resp.status_code} for {url}")
@@ -1008,7 +1008,7 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
                 reverse=True
             )
             
-            # Add discovered pages to crawl list
+            # Add discovered pages to crawl list (top-priority team/about pages).
             pages_to_crawl.extend(prioritized_paths[:4])
             logger.info(f"[CRAWLER] Discovered B2B pages to crawl: {pages_to_crawl}")
         else:
@@ -1027,6 +1027,7 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
         crawl_tasks = [_fetch_page_guarded(u) for u in pages_to_crawl]
         pages_results = await asyncio.gather(*crawl_tasks, return_exceptions=True)
 
+        _ai_text_parts: list = []  # accumulate page text for ONE AI pass after the loop
         for page_url, page_data in zip(pages_to_crawl, pages_results):
             if isinstance(page_data, Exception) or not page_data:
                 continue
@@ -1089,27 +1090,33 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
                     lead["owner"] = owner
                     logger.info(f"[ENRICH] → Owner from {page_url}: {lead['owner']}")
 
-            # ─── STEP 2.5: Hawk AI LLM Extraction ─────────────────────
-            if not lead.get("owner") or not lead.get("email") or not lead.get("phone"):
-                logger.info(f"[ENRICH] Step 2.5: Running Hawk AI LLM extraction on {page_url}...")
-                ai_contacts = await _ai_extract_contacts(content_for_extraction, biz_name)
-                
-                if ai_contacts.get("owner") and not lead.get("owner") and _is_plausible_name(ai_contacts["owner"]):
-                    lead["owner"] = ai_contacts["owner"]
-                    logger.info(f"[HAWK AI] → Owner extracted: {lead['owner']}")
-                
-                if ai_contacts.get("email") and not lead.get("email"):
-                    lead["email"] = ai_contacts["email"]
-                    logger.info(f"[HAWK AI] → Email extracted: {_mask_email(lead['email'])}")
-                
-                if ai_contacts.get("phone") and not lead.get("phone"):
-                    normalized = _normalize_phone_to_e164(ai_contacts["phone"])
-                    if normalized:
-                        lead["phone"] = normalized
-                        logger.info(f"[HAWK AI] → Phone extracted: {_mask_phone(lead['phone'])}")
+            # Accumulate this page's text for ONE AI extraction pass after the
+            # loop. The old code ran a Groq call per crawled page HERE — 5-11
+            # sequential calls — which blew the 25s enrich ceiling and returned
+            # nothing. One call over the combined text is faster and gives the
+            # model more context.
+            if content_for_extraction:
+                _ai_text_parts.append(content_for_extraction[:6000])
 
             if lead.get("email") and lead.get("phone") and lead.get("owner"):
                 break
+
+        # ─── Single AI extraction pass over all crawled text (one Groq call) ──
+        if (not lead.get("owner") or not lead.get("email")) and _ai_text_parts:
+            combined = "\n\n".join(_ai_text_parts)[:12000]
+            logger.info(f"[ENRICH] Hawk AI: one extraction pass over {len(_ai_text_parts)} page(s)...")
+            ai_contacts = await _ai_extract_contacts(combined, biz_name)
+            if ai_contacts.get("owner") and not lead.get("owner") and _is_plausible_name(ai_contacts["owner"]):
+                lead["owner"] = ai_contacts["owner"]
+                logger.info(f"[HAWK AI] → Owner: {lead['owner']}")
+            if ai_contacts.get("email") and not lead.get("email"):
+                lead["email"] = ai_contacts["email"]
+                lead["email_status"] = lead.get("email_status") or "found"
+                logger.info(f"[HAWK AI] → Email: {_mask_email(lead['email'])}")
+            if ai_contacts.get("phone") and not lead.get("phone"):
+                _norm = _normalize_phone_to_e164(ai_contacts["phone"])
+                if _norm:
+                    lead["phone"] = _norm
     else:
         logger.info("[ENRICH] Step 2: No real website found. Skipping website crawl.")
 
