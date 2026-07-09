@@ -145,6 +145,18 @@ async def _get_worksheet(tab_name: str, workbook_name: Optional[str] = None):
     except WorksheetNotFound:
         raise RuntimeError(f"Worksheet '{tab_name}' not found")
 
+def _int_or_none(value) -> Optional[int]:
+    """Coerce a sheet cell to int, tolerating prefixed IDs ('lead_12345'),
+    floats-as-text, blanks, and None. Non-numeric -> None (the DB assigns
+    a fresh id on insert)."""
+    if value in (None, ""):
+        return None
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
 async def restore_leads_from_sheets() -> List[Dict[str, Any]]:
     try:
         worksheet = await _get_worksheet("Leads")
@@ -163,19 +175,26 @@ async def restore_leads_from_sheets() -> List[Dict[str, Any]]:
         for row in records:
             if not row.get("Business") and not row.get("Email") and not row.get("URL"):
                 continue
-            leads.append({
-                "id": int(row.get("ID")) if row.get("ID") else None,
-                "business": row.get("Business"),
-                "owner": row.get("Owner"),
-                "email": row.get("Email"),
-                "phone": row.get("Phone"),
-                "url": row.get("URL"),
-                "status": row.get("Status") or "New",
-                "score": int(row.get("Score")) if row.get("Score") not in (None, "") else None,
-                "source": row.get("Source"),
-                "date": row.get("Date"),
-                "client_id": int(row.get("ClientID")) if row.get("ClientID") not in (None, "") else 0,
-            })
+            # Per-row guard: one malformed row (live-observed 2026-07-10: an
+            # ID cell holding "lead_12345") must not abort the whole restore —
+            # this is the LAST line of defense after a deploy wipes Render's
+            # ephemeral disk, so a wholesale [] here means total lead loss.
+            try:
+                leads.append({
+                    "id": _int_or_none(row.get("ID")),
+                    "business": row.get("Business"),
+                    "owner": row.get("Owner"),
+                    "email": row.get("Email"),
+                    "phone": row.get("Phone"),
+                    "url": row.get("URL"),
+                    "status": row.get("Status") or "New",
+                    "score": _int_or_none(row.get("Score")),
+                    "source": row.get("Source"),
+                    "date": row.get("Date"),
+                    "client_id": _int_or_none(row.get("ClientID")) or 0,
+                })
+            except Exception as row_exc:
+                logger.warning(f"[SheetsSync] Skipping malformed lead row: {row_exc}")
         return leads
     except Exception as exc:
         logger.warning(f"[SheetsSync] Could not restore leads from sheets: {exc}")
