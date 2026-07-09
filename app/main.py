@@ -71,17 +71,29 @@ def _get_background_loop():
 
 
 def _schedule_background(coro):
+    """Schedule a fire-and-forget coroutine on the background loop.
+
+    Callers hand in an already-created coroutine, so every path that can't
+    schedule it must close() it — otherwise it leaks with a "never awaited"
+    RuntimeWarning and the write silently vanishes. loop.create_task is only
+    legal from the loop's own thread; _append_log fires from logging handlers
+    on worker threads, so cross-thread callers must go through
+    run_coroutine_threadsafe.
+    """
     loop = _get_background_loop()
-    if loop is None:
+    if loop is None or not loop.is_running():
+        coro.close()
         return None
     try:
-        if loop.is_running():
-            return loop.create_task(coro)
-    except Exception:
-        pass
+        running = asyncio.get_running_loop()
+    except RuntimeError:
+        running = None
     try:
+        if running is loop:
+            return loop.create_task(coro)
         return asyncio.run_coroutine_threadsafe(coro, loop)
     except Exception:
+        coro.close()
         return None
 
 

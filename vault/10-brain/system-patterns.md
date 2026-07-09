@@ -20,7 +20,7 @@ status: active
 6. High-risk actions go through a **Telegram HITL approval** (approve/reject
    `APPROVAL-XXXX`, DB-persisted, single-use, 24h TTL).
 
-## 9 worker lanes (APScheduler cron)
+## 9 worker lanes (`schedule` lib in a daemon thread; APScheduler only runs the vault backup interval)
 
 | # | Lane | Cadence | Does |
 |---|---|---|---|
@@ -30,7 +30,7 @@ status: active
 | 4 | Cold Escalation | ~30 min | Trigger Retell.ai cold calls on cold leads |
 | 5 | Cloud Backup | ~3–6 hr | Back up SQLite to Google Drive |
 | 6 | CEO Brief | daily | Operator-voice executive briefing |
-| 7 | Health Monitor | ~2 hr | Pipeline health score + alerts |
+| 7 | Health Monitor | ~2 hr | Pipeline health score + alerts (incl. SerpAPI quota at ≥90%) |
 | 8 | Self-Improvement | ~6 hr | Wilson-ranked strategy optimization ([[claude-brain]]) |
 | 9 | Drip Sequence | ~1 hr | Send pending sequence emails |
 

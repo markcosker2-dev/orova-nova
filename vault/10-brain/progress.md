@@ -19,17 +19,25 @@ status: active
 - [x] Retell cold-call agent (webhook → prod, gpt-4.1-mini, booking → Calendar)
 - [x] Mission Control dashboard — structural redesign + all buttons wired
 - [x] Auth chain fixed (session tokens validated; "failed to queue" resolved)
-- [x] Drive backup + Drive-first restore (survives Render ephemeral disk)
+- [x] Drive backup + Drive-first restore **code** (⚠️ creds NOT set on Render —
+      deploys wipe prod SQLite until Mark adds them; see [[active-context]])
 - [x] Vault knowledge layer (ADR-0001) + business model captured
 - [x] LLM model upgrade — live free models, dead fallbacks removed (PR #19)
+- [x] Valid `GROQ_API_KEY` local + Render (2026-07-05); live `/api/chat` verified (07-10)
+- [x] SerpAPI-Maps discovery + registry-first owner-name engine (ADR-0003)
+- [x] Enrichment extraction fix — one AI pass, fits the 25s ceiling (PR #29)
+- [x] Owner-email finder layer — Tomba/Prospeo/Verifalia, env-gated (PR #32)
+- [x] Sheets lead-restore row-tolerance (PR #34) + SerpAPI quota health alert
 
 ## Remaining / next
 
 - [ ] **Land the first client** — the only thing that unblocks paid tooling
-- [ ] Vault auto-sync running on a schedule (bridge wired; needs `DASHBOARD_API_KEY`)
-- [ ] Verify `GROQ_API_KEY` on Render is fresh (local one is dead)
+- [ ] **Owner: Google Drive creds on Render** — stops the deploy data loss (top action)
+- [ ] **Owner: finder keys** (Tomba/Prospeo/Verifalia via the AgentMail address)
+- [ ] Owner: remove invalid `OPENROUTER_API_KEY` on Render; set booking link
+- [ ] Apply reviewed `business_context.json` diff ([[profitability-plan]] §6)
 - [ ] Deliverability check (mail-tester) on first real send
-- [ ] Confirm vault restore in Render boot log
+- [ ] Mission-control visual pass (needs owner's specifics)
 - [ ] Higgsfield creative samples for the chosen niche (owner)
 
 ## Linked
