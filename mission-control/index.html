@@ -8,9 +8,17 @@
     <meta name="description"
         content="OROVA AI Agency Mission Control Dashboard — Task Board, Content Pipeline, Calendar, Memory Bank, Analytics, Team Structure, Digital Office">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
-        rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="css/styles.css">
+    <!-- Non-render-blocking font load: page paints immediately with the system
+         fallback, then swaps to Inter when it arrives (no white flash / hang). -->
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
+        media="print" onload="this.media='all'">
+    <noscript>
+        <link rel="stylesheet"
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap">
+    </noscript>
 </head>
 
 <body>
