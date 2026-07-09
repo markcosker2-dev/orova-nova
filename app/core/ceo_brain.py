@@ -283,6 +283,15 @@ class CEOBrain:
         except Exception as e:
             logger.error(f"[CEO_BRAIN] Error compiling stats: {e}")
 
+        # 2.5 Funnel math — week-over-week conversion against the researched
+        # benchmarks (vault/10-brain/profitability-plan.md §2.3). Conversion,
+        # not activity, is the scoreboard for landing client #1.
+        funnel_text = ""
+        try:
+            funnel_text = self._format_funnel_section(await self.funnel_snapshot(client_id))
+        except Exception as e:
+            logger.debug(f"[CEO_BRAIN] Funnel snapshot skipped: {e}")
+
         # 3. Check for HOT Replies
         hot_replies_text = "None"
         try:
@@ -345,6 +354,10 @@ class CEOBrain:
         - Yesterday sends: {yesterday_sends} (7-Day Avg: {avg_7day_sends:.1f})
         - Yesterday replies: {yesterday_replies} (7-Day Avg: {avg_7day_replies:.1f})
 
+        FUNNEL CONVERSION (last 7 days vs prior 7, with benchmark targets —
+        judge the pipeline on THESE rates, not raw activity counts):
+        {funnel_text or "No funnel data yet."}
+
         HOT REPLIES NEEDING ATTENTION:
         {hot_replies_text}
 
@@ -362,10 +375,14 @@ class CEOBrain:
         except Exception as e:
             summary = f"Good morning! Here is your quick pipeline update. Total leads: {metrics.get('leads_found')}, sent: {metrics.get('emails_sent')}."
 
-        # 6. Format Final Telegram Report
+        # 6. Format Final Telegram Report — the funnel block is appended
+        # deterministically (not left to the AI summary) so the numbers are
+        # always present and always accurate even when the LLM paraphrases.
+        funnel_block = f"📊 **Funnel — last 7d (vs prior 7d)**\n{funnel_text}\n\n" if funnel_text else ""
         report = (
             f"☀️ **Nova CEO Daily Briefing**\n\n"
             f"{summary.strip()}\n\n"
+            f"{funnel_block}"
             f"⚡ **Proposed Daily Tasks:**\n"
         )
         for task in proposed_tasks:
@@ -413,6 +430,90 @@ class CEOBrain:
             logger.info(f"[CEO_BRAIN] Brief persisted to memories.json ({brief_id})")
         except Exception as e:
             logger.warning(f"[CEO_BRAIN] Brief persistence failed (non-fatal): {e}")
+
+    # Cold-outreach benchmark bands (July-2026 research; derivation and
+    # sources: vault/10-brain/profitability-plan.md §2.3). Bands, not points —
+    # the brief compares actuals against these so Mark reads conversion
+    # health at a glance instead of raw activity counts.
+    FUNNEL_BENCHMARKS = {
+        "reply_rate": (0.05, 0.08),        # replies / emails sent
+        "email_to_meeting": (0.01, 0.02),  # meetings / emails sent
+    }
+
+    async def funnel_snapshot(self, client_id: int = 0) -> dict:
+        """Funnel counts for two adjacent 7-day windows.
+
+        Sources match the vocabulary the pipeline already writes:
+        outreach_outcomes actions 'email_sent'/'email_reply'/'call', the
+        leads table for discovery volume, and leads.status for meetings
+        (updated_at approximates booking time — leads rarely change state
+        after booking, and outcomes carry no dedicated booking action yet).
+        Returns {"this": {...}, "prior": {...}}; zeros on any query failure.
+        """
+        empty = {"leads_found": 0, "emails_sent": 0, "replies": 0, "calls": 0, "meetings": 0}
+        snapshot = {"this": dict(empty), "prior": dict(empty)}
+        windows = {"this": ("-7 days", "+0 seconds"), "prior": ("-14 days", "-7 days")}
+
+        async def _count(sql: str, params: tuple) -> int:
+            row = await DatabaseManager.fetchone(sql, params)
+            return int(row["cnt"]) if row and row["cnt"] is not None else 0
+
+        for name, (start, end) in windows.items():
+            try:
+                snapshot[name]["leads_found"] = await _count(
+                    """SELECT COUNT(*) as cnt FROM leads WHERE client_id = ?
+                       AND datetime(created_at) >= datetime('now', ?)
+                       AND datetime(created_at) < datetime('now', ?)""",
+                    (client_id, start, end))
+                for field, action in (("emails_sent", "email_sent"),
+                                      ("replies", "email_reply"),
+                                      ("calls", "call")):
+                    snapshot[name][field] = await _count(
+                        """SELECT COUNT(*) as cnt FROM outreach_outcomes
+                           WHERE action = ? AND client_id = ?
+                           AND datetime(created_at) >= datetime('now', ?)
+                           AND datetime(created_at) < datetime('now', ?)""",
+                        (action, client_id, start, end))
+                snapshot[name]["meetings"] = await _count(
+                    """SELECT COUNT(*) as cnt FROM leads
+                       WHERE client_id = ? AND status = 'Meeting Booked'
+                       AND datetime(updated_at) >= datetime('now', ?)
+                       AND datetime(updated_at) < datetime('now', ?)""",
+                    (client_id, start, end))
+            except Exception as e:
+                logger.debug(f"[CEO_BRAIN] funnel window '{name}' failed: {e}")
+        return snapshot
+
+    @classmethod
+    def _format_funnel_section(cls, snapshot: dict) -> str:
+        """Render the funnel block. Pure formatting — no I/O, unit-testable."""
+        this, prior = snapshot.get("this", {}), snapshot.get("prior", {})
+
+        def _wow(field: str) -> str:
+            cur, prev = this.get(field, 0), prior.get(field, 0)
+            arrow = "↑" if cur > prev else ("↓" if cur < prev else "→")
+            return f"{cur} ({arrow} prev {prev})"
+
+        def _rate_line(numer: int, denom: int, band: tuple) -> str:
+            lo, hi = band
+            target = f"target {lo:.0%}–{hi:.0%}"
+            if not denom:
+                return f"n/a — no sends yet ({target})"
+            rate = numer / denom
+            verdict = "on target" if lo <= rate <= hi else ("above" if rate > hi else "below")
+            return f"{rate:.1%} ({target}: {verdict})"
+
+        emails = this.get("emails_sent", 0)
+        lines = [
+            f"• Leads found: {_wow('leads_found')}",
+            f"• Emails sent: {_wow('emails_sent')}",
+            f"• Replies: {_wow('replies')} — reply rate "
+            + _rate_line(this.get("replies", 0), emails, cls.FUNNEL_BENCHMARKS["reply_rate"]),
+            f"• Calls made: {_wow('calls')}",
+            f"• Meetings booked: {_wow('meetings')} — per email "
+            + _rate_line(this.get("meetings", 0), emails, cls.FUNNEL_BENCHMARKS["email_to_meeting"]),
+        ]
+        return "\n".join(lines)
 
     SERP_QUOTA_WARN_RATIO = 0.9
 

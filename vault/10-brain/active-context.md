@@ -67,7 +67,9 @@ check `/api/logs` for the restore line after each deploy.
    §6 (ICP narrowing, funnel benchmarks, calling policy) — **owner review
    first**.
 2. Mission-control visual pass (needs Mark's specifics on what looks wrong).
-3. Funnel-math section in the CEO brief (profitability-plan §5, Lane 6).
+3. ~~Funnel-math section in the CEO brief~~ ✅ shipped 2026-07-10 — the daily
+   brief now shows 7d-vs-prior-7d conversion against the §2.3 benchmark bands
+   (deterministic block + fed to the AI summary).
 4. ~~ADR-0004 Phase 1~~ ✅ shipped 2026-07-10 (vault context injection,
    skill-outcome tracking, improvement changelog, `/api/skill_health`).
    Phase 2 (SkillChallengerEvaluator) is next when outcome volume exists.
