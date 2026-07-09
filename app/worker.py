@@ -84,6 +84,33 @@ MAX_CALLS_PER_DAY = int(os.getenv("MAX_CALLS_PER_DAY", "5"))           # Safety 
 COLD_LEAD_DAYS_THRESHOLD = int(os.getenv("COLD_LEAD_DAYS_THRESHOLD", "5"))    # Days before escalating to phone call
 MAX_DAILY_COST = 5.0            # $5.00 daily safety cap
 
+# Default hunt rotation — mirrors business_context.json's primary_verticals
+# (profitability-plan §2.1/§5.2, owner-approved 2026-07-10). Exotic auto is
+# split into sub-niches so the champion/challenger loop can learn WHICH
+# sub-vertical converts, not just the top-level niche. Private jet / yacht
+# charter removed from the rotation: decision-makers there are family
+# offices/brokerages, not owners reachable by cold email — still huntable
+# via an explicit TARGET_NICHE override.
+DEFAULT_HUNT_NICHES = [
+    # Exotic / luxury automotive (sub-niches)
+    'exotic car dealer california',
+    'luxury car dealership california',
+    'exotic car rental california',
+    'high end car restoration california',
+    'ceramic coating auto detailing california',
+    'paint protection film installer california',
+    'luxury car wrap shop california',
+    # Custom homes / high-end remodeling
+    'custom home builder california',
+    'luxury home remodeling california',
+    'high end kitchen remodeler california',
+    # Luxury real estate (individual top producers) & high-ticket services
+    'luxury real estate agent california',
+    'luxury interior designer california',
+    'high end landscape design california',
+    'luxury med spa california',
+]
+
 # Security: Wallet Drain Safeguard
 daily_hunt_counter = 0
 daily_call_counter = 0
@@ -275,26 +302,7 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
         location = location or os.getenv("TARGET_LOCATION") or None
 
     if not niche:
-        niches = [
-            # Exotic / luxury automotive
-            'exotic car dealer california',
-            'luxury car dealership california',
-            'exotic car rental california',
-            'high end car restoration california',
-            # Custom homes / high-end remodeling
-            'custom home builder california',
-            'luxury home remodeling california',
-            'high end kitchen remodeler california',
-            # Private aviation & yachting
-            'private jet charter california',
-            'yacht charter california',
-            # Luxury real estate & high-ticket services
-            'luxury real estate agent california',
-            'luxury interior designer california',
-            'high end landscape design california',
-            'luxury med spa california',
-        ]
-        query = random.choice(niches)
+        query = random.choice(DEFAULT_HUNT_NICHES)
     else:
         query = f"{niche} {location if location else ''}".strip()
 

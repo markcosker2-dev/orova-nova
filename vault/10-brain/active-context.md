@@ -63,9 +63,11 @@ check `/api/logs` for the restore line after each deploy.
 
 ## Next code work (priority order — see [[roadmap]])
 
-1. Apply the reviewed `business_context.json` diff from [[profitability-plan]]
-   §6 (ICP narrowing, funnel benchmarks, calling policy) — **owner review
-   first**.
+1. ~~Apply the `business_context.json` §6 diff~~ ✅ owner-approved & shipped
+   2026-07-10 — ICP narrowed (aviation/yacht → opportunistic-only), funnel
+   benchmarks embedded, margin corrected to 90%+ (75-80% floor retained),
+   P1-first outreach framing, net-new calling-policy compliance section, and
+   the hunt rotation updated to match (jet/yacht out, auto sub-niches in).
 2. Mission-control visual pass (needs Mark's specifics on what looks wrong).
 3. ~~Funnel-math section in the CEO brief~~ ✅ shipped 2026-07-10 — the daily
    brief now shows 7d-vs-prior-7d conversion against the §2.3 benchmark bands

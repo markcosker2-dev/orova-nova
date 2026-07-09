@@ -110,8 +110,10 @@ call and creative volume. **Ad spend is not a cost — the client pays Meta.**
 
 ### Margin target
 
-**75–80% profit** after the above expenses. Pricing is set to protect this at
-every tier (see the proposed pricing correction in §1).
+**90%+ realistic operating margin** at current vendor pricing (bottom-up cost
+model: [[profitability-plan]] §3, owner-approved 2026-07-10); **75–80% retained
+as the conservative worst-case floor** for external/investor conversations.
+Pricing protects this at every tier.
 
 ### Refund policy
 
