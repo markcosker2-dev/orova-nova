@@ -202,6 +202,35 @@ class _DBBase:
                 client_id INTEGER DEFAULT 0,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+            CREATE TABLE IF NOT EXISTS skill_versions (
+                id TEXT PRIMARY KEY,
+                skill_name TEXT NOT NULL,
+                version_label TEXT NOT NULL,
+                code_hash TEXT,
+                source TEXT NOT NULL DEFAULT 'builtin',
+                active INTEGER NOT NULL DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS skill_outcomes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                skill_name TEXT NOT NULL,
+                version_id TEXT NOT NULL,
+                outcome TEXT NOT NULL,
+                latency_ms REAL,
+                client_id INTEGER DEFAULT 0,
+                metadata TEXT DEFAULT '{}',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_skill_outcomes_name ON skill_outcomes(skill_name, version_id);
+            CREATE TABLE IF NOT EXISTS improvement_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                subject_type TEXT NOT NULL,
+                subject_name TEXT NOT NULL,
+                action TEXT NOT NULL,
+                rationale TEXT,
+                client_id INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
             CREATE TABLE IF NOT EXISTS drip_campaigns (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 lead_id INTEGER UNIQUE,

@@ -110,6 +110,47 @@ async def api_learned_strategies(client_id: int = 0):
     return {"status": "ok", "strategies": [dict(r) for r in rows] if rows else []}
 
 
+@router.get("/skill_health")
+async def api_skill_health(limit: int = 200):
+    """Per-skill outcome rollups (ADR-0004 A2.1) — one row per
+    (skill_name, version_id): sample size, win rate, Wilson bound, average
+    latency, last use. Consumed by vault_pull.py -> vault/10-brain/skill-health.md."""
+    from app.core.self_improvement import wilson_lower_bound
+    rows = await DatabaseManager.fetchall(
+        """SELECT skill_name, version_id,
+                  COUNT(*) AS n,
+                  SUM(CASE WHEN outcome = 'success' THEN 1 ELSE 0 END) AS wins,
+                  AVG(latency_ms) AS avg_latency_ms,
+                  MAX(created_at) AS last_used
+           FROM skill_outcomes
+           GROUP BY skill_name, version_id
+           ORDER BY n DESC
+           LIMIT ?""",
+        (limit,)
+    )
+    skills = []
+    for r in (rows or []):
+        row = dict(r)
+        n, wins = row["n"] or 0, row["wins"] or 0
+        row["win_rate"] = round(wins / n, 4) if n else 0.0
+        row["wilson"] = round(wilson_lower_bound(wins, n), 4)
+        skills.append(row)
+    return {"status": "ok", "skills": skills}
+
+
+@router.get("/improvement_log")
+async def api_improvement_log(since_id: int = 0, limit: int = 500):
+    """Rows from improvement_log after since_id (ADR-0004 A2.2) — the
+    promote/retire changelog vault_pull.py appends to
+    vault/20-ops/improvement-log.md, idempotently by id."""
+    rows = await DatabaseManager.fetchall(
+        """SELECT id, subject_type, subject_name, action, rationale, client_id, created_at
+           FROM improvement_log WHERE id > ? ORDER BY id ASC LIMIT ?""",
+        (since_id, limit)
+    )
+    return {"status": "ok", "entries": [dict(r) for r in rows] if rows else []}
+
+
 @router.post("/worker/trigger/lane/{lane}")
 async def api_trigger_lane(lane: int, client_id: int = 0):
     """Manually trigger a specific worker lane for testing."""

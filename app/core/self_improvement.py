@@ -33,6 +33,54 @@ def wilson_lower_bound(successes: int, n: int, z: float = 1.96) -> float:
     return max(0.0, (centre - margin) / denom)
 
 
+async def log_improvement(subject_type: str, subject_name: str, action: str,
+                          rationale: str = "", client_id: int = 0) -> None:
+    """Append one row to improvement_log — the Reflexion-style 'what changed
+    and why' trace (ADR-0004 A2.2). vault_pull.py syncs it into
+    vault/20-ops/improvement-log.md so agents and Mark can read back why a
+    strategy/skill was promoted or retired before touching it again.
+    Fail-open: bookkeeping must never break the loop that calls it."""
+    try:
+        await DatabaseManager.query(
+            """INSERT INTO improvement_log (subject_type, subject_name, action, rationale, client_id)
+               VALUES (?, ?, ?, ?, ?)""",
+            (subject_type, subject_name, action, rationale, client_id),
+        )
+    except Exception as e:
+        logger.debug(f"[IMPROVEMENT_LOG] insert skipped: {e}")
+
+
+class SkillOutcomeTracker:
+    """Per-skill outcome recording (ADR-0004 B1/B2.1) — the skill-code
+    counterpart of OutcomeTracker's strategy-string records. Instrumented
+    once, in planner.py's tool-execution loop, so no skill file needs its
+    own call site. Rows feed /api/skill_health and (Phase 2) the
+    SkillChallengerEvaluator's Wilson ranking."""
+
+    @classmethod
+    async def record(cls, skill_name: str, outcome: str, latency_ms: float = None,
+                     client_id: int = 0, version_id: str = None, metadata: dict = None):
+        """outcome: 'success' | 'degraded' | 'error' | 'timeout'. Never raises."""
+        try:
+            vid = version_id or f"{skill_name}.builtin"
+            if version_id is None:
+                # Lazily register the builtin champion version so rollups can
+                # always join skill_outcomes -> skill_versions.
+                await DatabaseManager.query(
+                    """INSERT OR IGNORE INTO skill_versions (id, skill_name, version_label, source)
+                       VALUES (?, ?, 'champion', 'builtin')""",
+                    (vid, skill_name),
+                )
+            await DatabaseManager.query(
+                """INSERT INTO skill_outcomes (skill_name, version_id, outcome, latency_ms, client_id, metadata)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (skill_name, vid, outcome, latency_ms,
+                 client_id, json.dumps(metadata) if metadata else "{}"),
+            )
+        except Exception as e:
+            logger.debug(f"[SKILL_OUTCOMES] record skipped for {skill_name}: {e}")
+
+
 class OutcomeTracker:
     @classmethod
     async def record_outcome(cls, action: str, strategy: str, result: str, recipient: str = "", lead_id: int = 0, quality_score: float = 100.0, client_id: int = 0, metadata: dict = None):
@@ -421,6 +469,14 @@ class ImprovementLoop:
                     )
                     retired.append(row["strategy_value"])
                     logger.info(f"[IMPROVEMENT_LOOP] Retired underperforming {strategy_type} '{row['strategy_value']}' (wilson {wilson:.3f} vs champion {champion_wilson:.3f}, n={sample})")
+                    # Deterministic rationale (not an extra LLM call): the
+                    # numbers ARE the reason, and this must work LLM-dead.
+                    await log_improvement(
+                        "strategy", f"{strategy_type}:{row['strategy_value']}", "retired",
+                        f"Wilson {wilson:.3f} vs champion {champion_wilson:.3f} at n={sample} "
+                        f"(< half the champion with sufficient sample).",
+                        client_id,
+                    )
         except Exception as e:
             logger.error(f"[IMPROVEMENT_LOOP] evaluate_challengers failed: {e}")
         return retired
