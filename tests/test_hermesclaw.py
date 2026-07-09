@@ -138,6 +138,71 @@ class TestCEOBrain:
         assert "get_status" in src or "is_fresh" in src, "morning_brief should check for fresh start"
 
 
+# ── Funnel math in the CEO brief ──────────────────────────────────
+# Week-over-week conversion vs the profitability-plan §2.3 benchmark bands —
+# the brief must judge the pipeline on rates, not raw activity counts.
+
+class TestFunnelSection:
+    def _snapshot(self, this=None, prior=None):
+        empty = {"leads_found": 0, "emails_sent": 0, "replies": 0, "calls": 0, "meetings": 0}
+        return {"this": {**empty, **(this or {})}, "prior": {**empty, **(prior or {})}}
+
+    def test_format_shows_week_over_week_and_rates(self):
+        from app.core.ceo_brain import CEOBrain
+        snap = self._snapshot(
+            this={"leads_found": 12, "emails_sent": 100, "replies": 6, "calls": 3, "meetings": 1},
+            prior={"leads_found": 8, "emails_sent": 90, "replies": 2, "calls": 5, "meetings": 0},
+        )
+        text = CEOBrain._format_funnel_section(snap)
+        assert "Leads found: 12 (↑ prev 8)" in text
+        assert "Calls made: 3 (↓ prev 5)" in text
+        assert "6.0% (target 5%–8%: on target)" in text      # reply rate in band
+        assert "1.0% (target 1%–2%: on target)" in text      # email->meeting in band
+
+    def test_below_target_rate_is_called_out(self):
+        from app.core.ceo_brain import CEOBrain
+        snap = self._snapshot(this={"emails_sent": 100, "replies": 1})
+        text = CEOBrain._format_funnel_section(snap)
+        assert "1.0% (target 5%–8%: below)" in text
+
+    def test_zero_sends_renders_na_not_division_error(self):
+        from app.core.ceo_brain import CEOBrain
+        text = CEOBrain._format_funnel_section(self._snapshot())
+        assert "n/a — no sends yet" in text
+
+    def test_funnel_snapshot_counts_both_windows(self):
+        from app.core.ceo_brain import CEOBrain
+
+        async def fake_fetchone(sql, params=None):
+            return {"cnt": 7}
+
+        with patch("app.core.ceo_brain.DatabaseManager.fetchone", side_effect=fake_fetchone):
+            snap = asyncio.run(CEOBrain().funnel_snapshot())
+        for window in ("this", "prior"):
+            assert snap[window] == {"leads_found": 7, "emails_sent": 7,
+                                    "replies": 7, "calls": 7, "meetings": 7}
+
+    def test_funnel_snapshot_zeros_on_db_failure(self):
+        from app.core.ceo_brain import CEOBrain
+        with patch("app.core.ceo_brain.DatabaseManager.fetchone",
+                   AsyncMock(side_effect=RuntimeError("db down"))):
+            snap = asyncio.run(CEOBrain().funnel_snapshot())
+        assert snap["this"]["emails_sent"] == 0
+        assert snap["prior"]["leads_found"] == 0
+
+    def test_morning_brief_wires_funnel_section(self):
+        """The brief must fetch the snapshot and place the block in both the
+        AI prompt and the deterministic report (source-level, matching the
+        suite's pattern for the heavyweight brief path)."""
+        import inspect as _ins
+        from app.core.ceo_brain import CEOBrain
+        src = _ins.getsource(CEOBrain.morning_brief)
+        assert "funnel_snapshot" in src
+        assert "_format_funnel_section" in src
+        assert "FUNNEL CONVERSION" in src   # prompt injection
+        assert "funnel_block" in src        # deterministic report section
+
+
 # ── SerpAPI quota alert (health lane) ─────────────────────────────
 # The shared 250/mo SerpAPI budget is the binding constraint on lead volume
 # (vault/10-brain/profitability-plan.md §2.3): when it runs out, discovery AND
