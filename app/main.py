@@ -98,6 +98,11 @@ def _schedule_background(coro):
 
 
 def _append_log(msg: str):
+    # BufferHandler feeds this from the ROOT logger, so third-party URL logs
+    # (httpx etc.) land here too — scrub before the dashboard-readable buffer
+    # and the agent_logs state row ever see a credential.
+    from app.core.json_logger import redact_secrets
+    msg = redact_secrets(msg)
     LOG_BUFFER.append({"ts": datetime.now().strftime("%H:%M:%S"), "msg": msg})
     if len(LOG_BUFFER) > 100:
         LOG_BUFFER.pop(0)

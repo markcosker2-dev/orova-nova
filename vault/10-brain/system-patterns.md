@@ -42,8 +42,11 @@ Lanes are individually triggerable for testing via
 - SQLite (`app/orova.db`) is the single source of truth; Drive backup + Drive-first
   restore survive Render's ephemeral disk.
 - Task-scoped memory: sub-agents get relevant summaries, not full history.
-- PII/secret scrubbing in the logging pipeline; system traces and outreach data
-  live in separate tables.
+- Secret redaction in the logging pipeline (`json_logger.redact_secrets`,
+  added 2026-07-10 after a live token leak): env-derived secret values,
+  Telegram bot-token URL paths, and credential query params are scrubbed in
+  both the stdout JSON formatter and the dashboard log buffer. System traces
+  and outreach data live in separate tables.
 - The **vault** is the curated human/Claude-readable layer on top — never a DB
   mirror. `scripts/vault_pull.py` pulls leads, briefs, and learned strategies in.
 
