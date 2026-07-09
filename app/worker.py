@@ -983,6 +983,13 @@ def self_improvement_job():
         _run_async(PatternReinforcer().run_cycle())
     except Exception as e:
         logger.error(f"[LANE 8] PatternReinforcer failed: {e}")
+    # ADR-0004 Phase 2: skill-version champion/challenger evaluation. A clean
+    # no-op until a challenger version is registered via the forge flow.
+    try:
+        from app.core.self_improvement import SkillChallengerEvaluator
+        _run_async(SkillChallengerEvaluator.run_cycle())
+    except Exception as e:
+        logger.error(f"[LANE 8] SkillChallengerEvaluator failed: {e}")
 
 def sequence_drip_job():
     logger.info("[LANE 9] Triggering Drip Sequence Sender...")

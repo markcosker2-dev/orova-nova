@@ -116,6 +116,77 @@ def test_retiring_a_challenger_writes_improvement_log():
     assert log_mock.await_args.args[2] == "retired"
 
 
+# ── SkillChallengerEvaluator (Phase 2, B2.3) ────────────────────────────────
+
+def _versions_rows(champ_wins, champ_n, chal_wins, chal_n, label="challenger_1"):
+    return [
+        {"skill_name": "find_leads", "version_id": "find_leads.builtin",
+         "version_label": "champion", "n": champ_n, "wins": champ_wins},
+        {"skill_name": "find_leads", "version_id": "find_leads.abc123",
+         "version_label": label, "n": chal_n, "wins": chal_wins},
+    ]
+
+
+def _run_evaluator(rows):
+    query = AsyncMock()
+    log_mock = AsyncMock()
+    with patch("app.core.self_improvement.DatabaseManager.fetchall",
+               AsyncMock(return_value=rows)), \
+         patch("app.core.self_improvement.DatabaseManager.query", query), \
+         patch("app.core.self_improvement.log_improvement", log_mock):
+        result = asyncio.run(self_improvement.SkillChallengerEvaluator.run_cycle())
+    return result, query, log_mock
+
+
+def test_winning_challenger_is_promoted_and_champion_retired():
+    # challenger 28/30 (wilson ~0.78) vs champion 10/40 (wilson ~0.15)
+    result, query, log_mock = _run_evaluator(_versions_rows(10, 40, 28, 30))
+    assert result["promoted"] == ["find_leads.abc123"]
+    assert result["retired"] == ["find_leads.builtin"]
+    sqls = [c.args[0] for c in query.await_args_list]
+    assert any("version_label = 'retired'" in s for s in sqls)
+    assert any("version_label = 'champion'" in s for s in sqls)
+    assert log_mock.await_count == 2  # promoted + retired rows
+
+
+def test_under_sample_challenger_is_left_alone():
+    result, query, _ = _run_evaluator(_versions_rows(10, 40, 12, 12))  # n < 20
+    assert result == {"promoted": [], "retired": []}
+    # Assert on evaluator-issued SQL, not global mock call counts — the worker
+    # daemon thread (started by lifespan-using tests earlier in the suite) can
+    # legitimately await the class-level patched query during this window.
+    assert not [c for c in query.await_args_list if "skill_versions" in c.args[0]]
+
+
+def test_hopeless_challenger_is_retired():
+    # champion 30/40 (wilson ~0.6), challenger 2/25 (wilson ~0.02 < half)
+    result, query, log_mock = _run_evaluator(_versions_rows(30, 40, 2, 25))
+    assert result["promoted"] == []
+    assert result["retired"] == ["find_leads.abc123"]
+    log_mock.assert_awaited_once()
+
+
+def test_no_challengers_is_a_clean_noop():
+    rows = [{"skill_name": "find_leads", "version_id": "find_leads.builtin",
+             "version_label": "champion", "n": 50, "wins": 40}]
+    result, query, _ = _run_evaluator(rows)
+    assert result == {"promoted": [], "retired": []}
+    assert not [c for c in query.await_args_list if "skill_versions" in c.args[0]]
+
+
+def test_evaluator_never_raises_on_db_failure():
+    with patch("app.core.self_improvement.DatabaseManager.fetchall",
+               AsyncMock(side_effect=RuntimeError("db down"))):
+        result = asyncio.run(self_improvement.SkillChallengerEvaluator.run_cycle())
+    assert result == {"promoted": [], "retired": []}
+
+
+def test_lane8_schedules_the_evaluator():
+    from app import worker
+    src = inspect.getsource(worker.self_improvement_job)
+    assert "SkillChallengerEvaluator" in src
+
+
 # ── API endpoints (A2) ──────────────────────────────────────────────────────
 
 def test_api_skill_health_computes_win_rate_and_wilson():
