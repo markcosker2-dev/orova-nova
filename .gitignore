@@ -114,3 +114,6 @@ vault/.obsidian/graph.json
 # Kept local-only per CLAUDE.md: the vault is curated knowledge, not a DB replica.
 vault/30-leads/*.md
 vault/10-brain/strategy-snapshot.md
+
+# Runtime state written by app/skills/notes_skill.py (log_skill_note)
+app/notes.json
