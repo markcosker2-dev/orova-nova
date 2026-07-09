@@ -62,6 +62,7 @@ body {
 
 ::-webkit-scrollbar {
     width: 6px;
+    height: 6px; /* horizontal strips (e.g. the agent console) get the same slim dark bar */
 }
 
 ::-webkit-scrollbar-track {
@@ -423,6 +424,15 @@ body {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+    /* Wrap so the intro copy sits above the card strip on narrow screens
+       instead of being crushed into a one-word-per-line column. */
+    flex-wrap: wrap;
+}
+
+.agent-control-left {
+    flex: 0 0 auto;
+    min-width: 170px;
+    max-width: 260px;
 }
 
 .agent-control-left h2 {
@@ -438,6 +448,17 @@ body {
 .agent-list {
     display: flex;
     gap: 10px;
+    /* ~9 cards × 220px ≈ 2060px: the strip must scroll INSIDE itself —
+       without this the whole <main> pans sideways and cards clip off-screen
+       (the live-observed "doesn't look good" defect, 2026-07-10). */
+    flex: 1 1 320px;
+    min-width: 0;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    /* scrollbar-width disables ::-webkit-scrollbar theming in Chrome, so the
+       standard scrollbar-color must carry the dark theme in both engines. */
+    scrollbar-width: thin;
+    scrollbar-color: var(--text-muted) transparent;
 }
 
 .agent-card {
@@ -449,6 +470,14 @@ body {
     border: 1px solid var(--border-subtle);
     border-radius: 10px;
     min-width: 220px;
+    flex: 0 0 auto;
+}
+
+/* The Team-Structure screen's generic `.agent-card { width: 200px }` rule
+   (further down this file) leaks into the console strip and clamps cards
+   below their content width, clipping the Config button — scope it back out. */
+.agent-list .agent-card {
+    width: auto;
 }
 
 .agent-info {
@@ -680,6 +709,26 @@ body {
 .quick-actions {
     display: flex;
     gap: 8px;
+}
+
+.workspace-info {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Narrow viewports: keep the top bar on one line — truncate the workspace
+   title rather than wrapping it mid-phrase, and relax the desktop padding. */
+@media (max-width: 900px) {
+    .top-bar {
+        padding: 0 16px;
+        gap: 10px;
+    }
+
+    .action-btn {
+        padding: 8px 10px;
+    }
 }
 
 .action-btn {
