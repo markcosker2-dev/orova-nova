@@ -45,7 +45,7 @@ importers:
         version: 10.0.1(eslint@10.5.0(jiti@1.21.7))
       '@larksuite/openclaw-lark':
         specifier: 2026.4.9
-        version: 2026.4.9(openclaw@2026.4.27)
+        version: 2026.4.9(openclaw@2026.4.29)
       '@playwright/test':
         specifier: ^1.56.1
         version: 1.60.0
@@ -87,10 +87,10 @@ importers:
         version: 1.2.9(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@soimy/dingtalk':
         specifier: ^3.5.3
-        version: 3.6.4(openclaw@2026.4.27)
+        version: 3.6.4(openclaw@2026.4.29)
       '@tencent-weixin/openclaw-weixin':
         specifier: ^2.3.1
-        version: 2.4.4(openclaw@2026.4.27)
+        version: 2.4.4(openclaw@2026.4.29)
       '@testing-library/jest-dom':
         specifier: ^6.9.1
         version: 6.9.1
@@ -120,10 +120,10 @@ importers:
         version: 5.2.0(vite@7.3.5(@types/node@25.9.3)(jiti@1.21.7)(yaml@2.9.0))
       '@wecom/wecom-openclaw-plugin':
         specifier: ^2026.4.29
-        version: 2026.5.25(openclaw@2026.4.27)
+        version: 2026.5.25(openclaw@2026.4.29)
       '@whiskeysockets/baileys':
-        specifier: 7.0.0-rc.9
-        version: 7.0.0-rc.9(sharp@0.34.5)
+        specifier: 7.0.0-rc12
+        version: 7.0.0-rc12(sharp@0.34.5)
       autoprefixer:
         specifier: ^10.4.24
         version: 10.5.0(postcss@8.5.15)
@@ -164,8 +164,8 @@ importers:
         specifier: ^0.563.0
         version: 0.563.0(react@19.2.7)
       openclaw:
-        specifier: 2026.4.27
-        version: 2026.4.27
+        specifier: 2026.4.29
+        version: 2026.4.29
       png2icons:
         specifier: ^2.0.1
         version: 2.0.1
@@ -238,8 +238,8 @@ packages:
   '@adobe/css-tools@4.5.0':
     resolution: {integrity: sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q==}
 
-  '@agentclientprotocol/sdk@0.20.0':
-    resolution: {integrity: sha512-BxEHyE4MvwyOsdyVPub1vEtyrq8E0JSdjC+ckXWimY1VabFCTXdPyXv2y2Omz1j+iod7Z8oBJDXFCJptM0GBqQ==}
+  '@agentclientprotocol/sdk@0.21.0':
+    resolution: {integrity: sha512-ONj+Q8qOdNQp5XbH5jnMwzT9IKZJsSN0p0lkceS4GtUtNOPVLpNzSS8gqQdGMKfBvA0ESbkL8BTaSN1Rc9miEw==}
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
 
@@ -1146,25 +1146,25 @@ packages:
     resolution: {integrity: sha512-faGUlTcXka5l7rv0lP3K3vGW/ejRuOS24RR2aSFWREUQqzjgdsuWNo/IiPqL3kWRGt6Ahl2+qcDAwtdeWeuGUw==}
     hasBin: true
 
-  '@mariozechner/pi-agent-core@0.70.5':
-    resolution: {integrity: sha512-ZUnJ7fFeJog97KG8FewEyqaObY2sLWvfDurKHl9kImVEbgt3l1LJ9A5pb+4/5KXnCVsoF/Brd0h+7yBEd1Aj5g==}
+  '@mariozechner/pi-agent-core@0.70.6':
+    resolution: {integrity: sha512-PovJZJqhY4ajgTJRUcLzfWKnlQuJHxHW3T030CafR9LYeLmOHi/HGS8DbCdRgSJNbnoIG+kl67/7++9DKZ2+sg==}
     engines: {node: '>=20.0.0'}
     deprecated: please use @earendil-works/pi-agent-core instead going forward
 
-  '@mariozechner/pi-ai@0.70.5':
-    resolution: {integrity: sha512-eyeyOfu/YiqzY6q391oRYdmnPIIU1VTKAn3hWIvzqkRHkcArd41/YynG8mw6bgoLdmCnIBoY3fD6nzEHEHLIMA==}
+  '@mariozechner/pi-ai@0.70.6':
+    resolution: {integrity: sha512-LVAadu0Y+hb7Bj7EDiLsx6AuGxHlxDq0euLzyqX698i9qt0BW6a+oQSUIZQz4rJwExF18OvyL7ygJ5781ojrIQ==}
     engines: {node: '>=20.0.0'}
     deprecated: please use @earendil-works/pi-ai instead going forward
     hasBin: true
 
-  '@mariozechner/pi-coding-agent@0.70.5':
-    resolution: {integrity: sha512-5sQjY2LQLvYfMjo4Dn6P6iy3LFm3MZYgrYmgCQSwQSUM5yqzWceidYYXS4knloW7gNkko+nnhKB2u4NF3w+dVw==}
+  '@mariozechner/pi-coding-agent@0.70.6':
+    resolution: {integrity: sha512-S4hUZghBeHPqsL6+DNg/TbGLziSh5+/mEHPVlYq5y6ImirWXhISLdLCnyZUW83OblKWihmG7unhJXiHQTH82mQ==}
     engines: {node: '>=20.6.0'}
     deprecated: please use @earendil-works/pi-coding-agent instead going forward
     hasBin: true
 
-  '@mariozechner/pi-tui@0.70.5':
-    resolution: {integrity: sha512-5Ol9weTqpsQ85gg1C6Mo8M8o/HYz4uN7nM7QTPrw/Rm/UoFgO1/T/Irago5aGfzlIj/nmsGcqb7NlkWtT4vXUg==}
+  '@mariozechner/pi-tui@0.70.6':
+    resolution: {integrity: sha512-orBJEwMdpBC38AXfdVBKT5ZvqNTcKg6g3NdoF5a9aNQzDI/dOTu1UNYFYyEOTFRiTxSR1nw8eovbCcaSyekWfw==}
     engines: {node: '>=20.0.0'}
     deprecated: please use @earendil-works/pi-tui instead going forward
 
@@ -2147,11 +2147,6 @@ packages:
   '@ungap/structured-clone@1.3.1':
     resolution: {integrity: sha512-mUFwbeTqrVgDQxFveS+df2yfap6iuP20NAKAsBt5jDEoOTDew+zwLAOilHCeQJOVSvmgCX4ogqIrA0mnyr08yQ==}
 
-  '@vincentkoc/qrcode-tui@0.2.1':
-    resolution: {integrity: sha512-F2XVHMfasJ0q8G93gtcyU9Px0wMH6o6nIZLrZYSHc6dm9Pq3oCbHuVYYG/UQvJD0rhrGH3P9B6qgpCAqSDUw5w==}
-    engines: {node: '>=20'}
-    hasBin: true
-
   '@vitejs/plugin-react@5.2.0':
     resolution: {integrity: sha512-YmKkfhOAi3wsB1PhJq5Scj3GXMn3WvtQ/JC0xoopuHoXSdmtdStOpFrYaT1kie2YgFBcIe64ROzMYRjCrYOdYw==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -2198,16 +2193,12 @@ packages:
       openclaw:
         optional: true
 
-  '@whiskeysockets/baileys@7.0.0-rc.9':
-    resolution: {integrity: sha512-YFm5gKXfDP9byCXCW3OPHKXLzrAKzolzgVUlRosHHgwbnf2YOO3XknkMm6J7+F0ns8OA0uuSBhgkRHTDtqkacw==}
+  '@whiskeysockets/baileys@7.0.0-rc12':
+    resolution: {integrity: sha512-66uCsV27S9ttgn5qHRVR5KPkIPPvwo6nCfuLWYbwKPHnXg4+KOgl2aPeLI+Kwnv9Tl17yBcMOuRhuH0vQfm25g==}
     engines: {node: '>=20.0.0'}
-    deprecated: |-
-      This version is affected by a zero-day vulnerability that allows spoofing of messages, please update to
-        the latest versions (6.7.22^ or 7.0.0-rc12^)! For more information, check out the public advisory at
-        https://github.com/WhiskeySockets/Baileys/security/advisories/GHSA-qvv5-jq5g-4cgg
     peerDependencies:
       audio-decode: ^2.1.3
-      jimp: ^1.6.0
+      jimp: ^1.6.1
       link-preview-js: ^3.0.0
       sharp: '*'
     peerDependenciesMeta:
@@ -3666,9 +3657,8 @@ packages:
     resolution: {integrity: sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ==}
     engines: {node: '>= 0.8.0'}
 
-  libsignal@https://codeload.github.com/whiskeysockets/libsignal-node/tar.gz/bcea72df9ec34d9d9140ab30619cf479c7c144c7:
-    resolution: {tarball: https://codeload.github.com/whiskeysockets/libsignal-node/tar.gz/bcea72df9ec34d9d9140ab30619cf479c7c144c7}
-    version: 6.0.0
+  libsignal@6.0.0:
+    resolution: {integrity: sha512-d/5V3YFtDljbFMufz4ncyUYGYhJl+vzAe+c2EFFBQ6bz1h8Q3IOMEGXYMzlibU60I+e8GagMMpji18iez3P1hA==}
 
   lie@3.3.0:
     resolution: {integrity: sha512-UaiMJzeWRlEujzAuw5LokY1L5ecNQYZKfmyZ9L7wDHb/p5etKaxXhohBcrw0EYby+G/NA52vRSN4N39dxHAIwQ==}
@@ -4147,8 +4137,8 @@ packages:
       zod:
         optional: true
 
-  openclaw@2026.4.27:
-    resolution: {integrity: sha512-99UOcRI6hOYGY76NmJQkMtBpuDjlkiCn5bAilMnDIaMG0mQOQjB8ZQ5pMzS1Zzos1ENJH8ddvBki6JwVaYPxRA==}
+  openclaw@2026.4.29:
+    resolution: {integrity: sha512-IRhX38ow4Hj783YxChK10rHwNg6OCupzGvVxG7EE24GaXHBumrESDpWUsgX0FiwTa0LYQBxuAcDncbyFiGVaOg==}
     engines: {node: '>=22.14.0'}
     hasBin: true
 
@@ -4162,10 +4152,6 @@ packages:
   ora@9.4.0:
     resolution: {integrity: sha512-84cglkRILFxdtA8hAvLNdMrtBpPNBTrQ9/ulg0FA7xLMnD6mifv+enAIeRmvtv+WgdCE+LPGOfQmtJRrVaIVhQ==}
     engines: {node: '>=20'}
-
-  osc-progress@0.3.1:
-    resolution: {integrity: sha512-2+kMidO/YodbpyjdKUfR2Io978LuXfWpgu47zT8rF6hsaiWeD7CxHpU9deG8nB953M9og+A4qDlcmR6VFqAHaQ==}
-    engines: {node: '>=24'}
 
   p-cancelable@2.1.1:
     resolution: {integrity: sha512-BZOr3nRQHOntUjTrH8+Lh54smKHoHyur8We1V8DSMVrl5A2malOOwuJRnKRDjSnkoeBh4at6BwEnb5I7Jl31wg==}
@@ -5150,8 +5136,8 @@ packages:
     resolution: {integrity: sha512-faYHw0anBbc/kWF3zFTEnxSFOAGUX9GFbOBthvDdLsIlEoWOFOtS0zgCiQYwIskL9iGXZL3kAXD8OoZ4GmMATA==}
     engines: {node: '>= 18'}
 
-  typebox@1.1.33:
-    resolution: {integrity: sha512-+/MWwlQ1q2GSVwoxi/+u5JsHkgLQKcCN2Nsjree9c+K7GJu40qbaHrFETmfV1i9Fs1TcOVfynW+jJvIWcXtvjw==}
+  typebox@1.1.34:
+    resolution: {integrity: sha512-V0fM5W5DTXlEMDxqtX1dQ25HR1RQ11DPUVrIup4sJi1yQtIyI30SHfxBy/HjXKL1CtUqc5or2igA/wa/v4hMKQ==}
 
   typescript@5.9.3:
     resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
@@ -5397,6 +5383,9 @@ packages:
     resolution: {integrity: sha512-BMhLD/Sw+GbJC21C/UgyaZX41nPt8bUTg+jWyDeg7e7YN4xOM05YPSIXceACnXVtqyEw/LMClUQMtMZ+PGGpqQ==}
     engines: {node: '>=20'}
 
+  whatsapp-rust-bridge@0.5.4:
+    resolution: {integrity: sha512-yYO1qSs0Fe7tGtnxOFHomocUD6IZtoAgmA4oDFyGIRZ67D3QZk3w7swA6XXFXNQngiyrg2k7tul6IrM3eUFh7A==}
+
   whatwg-mimetype@5.0.0:
     resolution: {integrity: sha512-sXcNcHOC51uPGF0P/D4NVtrkjSU2fNsm9iog4ZvZJsL3rjoDAzXZhkm2MWt1y+PUdggKAYVoMAIYcs78wJ51Cw==}
     engines: {node: '>=20'}
@@ -5583,7 +5572,7 @@ snapshots:
 
   '@adobe/css-tools@4.5.0': {}
 
-  '@agentclientprotocol/sdk@0.20.0(zod@4.4.3)':
+  '@agentclientprotocol/sdk@0.21.0(zod@4.4.3)':
     dependencies:
       zod: 4.4.3
 
@@ -6427,7 +6416,7 @@ snapshots:
 
   '@keyv/serialize@1.1.1': {}
 
-  '@larksuite/openclaw-lark@2026.4.9(openclaw@2026.4.27)':
+  '@larksuite/openclaw-lark@2026.4.9(openclaw@2026.4.29)':
     dependencies:
       '@larksuiteoapi/node-sdk': 1.66.1
       '@sinclair/typebox': 0.34.48
@@ -6435,7 +6424,7 @@ snapshots:
       undici-types: 8.4.1
       zod: 4.4.3
     optionalDependencies:
-      openclaw: 2026.4.27
+      openclaw: 2026.4.29
     transitivePeerDependencies:
       - bufferutil
       - debug
@@ -6544,10 +6533,10 @@ snapshots:
       std-env: 3.10.0
       yoctocolors: 2.1.2
 
-  '@mariozechner/pi-agent-core@0.70.5(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)':
+  '@mariozechner/pi-agent-core@0.70.6(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)':
     dependencies:
-      '@mariozechner/pi-ai': 0.70.5(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
-      typebox: 1.1.33
+      '@mariozechner/pi-ai': 0.70.6(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
+      typebox: 1.1.34
     transitivePeerDependencies:
       - '@modelcontextprotocol/sdk'
       - bufferutil
@@ -6556,7 +6545,7 @@ snapshots:
       - ws
       - zod
 
-  '@mariozechner/pi-ai@0.70.5(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)':
+  '@mariozechner/pi-ai@0.70.6(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)':
     dependencies:
       '@anthropic-ai/sdk': 0.90.0(zod@4.4.3)
       '@aws-sdk/client-bedrock-runtime': 3.1068.0
@@ -6566,7 +6555,7 @@ snapshots:
       openai: 6.26.0(ws@8.21.0)(zod@4.4.3)
       partial-json: 0.1.7
       proxy-agent: 6.5.0
-      typebox: 1.1.33
+      typebox: 1.1.34
       undici: 7.27.2
       zod-to-json-schema: 3.25.2(zod@4.4.3)
     transitivePeerDependencies:
@@ -6577,12 +6566,12 @@ snapshots:
       - ws
       - zod
 
-  '@mariozechner/pi-coding-agent@0.70.5(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)':
+  '@mariozechner/pi-coding-agent@0.70.6(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)':
     dependencies:
       '@mariozechner/jiti': 2.6.5
-      '@mariozechner/pi-agent-core': 0.70.5(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
-      '@mariozechner/pi-ai': 0.70.5(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
-      '@mariozechner/pi-tui': 0.70.5
+      '@mariozechner/pi-agent-core': 0.70.6(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
+      '@mariozechner/pi-ai': 0.70.6(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
+      '@mariozechner/pi-tui': 0.70.6
       '@silvia-odwyer/photon-node': 0.3.4
       chalk: 5.6.2
       cli-highlight: 2.1.11
@@ -6596,7 +6585,7 @@ snapshots:
       minimatch: 10.2.5
       proper-lockfile: 4.1.2
       strip-ansi: 7.2.0
-      typebox: 1.1.33
+      typebox: 1.1.34
       undici: 7.27.2
       uuid: 14.0.0
       yaml: 2.9.0
@@ -6610,7 +6599,7 @@ snapshots:
       - ws
       - zod
 
-  '@mariozechner/pi-tui@0.70.5':
+  '@mariozechner/pi-tui@0.70.6':
     dependencies:
       '@types/mime-types': 2.1.4
       chalk: 5.6.2
@@ -7324,7 +7313,7 @@ snapshots:
       '@smithy/util-buffer-from': 2.2.0
       tslib: 2.8.1
 
-  '@soimy/dingtalk@3.6.4(openclaw@2026.4.27)':
+  '@soimy/dingtalk@3.6.4(openclaw@2026.4.29)':
     dependencies:
       axios: 1.13.6(debug@4.4.3)
       dingtalk-stream: 2.1.5
@@ -7333,7 +7322,7 @@ snapshots:
       pdf-parse: 2.4.5
       zod: 4.4.3
     optionalDependencies:
-      openclaw: 2026.4.27
+      openclaw: 2026.4.29
     transitivePeerDependencies:
       - bufferutil
       - debug
@@ -7346,9 +7335,9 @@ snapshots:
     dependencies:
       defer-to-connect: 2.0.1
 
-  '@tencent-weixin/openclaw-weixin@2.4.4(openclaw@2026.4.27)':
+  '@tencent-weixin/openclaw-weixin@2.4.4(openclaw@2026.4.29)':
     dependencies:
-      openclaw: 2026.4.27
+      openclaw: 2026.4.29
       qrcode-terminal: 0.12.0
       zod: 4.4.3
 
@@ -7594,10 +7583,6 @@ snapshots:
 
   '@ungap/structured-clone@1.3.1': {}
 
-  '@vincentkoc/qrcode-tui@0.2.1':
-    dependencies:
-      qrcode: 1.5.4
-
   '@vitejs/plugin-react@5.2.0(vite@7.3.5(@types/node@25.9.3)(jiti@1.21.7)(yaml@2.9.0))':
     dependencies:
       '@babel/core': 7.29.7
@@ -7662,7 +7647,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@wecom/wecom-openclaw-plugin@2026.5.25(openclaw@2026.4.27)':
+  '@wecom/wecom-openclaw-plugin@2026.5.25(openclaw@2026.4.29)':
     dependencies:
       '@wecom/aibot-node-sdk': 1.0.7
       fast-xml-parser: 5.8.0
@@ -7670,25 +7655,26 @@ snapshots:
       undici: 7.27.2
       zod: 4.4.3
     optionalDependencies:
-      openclaw: 2026.4.27
+      openclaw: 2026.4.29
     transitivePeerDependencies:
       - bufferutil
       - debug
       - supports-color
       - utf-8-validate
 
-  '@whiskeysockets/baileys@7.0.0-rc.9(sharp@0.34.5)':
+  '@whiskeysockets/baileys@7.0.0-rc12(sharp@0.34.5)':
     dependencies:
       '@cacheable/node-cache': 1.7.6
       '@hapi/boom': 9.1.4
       async-mutex: 0.5.0
-      libsignal: https://codeload.github.com/whiskeysockets/libsignal-node/tar.gz/bcea72df9ec34d9d9140ab30619cf479c7c144c7
+      libsignal: 6.0.0
       lru-cache: 11.5.1
       music-metadata: 11.13.0
       p-queue: 9.3.0
       pino: 9.14.0
       protobufjs: 7.6.4
       sharp: 0.34.5
+      whatsapp-rust-bridge: 0.5.4
       ws: 8.21.0
     transitivePeerDependencies:
       - bufferutil
@@ -8980,7 +8966,7 @@ snapshots:
       es6-error: 4.1.1
       matcher: 3.0.0
       roarr: 2.15.4
-      semver: 7.7.4
+      semver: 7.8.4
       serialize-error: 7.0.1
     optional: true
 
@@ -8988,7 +8974,7 @@ snapshots:
     dependencies:
       globalthis: 1.0.4
       matcher: 4.0.0
-      semver: 7.7.4
+      semver: 7.8.4
       serialize-error: 8.1.0
 
   globals@17.6.0: {}
@@ -9354,7 +9340,7 @@ snapshots:
       prelude-ls: 1.2.1
       type-check: 0.4.0
 
-  libsignal@https://codeload.github.com/whiskeysockets/libsignal-node/tar.gz/bcea72df9ec34d9d9140ab30619cf479c7c144c7:
+  libsignal@6.0.0:
     dependencies:
       curve25519-js: 0.0.4
       protobufjs: 7.6.4
@@ -9921,11 +9907,11 @@ snapshots:
 
   node-abi@4.31.0:
     dependencies:
-      semver: 7.7.4
+      semver: 7.8.4
 
   node-api-version@0.2.1:
     dependencies:
-      semver: 7.7.4
+      semver: 7.8.4
 
   node-domexception@1.0.0: {}
 
@@ -9942,7 +9928,7 @@ snapshots:
       graceful-fs: 4.2.11
       nopt: 9.0.0
       proc-log: 6.1.0
-      semver: 7.7.4
+      semver: 7.8.4
       tar: 7.5.16
       tinyglobby: 0.2.17
       undici: 6.26.0
@@ -9996,17 +9982,16 @@ snapshots:
       ws: 8.21.0
       zod: 4.4.3
 
-  openclaw@2026.4.27:
+  openclaw@2026.4.29:
     dependencies:
-      '@agentclientprotocol/sdk': 0.20.0(zod@4.4.3)
+      '@agentclientprotocol/sdk': 0.21.0(zod@4.4.3)
       '@clack/prompts': 1.5.1
       '@lydell/node-pty': 1.2.0-beta.12
-      '@mariozechner/pi-agent-core': 0.70.5(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
-      '@mariozechner/pi-ai': 0.70.5(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
-      '@mariozechner/pi-coding-agent': 0.70.5(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
-      '@mariozechner/pi-tui': 0.70.5
+      '@mariozechner/pi-agent-core': 0.70.6(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
+      '@mariozechner/pi-ai': 0.70.6(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
+      '@mariozechner/pi-coding-agent': 0.70.6(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
+      '@mariozechner/pi-tui': 0.70.6
       '@modelcontextprotocol/sdk': 1.29.0(zod@4.4.3)
-      '@vincentkoc/qrcode-tui': 0.2.1
       ajv: 8.20.0
       chalk: 5.6.2
       chokidar: 5.0.0
@@ -10022,13 +10007,13 @@ snapshots:
       jszip: 3.10.1
       markdown-it: 14.1.1
       openai: 6.42.0(ws@8.21.0)(zod@4.4.3)
-      osc-progress: 0.3.1
       proxy-agent: 8.0.2
+      qrcode: 1.5.4
       semver: 7.7.4
       sqlite-vec: 0.1.9
       tar: 7.5.13
       tslog: 4.10.2
-      typebox: 1.1.33
+      typebox: 1.1.34
       undici: 8.1.0
       web-push: 3.6.7
       ws: 8.21.0
@@ -10062,8 +10047,6 @@ snapshots:
       log-symbols: 7.0.1
       stdin-discarder: 0.3.2
       string-width: 8.2.1
-
-  osc-progress@0.3.1: {}
 
   p-cancelable@2.1.1: {}
 
@@ -11150,7 +11133,7 @@ snapshots:
       media-typer: 1.1.0
       mime-types: 3.0.2
 
-  typebox@1.1.33: {}
+  typebox@1.1.34: {}
 
   typescript@5.9.3: {}
 
@@ -11345,6 +11328,8 @@ snapshots:
       tslib: 2.8.1
 
   webidl-conversions@8.0.1: {}
+
+  whatsapp-rust-bridge@0.5.4: {}
 
   whatwg-mimetype@5.0.0: {}
 
