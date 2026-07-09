@@ -403,6 +403,16 @@ class TaskPlanner:
                 system_content += f"\n\nUSER PREFERENCES: {prefs_flat}"
         except Exception as e:
             logger.debug(f"[PLANNER] Self-learning context injection skipped: {e}")
+        # Vault brain (ADR-0004 A1): curated Obsidian notes, local-only — the
+        # injector returns "" on Render where vault/ doesn't exist.
+        try:
+            import asyncio as _asyncio
+            from app.core.vault_context import get_vault_context
+            vault_digest = await _asyncio.to_thread(get_vault_context)
+            if vault_digest:
+                system_content += f"\n\n=== VAULT BRAIN ===\n{vault_digest}\n==================="
+        except Exception as e:
+            logger.debug(f"[PLANNER] Vault context injection skipped: {e}")
         # Hierarchical planning: decompose complex goals into verifiable subgoals
         subgoal_plan = await self._decompose_goal(goal)
         if subgoal_plan:
@@ -578,6 +588,19 @@ class TaskPlanner:
                     firewall_reason=guard_result.get("reason", ""),
                     error_message=tool_error[:200] if tool_error else "",
                 ))
+
+                # Skill-outcome instrumentation (ADR-0004 B2.1): the one place
+                # that sees every executed tool call. Fail-open by contract.
+                try:
+                    from app.core.self_improvement import SkillOutcomeTracker
+                    await SkillOutcomeTracker.record(
+                        skill_name=fn_name,
+                        outcome="error" if tool_error else "success",
+                        latency_ms=(time.time() - step_start_time) * 1000,
+                        client_id=client_id,
+                    )
+                except Exception as e:
+                    logger.debug(f"[PLANNER] Skill outcome recording skipped: {e}")
 
                 if _ctx_size(messages) > MAX_TOTAL_CHARS:
                     logger.warning("[PLANNER] Context budget exceeded — compressing...")

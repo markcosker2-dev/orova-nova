@@ -472,6 +472,19 @@ existing `test_owner_finder.py`-style coverage pattern).
   existing memory-hardening posture (`app/core/hardening.py`'s
   `memory_monitor`).
 
+## Status
+
+**Phase 1 shipped 2026-07-10** (all five items): `app/core/vault_context.py` +
+planner injection; `skill_versions`/`skill_outcomes`/`improvement_log` DDL;
+`SkillOutcomeTracker` + the planner tool-loop instrumentation;
+`self_learning_loop.run_cycle()` + `PatternReinforcer` scheduled into Lane 8
+(shipped earlier, PRs #23–30); `/api/skill_health` + `/api/improvement_log`
+endpoints and the `skill-health.md`/`improvement-log.md` sections in
+`vault_pull.py`. One deviation from the letter of A2.2: retire rationales are
+deterministic sentences built from the Wilson numbers rather than an extra
+LLM call — works LLM-dead, zero cost, same Reflexion content. Phases 2–3
+remain open.
+
 ## Follow-ups
 
 - Scope HermesClaw's own agent/prompt-assembly loop to find the exact call
