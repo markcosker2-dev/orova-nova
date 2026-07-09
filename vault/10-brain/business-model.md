@@ -41,7 +41,14 @@ Full operating detail — sales funnel, delivery, automation/approval split — 
 
 ## ICP
 
-Luxury/premium West Coast businesses (CA, OR, WA, NV, AZ) that can afford $6–7.5K/mo all-in: exotic/luxury automotive, custom home builders, private aviation, yacht charter, luxury real estate, high-ticket services.
+Luxury/premium West Coast businesses (CA, OR, WA, NV, AZ) that can afford
+$6–7.5K/mo all-in. **Narrowed 2026-07-10 (owner-approved, [[profitability-plan]]
+§2.1) to three primary verticals that fit the cold-outreach-to-owner motion:**
+exotic/luxury automotive (dealers, detailing/PPF/wrap, restoration), custom
+home builders / high-end remodeling, and luxury real estate agents (individual
+top producers). Private aviation & yacht charter moved to opportunistic-only —
+their decision-makers are family offices/brokerages, not owners reading cold
+email.
 
 ## Economics of the first client
 

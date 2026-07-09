@@ -1,6 +1,6 @@
 {
   "_description": "Single source of truth for OROVA business context. Loaded by email pipeline, proofreader, and drip templates. All other files (USER.md, brand_guidelines.json, config.py) should align with this.",
-  "_last_updated": "2026-07-04",
+  "_last_updated": "2026-07-10",
 
   "company": {
     "name": "OROVA",
@@ -41,7 +41,7 @@
     "ad_spend_billing": "Client pays Meta directly for ad spend. Ad budget NEVER flows through OROVA.",
     "onboarding": "After the Google Meet, Mark sends agreement + invoice, then an onboarding call to get added to the client's ad manager and CRM.",
     "refund_policy": "Partial refunds only — never the full amount. The system build/setup (ad account, creatives, automation, CRM wiring) is non-refundable; a refund returns the unused portion of the retainer minus the build already delivered.",
-    "margin_target": "75-80% profit after OROVA's monthly costs (Twilio number + usage, Retell pay-as-you-go, Make.com, Higgsfield, hosting/LLM/email). Ad spend is not an OROVA cost.",
+    "margin_target": "90%+ realistic operating margin at current vendor pricing (see vault/10-brain/profitability-plan.md §3); 75-80% retained as the conservative worst-case floor for external/investor conversations. Ad spend is not an OROVA cost.",
     "pricing_note": "6-month tier corrected 2026-07-04 to $18K (P1) / $24K (P2) so longer commitments are cheaper per month ($3,000/$4,000 vs the 3-month $3,333/$4,333)."
   },
 
@@ -54,6 +54,14 @@
       "Onboarding call — get added to client's ad manager + CRM"
     ],
     "booking_target": "Book the appointment with Mark (human closes the deal).",
+    "funnel_benchmarks_2026": {
+      "cold_email_reply_rate_target": "5-8% (agency-managed benchmark: 5.8%)",
+      "cold_email_to_meeting_rate_target": "1-2%",
+      "cold_call_dial_to_meeting_rate_target": "2.5-5%",
+      "meeting_to_close_rate_target": "20-30% (founder-led close)",
+      "leads_per_client_estimate": "100-200 on-ICP leads processed through the full funnel per new client, pre-referral",
+      "note": "See vault/10-brain/profitability-plan.md for full derivation and sources."
+    },
     "signature_objection": {
       "question": "How do I know the AI caller is any good?",
       "answer": "You already spoke to Nova and got her emails — that's Nova, our AI sales assistant. You've already experienced the product."
@@ -92,11 +100,11 @@
       "Luxury / premium brands (the core focus)",
       "Exotic and luxury automotive (dealers, rentals, tuning, detailing, storage, restoration)",
       "Custom home builders / high-end remodeling",
-      "Private aviation and yacht charter"
+      "Luxury real estate agents (individual top producers)"
     ],
     "secondary_verticals": [
       "High-ticket service providers",
-      "Luxury real estate",
+      "Private aviation and yacht charter (opportunistic only — decision-makers here are typically family offices/brokerages/fleet operators, not a single owner reachable by cold email; do not hunt these as a default rotation target)",
       "Premium professional services"
     ],
     "region": "West Coast US (CA, OR, WA, NV, AZ — all states, no specific city focus)",
@@ -162,10 +170,18 @@
     }
   },
 
+  "compliance": {
+    "calling_policy": {
+      "rule": "Retell/cold-call lane may ONLY dial a business's published line (source: Yelp/Google Maps/website — Nova's existing phone source). NEVER wire in a personal-cell enrichment source for the automated dialer — the B2B TCPA exemption this lane relies on protects business-line calls soliciting a B2B service; it does NOT extend to a personal cell even for the same B2B pitch.",
+      "known_gap": "app/core/dnc.py implements an opt-out suppression list, not a National DNC Registry scrub. A registry-scrub gate ahead of trigger_retell_call() is an open follow-up, not yet built.",
+      "source": "vault/20-ops/sessions/2026-07-05-owner-contact-research.md"
+    }
+  },
+
   "outreach": {
     "initial_email_framework": {
       "hook": "Mention something specific about their business — show you actually looked",
-      "value": "One sentence about what OROVA does that's relevant to them",
+      "value": "One sentence about what OROVA does that's relevant to them — for a first-touch email to a prospect with no case study yet, lead with Package 1 (Meta lead-gen + creatives); mention Package 2's AI qualification only if they ask 'what do you do with the leads.'",
       "ask": "Low-pressure invitation for a 10-15 minute chat",
       "example": "Hi {name},\n\nI was checking out {company} — really impressed by {specific_thing}.\n\nWe help {industry} businesses on the West Coast stop chasing bad leads by qualifying every single one automatically. Most of our clients see 3-5x more qualified conversations within 60 days.\n\nWould a 10-minute call be worth it to see if this fits {company}?\n\nNova @ OROVA"
     },
