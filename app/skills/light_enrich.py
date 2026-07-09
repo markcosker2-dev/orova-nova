@@ -1229,21 +1229,53 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
                 category="lead_enrichment"
             )
 
+    # ─── STEP 4.7: Free-Tier Email Finders (Tomba → Prospeo) ──
+    # Name+domain lookup against the finders' own verified indexes — catches
+    # owner emails published elsewhere (directories, partner sites) that the
+    # business's own site never lists. Both keys optional; quotas rationed
+    # inside email_finder (25/mo Tomba, 75/mo Prospeo, never both per lead).
+    if not lead.get("email") and lead.get("owner") and domain and "yelp.com" not in domain:
+        try:
+            from app.skills.email_finder import find_owner_email
+            hit = await find_owner_email(lead["owner"], domain)
+            if hit.get("email"):
+                lead["email"] = hit["email"]
+                lead["email_status"] = hit.get("status") or "found"
+                logger.info(f"[ENRICH] → Email from {hit.get('source')}: {_mask_email(lead['email'])}")
+                log_skill_note(
+                    "email_finder",
+                    f"{hit.get('source', 'finder')} found owner email for {biz_name or domain}.",
+                    category="lead_enrichment"
+                )
+        except Exception as e:
+            logger.debug(f"[ENRICH] email finder step skipped: {e}")
+
     # ─── STEP 5: Email Guess (Last Resort) ────────────────────
-    # Pattern-learned, ranked guesses. Guessed emails are flagged with
-    # email_status='guessed' so outreach can route them to the call lane
-    # instead of risking bounces that damage sender reputation.
+    # Pattern-learned, ranked guesses, now Verifalia-checked when creds are
+    # set (HTTP-only — Render blocks SMTP, and the MX gate below can't see
+    # catch-all domains or dead mailboxes). A Deliverable guess is upgraded
+    # to email_status='verified'; if every candidate hard-bounces the guess
+    # is dropped entirely. No Verifalia → prior behavior ('guessed').
     if not lead.get("email") and lead.get("owner") and domain and "yelp.com" not in domain:
         if not await _verify_mx(domain):
             logger.info(f"[ENRICH] → Skipping email guess — domain {domain} has no MX records")
         else:
             guesses = _guess_emails_ranked(lead["owner"], domain, observed_emails)
             if guesses:
-                lead["email"] = guesses[0]
-                lead["email_status"] = "guessed"
-                alt = ", ".join(guesses[1:4])
-                lead["notes"] = (lead.get("notes", "") + f" | Email guessed (alternates: {alt})").strip(" |")
-                logger.info(f"[ENRICH] → Guessed email: {_mask_email(lead['email'])} (MX ok)")
+                chosen, status = guesses[0], "guessed"
+                try:
+                    from app.skills.email_finder import select_best_guess
+                    chosen, status = await select_best_guess(guesses)
+                except Exception as e:
+                    logger.debug(f"[ENRICH] guess verification skipped: {e}")
+                if chosen:
+                    lead["email"] = chosen
+                    lead["email_status"] = status
+                    alt = ", ".join(g for g in guesses[1:4] if g != chosen)
+                    lead["notes"] = (lead.get("notes", "") + f" | Email {status} (alternates: {alt})").strip(" |")
+                    logger.info(f"[ENRICH] → {status.capitalize()} email: {_mask_email(lead['email'])} (MX ok)")
+                else:
+                    logger.info(f"[ENRICH] → All guessed emails for {domain} undeliverable per Verifalia — none kept")
 
     # ─── STEP 6: LinkedIn Title Enrichment ────────────────────
     # Free DDG search + public profile scrape. Adds the owner's title and
