@@ -78,8 +78,10 @@ async def _cache_set(business: str, state: str, result: dict) -> None:
         logger.debug(f"[OWNER_FINDER] cache write failed: {e}")
 
 
-async def _ration_check_and_increment(counter_key: str, cap: int, period: str) -> bool:
-    """Return True if under cap (and increments usage). period: 'day' or 'month'.
+async def _ration_check_and_increment(counter_key: str, cap: int, period: str, amount: int = 1) -> bool:
+    """Return True if under cap (and increments usage by `amount`).
+    period: 'day' or 'month'. `amount` > 1 covers per-item quotas like
+    Verifalia's, where one HTTP call charges one credit per email submitted.
 
     Persisted in state_store so the ration survives process restarts on
     Render's free tier, mirroring the intent of worker.py's daily counters.
@@ -91,9 +93,9 @@ async def _ration_check_and_increment(counter_key: str, cap: int, period: str) -
         state = await db.get_state(counter_key) or {}
         if state.get("bucket") != bucket:
             state = {"bucket": bucket, "count": 0}
-        if state["count"] >= cap:
+        if state["count"] + amount > cap:
             return False
-        state["count"] += 1
+        state["count"] += amount
         await db.set_state(counter_key, state)
         return True
     except Exception as e:
