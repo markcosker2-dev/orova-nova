@@ -11,103 +11,77 @@ status: active
 > Session-start file. Read this first (CLAUDE.md rule). Keep it current when the
 > direction changes materially.
 
-## Where things stand (2026-07-03)
+## Where things stand (2026-07-10)
 
-Nova (the OROVA agent) is **live on Render free tier** at
-`https://orova-nova.onrender.com` — health is green, all 9 worker lanes and the
-mission-control dashboard are deployed and working. The build is past the
-"make it run" phase; the gate to everything now is **the first paying client**,
-which funds better tooling (paid Anthropic, paid enrichment, Render paid tier).
+Nova is **live on Render free tier** (`orova-nova.onrender.com`), all 9 lanes
+green. The lead engine is rebuilt end-to-end: SerpAPI-Maps discovery →
+registry/SERP owner-name resolver → single-AI-pass extraction (under the 25s
+ceiling) → owner-email finder layer (Tomba/Prospeo/Verifalia — **built, awaiting
+keys**). The gate to everything is still **the first paying client**. Test
+baseline: **197 Python + 40 TS passing**.
 
-## Shipped recently
+## 🚨 Critical operational fact (verified live 2026-07-10)
 
-- **LLM model upgrade** (PR #19) — the old OpenRouter fallback models
-  (`gemini-2.0-flash-lite-preview`, `qwen-2.5-coder-32b`) had been retired by the
-  provider and were 404-ing. Now on live free models: `llama-3.3-70b` (default),
-  `qwen3-next-80b` (smart), `qwen3-coder` (genius); Groq `llama-3.3-70b-versatile`
-  stays tier-1; Gemini bumped to 2.5-flash. See [[claude-brain]].
-- **Dashboard** — structural redesign (Tabler-style), readable fonts, all buttons
-  wired; the "failed to queue" bug (session tokens issued but never validated) is
-  fixed.
-- **Auth chain** — `require_dashboard_api_key` now accepts session tokens.
-- **Retell cold-call agent** — Nova agent live, LLM bumped to gpt-4.1-mini,
-  webhook pointing at production, caller number +1 716 670 3920.
-- **Vault** — this knowledge layer (ADR-0001); brain refreshed to match reality
-  and wired to pull production learning each session (see [[strategy-snapshot]]).
+**Every merge to `main` redeploys Render and wipes production SQLite.** The
+Drive restore fails because `GOOGLE_REFRESH_TOKEN`/`GOOGLE_CLIENT_ID`/
+`GOOGLE_CLIENT_SECRET` are **not set on Render** (the 3-hourly backup lane is
+dead for the same reason). The Sheets fallback restores **leads only** (fixed in
+PR #34 — one malformed row used to abort the whole restore) — learning data
+starts fresh every deploy. Until Mark adds the Drive creds: **batch merges** and
+check `/api/logs` for the restore line after each deploy.
 
-## Nova buildout (PR #21, in progress — see [[0002-lead-engine-and-subagents]])
+## Shipped recently (PRs #23–34, 2026-07-06 → 07-10)
 
-- **WP1 done** — fixed the CEO's broken auto-hunt (`run_planner` ghost) + added a
-  Render-safe AI extraction path to the scraper.
-- **WP2 done** — lead engine: scan owner pages (/about,/team) first, AI extraction
-  pass, and fixed `_prioritize_email` (was preferring `info@` over personal).
-- **WP3 done** — real sub-agents: `dispatch_task` now runs a scoped planner with
-  the agent's persona + role tools (was a hardcoded string).
-- **WP4 done** — approval gates enforced in code (cold email/calls need approval,
-  fail-closed) **and** the reply → qualify → booking middle-mile is wired: replies
-  are classified HOT/WARM/COLD, HOT ones are qualified and auto-progressed to a
-  booking-link reply (approval-gated via `REPLIES_AUTOPILOT`, durable retry queue),
-  and a Cal.com webhook (`/api/cal/webhook`) creates the Google Calendar event on
-  booking. All degrade gracefully with no LLM key / no booking link. 124 tests
-  pass. See [[session-2026-07-04-wp4-booking-funnel]].
-- Vault learning bridge live (`scripts/vault_pull.py`).
-- **Owner-name engine (2026-07-04, [[0003-owner-name-first-lead-engine]])** — new
-  registry-FIRST resolver (`app/skills/owner_finder.py`). **Live-verified the sources**:
-  WA SoS is **anti-bot gated → unusable server-side** (now dormant behind
-  `WA_SOS_ENABLED`); OpenCorporates free tier is open-data-only (paid for us); CA
-  key-gated. **SerpAPI is the one working free source** (validated live — found "Kim
-  Malek" for Salt & Straw; 250/mo, score-gated; fixed an over-capture bug + 20s
-  timeout). Upshot: free registries are a dead end — **SerpAPI + the website/AI scrape
-  are the real free owner sources, so a live LLM key is the top lever.** SerpAPI key is
-  set (local + Render). Also fixed 2 latent bugs (gmail_skill, sheets_sync). **151 tests
-  pass.** Audits: [[lead-engine-research]] · [[skill-health-audit]].
+- **Owner-email finder layer** (`app/skills/email_finder.py`, PR #32): Tomba
+  (25/mo) → Prospeo (75/mo) finders + Verifalia (25/day) HTTP verification of
+  pattern-guessed emails (Deliverable → `verified`, all-bounce → dropped).
+  Env-gated, SQLite-rationed, fails open. See [[owner-email-finder]].
+- **Extraction timeout fix** (PR #29): one AI pass over combined page text
+  instead of per-page Groq calls — live-proven (iLusso → owner + direct email).
+- **SerpAPI Google Maps discovery** (`_source_serpapi_maps`): business + phone
+  (E.164) + website at ~100% on live luxury dealers. Shares the 250/mo quota.
+- **WP4 booking funnel**, **approval gates**, **DNC fail-closed gate**,
+  **learning loops scheduled** (Lane 8), **dead scraper purge** (−3,270 lines),
+  **CI fixed** (Electron E2E + Render deploy), **Sheets restore row-tolerance**
+  (PR #34), **SerpAPI quota alert in the health lane** + `_schedule_background`
+  log-persistence fix (this session).
 
-## Lead scraping overhaul (2026-07-05) — discovery FIXED, extraction next
+## Owner actions (in order — these unblock everything)
 
-Live-tested the real pipeline and found the discovery layer was the root problem:
-`find_leads_v3` used the **deprecated** `duckduckgo_search` + Google-Maps HTML scrape,
-returning junk (WHOIS text as owner, image filenames as email). Fixes shipped:
+1. **Google Drive creds on Render** (`GOOGLE_REFRESH_TOKEN`,
+   `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`) — stops the deploy data loss.
+2. **Finder keys** — sign up Tomba/Prospeo/Verifalia **with Nova's AgentMail
+   address** (Tomba rejects webmail signups) and set `TOMBA_API_KEY`+
+   `TOMBA_SECRET`, `PROSPEO_API_KEY`, `VERIFALIA_USERNAME`/`VERIFALIA_PASSWORD`.
+3. **Remove the invalid `OPENROUTER_API_KEY` on Render** (its 401 masks real
+   errors as "All providers failed"; Groq+Gemini carry the load — the live
+   `/api/chat` path is verified working).
+4. `CALENDLY_LINK`/`CAL_COM_EVENT_SLUG` + Cal.com webhook — a HOT reply today
+   queues a booking-link reply **with no link configured**.
+5. SerpAPI $25/mo — the one paid upgrade worth making pre-revenue (the 250/mo
+   free quota is the binding constraint; the health lane now alerts at 90%).
 
-- **Discovery → SerpAPI Google Maps engine** (`_source_serpapi_maps` in `lead_gen_v3`).
-  Live result: **business + phone (E.164) + website at 100%** on real luxury dealers
-  (Lamborghini Beverly Hills, Marshall Goldman, DRIVE LA). Uses the existing SerpAPI
-  key; ~15 businesses/search; shares the 250/mo quota (fail-OPEN so a DB hiccup can't
-  zero out lead-gen). Legacy scrape/DDG kept only as fallback.
-- **Groq**: the key in `.env` was INVALID (401); Mark provided a valid one
-  (`gsk_IdJ…`). AI client now returns real output. ⚠️ **Render `GROQ_API_KEY` must be
-  updated to this same key.**
-- Removed 3 junk enrichment sources (`_state_registry_lookup` → `bizfile@sos.ca.gov`,
-  `_whois_lookup` → ToS boilerplate, `_ddg_owner_verification` → deprecated DDG).
-- Outreach: fixed a **double-send + approval-gate bypass** (drip now starts at the
-  day-2 follow-up, not a day-0 second email). Broadened the hunt niches across the ICP.
+## Next code work (priority order — see [[roadmap]])
 
-**Still open (the hard part): email + owner-name extraction.** The AI path
-(`enrich_lead_lite`) times out at the 25s Render ceiling and returns empty; needs a
-fast, focused rewrite (homepage + /about + /contact only, short per-page timeout,
-one Groq extraction call). This is the next task. Local-test note: scripts must
-`load_dotenv(<repo>/.env, override=True)` — the shell has an empty `SERPAPI_KEY`.
+1. Apply the reviewed `business_context.json` diff from [[profitability-plan]]
+   §6 (ICP narrowing, funnel benchmarks, calling policy) — **owner review
+   first**.
+2. Mission-control visual pass (needs Mark's specifics on what looks wrong).
+3. Funnel-math section in the CEO brief (profitability-plan §5, Lane 6).
+4. ADR-0004 Phase 1 remainder: `vault_context.py`, skill-outcome tables,
+   `/api/skill_health` (+ `vault_pull.py` sections).
+5. Later: Dependabot criticals (156, 4 critical — GUI-side), per-client call
+   caps, owner-name SERP fallback depth.
 
-## 🚨 The #1 blocker: ~~no working LLM key~~ RESOLVED 2026-07-05 (valid Groq key)
+## Standing constraints (don't "fix" these)
 
-A live test showed **all three providers are dead**: Groq 401, OpenRouter 401
-("User not found"), Google empty. Nova has **no working AI brain** — every AI call
-falls back to non-AI paths. The buildout code degrades gracefully, but nothing
-AI-driven works until Mark sets **one** live key (OpenRouter / Groq / Gemini) on
-Render. This gates real-world results more than any code.
-
-## Other owner actions
-
-1. `DASHBOARD_API_KEY` in local `.env` (vault sync). 2. `TARGET_NICHE` /
-`TARGET_LOCATION` on Render (done). 3. Deliverability check on first send.
-4. Confirm vault restore in Render boot log.
-
-## Not needed (settled)
-
-- **Apollo** — production hunting uses Google Maps + DuckDuckGo + free web/WHOIS/
-  registry enrichment. The Apollo scrapers are optional local-only browser tools
-  that can't run on Render. Not on the critical path.
+$0 pre-revenue · Render free tier: 512 MB, ephemeral disk, no browser, no SMTP
+(MX-only verify), 25s enrichment ceiling · `httpx==0.27.2` pinned · TCPA:
+**published business lines only, never personal cells** · cold email/calls/
+replies approval-gated unless `*_AUTOPILOT=1` · ads/spend always human-approved.
 
 ## Linked
 
 - [[project-brief]] · [[business-model]] · [[system-patterns]] · [[claude-brain]]
-- [[progress]] — running done/remaining list
+- [[progress]] — running done/remaining · [[profitability-plan]] — funnel math
+- [[session-2026-07-10-handoff]] — full state dump this refresh is based on

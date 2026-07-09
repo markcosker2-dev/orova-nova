@@ -452,7 +452,16 @@ class _DBBase:
                 break
             except Exception as e:
                 logger.error(f"Error closing pooled connection: {e}")
-        logger.info(f"Database connections closed (drained {closed} from pool)")
+        # This also runs from an atexit hook, when the log stream may already
+        # be closed (pytest capture teardown, interpreter shutdown) — logging
+        # then prints a spurious "--- Logging error ---" traceback. Suppress
+        # handler errors for this one farewell line only.
+        prev_raise = logging.raiseExceptions
+        logging.raiseExceptions = False
+        try:
+            logger.info(f"Database connections closed (drained {closed} from pool)")
+        finally:
+            logging.raiseExceptions = prev_raise
 
     @classmethod
     def register_sigterm_handler(cls, loop):

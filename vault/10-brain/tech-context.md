@@ -14,8 +14,10 @@ status: active
   `C:\Users\Mike\AppData\Local\hermes\hermes-agent\venv`.
 - **HermesClaw GUI:** Node.js / TypeScript, Electron + esbuild.
 - **Database:** SQLite (`app/orova.db`) — primary state store. Render disk is
-  ephemeral, so state is backed up to Google Drive every 3h + on shutdown, and
-  restored Drive-first on boot.
+  ephemeral; the design is Drive backup every 3h + Drive-first restore on boot,
+  **but the Drive creds are not set on Render (verified 2026-07-10), so today
+  every deploy starts empty and only leads come back (Sheets fallback).** See
+  [[active-context]] for the owner action.
 
 ## Key dependencies
 
@@ -34,14 +36,15 @@ BeautifulSoup + duckduckgo_search (lead sourcing) · gspread (Sheets).
 
 | Var | Purpose |
 |---|---|
-| `GROQ_API_KEY` | Tier-1 brain. **Local copy is dead (401) — verify Render's is fresh.** |
-| `GOOGLE_API_KEY` | Gemini tier-2 + embeddings. Empty locally — verify on Render. |
-| `OPENROUTER_API_KEY` | Tier-3 fallback models |
+| `GROQ_API_KEY` | Tier-1 brain. Valid `gsk_IdJ…` key set locally + on Render (fixed 2026-07-05). |
+| `GOOGLE_API_KEY` | Gemini tier-2 + embeddings. |
+| `OPENROUTER_API_KEY` | Tier-3 fallback. **Render's copy is INVALID (401 "user not found") — remove it**; its error masks real failures. |
 | `AGENTMAIL_API_KEY` | Outreach email sending |
 | `DASHBOARD_API_KEY` | Mission Control + vault-sync auth |
-| `GOOGLE_APPLICATION_CREDENTIALS` | Drive backup/restore + vault (service acct) |
+| `GOOGLE_REFRESH_TOKEN`/`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` | Drive backup/restore. **NOT SET on Render (verified 2026-07-10) → every deploy wipes prod SQLite; only the Sheets lead-restore survives.** |
 | `RETELL_FROM_NUMBER` / `RETELL_API_KEY` | Cold calls (number +1 716 670 3920) |
-| `MAKE_CRM_WEBHOOK_URL` | Forward Retell events to Make.com CRM |
+| `SERPAPI_KEY` | Discovery + owner-name lookup — one shared 250/mo quota (health lane alerts at 90%) |
+| `TOMBA_API_KEY`+`TOMBA_SECRET` / `PROSPEO_API_KEY` / `VERIFALIA_USERNAME`+`VERIFALIA_PASSWORD` | Owner-email finder layer (built, keys not yet set — sign up with the AgentMail address, Tomba blocks webmail) |
 | `TELEGRAM_BOT_TOKEN` + `PERSONAL_CHAT_ID`/`ADMIN_CHAT_ID` | HITL approvals + alerts |
 | `RENDER_EXTERNAL_URL` | Base URL for `scripts/vault_pull.py` |
 
@@ -57,5 +60,8 @@ BeautifulSoup + duckduckgo_search (lead sourcing) · gspread (Sheets).
 
 ## Tests
 
-`python -m pytest tests -q` → 98 passing · `npx vitest run` → 40 passing ·
-`pnpm typecheck` clean (src only).
+`python -m pytest tests -q` → 197 passing (2026-07-10) · `npx vitest run` → 40
+passing · `pnpm typecheck` clean (src only). Known benign warnings: starlette
+0.27's own TestClient triggers httpx deprecation notices — inside the pinned
+package, goes away when fastapi/starlette are eventually upgraded together
+with the httpx pin.

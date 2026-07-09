@@ -138,6 +138,97 @@ class TestCEOBrain:
         assert "get_status" in src or "is_fresh" in src, "morning_brief should check for fresh start"
 
 
+# ── SerpAPI quota alert (health lane) ─────────────────────────────
+# The shared 250/mo SerpAPI budget is the binding constraint on lead volume
+# (vault/10-brain/profitability-plan.md §2.3): when it runs out, discovery AND
+# owner-name lookup silently stop. The health lane must warn Mark BEFORE that
+# happens — once per month-bucket, not once per 2-hour lane run.
+
+class TestSerpQuotaAlert:
+    @staticmethod
+    def _current_bucket():
+        import time
+        now = time.localtime()
+        return f"{now.tm_year}-{now.tm_mon}"
+
+    def _run_quota_check(self, state_map, telegram_mock):
+        from app.core.ceo_brain import CEOBrain
+        set_state = AsyncMock()
+
+        async def fake_get_state(key, default=None):
+            return state_map.get(key, default)
+
+        with patch("app.core.ceo_brain.DatabaseManager.get_state", side_effect=fake_get_state), \
+             patch("app.core.ceo_brain.DatabaseManager.set_state", set_state), \
+             patch("app.core.ceo_brain._send_telegram_alert", telegram_mock):
+            result = asyncio.run(CEOBrain()._check_serp_quota())
+        return result, set_state
+
+    def test_near_cap_warns_and_telegrams_once(self):
+        telegram = AsyncMock()
+        state = {"owner_finder:serp_monthly": {"bucket": self._current_bucket(), "count": 230}}
+        alert, set_state = self._run_quota_check(state, telegram)
+        assert "230/250" in alert
+        telegram.assert_awaited_once()
+        set_state.assert_awaited_once_with("serp_quota_alert_bucket", self._current_bucket())
+
+    def test_already_alerted_this_month_skips_telegram_but_keeps_alert(self):
+        telegram = AsyncMock()
+        state = {
+            "owner_finder:serp_monthly": {"bucket": self._current_bucket(), "count": 250},
+            "serp_quota_alert_bucket": self._current_bucket(),
+        }
+        alert, _ = self._run_quota_check(state, telegram)
+        assert alert  # still surfaces in the health report
+        telegram.assert_not_awaited()  # but no repeat Telegram ping
+
+    def test_stale_month_bucket_means_fresh_quota(self):
+        telegram = AsyncMock()
+        state = {"owner_finder:serp_monthly": {"bucket": "1999-1", "count": 250}}
+        alert, _ = self._run_quota_check(state, telegram)
+        assert alert == ""
+        telegram.assert_not_awaited()
+
+    def test_under_threshold_is_quiet(self):
+        telegram = AsyncMock()
+        state = {"owner_finder:serp_monthly": {"bucket": self._current_bucket(), "count": 100}}
+        alert, _ = self._run_quota_check(state, telegram)
+        assert alert == ""
+        telegram.assert_not_awaited()
+
+    def test_health_check_survives_quota_check_failure(self):
+        """Fail-open: a state_store error must never break the health lane."""
+        from app.core.ceo_brain import CEOBrain
+        with patch("app.core.ceo_brain.DatabaseManager.aget_metrics",
+                   AsyncMock(return_value={"leads_found": 25, "emails_sent": 50, "replies_received": 5})), \
+             patch("app.core.ceo_brain.DatabaseManager.fetchone",
+                   AsyncMock(return_value={"cnt": 1})), \
+             patch("app.core.ceo_brain.DatabaseManager.get_state",
+                   AsyncMock(side_effect=RuntimeError("state_store is down"))), \
+             patch("app.core.ceo_brain._send_telegram_alert", AsyncMock()):
+            health = asyncio.run(CEOBrain().pipeline_health_check())
+        assert "health_score" in health
+
+    def test_health_check_docks_score_and_lists_quota_alert(self):
+        from app.core.ceo_brain import CEOBrain
+
+        async def fake_get_state(key, default=None):
+            if key == "owner_finder:serp_monthly":
+                return {"bucket": self._current_bucket(), "count": 249}
+            return default
+
+        with patch("app.core.ceo_brain.DatabaseManager.aget_metrics",
+                   AsyncMock(return_value={"leads_found": 25, "emails_sent": 50, "replies_received": 5})), \
+             patch("app.core.ceo_brain.DatabaseManager.fetchone",
+                   AsyncMock(return_value={"cnt": 1})), \
+             patch("app.core.ceo_brain.DatabaseManager.get_state", side_effect=fake_get_state), \
+             patch("app.core.ceo_brain.DatabaseManager.set_state", AsyncMock()), \
+             patch("app.core.ceo_brain._send_telegram_alert", AsyncMock()):
+            health = asyncio.run(CEOBrain().pipeline_health_check())
+        assert any("SerpAPI" in a for a in health["alerts"])
+        assert health["health_score"] <= 85  # -15 for the quota warning
+
+
 # ── Fix 3: Self-Improvement Loop ──────────────────────────────────
 
 class TestSelfImprovement:

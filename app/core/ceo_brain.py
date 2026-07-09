@@ -414,6 +414,40 @@ class CEOBrain:
         except Exception as e:
             logger.warning(f"[CEO_BRAIN] Brief persistence failed (non-fatal): {e}")
 
+    SERP_QUOTA_WARN_RATIO = 0.9
+
+    async def _check_serp_quota(self) -> str:
+        """Return a warning string when the shared SerpAPI monthly quota is
+        >=90% spent, else "". Sends one dedicated Telegram alert per
+        month-bucket (state-debounced) so Mark hears about it exactly once.
+
+        Reads the same state_store counter both quota consumers increment
+        (owner_finder._ration_check_and_increment, key
+        "owner_finder:serp_monthly") — no new bookkeeping, just visibility.
+        """
+        import time as _time
+        from app.skills.owner_finder import SERPAPI_MONTHLY_CAP
+
+        state = await DatabaseManager.get_state("owner_finder:serp_monthly") or {}
+        now = _time.localtime()
+        current_bucket = f"{now.tm_year}-{now.tm_mon}"
+        if state.get("bucket") != current_bucket:
+            return ""  # counter is from a previous month — quota effectively fresh
+        used = int(state.get("count", 0))
+        if used < SERPAPI_MONTHLY_CAP * self.SERP_QUOTA_WARN_RATIO:
+            return ""
+
+        alert = (
+            f"SerpAPI quota at {used}/{SERPAPI_MONTHLY_CAP} for this month — "
+            f"lead discovery AND owner-name lookup halt when it runs out "
+            f"($25/mo upgrade removes the ceiling)."
+        )
+        debounce = await DatabaseManager.get_state("serp_quota_alert_bucket")
+        if debounce != current_bucket:
+            await _send_telegram_alert(f"⚠️ **SerpAPI quota warning**\n\n{alert}")
+            await DatabaseManager.set_state("serp_quota_alert_bucket", current_bucket)
+        return alert
+
     async def pipeline_health_check(self, client_id: int = 0) -> dict:
         """
         Runs periodically (every 2 hours) to check the health of the pipeline.
@@ -455,7 +489,22 @@ class CEOBrain:
         if stale_count > 5:
             alerts.append(f"{stale_count} leads are stale (no updates in 48h+). Escalation recommended.")
             health_score -= 10
-            
+
+        # 4. SerpAPI quota — the binding constraint on lead volume (see
+        # vault/10-brain/profitability-plan.md §2.3/§5.7): discovery AND
+        # owner-name lookup share one 250/mo budget, and exhaustion silently
+        # zeroes out hunting mid-month. Warn at >=90% with a dedicated
+        # Telegram alert, debounced to once per month-bucket so the 2-hourly
+        # lane doesn't repeat it 360 times. Fail-open: a state read/write
+        # error must never break the health check.
+        try:
+            serp_alert = await self._check_serp_quota()
+            if serp_alert:
+                alerts.append(serp_alert)
+                health_score -= 15
+        except Exception as e:
+            logger.debug(f"[CEO_BRAIN] SerpAPI quota check skipped: {e}")
+
         health_score = max(0, health_score)
         
         # If health score drops below 70, alert CEO
