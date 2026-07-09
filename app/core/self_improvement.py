@@ -81,6 +81,86 @@ class SkillOutcomeTracker:
             logger.debug(f"[SKILL_OUTCOMES] record skipped for {skill_name}: {e}")
 
 
+class SkillChallengerEvaluator:
+    """Champion/challenger evaluation for SKILL VERSIONS (ADR-0004 B2.3) —
+    the exact Wilson-bound machinery evaluate_challengers applies to strategy
+    strings, generalized to versioned skill implementations recorded by
+    SkillOutcomeTracker. This evaluator only flips labels from accumulated
+    production outcomes; it never writes code. With no challengers registered
+    (today's state: builtin champions only), every cycle is a clean no-op —
+    it activates the day a forged/skill-creator challenger is registered.
+
+    Thresholds mirror evaluate_challengers: promotion needs sample >= 20 and
+    a Wilson bound strictly above the champion's; a challenger at >= 20
+    samples with a bound below half the champion's is retired.
+    """
+
+    MIN_SAMPLE = 20
+    RETIRE_RATIO = 0.5
+
+    @classmethod
+    async def run_cycle(cls, client_id: int = 0) -> dict:
+        """Evaluate every skill with an active champion + challengers.
+        Returns {"promoted": [...], "retired": [...]}. Never raises."""
+        promoted, retired = [], []
+        try:
+            rows = await DatabaseManager.fetchall(
+                """SELECT v.skill_name, v.id AS version_id, v.version_label,
+                          COUNT(o.id) AS n,
+                          SUM(CASE WHEN o.outcome = 'success' THEN 1 ELSE 0 END) AS wins
+                   FROM skill_versions v
+                   LEFT JOIN skill_outcomes o ON o.version_id = v.id
+                   WHERE v.active = 1
+                   GROUP BY v.skill_name, v.id, v.version_label"""
+            )
+            by_skill: dict = {}
+            for r in (rows or []):
+                version = dict(r)
+                version["n"] = int(version["n"] or 0)
+                version["wilson"] = wilson_lower_bound(int(version["wins"] or 0), version["n"])
+                by_skill.setdefault(version["skill_name"], []).append(version)
+
+            for skill, versions in by_skill.items():
+                champion = next((v for v in versions if v["version_label"] == "champion"), None)
+                challengers = [v for v in versions if v["version_label"].startswith("challenger")]
+                if not champion or not challengers:
+                    continue
+                for challenger in sorted(challengers, key=lambda v: v["wilson"], reverse=True):
+                    if challenger["n"] < cls.MIN_SAMPLE:
+                        continue
+                    if challenger["wilson"] > champion["wilson"]:
+                        await DatabaseManager.query(
+                            "UPDATE skill_versions SET version_label = 'retired', active = 0 WHERE id = ?",
+                            (champion["version_id"],))
+                        await DatabaseManager.query(
+                            "UPDATE skill_versions SET version_label = 'champion' WHERE id = ?",
+                            (challenger["version_id"],))
+                        rationale = (
+                            f"Challenger Wilson {challenger['wilson']:.3f} (n={challenger['n']}) beat "
+                            f"champion {champion['wilson']:.3f} (n={champion['n']})."
+                        )
+                        await log_improvement("skill", f"{skill}:{challenger['version_id']}", "promoted", rationale, client_id)
+                        await log_improvement("skill", f"{skill}:{champion['version_id']}", "retired", rationale, client_id)
+                        promoted.append(challenger["version_id"])
+                        retired.append(champion["version_id"])
+                        logger.info(f"[SKILL_CHALLENGER] Promoted {challenger['version_id']} over {champion['version_id']} for '{skill}'")
+                        champion = challenger  # remaining challengers face the new champion
+                    elif champion["wilson"] > 0 and challenger["wilson"] < champion["wilson"] * cls.RETIRE_RATIO:
+                        await DatabaseManager.query(
+                            "UPDATE skill_versions SET active = 0 WHERE id = ?",
+                            (challenger["version_id"],))
+                        await log_improvement(
+                            "skill", f"{skill}:{challenger['version_id']}", "retired",
+                            f"Wilson {challenger['wilson']:.3f} vs champion {champion['wilson']:.3f} "
+                            f"at n={challenger['n']} (< half the champion with sufficient sample).",
+                            client_id)
+                        retired.append(challenger["version_id"])
+                        logger.info(f"[SKILL_CHALLENGER] Retired {challenger['version_id']} for '{skill}'")
+        except Exception as e:
+            logger.error(f"[SKILL_CHALLENGER] cycle failed: {e}")
+        return {"promoted": promoted, "retired": retired}
+
+
 class OutcomeTracker:
     @classmethod
     async def record_outcome(cls, action: str, strategy: str, result: str, recipient: str = "", lead_id: int = 0, quality_score: float = 100.0, client_id: int = 0, metadata: dict = None):
