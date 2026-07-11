@@ -36,6 +36,15 @@ consent-link flow from chat), approve in the browser, set
 Render. Claude then verifies the first `[Vault] Uploaded →` line and the
 next boot's full-fidelity restore.
 
+## Business close-kit (NEW 2026-07-12)
+
+Council verdict: the first deal is lost to missing paperwork, not code.
+`close-kit/` now holds the draft **service-agreement**, **invoice-template**,
+and **onboarding-checklist** (terms pulled from business_context.json). Owner
+to-dos before first send: one lawyer pass on the agreement, pick e-sign +
+invoicing tools, verify Meta Business Manager partner access. See
+[[close-kit/README]].
+
 ## Blockers (all owner-side, in value order)
 
 1. `GOOGLE_REFRESH_TOKEN` — see next action above. **Blocks learning.**
