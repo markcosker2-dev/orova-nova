@@ -8,19 +8,24 @@ status: active
 
 # Owner Playbook — How Mark Decides
 
-> Built from the 2026-07 decision interview (in progress). Each file below is
-> a self-contained "skill" any future AI chat can load to act as Mark would.
-> Until a file exists here, DO NOT guess Mark's preference — ask him.
+> Built from the 2026-07-11 decision interview (11 questions, complete).
+> Each file is a self-contained "skill" any future AI chat loads to act as
+> Mark would. For anything not covered here, apply [[judgment-calls]]; if
+> still unsure — that IS the answer: escalate to Mark.
 
-## Planned skill files (filled as the interview progresses)
+## Skill files
 
-- `client-acceptance.md` — what makes a lead worth Mark's time; who gets
-  turned away even with money in hand
-- `pricing-and-negotiation.md` — discounts, trials, scope creep, payment terms
-- `outreach-voice.md` — how Mark talks to prospects; tone red lines
-- `red-lines.md` — the never-do list (hard stops, no exceptions)
-- `judgment-calls.md` — how Mark weighs risk/speed/cost when rules conflict
-- `escalation.md` — what an AI must ALWAYS bring to Mark vs. decide alone
+- [[client-acceptance]] — dealbreakers + the educate-first pattern
+- [[pricing-and-negotiation]] — price is the price; refund stance
+- [[outreach-voice]] — cadence spec, promise ceiling, social-proof scripts
+- [[red-lines]] — the 10 never-dos (absolute, above all other rules)
+- [[judgment-calls]] — the tie-breaker ranking: revenue > certainty >
+  reputation > speed, INSIDE the red lines
+- [[escalation]] — the always-Mark list, forever
+
+Machine twin: the enforcement-relevant rules are mirrored in
+`app/core/business_context.json` (`case_studies`, `outreach.cadence_policy`)
+so Nova's runtime obeys them too. Keep both in sync.
 
 ## Already codified elsewhere (don't duplicate)
 

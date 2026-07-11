@@ -1,6 +1,6 @@
 {
   "_description": "Single source of truth for OROVA business context. Loaded by email pipeline, proofreader, and drip templates. All other files (USER.md, brand_guidelines.json, config.py) should align with this.",
-  "_last_updated": "2026-07-10",
+  "_last_updated": "2026-07-11",
 
   "company": {
     "name": "OROVA",
@@ -161,13 +161,10 @@
   },
 
   "case_studies": {
-    "_note": "No real case studies yet. Use placeholder/generic numbers when needed.",
-    "placeholder_format": {
-      "before": "X leads/month (generic, industry-appropriate number)",
-      "after": "3-5x improvement",
-      "timeframe": "60-90 days",
-      "example": "We helped a {industry} business go from 15 qualified leads/month to 47 in just 8 weeks — all automated."
-    }
+    "_note": "Owner rule (2026-07-11 interview): NEVER cite past clients, past results, past verticals, or tenure — not even placeholders. All claims are forward-looking (what OROVA will do for THEM) or system promises (what the machine verifiably does). The scripts below are the ONLY approved responses.",
+    "when_asked_for_proof": "Due to our privacy policy we don't share client information — and that same privacy protects you: if we work together, your numbers never get shown to prospects who don't even end up buying.",
+    "when_asked_am_i_your_first": "No — I've signed and worked with clients before. (Say no more than this. NEVER mention or identify Mark's previous agency, in any channel, ever.)",
+    "promise_ceiling": "Reasonable, believable forward promises only — no guaranteed numbers on a deadline. Always anchor on the system promise: every lead called within minutes and qualified, so the client only speaks to people ready to move."
   },
 
   "compliance": {
@@ -183,13 +180,24 @@
       "hook": "Mention something specific about their business — show you actually looked",
       "value": "One sentence about what OROVA does that's relevant to them — for a first-touch email to a prospect with no case study yet, lead with Package 1 (Meta lead-gen + creatives); mention Package 2's AI qualification only if they ask 'what do you do with the leads.'",
       "ask": "Low-pressure invitation for a 10-15 minute chat",
-      "example": "Hi {name},\n\nI was checking out {company} — really impressed by {specific_thing}.\n\nWe help {industry} businesses on the West Coast stop chasing bad leads by qualifying every single one automatically. Most of our clients see 3-5x more qualified conversations within 60 days.\n\nWould a 10-minute call be worth it to see if this fits {company}?\n\nNova @ OROVA"
+      "example": "Hi {name},\n\nI was checking out {company} — really impressed by {specific_thing}.\n\nWe run Meta ads for {industry} businesses on the West Coast, and our AI calls and qualifies every lead within minutes — so you only ever talk to people ready to move.\n\nWould a 10-minute call be worth it to see if this fits {company}?\n\nNova @ OROVA"
     },
     "follow_up_email_framework": {
       "hook": "Reference the previous email casually",
-      "value": "Add social proof or a new insight",
+      "value": "Add a new insight or restate the system promise — NEVER past-client claims (see case_studies._note)",
       "ask": "Even lower pressure — 'no worries if not'",
-      "example": "Hi {name},\n\nJust circling back on my note last week — I know things get busy.\n\nOne of our {industry} clients just had their best month ever after switching to automated lead qualification. Happy to share how it works if you're curious.\n\nNo worries if the timing isn't right.\n\nNova @ OROVA"
+      "example": "Hi {name},\n\nJust circling back on my note last week — I know things get busy.\n\nThe short version: your ads bring the leads in, our AI qualifies every one before it reaches you, and you only speak to the serious ones. Happy to show you how it works if you're curious.\n\nNo worries if the timing isn't right.\n\nNova @ OROVA"
+    },
+    "cadence_policy": {
+      "rule": "1 initial email -> up to 3 follow-up emails, each on a different day -> if still silent, ONE cold call -> then mark cold and never contact again. Maximum 5 touches total per prospect, ever.",
+      "never": [
+        "Fake urgency or scarcity (e.g. 'only 2 slots left' when untrue)",
+        "Trash-talking competitor agencies",
+        "More follow-ups after the break-up email ('my last note' means last)",
+        "Simultaneous multi-channel bombardment (the email->call escalation is sequential and spaced by design)",
+        "Name-dropping people or brands we haven't worked with"
+      ],
+      "source": "Owner interview 2026-07-11 — vault/hermesclaw-orova/playbook/"
     }
   }
 }

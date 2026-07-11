@@ -10,6 +10,24 @@ status: active
 
 > Append-only. Newest entry first. One entry per working day/session.
 
+## 2026-07-11 (later) — Owner playbook + outreach conformance
+
+- **11-question decision interview complete** → `playbook/` (6 skill files):
+  client acceptance (educate-first, respect non-negotiable), pricing (firm,
+  no freebies, no full refunds), outreach voice (cadence 1+3+1-call, promise
+  ceiling, privacy-deflection scripts, past fully closed, never name the old
+  agency), 10 red lines, escalation always-Mark list, tie-breaker ranking
+  (revenue > certainty > reputation > speed, inside the red lines).
+- **Conformance fixes the interview forced**: cold_intro drip cut from 4→3
+  follow-ups (the 5th email even followed the break-up "last note" — gone);
+  all past-client claims rewritten to system-promise framing across 3
+  sequences + business_context examples; fabricated case-study placeholder
+  replaced with Mark's approved proof/first-client scripts; cadence policy
+  codified in the machine twin. 6 regression tests pin it all (suite 254).
+- Vault project folder created (README/STATUS/progress/decision, PR #47);
+  kepano/obsidian-skills installed user-level; second-brain held for Mark's
+  call (its agents auto-rewrite vaults); obsidian-mind recommended skip.
+
 ## 2026-07-11 — Keys activation + Drive backup last mile
 
 - **Happened:** Mark supplied the Prospeo key. Live smoke test immediately
