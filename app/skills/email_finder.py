@@ -6,7 +6,7 @@ this module resolves the owner's direct EMAIL:
 
     1. Tomba.io finder   (25 searches/mo free, name+domain -> email) —
        only for leads where the website scrape found no email at all.
-    2. Prospeo finder    (75 credits/mo free, same shape) — a same-tier
+    2. Prospeo finder    (100 credits/mo free, /enrich-person) — a same-tier
        ALTERNATE, tried only when Tomba is unset or its quota is spent;
        never both on one lead.
     3. Verifalia verify  (25 credits/day free ≈ 750/mo) — HTTP-only
@@ -38,7 +38,7 @@ _VERIFALIA_SUBMIT_WAIT_MS = 5000
 _VERIFALIA_POLL_WAIT_MS = 4000
 
 TOMBA_MONTHLY_CAP = 25
-PROSPEO_MONTHLY_CAP = 75
+PROSPEO_MONTHLY_CAP = 100         # free tier grants 100 credits/mo (confirmed live 2026-07-10)
 VERIFALIA_DAILY_CAP = 25          # free tier grants 25/day (≈750/mo)
 MAX_GUESSES_TO_VERIFY = 3         # 3 credits/lead keeps ~8 leads/day verifiable
 
@@ -84,7 +84,15 @@ async def _tomba_finder(owner: str, domain: str) -> dict:
 
 
 async def _prospeo_finder(owner: str, domain: str) -> dict:
-    """Prospeo email finder — needs PROSPEO_API_KEY."""
+    """Prospeo email finder via the /enrich-person API — needs PROSPEO_API_KEY.
+
+    Endpoint + shapes verified live 2026-07-10 (iLusso -> todd@ilusso.com):
+    the older /email-finder path Prospeo shipped in early 2026 now 400s with
+    error_code DEPRECATED, so this targets the current /enrich-person route.
+    A credit is charged only when an email is actually revealed, so a miss
+    (person found, email masked, or no person) costs nothing on Prospeo's
+    side — but the ration still counts the attempt (conservative bookkeeping).
+    """
     api_key = os.getenv("PROSPEO_API_KEY")
     if not api_key or not owner or not domain:
         return dict(_EMPTY)
@@ -92,9 +100,9 @@ async def _prospeo_finder(owner: str, domain: str) -> dict:
         logger.info("[EMAIL_FINDER] Prospeo monthly cap reached, skipping")
         return dict(_EMPTY)
     try:
-        url = "https://api.prospeo.io/email-finder"
+        url = "https://api.prospeo.io/enrich-person"
         headers = {"Content-Type": "application/json", "X-KEY": api_key}
-        payload = {"full_name": owner, "company": domain}
+        payload = {"data": {"full_name": owner, "company_website": domain}}
         async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
             resp = await client.post(url, json=payload, headers=headers)
         if resp.status_code != 200:
@@ -102,15 +110,15 @@ async def _prospeo_finder(owner: str, domain: str) -> dict:
         body = resp.json()
         if body.get("error"):
             return dict(_EMPTY)
-        response = body.get("response") or {}
-        # Prospeo has shipped both shapes: "email" as a bare string and as a
-        # nested {"email": ...} object — accept either.
-        email_field = response.get("email")
-        email = (email_field.get("email") if isinstance(email_field, dict) else email_field) or ""
-        email = email.strip().lower()
-        if not email or "@" not in email:
+        email_obj = ((body.get("person") or {}).get("email")) or {}
+        # revealed=false means the address is masked (e.g. "t***@x.com") — not
+        # usable for outreach, so require an explicit reveal + a real address.
+        if not email_obj.get("revealed"):
             return dict(_EMPTY)
-        status = "verified" if (response.get("email_status") or "").upper() == "VALID" else "found"
+        email = (email_obj.get("email") or "").strip().lower()
+        if not email or "@" not in email or "*" in email:
+            return dict(_EMPTY)
+        status = "verified" if (email_obj.get("status") or "").upper() == "VERIFIED" else "found"
         return {"email": email, "source": "prospeo", "status": status}
     except Exception as e:
         logger.debug(f"[EMAIL_FINDER] Prospeo lookup failed for {domain}: {e}")
