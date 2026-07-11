@@ -5,7 +5,9 @@ Restore command pulls latest snapshot back to disk post-redeploy.
 """
 
 import asyncio
+import base64
 import io
+import json
 import logging
 import os
 import shutil
@@ -36,11 +38,19 @@ BACKUP_INTERVAL_SECONDS = 12 * 3600 # 12 hours
 def _get_drive_service():
     """Build a Google Drive v3 service client.
 
-    Tries user OAuth env vars first, then falls back to the service-account
-    file (GOOGLE_APPLICATION_CREDENTIALS) that drive_backup.py and the
-    Sheets integration already use — one set of Render credentials powers
-    every Drive feature.
+    Credential precedence (first available wins):
+      1. GOOGLE_REFRESH_TOKEN + GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET (user OAuth)
+      2. GOOGLE_CREDENTIALS_JSON (base64 service-account JSON) — the SAME
+         variable the Sheets integration already uses (sheets_sync.py), so a
+         single Render credential powers Drive backup AND Sheets with no new
+         env var to configure.
+      3. GOOGLE_APPLICATION_CREDENTIALS (service-account file path)
+
+    Backups land in the service account's own Drive (its 15GB), read back by
+    the same account on restore — self-contained, no user-Drive sharing needed.
     """
+    _DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive"]
+
     refresh_token = os.getenv("GOOGLE_REFRESH_TOKEN")
     client_id = os.getenv("GOOGLE_CLIENT_ID")
     client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
@@ -55,16 +65,25 @@ def _get_drive_service():
         )
         return build("drive", "v3", credentials=creds, cache_discovery=False)
 
+    creds_b64 = os.getenv("GOOGLE_CREDENTIALS_JSON")
+    if creds_b64:
+        creds_dict = json.loads(base64.b64decode(creds_b64).decode("utf-8"))
+        sa_creds = service_account.Credentials.from_service_account_info(
+            creds_dict, scopes=_DRIVE_SCOPES
+        )
+        return build("drive", "v3", credentials=sa_creds, cache_discovery=False)
+
     creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "credentials.json")
     if os.path.exists(creds_path):
         sa_creds = service_account.Credentials.from_service_account_file(
-            creds_path, scopes=["https://www.googleapis.com/auth/drive"]
+            creds_path, scopes=_DRIVE_SCOPES
         )
         return build("drive", "v3", credentials=sa_creds, cache_discovery=False)
 
     raise ValueError(
         "No Google Drive credentials: set GOOGLE_REFRESH_TOKEN/GOOGLE_CLIENT_ID/"
-        "GOOGLE_CLIENT_SECRET or GOOGLE_APPLICATION_CREDENTIALS."
+        "GOOGLE_CLIENT_SECRET, or GOOGLE_CREDENTIALS_JSON, or "
+        "GOOGLE_APPLICATION_CREDENTIALS."
     )
 
 def _get_or_create_folder(service) -> str:
