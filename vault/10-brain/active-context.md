@@ -61,22 +61,29 @@ check `/api/logs` for the restore line after each deploy.
 5. SerpAPI $25/mo — the one paid upgrade worth making pre-revenue (the 250/mo
    free quota is the binding constraint; the health lane now alerts at 90%).
 
-## Next code work (priority order — see [[roadmap]])
+## Code milestone board — ALL SHIPPED (2026-07-10, PRs #32–#42)
 
-1. ~~Apply the `business_context.json` §6 diff~~ ✅ owner-approved & shipped
-   2026-07-10 — ICP narrowed (aviation/yacht → opportunistic-only), funnel
-   benchmarks embedded, margin corrected to 90%+ (75-80% floor retained),
-   P1-first outreach framing, net-new calling-policy compliance section, and
-   the hunt rotation updated to match (jet/yacht out, auto sub-niches in).
-2. Mission-control visual pass (needs Mark's specifics on what looks wrong).
-3. ~~Funnel-math section in the CEO brief~~ ✅ shipped 2026-07-10 — the daily
-   brief now shows 7d-vs-prior-7d conversion against the §2.3 benchmark bands
-   (deterministic block + fed to the AI summary).
-4. ~~ADR-0004 Phase 1~~ ✅ shipped 2026-07-10 (vault context injection,
-   skill-outcome tracking, improvement changelog, `/api/skill_health`).
-   Phase 2 (SkillChallengerEvaluator) is next when outcome volume exists.
-5. Later: Dependabot criticals (156, 4 critical — GUI-side), per-client call
-   caps, owner-name SERP fallback depth.
+Every code milestone on the board is merged, deployed, and live-verified:
+`business_context.json` §6 (owner-approved), CEO-brief funnel math
+(live-verified in a production brief), ADR-0004 Phases 1 **and** 2
+(SkillChallengerEvaluator in Lane 8, no-op until a challenger registers),
+mission-control overflow fix (live-verified in the served CSS + preview at
+577px/375px), Dependabot criticals (**4 → 0**, GitHub banner confirms),
+log-pipeline secret redaction (live-verified: `bot[REDACTED]` in the boot
+log), SerpAPI quota alert, and the owner-email finder layer.
+
+**The gate is now entirely the owner env actions above** — nothing on the
+code side blocks outreach volume.
+
+## Genuinely-later code work (post-revenue or post-volume)
+
+- Per-client call caps (`MAX_CALLS_PER_DAY` is global — fine at 1 client,
+  binds at 3+; profitability-plan §5).
+- National DNC registry scrub gate ahead of `trigger_retell_call()`
+  (compliance follow-up, needs a paid/free-tier scrub API).
+- Deliverability hardening (SPF/DKIM checks) once a sending domain exists.
+- ADR-0004 Phase 3 (HermesClaw vault service + Render read-gap decision).
+- Remaining Dependabot highs (76, GUI-side, non-critical).
 
 ## Standing constraints (don't "fix" these)
 
