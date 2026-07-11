@@ -25,8 +25,11 @@ logger = logging.getLogger(__name__)
 
 SEQUENCES = {
     "cold_intro_drip": {
-        "name": "Cold Intro Drip (5-Touch)",
-        "description": "5-email cold outreach sequence with increasing urgency",
+        "name": "Cold Intro Drip (4-Touch)",
+        # Owner cadence spec (playbook, 2026-07-11): 1 initial + 3 follow-ups
+        # on different days, then ONE call, then stop forever. The break-up
+        # email is the LAST email — nothing may ever send after "my last note".
+        "description": "Initial + 3 spaced follow-ups, ending on an honest break-up",
         "emails": [
             {
                 "delay_days": 0,
@@ -46,12 +49,13 @@ SEQUENCES = {
                 "subject_template": "Re: Quick question about {company}",
                 "body_template": (
                     "Hi {first_name},\n\n"
-                    "Just circling back. One of our {industry} clients on the West Coast went from "
-                    "wasting hours on unqualified leads to only taking calls that actually convert.\n\n"
-                    "Happy to share how it works.\n\n"
+                    "Just circling back. The short version of what we do: every lead your ads "
+                    "bring in gets called and qualified within minutes, so the only calls you "
+                    "take are people ready to move.\n\n"
+                    "Happy to show you how it works.\n\n"
                     "Nova @ OROVA"
                 ),
-                "purpose": "Social proof follow-up"
+                "purpose": "System-promise follow-up (no past-client claims — owner rule)"
             },
             {
                 "delay_days": 4,
@@ -76,19 +80,7 @@ SEQUENCES = {
                     "Here when you're ready.\n\n"
                     "Nova @ OROVA"
                 ),
-                "purpose": "Break-up email"
-            },
-            {
-                "delay_days": 8,
-                "subject_template": "Update from OROVA",
-                "body_template": (
-                    "Hi {first_name},\n\n"
-                    "We've been getting great results for {industry} businesses on the West Coast — "
-                    "qualified leads coming in daily, no more tire-kickers.\n\n"
-                    "If you're open to a quick call, Mark would love to walk you through it.\n\n"
-                    "Nova @ OROVA"
-                ),
-                "purpose": "Re-engage after cooling period"
+                "purpose": "Break-up email — ALWAYS the final email of this sequence"
             }
         ]
     },
@@ -110,15 +102,16 @@ SEQUENCES = {
             },
             {
                 "delay_days": 2,
-                "subject_template": "Results in {industry}",
+                "subject_template": "How this works for {industry}",
                 "body_template": (
                     "Hi {first_name},\n\n"
-                    "Thought you'd find this interesting — a {industry} client of ours stopped chasing "
-                    "bad leads entirely. Every call they take now is pre-qualified by our AI.\n\n"
+                    "Picture your lead flow with the chasing removed — every enquiry called and "
+                    "qualified by our AI before it ever reaches you, so each call you take is "
+                    "someone ready to talk business.\n\n"
                     "Could this work for {company}?\n\n"
                     "Nova @ OROVA"
                 ),
-                "purpose": "Case study / social proof"
+                "purpose": "System-promise follow-up (no past-client claims — owner rule)"
             },
             {
                 "delay_days": 4,
@@ -143,8 +136,9 @@ SEQUENCES = {
                 "subject_template": "Thought of {company}",
                 "body_template": (
                     "Hi {first_name},\n\n"
-                    "We were reviewing our pipeline and {company} came up. "
-                    "We've upgraded our lead qualification — results are even better for {industry} businesses now.\n\n"
+                    "We were reviewing our pipeline and {company} came up. Since we last spoke, "
+                    "we've sharpened how our AI qualifies leads — worth a fresh look if better "
+                    "lead quality is on your radar this quarter.\n\n"
                     "Worth a quick call?\n\n"
                     "Nova @ OROVA"
                 ),
@@ -152,15 +146,15 @@ SEQUENCES = {
             },
             {
                 "delay_days": 2,
-                "subject_template": "New results in {industry}",
+                "subject_template": "Only speak to buyers, {first_name}",
                 "body_template": (
                     "Hi {first_name},\n\n"
-                    "One of our {industry} clients just had their best month after switching to automated "
-                    "lead qualification — qualified leads only, no more tire-kickers.\n\n"
-                    "If {company} is looking to grow this quarter, Mark would love to chat.\n\n"
+                    "The pitch in one line: your ads bring leads in, our AI calls and qualifies "
+                    "every one within minutes, and {company} only ever talks to the serious ones.\n\n"
+                    "If growth is on the plan this quarter, Mark would love to chat.\n\n"
                     "Nova @ OROVA"
                 ),
-                "purpose": "Updated social proof"
+                "purpose": "System-promise re-engagement (no past-client claims — owner rule)"
             }
         ]
     },

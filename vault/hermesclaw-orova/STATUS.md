@@ -51,8 +51,14 @@ next boot's full-fidelity restore.
 
 - Prospeo free key is in chat transcripts — rotate from prospeo.io when
   convenient (low urgency, free-tier key).
-- Owner-interview playbook (`playbook/`) — in progress 2026-07-11; Mark is
-  being interviewed one question at a time.
+- ✅ Owner playbook COMPLETE (2026-07-11, 11-question interview) —
+  `playbook/` has 6 skill files; outreach copy + `business_context.json`
+  brought into conformance (past-client claims removed, cadence capped at
+  1+3+call, 5th drip email deleted). Mark: skim the playbook files and
+  correct anything that reads wrong.
+- Plugin decision pending: **obsidian-second-brain** — install commands-only,
+  full (its agents auto-rewrite the vault), or skip? (claude-council needs
+  one interactive `/plugin` command from Mark; kepano skills installed.)
 
 ## Env facts (verified 2026-07-11)
 
