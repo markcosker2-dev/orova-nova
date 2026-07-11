@@ -1,5 +1,21 @@
 # CLAUDE.md — OROVA / HermesClaw
 
+## Council protocol (owner mandate, 2026-07-11)
+
+The claude-council plugin is Claude's own advisory board, not a user tool.
+When its commands are available (`/claude-council:ask` in the skills list):
+
+- **Consult the council before committing to** architecture decisions,
+  non-obvious bug diagnoses, business-sensitive copy, and any judgment call
+  where the owner playbook (`vault/hermesclaw-orova/playbook/`) doesn't
+  settle it. Weigh the outside opinions, then decide — the council advises,
+  Claude decides, Mark overrules.
+- The stop-gate (`.claude/council-stop-gate.json`, enabled) has a second
+  model review Claude's uncommitted diff at end of turn. Treat a `BLOCK:`
+  verdict as a real finding: fix or explicitly rebut it, never ignore it.
+- If no council provider key is configured, note it once and proceed —
+  the council is an amplifier, not a dependency.
+
 ## What this repo is
 
 - `app/` — "Nova", the autonomous lead-gen agent (Python/FastAPI, deployed on Render free tier at orova-nova.onrender.com). 9 scheduled worker lanes: hunting, outreach, replies, cold calls (Retell), backups, CEO brain, health, self-improvement, drips.

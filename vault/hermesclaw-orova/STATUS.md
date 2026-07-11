@@ -56,9 +56,12 @@ next boot's full-fidelity restore.
   brought into conformance (past-client claims removed, cadence capped at
   1+3+call, 5th drip email deleted). Mark: skim the playbook files and
   correct anything that reads wrong.
-- Plugin decision pending: **obsidian-second-brain** — install commands-only,
-  full (its agents auto-rewrite the vault), or skip? (claude-council needs
-  one interactive `/plugin` command from Mark; kepano skills installed.)
+- ✅ claude-council INSTALLED & LIVE (2026-07-11): smoke-tested against
+  Gemini (gemini-2.5-flash), stop-gate armed, CLAUDE.md mandate written —
+  Claude convenes it on significant calls from next session onward.
+- Plugin decision still pending: **obsidian-second-brain** — commands-only,
+  full (its agents auto-rewrite the vault), or skip? (kepano skills installed;
+  obsidian-mind recommended skip.)
 
 ## Env facts (verified 2026-07-11)
 
