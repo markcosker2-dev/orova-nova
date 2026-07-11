@@ -118,22 +118,48 @@ def test_prospeo_skipped_when_key_unset(monkeypatch):
     client_cls.assert_not_called()
 
 
-def test_prospeo_parses_string_email_shape(monkeypatch):
+# Shape mirrors the live /enrich-person response verified 2026-07-10.
+def _prospeo_body(email="jane@acme.com", status="VERIFIED", revealed=True):
+    return {"error": False, "person": {"full_name": "Jane Smith",
+            "email": {"status": status, "revealed": revealed, "email": email,
+                      "verification_method": "SMTP"}}}
+
+
+def test_prospeo_parses_verified_reveal(monkeypatch):
     monkeypatch.setenv("PROSPEO_API_KEY", "pk_test")
-    body = {"error": False, "response": {"email": "jane@acme.com", "email_status": "VALID"}}
-    client = _client(post_return=_resp(200, body))
+    client = _client(post_return=_resp(200, _prospeo_body()))
     with patch("app.skills.email_finder.httpx.AsyncClient", return_value=client), _patch_db():
         result = asyncio.run(email_finder._prospeo_finder("Jane Smith", "acme.com"))
     assert result == {"email": "jane@acme.com", "source": "prospeo", "status": "verified"}
 
 
-def test_prospeo_parses_nested_email_shape(monkeypatch):
+def test_prospeo_unverified_reveal_is_found_not_verified(monkeypatch):
     monkeypatch.setenv("PROSPEO_API_KEY", "pk_test")
-    body = {"error": False, "response": {"email": {"email": "jane@acme.com"}, "email_status": "UNKNOWN"}}
+    client = _client(post_return=_resp(200, _prospeo_body(status="UNKNOWN")))
+    with patch("app.skills.email_finder.httpx.AsyncClient", return_value=client), _patch_db():
+        result = asyncio.run(email_finder._prospeo_finder("Jane Smith", "acme.com"))
+    assert result["status"] == "found"
+
+
+def test_prospeo_masked_unrevealed_email_is_rejected(monkeypatch):
+    monkeypatch.setenv("PROSPEO_API_KEY", "pk_test")
+    body = _prospeo_body(email="j***@acme.com", revealed=False)
     client = _client(post_return=_resp(200, body))
     with patch("app.skills.email_finder.httpx.AsyncClient", return_value=client), _patch_db():
         result = asyncio.run(email_finder._prospeo_finder("Jane Smith", "acme.com"))
-    assert result == {"email": "jane@acme.com", "source": "prospeo", "status": "found"}
+    assert result["email"] == ""  # masked address is not usable for outreach
+
+
+def test_prospeo_sends_new_enrich_person_shape(monkeypatch):
+    """Guard against regressing to the DEPRECATED /email-finder endpoint."""
+    monkeypatch.setenv("PROSPEO_API_KEY", "pk_test")
+    client = _client(post_return=_resp(200, _prospeo_body()))
+    with patch("app.skills.email_finder.httpx.AsyncClient", return_value=client), _patch_db():
+        asyncio.run(email_finder._prospeo_finder("Jane Smith", "acme.com"))
+    url = client.post.await_args.args[0]
+    payload = client.post.await_args.kwargs["json"]
+    assert url.endswith("/enrich-person")
+    assert payload == {"data": {"full_name": "Jane Smith", "company_website": "acme.com"}}
 
 
 def test_prospeo_error_flag_returns_empty(monkeypatch):
