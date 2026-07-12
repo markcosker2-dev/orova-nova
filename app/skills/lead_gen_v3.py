@@ -63,6 +63,30 @@ FALSE_POSITIVE_NAMES = frozenset({
     "Book Now", "In Silver Lake",
 })
 
+# Business / entity / web-page words that are never a person's first-or-last
+# name. If ANY token of a candidate matches, it's a business or scraped page
+# phrase ("Maintenance Manual", "Member Circles", "Auto Repair"), not an owner.
+# Deliberately excludes words that are also common surnames (Baker, Page,
+# Mason, Taylor, Wood, Berry, Marsh) to avoid rejecting real people.
+_NON_NAME_WORDS = frozenset({
+    "auto", "automotive", "repair", "repairs", "maintenance", "manual", "manuals",
+    "service", "services", "servicing", "dealer", "dealers", "dealership",
+    "detailing", "collision", "bodyshop", "towing", "roadside", "transmission",
+    "brakes", "tire", "tires", "wheel", "wheels", "engine", "upholstery",
+    "ceramic", "coating", "coatings", "tint", "tinting", "wrap", "wraps",
+    "remodel", "remodeling", "renovation", "construction", "builders", "roofing",
+    "plumbing", "hvac", "landscaping", "realty", "realtors", "brokerage",
+    "llc", "inc", "ltd", "corp", "corporation", "incorporated", "company",
+    "motors", "motor", "enterprises", "holdings", "group", "industries",
+    "solutions", "systems", "technologies", "associates", "management",
+    "member", "members", "circles", "center", "centre", "store", "shop",
+    "mobile", "express", "premium", "luxury", "exotic", "rental", "rentals",
+    "leasing", "financing", "warranty", "insurance", "appointment", "quote",
+    "welcome", "about", "contact", "team", "staff", "login", "search",
+    "results", "privacy", "policy", "terms", "menu", "gallery",
+})  # NOTE: deliberately omit surname-collisions (Page, Home, Baker, Mason, Wood, Berry, Marsh)
+
+
 def _is_plausible_name(text: str) -> bool:
     if not text or len(text) < 4 or len(text) > 50:
         return False
@@ -74,6 +98,10 @@ def _is_plausible_name(text: str) -> bool:
     if not parts[0][0].isupper():
         return False
     if text in FALSE_POSITIVE_NAMES:
+        return False
+    # Reject if any token is a business/entity/page word — the #1 source of
+    # junk "owner" names from scraped titles and WHOIS org fields.
+    if any(p.lower().strip("'-") in _NON_NAME_WORDS for p in parts):
         return False
     return True
 
@@ -392,18 +420,22 @@ async def _whois_lookup(domain: str) -> dict:
                     if len(vcard) >= 2 and isinstance(vcard[1], list):
                         for field in vcard[1]:
                             if len(field) >= 4 and field[0] == "fn":
-                                result["owner_name"] = str(field[3]).strip()
+                                _cand = str(field[3]).strip()
+                                if _is_plausible_name(_cand):  # skip WHOIS org/privacy names
+                                    result["owner_name"] = _cand
                             elif len(field) >= 4 and field[0] == "email":
                                 result["email"] = str(field[3]).strip()
                             elif len(field) >= 4 and field[0] == "tel":
                                 result["phone"] = str(field[3]).strip()
-                
+
                 # Also check administrative/technical contacts
                 if "administrative" in roles and not result["owner_name"]:
                     if len(vcard) >= 2 and isinstance(vcard[1], list):
                         for field in vcard[1]:
                             if len(field) >= 4 and field[0] == "fn":
-                                result["owner_name"] = str(field[3]).strip()
+                                _cand = str(field[3]).strip()
+                                if _is_plausible_name(_cand):
+                                    result["owner_name"] = _cand
             
             # Fallback: check top-level name/handle fields
             if not result["owner_name"]:
@@ -412,8 +444,8 @@ async def _whois_lookup(domain: str) -> dict:
                 for notice in data.get("notices", []):
                     desc = " ".join(notice.get("description", []))
                     if desc and len(desc) < 200 and not result["owner_name"]:
-                        # Only use short descriptions that look like names/orgs
-                        if any(c.isupper() for c in desc[:10]):
+                        # Only accept a description that is actually a person name
+                        if _is_plausible_name(desc.strip()):
                             result["owner_name"] = desc.strip()
     except Exception as e:
         logger.debug(f"[RDAP] Error for {domain}: {e}")
@@ -426,8 +458,8 @@ async def _whois_lookup(domain: str) -> dict:
             resp = await client.get(alt_url)
             if resp.status_code == 200:
                 data = resp.json()
-                if data.get("registrant"):
-                    result["owner_name"] = data["registrant"]
+                if data.get("registrant") and _is_plausible_name(str(data["registrant"]).strip()):
+                    result["owner_name"] = str(data["registrant"]).strip()
                 if data.get("email"):
                     result["email"] = data["email"]
         except Exception:
