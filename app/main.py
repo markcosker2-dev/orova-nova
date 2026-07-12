@@ -389,7 +389,10 @@ async def global_exception_handler(request: Request, exc: Exception):
     logger.error(error_msg)
     if '_append_log' in globals():
         _append_log(f"❌ {error_msg}")
-    return JSONResponse(status_code=500, content={"status": "error", "message": str(exc)})
+    # Return a generic message to the client — the exception detail is logged
+    # server-side above, so surfacing str(exc) to the caller only leaks
+    # internals (CodeQL py/stack-trace-exposure).
+    return JSONResponse(status_code=500, content={"status": "error", "message": "Internal server error"})
 
 # --- [P6] Admin Command Center ---
 
