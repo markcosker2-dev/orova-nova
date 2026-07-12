@@ -943,13 +943,12 @@ def cold_escalation_job():
 def cloud_backup_job():
     logger.info("☁️ [LANE 5] Triggering Google Drive Database Backup...")
     try:
-        from app.core.database import DB_PATH
-        from app.skills.drive_backup import upload_database
-        loop = asyncio.new_event_loop()
-        try:
-            loop.run_until_complete(loop.run_in_executor(None, upload_database, DB_PATH))
-        finally:
-            loop.close()
+        # Use vault_skill.backup_database — the working OAuth-capable Drive path
+        # (the old drive_backup.upload_database was service-account-only and
+        # can't upload to consumer Drive). _run_async bridges this sync
+        # schedule-thread job to the async backup.
+        from app.skills.vault_skill import backup_database
+        _run_async(backup_database())
     except Exception as e:
         logger.error(f"[LANE 5] Backup Error: {e}")
 
