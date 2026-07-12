@@ -36,7 +36,21 @@ consent-link flow from chat), approve in the browser, set
 Render. Claude then verifies the first `[Vault] Uploaded →` line and the
 next boot's full-fidelity restore.
 
-## Business close-kit (NEW 2026-07-12)
+## Agent-team run (2026-07-12)
+
+Fable led 3 Sonnet agents in isolated worktrees on the security+quality
+backlog. All 3 hit the session limit mid-task (the known subagent-drain
+risk); the lead salvaged and completed the recoverable work inline:
+- ✅ **Dead-code removal** (PR #51): deleted dead `drive_backup.py`, repointed
+  Lane 5 to the working `vault_skill.backup_database`. (The 7 scraper modules
+  in the stale roadmap list were already gone from a prior cleanup.)
+- ✅ **National DNC Registry scrub gate** (PR #52): additive TCPA gate before
+  Retell calls, env-gated + fail-open + 31-day cache. Suite now **262**.
+- ⏸️ **Dependabot highs** — DEFERRED (leader call): 76 non-critical GUI-side
+  advisories; deserves a careful bump-and-retest pass with fresh budget, not
+  a rushed one. Top item for next session.
+
+## Business close-kit (2026-07-12)
 
 Council verdict: the first deal is lost to missing paperwork, not code.
 `close-kit/` now holds the draft **service-agreement**, **invoice-template**,
