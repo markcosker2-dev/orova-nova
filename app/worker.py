@@ -111,6 +111,19 @@ DEFAULT_HUNT_NICHES = [
     'luxury med spa california',
 ]
 
+
+def _parse_niche_range(raw: str) -> list:
+    """TARGET_NICHE may hold a RANGE of niches (comma / semicolon / newline
+    separated), e.g. 'exotic car dealer, luxury remodel, luxury real estate'.
+    Split it so the hunt rotates ONE niche per run — cramming the whole string
+    into a single SerpAPI query returns generic junk (live-observed 2026-07-12).
+    Returns [] for an empty/blank value so the caller falls back to the
+    curated DEFAULT_HUNT_NICHES rotation."""
+    if not raw:
+        return []
+    normalized = raw.replace(";", ",").replace("\n", ",")
+    return [n.strip() for n in normalized.split(",") if n.strip()]
+
 # Security: Wallet Drain Safeguard
 daily_hunt_counter = 0
 daily_call_counter = 0
@@ -298,8 +311,10 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
 
     import random
     if not niche:
-        niche = os.getenv("TARGET_NICHE") or None
         location = location or os.getenv("TARGET_LOCATION") or None
+        # Rotate through TARGET_NICHE's range (one per run); [] -> curated list.
+        target_niches = _parse_niche_range(os.getenv("TARGET_NICHE") or "")
+        niche = random.choice(target_niches) if target_niches else None
 
     if not niche:
         query = random.choice(DEFAULT_HUNT_NICHES)
