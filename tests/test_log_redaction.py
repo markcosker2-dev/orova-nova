@@ -16,9 +16,12 @@ def _reset_env_cache():
 
 
 def test_telegram_bot_token_path_is_redacted():
-    line = 'HTTP Request: POST https://api.telegram.org/bot8980108861:AAFHE1qbZ5K5CMTszMTyhqbxbkx2RpjSgOs/setWebhook "200 OK"'
+    # Token is deliberately fabricated + obviously-fake so it doesn't trip
+    # GitHub secret scanning; it still matches the bot<id>:<hash> shape the
+    # redactor targets.
+    line = 'HTTP Request: POST https://api.telegram.org/bot0000000000:FAKEtokenFORtestsONLYnotreal00/setWebhook "200 OK"'
     out = json_logger.redact_secrets(line)
-    assert "AAFHE1qbZ5K5CMTszMTyhqbxbkx2RpjSgOs" not in out
+    assert "FAKEtokenFORtestsONLYnotreal00" not in out
     assert "bot[REDACTED]/setWebhook" in out
 
 
