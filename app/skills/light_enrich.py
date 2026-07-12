@@ -1036,8 +1036,10 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
             markdown_fallback = page_data.get("markdown", "")
             content_for_extraction = html or markdown_fallback
 
-            # Special BBB.org Profile Extractor
-            if "bbb.org" in page_url:
+            # Special BBB.org Profile Extractor (dot-anchored host check so a
+            # URL merely containing "bbb.org" elsewhere can't select this parser)
+            _page_host = urllib.parse.urlparse(page_url).netloc.lower()
+            if _page_host == "bbb.org" or _page_host.endswith(".bbb.org"):
                 soup = BeautifulSoup(content_for_extraction, "html.parser")
                 if not lead.get("owner"):
                     for management_header in soup.find_all(text=re.compile(r'Business Management|Key People', re.I)):
