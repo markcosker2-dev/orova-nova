@@ -67,7 +67,10 @@ docs/pr-session-notes-*.md
 docs/
 
 .cursor/
-.claude/
+.claude/*
+# Version-control the Sales Intelligence skill pack (permanent HermesClaw layer);
+# keep the rest of .claude/ (caches, worktrees, local settings) ignored.
+!.claude/skills/
 .opencode/
 .playwright-mcp/
 .sisyphus/
