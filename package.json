@@ -16,7 +16,7 @@
             "isbinaryfile": "^5.0.0",
             "https-proxy-agent": "7.0.6",
             "axios": ">=1.16.0",
-            "undici": ">=7.28.0"
+            "undici": "^7.28.0"
         },
         "supportedArchitectures": {
             "os": [

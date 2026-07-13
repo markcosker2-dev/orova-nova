@@ -22,6 +22,12 @@ export default [
     ignores: [
       // Dependencies and build outputs
       'node_modules/**',
+      // Nested git worktrees (agent/review sandboxes) — never lint these;
+      // they don't exist on CI's fresh checkout and otherwise leak thousands
+      // of duplicate findings into a local `pnpm run lint`.
+      '.claude/**',
+      '.kilo/**',
+      '**/*.worktrees/**',
       'dist/**',
       'dist-electron/**',
       'build/**',

@@ -8,7 +8,7 @@ overrides:
   isbinaryfile: ^5.0.0
   https-proxy-agent: 7.0.6
   axios: '>=1.16.0'
-  undici: '>=7.28.0'
+  undici: ^7.28.0
 
 importers:
 
@@ -5826,9 +5826,9 @@ packages:
   undici-types@8.4.1:
     resolution: {integrity: sha512-iIXDNrTeaM0lDZvNUY1Urfs9dVgOWdQCkv6VMiePh644EKce0qoz6FNxxg7/DS4CxbFI36Atlz0VgHKS2qL1Dw==}
 
-  undici@8.1.0:
-    resolution: {integrity: sha512-E9MkTS4xXLnRPYqxH2e6Hr2/49e7WFDKczKcCaFH4VaZs2iNvHMqeIkyUAD9vM8kujy9TjVrRlQ5KkdEJxB2pw==}
-    engines: {node: '>=22.19.0'}
+  undici@7.28.0:
+    resolution: {integrity: sha512-cRZYrTDwWznlnRiPjggAGxZXanty6M8RV1ff8Wm4LWXBp7/IG8v5DnOm74DtUBp9OONpK75YlPnIjQqX0dBDtA==}
+    engines: {node: '>=20.18.1'}
 
   unified@11.0.5:
     resolution: {integrity: sha512-xKvGhPWw3k84Qjh8bI3ZeJjqnyadK+GEFtazSfZv/rKeTkTjOJho6mFqh2SM96iIcZokxiOpg78GazTSg8+KHA==}
@@ -7088,7 +7088,7 @@ snapshots:
       semver: 7.8.4
       sumchecker: 3.0.1
     optionalDependencies:
-      undici: 8.1.0
+      undici: 7.28.0
     transitivePeerDependencies:
       - supports-color
 
@@ -7612,7 +7612,7 @@ snapshots:
       partial-json: 0.1.7
       proxy-agent: 6.5.0
       typebox: 1.1.37
-      undici: 8.1.0
+      undici: 7.28.0
       zod-to-json-schema: 3.25.2(zod@4.4.3)
     transitivePeerDependencies:
       - '@modelcontextprotocol/sdk'
@@ -7642,7 +7642,7 @@ snapshots:
       proper-lockfile: 4.1.2
       strip-ansi: 7.2.0
       typebox: 1.1.37
-      undici: 8.1.0
+      undici: 7.28.0
       uuid: 14.0.0
       yaml: 2.9.0
     optionalDependencies:
@@ -9039,7 +9039,7 @@ snapshots:
       '@wecom/aibot-node-sdk': 1.0.7
       fast-xml-parser: 5.8.0
       file-type: 21.3.4
-      undici: 8.1.0
+      undici: 7.28.0
       zod: 4.4.3
     optionalDependencies:
       openclaw: 2026.5.6(@types/express@5.0.6)
@@ -9477,7 +9477,7 @@ snapshots:
       ora: 9.4.0
       p-retry: 7.1.1
       semver: 7.8.4
-      undici: 8.1.0
+      undici: 7.28.0
 
   cli-cursor@5.0.0:
     dependencies:
@@ -10773,7 +10773,7 @@ snapshots:
       saxes: 6.0.0
       symbol-tree: 3.2.4
       tough-cookie: 6.0.1
-      undici: 8.1.0
+      undici: 7.28.0
       w3c-xmlserializer: 5.0.0
       webidl-conversions: 8.0.1
       whatwg-mimetype: 5.0.0
@@ -11501,7 +11501,7 @@ snapshots:
       semver: 7.8.4
       tar: 7.5.16
       tinyglobby: 0.2.17
-      undici: 8.1.0
+      undici: 7.28.0
       which: 6.0.1
 
   node-int64@0.4.0: {}
@@ -11610,7 +11610,7 @@ snapshots:
       tree-sitter-bash: 0.25.1
       tslog: 4.10.2
       typebox: 1.1.37
-      undici: 8.1.0
+      undici: 7.28.0
       web-push: 3.6.7
       web-tree-sitter: 0.26.10
       ws: 8.21.0
@@ -12814,7 +12814,7 @@ snapshots:
 
   undici-types@8.4.1: {}
 
-  undici@8.1.0: {}
+  undici@7.28.0: {}
 
   unified@11.0.5:
     dependencies:
