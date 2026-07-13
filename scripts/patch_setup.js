@@ -10,7 +10,7 @@ content = content.replace(
 
 // Modify InstallingContentProps
 content = content.replace(
-  /interface InstallingContentProps \{[\s\S]*?installChoice: SetupInstallChoice;\n  skills: DefaultSkill\[\];\n  onComplete: \(installedSkills: string\[\]\) => void;\n  onSkip: \(\) => void;\n\}/m,
+  /interface InstallingContentProps \{[\s\S]*?installChoice: SetupInstallChoice;\n {2}skills: DefaultSkill\[\];\n {2}onComplete: \(installedSkills: string\[\]\) => void;\n {2}onSkip: \(\) => void;\n\}/m,
   `interface InstallingContentProps {\n  installChoice: SetupInstallChoice;\n  onComplete: (installedSkills: string[]) => void;\n  onSkip: () => void;\n}`
 );
 
@@ -28,7 +28,7 @@ content = content.replace(
 
 // Modify useEffect content
 content = content.replace(
-  /useEffect\(\(\) => \{[\s\S]*?runRealInstall\(\);\n  \}, \[installChoice, onComplete, skills\]\);/m,
+  /useEffect\(\(\) => \{[\s\S]*?runRealInstall\(\);\n {2}\}, \[installChoice, onComplete, skills\]\);/m,
   `useEffect(() => {
     if (installStarted.current) return;
     installStarted.current = true;
@@ -90,7 +90,7 @@ content = content.replace(
 
 // getStatusIcon
 content = content.replace(
-  /const getStatusIcon = \(status: InstallStatus\) => \{[\s\S]*?\}\n  \};/m,
+  /const getStatusIcon = \(status: InstallStatus\) => \{[\s\S]*?\}\n {2}\};/m,
   `const getStatusIcon = (status: InstallStatus) => {
     switch (status) {
       case 'pending':
@@ -109,7 +109,7 @@ content = content.replace(
 
 // getStatusText
 content = content.replace(
-  /const getStatusText = \(skill: SkillInstallState\) => \{[\s\S]*?\}\n  \};/m,
+  /const getStatusText = \(skill: SkillInstallState\) => \{[\s\S]*?\}\n {2}\};/m,
   `const getStatusText = (step: StepInstallState) => {
     switch (step.status) {
       case 'pending':
@@ -128,7 +128,7 @@ content = content.replace(
 
 // Skill list map
 content = content.replace(
-  /\{skillStates\.map\(\(skill\) => \([\s\S]*?\{getStatusText\(skill\)\}\n          <\/motion\.div>\n        \)\)\}/m,
+  /\{skillStates\.map\(\(skill\) => \([\s\S]*?\{getStatusText\(skill\)\}\n {10}<\/motion\.div>\n {8}\)\)\}/m,
   `{stepStates.map((step) => (
           <motion.div
             key={step.id}
@@ -153,7 +153,7 @@ content = content.replace(
 
 // Fix call in Setup step
 content = content.replace(
-  /skills=\{getDefaultSkills\(t\)\}\n                  onComplete=\{handleInstallationComplete\}/m,
+  /skills=\{getDefaultSkills\(t\)\}\n {18}onComplete=\{handleInstallationComplete\}/m,
   `onComplete={handleInstallationComplete}`
 );
 

@@ -45,7 +45,7 @@ export async function handleGatewayLifecycleRoutes(
         action?: string;
         message?: string;
       }
-      let result: ApplyConfigResult = { success: true, decision };
+      const result: ApplyConfigResult = { success: true, decision };
       
       if (decision.action === 'restart') {
         await ctx.gatewayManager.restart();
