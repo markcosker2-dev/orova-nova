@@ -164,10 +164,11 @@ async def restore_latest() -> dict:
         while not done:
             _, done = await asyncio.to_thread(downloader.next_chunk)
 
-        if DB_PATH.exists():
-            shutil.copy2(DB_PATH, DB_PATH.with_name("nova_pre_restore.db"))
-        
-        DB_PATH.write_bytes(buf.getvalue())
+        db_path = Path(DB_PATH)  # DB_PATH is a str — pathlib calls on it crash the restore
+        if db_path.exists():
+            shutil.copy2(db_path, db_path.with_name("nova_pre_restore.db"))
+
+        db_path.write_bytes(buf.getvalue())
         logger.info(f"[Vault] Restored from {latest['name']}")
         return {"ok": True, "filename": latest["name"]}
     except Exception as e:

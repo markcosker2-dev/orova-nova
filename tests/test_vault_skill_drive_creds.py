@@ -8,6 +8,7 @@ integration already uses — so one existing Render credential powers Drive
 backup without a new OAuth secret. Without this, every deploy wiped all
 learning data (leads survived via Sheets; strategies/patterns did not).
 """
+import asyncio
 import base64
 import json
 from unittest.mock import patch, MagicMock
@@ -62,3 +63,34 @@ def test_no_credentials_raises_clear_error(monkeypatch):
     with patch("app.skills.vault_skill.os.path.exists", return_value=False):
         with pytest.raises(ValueError, match="GOOGLE_CREDENTIALS_JSON"):
             vault_skill._get_drive_service()
+
+
+def test_restore_latest_writes_snapshot_to_disk(monkeypatch, tmp_path):
+    """Regression: DB_PATH is a str, and restore_latest called pathlib methods
+    on it — every Drive restore crashed with 'str' object has no attribute
+    'exists' (live-observed on Render, 2026-07-13)."""
+    fake_db = tmp_path / "orova.db"
+    fake_db.write_bytes(b"OLD-DB")
+    monkeypatch.setattr(vault_skill, "DB_PATH", str(fake_db))
+
+    class FakeDownloader:
+        def __init__(self, buf, request):
+            self._buf = buf
+
+        def next_chunk(self):
+            self._buf.write(b"SNAPSHOT-BYTES")
+            return None, True
+
+    fake_service = MagicMock()
+    fake_service.files.return_value.list.return_value.execute.return_value = {
+        "files": [{"id": "f1", "name": "nova_backup_test.db"}]
+    }
+    with patch.object(vault_skill, "_get_drive_service", return_value=fake_service), \
+         patch.object(vault_skill, "_get_or_create_folder", return_value="folder1"), \
+         patch.object(vault_skill, "MediaIoBaseDownload", FakeDownloader):
+        res = asyncio.run(vault_skill.restore_latest())
+
+    assert res == {"ok": True, "filename": "nova_backup_test.db"}
+    assert fake_db.read_bytes() == b"SNAPSHOT-BYTES"
+    # pre-restore safety copy of the old DB
+    assert (tmp_path / "nova_pre_restore.db").read_bytes() == b"OLD-DB"
