@@ -11,6 +11,16 @@ status: active
 > Session-start file. Read this first (CLAUDE.md rule). Keep it current when the
 > direction changes materially.
 
+## ICP decision (owner, 2026-07-13)
+
+**The ICP stays MIXED** — automotive + custom home builders + luxury RE +
+high-ticket services, per Mark's explicit call on 2026-07-13. The 07-12
+"automotive-only" narrowing proposal is **rejected**; `business_context.json`
+and the 15-niche `DEFAULT_HUNT_NICHES` rotation are correct as-is. The one
+blocker to on-ICP leads: **`TARGET_NICHE` on Render still holds a stale generic
+value that overrides the curated rotation** (confirmed by a live hunt 07-13 —
+returned generic auto shops). Owner must delete it or set it deliberately.
+
 ## Where things stand (2026-07-10)
 
 Nova is **live on Render free tier** (`orova-nova.onrender.com`), all 9 lanes
@@ -20,14 +30,11 @@ ceiling) → owner-email finder layer (Tomba/Prospeo/Verifalia — **built, awai
 keys**). The gate to everything is still **the first paying client**. Test
 baseline: **197 Python + 40 TS passing**.
 
-## 🚨 Critical operational fact (verified live 2026-07-10)
+## Deploy/data-loss status (updated 2026-07-13)
 
-**Every merge to `main` redeploys Render and wipes production SQLite.** The
-Drive restore fails because `GOOGLE_REFRESH_TOKEN`/`GOOGLE_CLIENT_ID`/
-`GOOGLE_CLIENT_SECRET` are **not set on Render** (the 3-hourly backup lane is
-dead for the same reason). The Sheets fallback restores **leads only** (fixed in
-PR #34 — one malformed row used to abort the whole restore) — learning data
-starts fresh every deploy. Until Mark adds the Drive creds: **batch merges** and
+**Every merge to `main` still redeploys Render and wipes production SQLite**,
+but the Drive backup lane is now **WORKING** — creds were added and the first
+`[Vault] Uploaded` was live-verified 2026-07-11. Still: **batch merges** and
 check `/api/logs` for the restore line after each deploy.
 
 ## Shipped recently (PRs #23–34, 2026-07-06 → 07-10)

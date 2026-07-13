@@ -322,11 +322,8 @@ async def _scrape_website(url: str) -> dict:
 
                 # Extract ALL emails (not just first)
                 emails = EMAIL_RE.findall(text)
-                noise_domains = ["example.com", "domain.com", "test.com", "wix.com", "squarespace.com",
-                                 "sentry.io", "webpack", "wixpress.com", "yourdomain.com"]
                 for e in emails:
-                    domain_part = e.split("@")[-1].lower()
-                    if domain_part not in noise_domains and e.lower() not in all_emails:
+                    if not _is_noise_email(e) and e.lower() not in all_emails:
                         all_emails.append(e.lower())
 
                 clean = re.sub(r'<[^>]+>', ' ', text)
@@ -366,7 +363,7 @@ async def _scrape_website(url: str) -> dict:
             if not result["owner_name"] and ai_data.get("owner_name"):
                 if _is_plausible_name(ai_data["owner_name"]):
                     result["owner_name"] = ai_data["owner_name"]
-            if not result["email"] and ai_data.get("email"):
+            if not result["email"] and ai_data.get("email") and not _is_noise_email(ai_data["email"]):
                 result["email"] = ai_data["email"].lower()
             if not result["phone"] and ai_data.get("phone"):
                 norm = _normalize_phone_to_e164(ai_data["phone"])
@@ -648,10 +645,8 @@ async def _bbb_lookup(business_name: str, domain: str = "") -> dict:
         
         # Extract email
         emails = EMAIL_RE.findall(text)
-        noise = {"bbb.org", "example.com", "domain.com"}
         for e in emails:
-            domain_part = e.split("@")[-1].lower()
-            if domain_part not in noise:
+            if not _is_noise_email(e):
                 result["email"] = e.lower()
                 break
                     
@@ -708,10 +703,8 @@ async def _google_business_lookup(business_name: str, domain: str = "") -> dict:
             # Extract email
             if not result["email"]:
                 emails = EMAIL_RE.findall(text)
-                noise = {"example.com", "domain.com", "test.com"}
                 for e in emails:
-                    domain_part = e.split("@")[-1].lower()
-                    if domain_part not in noise:
+                    if not _is_noise_email(e):
                         result["email"] = e.lower()
                         break
             
@@ -737,6 +730,20 @@ _GENERIC_LOCALPARTS = [
     "info", "support", "help", "team",
 ]
 _JUNK_LOCALPARTS = {"noreply", "no-reply", "donotreply", "do-not-reply", "mailer-daemon", "postmaster"}
+
+# Domains (and any subdomain of them) that never belong to a prospect's inbox —
+# platform/telemetry addresses scraped out of page source. Must be suffix-matched:
+# exact-match let 605a...@sentry-next.wixpress.com through as a lead email
+# (live-observed 2026-07-13).
+_NOISE_EMAIL_DOMAINS = (
+    "example.com", "domain.com", "test.com", "yourdomain.com",
+    "wix.com", "wixpress.com", "squarespace.com", "sentry.io", "bbb.org",
+)
+
+def _is_noise_email(email: str) -> bool:
+    """True if the email's domain is (or is a subdomain of) a noise domain."""
+    domain = email.rsplit("@", 1)[-1].lower()
+    return any(domain == d or domain.endswith("." + d) for d in _NOISE_EMAIL_DOMAINS)
 
 def _prioritize_email(emails: list) -> str:
     """Pick the best email: personal address first, then the most useful generic
