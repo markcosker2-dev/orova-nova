@@ -86,6 +86,13 @@ _NON_NAME_WORDS = frozenset({
     "results", "privacy", "policy", "terms", "menu", "gallery",
 })  # NOTE: deliberately omit surname-collisions (Page, Home, Baker, Mason, Wood, Berry, Marsh)
 
+# Lowercase particles legitimately embedded in a person's name (allowed to be
+# non-capitalized so the Title-Case check below doesn't reject them).
+_NAME_PARTICLES = frozenset({
+    "van", "von", "de", "del", "della", "der", "den", "la", "le", "du", "da",
+    "di", "dos", "das", "bin", "al", "ter", "ten", "st",
+})
+
 
 def _is_plausible_name(text: str) -> bool:
     if not text or len(text) < 4 or len(text) > 50:
@@ -97,6 +104,17 @@ def _is_plausible_name(text: str) -> bool:
         return False
     if not parts[0][0].isupper():
         return False
+    # Every token must be capitalized (or a known lowercase name particle).
+    # Real names are Title Case ("Todd Rowsell", "Darren O'Gara"); sentence
+    # fragments scraped as owners ("When you are an", "Keith Mayou While others",
+    # "Christine Lally Department of") always carry a lowercase function word —
+    # this rejects them where the shape/denylist checks did not (2026-07-13).
+    for p in parts:
+        core = p.lstrip("'-")
+        if not core:
+            return False
+        if not core[0].isupper() and p.lower() not in _NAME_PARTICLES:
+            return False
     if text in FALSE_POSITIVE_NAMES:
         return False
     # Reject if any token is a business/entity/page word — the #1 source of
@@ -323,7 +341,7 @@ async def _scrape_website(url: str) -> dict:
                 # Extract ALL emails (not just first)
                 emails = EMAIL_RE.findall(text)
                 for e in emails:
-                    if not _is_noise_email(e) and e.lower() not in all_emails:
+                    if _is_valid_business_email(e) and e.lower() not in all_emails:
                         all_emails.append(e.lower())
 
                 clean = re.sub(r'<[^>]+>', ' ', text)
@@ -363,7 +381,7 @@ async def _scrape_website(url: str) -> dict:
             if not result["owner_name"] and ai_data.get("owner_name"):
                 if _is_plausible_name(ai_data["owner_name"]):
                     result["owner_name"] = ai_data["owner_name"]
-            if not result["email"] and ai_data.get("email") and not _is_noise_email(ai_data["email"]):
+            if not result["email"] and ai_data.get("email") and _is_valid_business_email(ai_data["email"]):
                 result["email"] = ai_data["email"].lower()
             if not result["phone"] and ai_data.get("phone"):
                 norm = _normalize_phone_to_e164(ai_data["phone"])
@@ -421,7 +439,9 @@ async def _whois_lookup(domain: str) -> dict:
                                 if _is_plausible_name(_cand):  # skip WHOIS org/privacy names
                                     result["owner_name"] = _cand
                             elif len(field) >= 4 and field[0] == "email":
-                                result["email"] = str(field[3]).strip()
+                                _e = str(field[3]).strip()
+                                if _is_valid_business_email(_e):
+                                    result["email"] = _e
                             elif len(field) >= 4 and field[0] == "tel":
                                 result["phone"] = str(field[3]).strip()
 
@@ -457,7 +477,7 @@ async def _whois_lookup(domain: str) -> dict:
                 data = resp.json()
                 if data.get("registrant") and _is_plausible_name(str(data["registrant"]).strip()):
                     result["owner_name"] = str(data["registrant"]).strip()
-                if data.get("email"):
+                if data.get("email") and _is_valid_business_email(str(data["email"])):
                     result["email"] = data["email"]
         except Exception:
             pass
@@ -528,9 +548,10 @@ async def _state_registry_lookup(business_name: str, state: str = "") -> dict:
                     result["owner_name"] = agent_match.group(1)
             
             if not result["email"]:
-                email_match = EMAIL_RE.search(text)
-                if email_match:
-                    result["email"] = email_match.group(0)
+                for _e in EMAIL_RE.findall(text):
+                    if _is_valid_business_email(_e):
+                        result["email"] = _e.lower()
+                        break
     except Exception as e:
         logger.debug(f"[REGISTRY] Error for {business_name}: {e}")
     
@@ -646,10 +667,10 @@ async def _bbb_lookup(business_name: str, domain: str = "") -> dict:
         # Extract email
         emails = EMAIL_RE.findall(text)
         for e in emails:
-            if not _is_noise_email(e):
+            if _is_valid_business_email(e):
                 result["email"] = e.lower()
                 break
-                    
+
     except Exception as e:
         logger.debug(f"[BBB] Error for {business_name}: {e}")
     
@@ -704,7 +725,7 @@ async def _google_business_lookup(business_name: str, domain: str = "") -> dict:
             if not result["email"]:
                 emails = EMAIL_RE.findall(text)
                 for e in emails:
-                    if not _is_noise_email(e):
+                    if _is_valid_business_email(e):
                         result["email"] = e.lower()
                         break
             
@@ -745,10 +766,73 @@ def _is_noise_email(email: str) -> bool:
     domain = email.rsplit("@", 1)[-1].lower()
     return any(domain == d or domain.endswith("." + d) for d in _NOISE_EMAIL_DOMAINS)
 
+# The loose EMAIL_RE (…@dom.\w{2,}) can't tell a real TLD from a scraped asset
+# filename or trailing page text, so it produced junk "emails" that reached the
+# DB (2026-07-13): a-logo-black-@1x.png, info@…phfooterLink, hex@ingest-prd.
+# sentry.zalora.net. _is_valid_business_email() is the gate every accepted email
+# must pass.
+_ASSET_TLDS = frozenset({
+    "png", "jpg", "jpeg", "gif", "svg", "webp", "ico", "bmp", "tiff", "tif",
+    "css", "js", "mjs", "json", "xml", "html", "htm", "pdf", "mp4", "mp3",
+    "woff", "woff2", "ttf", "eot", "otf", "zip", "gz", "webmanifest", "map",
+})
+# Business gTLDs; any 2-letter alpha suffix is accepted as a ccTLD. Generous on
+# purpose — dropping a real lead's email costs more than storing a rare junk
+# one, and the ICP (auto / real-estate / high-end services) uses niche gTLDs.
+_KNOWN_GTLDS = frozenset({
+    # generic / most common
+    "com", "net", "org", "io", "co", "biz", "info", "dev", "app", "xyz",
+    "online", "site", "store", "shop", "email", "live", "group", "company",
+    "pro", "tv", "me", "cc", "ws", "name", "mobi", "edu", "gov", "mil",
+    # automotive ICP
+    "cars", "auto", "autos", "dealer", "car", "tires", "motorcycles", "bike",
+    "limo", "parts",
+    # real-estate / builder ICP
+    "realtor", "realty", "estate", "homes", "house", "build", "builders",
+    "construction", "properties", "property", "rentals", "land", "villas",
+    # premium / services
+    "luxury", "vip", "gold", "style", "design", "studio", "agency", "media",
+    "digital", "marketing", "services", "solutions", "consulting", "capital",
+    "ventures", "expert", "guru", "tech", "systems", "works", "world", "life",
+    "club", "care", "coach", "events", "photography", "fashion", "jewelry",
+    # common geo
+    "la", "nyc", "vegas", "miami", "london", "us", "uk", "ca",
+})
+# Any domain containing one of these markers is platform/telemetry, never a
+# prospect inbox (catches sentry.zalora.net, ingest-prd.*, etc.).
+_NOISE_DOMAIN_MARKERS = ("sentry", "ingest", "wixpress", "cloudfront",
+                         "googleusercontent", "gstatic", "w3.org", "schema.org")
+
+def _valid_tld(domain: str) -> bool:
+    tld = domain.rsplit(".", 1)[-1]
+    if tld in _ASSET_TLDS:
+        return False
+    if len(tld) == 2 and tld.isalpha():   # ccTLD (us, ca, ph, uk, …)
+        return True
+    return tld in _KNOWN_GTLDS
+
+def _is_valid_business_email(email: str) -> bool:
+    """The single gate for accepting a scraped email. Rejects malformed captures
+    (asset filenames, trailing junk making a bogus TLD), telemetry/platform
+    domains, and noreply-style localparts."""
+    email = (email or "").strip().lower().rstrip(".")
+    if email.count("@") != 1:
+        return False
+    local, domain = email.split("@", 1)
+    if not local or "." not in domain or ".." in domain:
+        return False
+    if local in _JUNK_LOCALPARTS:
+        return False
+    if _is_noise_email(email):
+        return False
+    if any(marker in domain for marker in _NOISE_DOMAIN_MARKERS):
+        return False
+    return _valid_tld(domain)
+
 def _prioritize_email(emails: list) -> str:
     """Pick the best email: personal address first, then the most useful generic
     inbox. Junk (noreply etc.) is dropped entirely."""
-    cleaned = [e for e in emails if e and e.split("@", 1)[0].lower() not in _JUNK_LOCALPARTS]
+    cleaned = [e for e in emails if _is_valid_business_email(e)]
     if not cleaned:
         return ""
     if len(cleaned) == 1:

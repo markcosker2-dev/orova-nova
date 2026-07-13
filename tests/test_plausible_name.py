@@ -30,6 +30,23 @@ def test_surnames_that_look_like_words_still_accepted():
         assert _is_plausible_name(name), f"real surname wrongly rejected: {name}"
 
 
+def test_sentence_fragments_rejected():
+    # Live prod 2026-07-13: the owner-name extractor stored sentence fragments
+    # scraped from page copy. Each carries a lowercase function word, so the
+    # Title-Case check must reject them.
+    for junk in ["When you are an", "Now under the", "Christine Lally Department of",
+                 "Keith Mayou While others", "Slider with alias", "When you",
+                 "Call us today", "Serving the community"]:
+        assert not _is_plausible_name(junk), f"fragment wrongly accepted: {junk}"
+
+
+def test_lowercase_name_particles_allowed():
+    # Real names with lowercase particles must still pass.
+    for name in ["Ludwig van Beethoven", "Vincent van Gogh", "Robert de Niro",
+                 "Oscar de la Renta"]:
+        assert _is_plausible_name(name), f"particle name wrongly rejected: {name}"
+
+
 def test_shape_rejects_still_hold():
     assert not _is_plausible_name("")            # empty
     assert not _is_plausible_name("Bob")         # single token
