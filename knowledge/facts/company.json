@@ -1,0 +1,33 @@
+{
+  "_doc": "CANONICAL business facts — the single source of truth (ADR-0005). Edit values HERE; downstream artifacts (business_context.json, facts.md, prompts) are generated/validated from this. Use \"{{ref:dotted.path}}\" to reference another fact instead of copying a value.",
+  "company": {
+    "name": "OROVA",
+    "ceo": "Mark",
+    "ai_agent": "Nova",
+    "timezone": "America/Los_Angeles"
+  },
+  "pricing": {
+    "service_fee_p1_usd": 4000,
+    "service_fee_p2_usd": 5000,
+    "ad_spend_recommended_usd": "2000-2500"
+  },
+  "packages": [
+    {
+      "id": "package_1",
+      "name": "Package 1 — Meta Lead Gen + Ad Creatives",
+      "price_monthly_usd": "{{ref:pricing.service_fee_p1_usd}}",
+      "tiers_usd": { "1_month": "{{ref:pricing.service_fee_p1_usd}}", "3_month": 10000, "6_month": 18000 }
+    },
+    {
+      "id": "package_2",
+      "name": "Package 2 — Lead Gen + AI Qualification + CRM + Appointments",
+      "price_monthly_usd": "{{ref:pricing.service_fee_p2_usd}}",
+      "tiers_usd": { "1_month": "{{ref:pricing.service_fee_p2_usd}}", "3_month": 13000, "6_month": 24000 }
+    }
+  ],
+  "compliance": {
+    "_doc": "Enforced by the linter against OUTBOUND COPY fields only (email templates, subject lines) — not against rule-documentation that legitimately quotes these terms.",
+    "spam_words": ["act now", "make money", "100% guaranteed", "risk-free", "limited time"],
+    "forbidden_phrases": ["our clients see", "previous agency", "my last agency", "my old agency"]
+  }
+}
