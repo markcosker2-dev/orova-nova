@@ -19,8 +19,9 @@ status: active
 - [x] Retell cold-call agent (webhook → prod, gpt-4.1-mini, booking → Calendar)
 - [x] Mission Control dashboard — structural redesign + all buttons wired
 - [x] Auth chain fixed (session tokens validated; "failed to queue" resolved)
-- [x] Drive backup + Drive-first restore **code** (⚠️ creds NOT set on Render —
-      deploys wipe prod SQLite until Mark adds them; see [[active-context]])
+- [x] Drive backup + Drive-first restore — creds set on Render, backup verified
+      2026-07-11, restore-path crash fixed PR #61 (2026-07-13); prod SQLite now
+      survives deploys via the Drive snapshot (see [[active-context]])
 - [x] Vault knowledge layer (ADR-0001) + business model captured
 - [x] LLM model upgrade — live free models, dead fallbacks removed (PR #19)
 - [x] Valid `GROQ_API_KEY` local + Render (2026-07-05); live `/api/chat` verified (07-10)

@@ -14,10 +14,12 @@ status: active
   `C:\Users\Mike\AppData\Local\hermes\hermes-agent\venv`.
 - **HermesClaw GUI:** Node.js / TypeScript, Electron + esbuild.
 - **Database:** SQLite (`app/orova.db`) — primary state store. Render disk is
-  ephemeral; the design is Drive backup every 3h + Drive-first restore on boot,
-  **but the Drive creds are not set on Render (verified 2026-07-10), so today
-  every deploy starts empty and only leads come back (Sheets fallback).** See
-  [[active-context]] for the owner action.
+  ephemeral; the design is Drive backup every 3h + Drive-first restore on boot.
+  **Status 2026-07-13: Drive creds ARE set on Render — backup verified working
+  since 2026-07-11 (`[Vault] Uploaded`), and the restore path (which had a
+  `str`-vs-`Path` crash) was fixed in PR #61.** Every deploy still wipes the
+  ephemeral disk, but the DB is now restored from the latest Drive snapshot on
+  boot; Sheets remains the leads-only fallback. See [[active-context]].
 
 ## Key dependencies
 
@@ -41,7 +43,7 @@ BeautifulSoup + duckduckgo_search (lead sourcing) · gspread (Sheets).
 | `OPENROUTER_API_KEY` | Tier-3 fallback. **Render's copy is INVALID (401 "user not found") — remove it**; its error masks real failures. |
 | `AGENTMAIL_API_KEY` | Outreach email sending |
 | `DASHBOARD_API_KEY` | Mission Control + vault-sync auth |
-| `GOOGLE_REFRESH_TOKEN`/`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` | Drive backup/restore. **NOT SET on Render (verified 2026-07-10) → every deploy wipes prod SQLite; only the Sheets lead-restore survives.** |
+| `GOOGLE_REFRESH_TOKEN`/`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` | Drive backup/restore. **SET on Render — backup verified 2026-07-11, restore-path crash fixed in PR #61 (2026-07-13). Prod SQLite now survives deploys via the Drive snapshot.** |
 | `RETELL_FROM_NUMBER` / `RETELL_API_KEY` | Cold calls (number +1 716 670 3920) |
 | `SERPAPI_KEY` | Discovery + owner-name lookup — one shared 250/mo quota (health lane alerts at 90%) |
 | `TOMBA_API_KEY`+`TOMBA_SECRET` / `PROSPEO_API_KEY` / `VERIFALIA_USERNAME`+`VERIFALIA_PASSWORD` | Owner-email finder layer (built, keys not yet set — sign up with the AgentMail address, Tomba blocks webmail) |
