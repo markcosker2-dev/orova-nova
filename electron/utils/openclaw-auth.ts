@@ -1995,7 +1995,7 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
       const externalPluginIds = allowArr2.filter(
         (pluginId) => !BUILTIN_CHANNEL_IDS.has(pluginId) && !bundled.all.has(pluginId),
       );
-      let nextAllow = [...externalPluginIds];
+      const nextAllow = [...externalPluginIds];
       if (externalPluginIds.length > 0) {
         for (const channelId of configuredBuiltIns) {
           if (!nextAllow.includes(channelId)) {
