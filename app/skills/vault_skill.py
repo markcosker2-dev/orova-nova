@@ -143,34 +143,108 @@ def _prune_old_backups(service, folder_id: str):
             service.files().delete(fileId=f["id"]).execute()
             logger.info(f"[Vault] Pruned: {f['name']}")
 
+def _sqlite_ok(path: Path) -> bool:
+    """True only if `path` is a well-formed SQLite database.
+
+    A corrupt snapshot that passes as 'downloaded' but is malformed took the
+    whole service down with exit 3 on 2026-07-13 (startup opened it, SQLite
+    raised 'database disk image is malformed', the lifespan died). We now
+    validate every snapshot with an integrity check before adopting it."""
+    try:
+        con = sqlite3.connect(str(path))
+        try:
+            row = con.execute("PRAGMA integrity_check").fetchone()
+            return bool(row) and row[0] == "ok"
+        finally:
+            con.close()
+    except Exception:
+        return False
+
+
+def _prepare_db_for_swap(db_path: Path):
+    """Make it safe to overwrite the live DB file with a restored snapshot.
+
+    Two hazards, both root causes of the 2026-07-13 'database disk image is
+    malformed' crash: (1) the live connection pool holds WAL locks and would
+    checkpoint stale pages onto the new file when closed, and (2) the empty
+    DB's `-wal`/`-shm` sidecars, if left in place, mismatch the swapped-in main
+    file. So we close the pool first, keep a pre-restore copy, then delete the
+    main DB *and* its sidecars — leaving a clean slate for the snapshot."""
+    try:
+        from app.core.database import DatabaseManager
+        DatabaseManager._close_all_connections()
+    except Exception as e:
+        logger.warning(f"[Vault] Could not close DB connections before swap: {e}")
+    if db_path.exists():
+        try:
+            shutil.copy2(db_path, db_path.with_name("nova_pre_restore.db"))
+        except Exception as e:
+            logger.warning(f"[Vault] Could not stash pre-restore copy: {e}")
+    for p in (db_path, Path(str(db_path) + "-wal"), Path(str(db_path) + "-shm")):
+        try:
+            if p.exists():
+                p.unlink()
+        except Exception as e:
+            logger.warning(f"[Vault] Could not remove {p.name} before swap: {e}")
+
+
 async def restore_latest() -> dict:
-    """[P6] Pull latest snapshot from Drive (Recovery Path)."""
+    """[P6] Pull the latest VALID snapshot from Drive (Recovery Path).
+
+    Downloads snapshots newest-first and validates each before adopting it, so a
+    corrupt newest snapshot neither overwrites the live DB nor crashes startup —
+    it is skipped in favour of an older good one. Returns ok=False only when NO
+    snapshot is valid, so the caller falls back to Sheets."""
     try:
         service = await asyncio.to_thread(_get_drive_service)
         folder_id = await asyncio.to_thread(_get_or_create_folder, service)
 
         query = f"'{folder_id}' in parents and name contains '{BACKUP_PREFIX}' and trashed=false"
         results = await asyncio.to_thread(
-            lambda: service.files().list(q=query, orderBy="createdTime desc", pageSize=1, fields="files(id, name)").execute()
+            lambda: service.files().list(q=query, orderBy="createdTime desc", pageSize=10, fields="files(id, name)").execute()
         )
         files = results.get("files", [])
         if not files: return {"ok": False, "error": "No backups found."}
 
-        latest = files[0]
-        request = service.files().get_media(fileId=latest["id"])
-        buf = io.BytesIO()
-        downloader = MediaIoBaseDownload(buf, request)
-        done = False
-        while not done:
-            _, done = await asyncio.to_thread(downloader.next_chunk)
-
         db_path = Path(DB_PATH)  # DB_PATH is a str — pathlib calls on it crash the restore
-        if db_path.exists():
-            shutil.copy2(db_path, db_path.with_name("nova_pre_restore.db"))
+        incoming = db_path.with_name("nova_restore_incoming.db")
+        corrupt = 0
+        for latest in files:
+            try:
+                request = service.files().get_media(fileId=latest["id"])
+                buf = io.BytesIO()
+                downloader = MediaIoBaseDownload(buf, request)
+                done = False
+                while not done:
+                    _, done = await asyncio.to_thread(downloader.next_chunk)
 
-        db_path.write_bytes(buf.getvalue())
-        logger.info(f"[Vault] Restored from {latest['name']}")
-        return {"ok": True, "filename": latest["name"]}
+                # Validate on a scratch file BEFORE touching the live DB.
+                data = buf.getvalue()
+                incoming.write_bytes(data)
+                if not _sqlite_ok(incoming):
+                    corrupt += 1
+                    logger.warning(f"[Vault] Snapshot {latest['name']} failed integrity check — skipping.")
+                    continue
+
+                # Valid: close the pool + clear stale sidecars, then write the
+                # snapshot as a clean standalone DB. Caller re-inits the pool.
+                _prepare_db_for_swap(db_path)
+                db_path.write_bytes(data)
+                msg = f"[Vault] Restored from {latest['name']}"
+                if corrupt:
+                    msg += f" (skipped {corrupt} corrupt)"
+                logger.info(msg)
+                return {"ok": True, "filename": latest["name"], "skipped_corrupt": corrupt}
+            except Exception as inner:
+                corrupt += 1
+                logger.warning(f"[Vault] Snapshot {latest.get('name')} restore attempt failed: {inner}")
+            finally:
+                try:
+                    incoming.unlink()
+                except FileNotFoundError:
+                    pass
+
+        return {"ok": False, "error": f"no valid snapshot ({corrupt} corrupt of {len(files)})"}
     except Exception as e:
         logger.error(f"[Vault] Restore failed: {e}")
         return {"ok": False, "error": str(e)}

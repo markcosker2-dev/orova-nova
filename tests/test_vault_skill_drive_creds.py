@@ -65,32 +65,86 @@ def test_no_credentials_raises_clear_error(monkeypatch):
             vault_skill._get_drive_service()
 
 
-def test_restore_latest_writes_snapshot_to_disk(monkeypatch, tmp_path):
-    """Regression: DB_PATH is a str, and restore_latest called pathlib methods
-    on it — every Drive restore crashed with 'str' object has no attribute
-    'exists' (live-observed on Render, 2026-07-13)."""
+def _valid_sqlite_bytes(tmp_path, name="src.db") -> bytes:
+    """Bytes of a well-formed SQLite database (passes PRAGMA integrity_check)."""
+    import sqlite3
+    p = tmp_path / name
+    con = sqlite3.connect(str(p))
+    con.execute("CREATE TABLE leads (id INTEGER PRIMARY KEY)")
+    con.commit()
+    con.close()
+    data = p.read_bytes()
+    p.unlink()
+    return data
+
+
+def _restore_with(monkeypatch, tmp_path, files, id_to_bytes):
+    """Run restore_latest() with a fake Drive serving `files`, each file id
+    mapped to the bytes it downloads. Returns the result dict."""
     fake_db = tmp_path / "orova.db"
-    fake_db.write_bytes(b"OLD-DB")
+    fake_db.write_bytes(_valid_sqlite_bytes(tmp_path, "old.db"))
     monkeypatch.setattr(vault_skill, "DB_PATH", str(fake_db))
 
     class FakeDownloader:
         def __init__(self, buf, request):
             self._buf = buf
+            self._data = id_to_bytes[request]  # request == fileId (see side_effect)
 
         def next_chunk(self):
-            self._buf.write(b"SNAPSHOT-BYTES")
+            self._buf.write(self._data)
             return None, True
 
     fake_service = MagicMock()
-    fake_service.files.return_value.list.return_value.execute.return_value = {
-        "files": [{"id": "f1", "name": "nova_backup_test.db"}]
-    }
+    fake_service.files.return_value.list.return_value.execute.return_value = {"files": files}
+    fake_service.files.return_value.get_media.side_effect = lambda fileId: fileId
+
     with patch.object(vault_skill, "_get_drive_service", return_value=fake_service), \
          patch.object(vault_skill, "_get_or_create_folder", return_value="folder1"), \
          patch.object(vault_skill, "MediaIoBaseDownload", FakeDownloader):
         res = asyncio.run(vault_skill.restore_latest())
+    return res, fake_db
 
-    assert res == {"ok": True, "filename": "nova_backup_test.db"}
-    assert fake_db.read_bytes() == b"SNAPSHOT-BYTES"
-    # pre-restore safety copy of the old DB
-    assert (tmp_path / "nova_pre_restore.db").read_bytes() == b"OLD-DB"
+
+def test_restore_latest_adopts_valid_snapshot(monkeypatch, tmp_path):
+    """Happy path: a valid snapshot is written to DB_PATH (also covers the
+    2026-07-13 str-DB_PATH regression — pathlib calls on a str used to crash)."""
+    snap = _valid_sqlite_bytes(tmp_path, "snap.db")
+    res, fake_db = _restore_with(
+        monkeypatch, tmp_path,
+        files=[{"id": "f1", "name": "nova_backup_test.db"}],
+        id_to_bytes={"f1": snap},
+    )
+    assert res["ok"] is True and res["filename"] == "nova_backup_test.db"
+    assert res["skipped_corrupt"] == 0
+    assert fake_db.read_bytes() == snap
+    assert (tmp_path / "nova_pre_restore.db").exists()  # old DB preserved
+
+
+def test_restore_latest_skips_corrupt_and_uses_older_valid(monkeypatch, tmp_path):
+    """The bug that took prod down (exit 3): the NEWEST snapshot was malformed.
+    Restore must skip it and adopt the next valid one instead of crashing."""
+    good = _valid_sqlite_bytes(tmp_path, "good.db")
+    res, fake_db = _restore_with(
+        monkeypatch, tmp_path,
+        files=[{"id": "bad", "name": "newest_corrupt.db"},
+               {"id": "ok", "name": "older_good.db"}],
+        id_to_bytes={"bad": b"this is not a sqlite file", "ok": good},
+    )
+    assert res["ok"] is True and res["filename"] == "older_good.db"
+    assert res["skipped_corrupt"] == 1
+    assert fake_db.read_bytes() == good
+
+
+def test_restore_latest_all_corrupt_falls_back(monkeypatch, tmp_path):
+    """When every snapshot is corrupt, return ok=False (caller uses Sheets) and
+    leave the live DB untouched — never adopt a malformed file."""
+    original = None
+    res, fake_db = _restore_with(
+        monkeypatch, tmp_path,
+        files=[{"id": "b1", "name": "c1.db"}, {"id": "b2", "name": "c2.db"}],
+        id_to_bytes={"b1": b"garbage-1", "b2": b"garbage-2"},
+    )
+    assert res["ok"] is False
+    assert "corrupt" in res["error"]
+    # live DB was a valid sqlite file at start and must remain openable
+    assert vault_skill._sqlite_ok(fake_db)

@@ -160,19 +160,29 @@ async def lifespan(app: FastAPI):
         # learned strategies, memories). Sheets only holds leads, so trying
         # it first silently discards all learning data on every cold boot.
         logger.info("♻️ Database appears empty. Attempting Google Drive snapshot restore (full fidelity)...")
+        # restore_latest() validates the snapshot and, when valid, swaps it in
+        # cleanly (closes the pool + clears WAL sidecars). We re-init the pool
+        # here. Guarded end-to-end: a bad snapshot must NEVER crash startup — an
+        # unguarded open of a malformed DB exited the process with status 3
+        # (2026-07-13), which kept every deploy from going live.
         restore_res = await restore_latest()
+        restored_ok = False
         if restore_res.get("ok"):
-            logger.info(f"♻️ Restored database snapshot from Drive: {restore_res.get('filename')}")
-            DatabaseManager._close_all_connections()
-            DatabaseManager._init_sqlite_fallback()
-            # Re-run Phase 5 migrations on the restored DB so schema is current
             try:
+                DatabaseManager._init_sqlite_fallback()
                 await DatabaseManager.run_phase5_migrations()
-                logger.info("♻️ Phase 5 migrations applied to restored DB")
-            except Exception as mig_err:
-                logger.warning(f"⚠️ Phase 5 migrations on restored DB failed: {mig_err}")
-        else:
-            logger.warning(f"⚠️ No Drive backup ({restore_res.get('error')}). Falling back to Google Sheets leads...")
+                logger.info(f"♻️ Restored database snapshot from Drive: {restore_res.get('filename')}")
+                restored_ok = True
+            except Exception as adopt_err:
+                logger.error(f"⚠️ Restored snapshot could not be opened ({adopt_err}); falling back to a fresh DB + Sheets.")
+        if not restored_ok:
+            # Give the Sheets fallback a clean, open, empty DB. restore_latest may
+            # have closed the pool during a swap, so re-init unconditionally.
+            try:
+                DatabaseManager.reset_sqlite_fresh()
+            except Exception as reset_err:
+                logger.critical(f"⚠️ DB reset after a failed restore failed: {reset_err}")
+            logger.warning(f"⚠️ No usable Drive snapshot ({restore_res.get('error') or 'unusable'}). Falling back to Google Sheets leads...")
             leads = await restore_leads_from_sheets()
             if leads:
                 for lead in leads:

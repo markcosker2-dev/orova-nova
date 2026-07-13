@@ -111,6 +111,30 @@ class _DBBase:
         logger.info(f"✅ SQLite ready: {cls._db_path} (pool size: {cls._max_connections})")
 
     @classmethod
+    def reset_sqlite_fresh(cls):
+        """Discard the current SQLite file (and its WAL sidecars) and re-init an
+        empty DB.
+
+        Recovery path when a restored snapshot cannot be opened: a fresh empty
+        DB keeps the service up (Sheets can repopulate leads) instead of
+        crashing startup with exit 3. Best-effort — never raises."""
+        try:
+            cls._close_all_connections()
+        except Exception:
+            pass
+        # Remove the main DB and its -wal/-shm sidecars: leaving stale sidecars
+        # behind is what corrupts a swapped-in file ("database disk image is
+        # malformed"), so a clean reset must clear all three.
+        for path in (cls._db_path, cls._db_path + "-wal", cls._db_path + "-shm"):
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except Exception as e:
+                logger.warning(f"[DB] Could not remove {path} during reset: {e}")
+        cls._init_sqlite_fallback()
+        logger.warning("[DB] Re-initialized a fresh empty SQLite DB after an unusable restore.")
+
+    @classmethod
     def _init_tables(cls, conn):
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS leads (
