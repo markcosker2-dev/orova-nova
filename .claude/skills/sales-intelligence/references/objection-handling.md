@@ -1,7 +1,17 @@
 # Objection handling
 
-The response library. Each answer: acknowledge → reframe to the differentiator →
-small next step. Never argue, never discount, never claim past clients.
+The response library. Each answer: **validate → (optionally) label the emotion →
+reframe to the differentiator → secondary ask.** Never argue, never discount,
+never claim past clients.
+
+- **Validate first** — "Fair," "Totally understand," "Thanks for flagging that."
+  Skipping this triggers hang-ups.
+- **Label the emotion** when you can read it — "Sounds like you're slammed right
+  now" / "Feels like you've been burned before." Naming it makes the prospect far
+  more likely to accept the next ask (Gong cold-call data).
+- **Reframe** to the OROVA differentiator (qualified conversations, not leads).
+- **Secondary ask, not silence** — a forward question ("When's better?", "Who
+  handles this?", "What's the priority right now?") keeps the call alive.
 
 | They say | Respond (reframe in bold) |
 |---|---|

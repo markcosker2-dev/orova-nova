@@ -19,9 +19,11 @@ retell_pitch` — keep this in sync with them.
 4. **One qualifying question.** Move the conversation to them:
    > "Are you happy with how many serious buyers you're actually talking to right
    > now, or is a lot of it tire-kickers?"
-5. **The ask.** A booked slot, not "think about it":
-   > "Let's grab 10 minutes with Mark this week — does Thursday or Friday work
-   > better?"
+5. **The ask — interest first, then the slot.** On a *cold* call an interest CTA
+   books more than jumping straight to a specific time (Gong data). Confirm
+   interest, *then* pin the slot:
+   > "Does it make sense for me to share how this'd work for {company}?"
+   > → if yes: "Great — 10 minutes with Mark, Thursday or Friday?"
 
 ## Voicemail (≤15 seconds)
 
@@ -31,6 +33,8 @@ retell_pitch` — keep this in sync with them.
 
 ## Rules
 
+- **Open with the reason for the call** — it books ~2x more than a vague opener,
+  and **never** use "Did I catch you at a bad time?" (it tanks to ~1% success).
 - Business lines only (TCPA). One call, ever, per the cadence — it's the final
   touch after emails, then the prospect is marked cold.
 - Voice agent **discloses AI when asked** (CA bot-disclosure law). Never argues it.
