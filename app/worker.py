@@ -390,6 +390,13 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
                     
                     lead_id = await DatabaseManager.asave_lead(lead, default_vertical=niche, client_id=client_id)
 
+                    # Unified event log (ADR-0007): Scout discovered a prospect.
+                    if lead_id and lead_id != -1:
+                        from app.core.event_log import alog_event
+                        await alog_event(lead_id, "lead_discovered", "scout",
+                                         payload={"source": lead.get("source", "hunt"),
+                                                  "niche": niche, "score": lead.get("score", 0)})
+
                     # ── [PIPELINE] Send outreach email + enroll in drip ──
                     if lead_id and lead_id != -1:
                         lead_email = lead.get("email", "").strip()
