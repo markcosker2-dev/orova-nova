@@ -380,6 +380,24 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
 
                     lead["icebreaker"] = "Pending review..."
 
+                    # ── Dossier (Analyst, stage-gated): deep research ONLY for
+                    # HOT leads — research time/quota is spent where outreach
+                    # will actually go. Gives the composer a real, verifiable
+                    # icebreaker instead of a generic opener. Fail-open.
+                    dossier = {}
+                    try:
+                        from app.skills.dossier import build_dossier, DOSSIER_MIN_SCORE
+                        if lead.get("score", 0) >= DOSSIER_MIN_SCORE:
+                            dossier = await build_dossier(lead)
+                            if dossier.get("icebreaker"):
+                                lead["icebreaker"] = dossier["icebreaker"]
+                                logger.info(f"[DOSSIER] {lead.get('business','?')}: {dossier['icebreaker'][:80]}")
+                            if dossier:
+                                lead["notes"] = ((lead.get("notes") or "") + " | DOSSIER: "
+                                                 + json.dumps(dossier, ensure_ascii=False)[:800]).strip(" |")
+                    except Exception as e:
+                        logger.warning(f"[DOSSIER] skipped (non-fatal): {e}")
+
                     # Populate CRM Metadata
                     from urllib.parse import urlparse as _urlparse
                     _host = _urlparse(lead.get("url") or "").netloc.lower()
@@ -387,7 +405,7 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
                     lead["source"] = lead.get("source_type", "Yelp Direct" if _is_yelp else "Web Search")
                     lead["date"] = datetime.now().strftime("%Y-%m-%d")
                     lead["vertical"] = niche
-                    
+
                     lead_id = await DatabaseManager.asave_lead(lead, default_vertical=niche, client_id=client_id)
 
                     # Unified event log (ADR-0007): Scout discovered a prospect.
@@ -396,6 +414,10 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
                         await alog_event(lead_id, "lead_discovered", "scout",
                                          payload={"source": lead.get("source", "hunt"),
                                                   "niche": niche, "score": lead.get("score", 0)})
+                        if dossier:
+                            await alog_event(lead_id, "dossier_built", "analyst",
+                                             payload={"icebreaker": dossier.get("icebreaker", ""),
+                                                      "observations": dossier.get("observations", [])})
 
                     # ── [PIPELINE] Send outreach email + enroll in drip ──
                     if lead_id and lead_id != -1:
