@@ -18,10 +18,16 @@ When its commands are available (`/claude-council:ask` in the skills list):
 
 ## What this repo is
 
-- `app/` — "Nova", the autonomous lead-gen agent (Python/FastAPI, deployed on Render free tier at orova-nova.onrender.com). 9 scheduled worker lanes: hunting, outreach, replies, cold calls (Retell), backups, CEO brain, health, self-improvement, drips.
-- `electron/` + `src/` — the HermesClaw desktop GUI (OpenClaw-based). `HermesClaw/` holds reference mirrors only; canonical code lives in `electron/`.
+**HermesClaw is an autonomous AI SDR** (ADR-0006). Its one job: find qualified
+prospects, research them, personalize outreach, start conversations, and book
+meetings for OROVA. The north-star metric is booked meetings.
+
+- `app/` — "Nova", the SDR engine (Python/FastAPI, deployed on Render free tier at orova-nova.onrender.com). 9 scheduled worker lanes: hunting, outreach, replies, cold calls (Retell), backups, CEO brain, health, self-improvement, drips.
+- `knowledge/` — canonical business facts + the build-time compiler (ADR-0005).
 - `mission-control/` — the web dashboard served by the FastAPI app.
+- `.claude/skills/sales-intelligence/` — the sales craft layer for Claude agents.
 - `.clinerules` — the behavioral ruleset for AI tools working here; it complements this file.
+- The former Electron desktop GUI lives on the `archive/electron-gui` branch (removed from `main` per ADR-0006 — restore by merging that branch if ever needed).
 
 ## The vault is the shared brain
 
@@ -55,6 +61,6 @@ Your auto-memory directory is for your own recall. Anything Mark should be able 
 
 ## Practical notes
 
-- Python tests: `python -m pytest tests -q` (150 passing baseline). TS tests: `npx vitest run`. Typecheck: `pnpm typecheck`.
+- Tests: `python -m pytest tests -q` (289+ passing baseline). Knowledge gate: `python scripts/compile_knowledge.py --check`.
 - httpx must stay 0.27.2 (starlette 0.27 TestClient vs mcp/ollama constraints — see requirements.txt comment).
 - Production knowledge (CEO briefs, leads) is pulled into the vault with `python scripts/vault_pull.py` (needs `RENDER_EXTERNAL_URL` + `DASHBOARD_API_KEY` in `.env`).
