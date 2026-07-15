@@ -1390,6 +1390,101 @@ async def chat_with_agent(request: Request, authorized: bool = Depends(require_d
         logger.error(f"Error in chat endpoint: {e}")
         return {"status": "error", "response": "Chat system error — see server logs"}
 
+@app.post("/api/leads/import-csv")
+async def import_leads_csv(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
+    """Import prospect lists from a CSV body (SDR Stage 1: any source → pipeline).
+
+    Body = raw CSV text. Header names are matched flexibly (business/company/name,
+    owner, email, phone, website/url, niche/vertical). Every row passes the same
+    quality gates as hunted leads (_is_valid_business_email / _is_plausible_name),
+    gets a deterministic ICP score, and is deduped by email or business name.
+    Returns a per-row summary so Mark can see exactly what was accepted.
+    """
+    import csv as _csv
+    import io as _io
+    from app.skills.lead_gen_v3 import _is_valid_business_email, _is_plausible_name
+    from app.skills.lead_validator import score_lead_icp
+
+    raw = (await request.body()).decode("utf-8-sig", errors="replace")
+    if not raw.strip():
+        return {"status": "error", "error": "Empty body — POST raw CSV text."}
+
+    # Flexible header mapping: first alias found wins.
+    aliases = {
+        "business": ("business", "company", "company_name", "name", "business_name"),
+        "owner": ("owner", "owner_name", "contact", "contact_name", "first_last"),
+        "email": ("email", "email_address", "owner_email", "contact_email"),
+        "phone": ("phone", "phone_number", "tel", "telephone", "mobile"),
+        "website": ("website", "url", "site", "web", "domain"),
+        "vertical": ("vertical", "niche", "industry", "category"),
+    }
+    reader = _csv.DictReader(_io.StringIO(raw))
+    if not reader.fieldnames:
+        return {"status": "error", "error": "CSV has no header row."}
+    header_map = {}
+    # Normalize: lowercase + spaces/dashes → underscores, so "Contact Name",
+    # "contact-name" and "contact_name" all match the same alias.
+    lowered = {h.lower().strip().replace(" ", "_").replace("-", "_"): h for h in reader.fieldnames}
+    for field, names in aliases.items():
+        for n in names:
+            if n in lowered:
+                header_map[field] = lowered[n]
+                break
+
+    if "business" not in header_map:
+        return {"status": "error", "error": f"No business/company column found in header: {reader.fieldnames}"}
+
+    # Dedup against existing leads (email or business name, case-insensitive).
+    existing = await DatabaseManager.query(
+        "SELECT COALESCE(email,'') AS email, COALESCE(business,'') AS business FROM leads",
+        (), fetchall=True,
+    )
+    seen_emails = {(dict(r).get("email") or "").lower() for r in existing if dict(r).get("email")}
+    seen_names = {(dict(r).get("business") or "").lower() for r in existing if dict(r).get("business")}
+
+    imported, skipped = [], []
+    for i, row in enumerate(reader, start=2):  # start=2: header is line 1
+        get = lambda f: (row.get(header_map[f], "") or "").strip() if f in header_map else ""
+        business = get("business")
+        if not business:
+            skipped.append({"line": i, "reason": "no business name"})
+            continue
+        if business.lower() in seen_names:
+            skipped.append({"line": i, "business": business, "reason": "duplicate business"})
+            continue
+        email = get("email")
+        if email and not _is_valid_business_email(email):
+            skipped.append({"line": i, "business": business, "reason": f"invalid email '{email}'"})
+            email = ""  # keep the lead, drop the bad email
+        if email and email.lower() in seen_emails:
+            skipped.append({"line": i, "business": business, "reason": "duplicate email"})
+            continue
+        owner = get("owner")
+        if owner and not _is_plausible_name(owner):
+            owner = ""  # drop junk names, keep the lead
+        lead = {
+            "business": business,
+            "owner": owner,
+            "email": email.lower() if email else "",
+            "phone": get("phone"),
+            "website": get("website"),
+            "vertical": get("vertical") or "CSV Import",
+            "source": "csv_import",
+            "status": "New",
+            "icebreaker": "Pending review...",
+        }
+        lead["score"] = score_lead_icp(lead)["score"]
+        lead_id = await DatabaseManager.asave_lead(lead, default_vertical=lead["vertical"], client_id=0)
+        seen_names.add(business.lower())
+        if email:
+            seen_emails.add(email.lower())
+        imported.append({"line": i, "id": lead_id, "business": business, "score": lead["score"]})
+
+    logger.info(f"[CSV IMPORT] imported={len(imported)} skipped={len(skipped)}")
+    return {"status": "ok", "imported": len(imported), "skipped": len(skipped),
+            "leads": imported[:50], "skipped_detail": skipped[:50]}
+
+
 @app.post("/api/actions/hunt-leads")
 async def action_hunt_leads(authorized: bool = Depends(require_dashboard_api_key)):
     from app.worker import run_lead_hunt_slow_lane, start_worker_scheduler, stop_worker_scheduler
