@@ -917,6 +917,17 @@ async def process_telegram_message(data: dict):
         except Exception as e:
             logger.warning(f"[Telegram] Approval intercept failed (continuing to brain): {e}")
 
+        # Intercept meeting-outcome capture ('/outcome 12 held ...') the same
+        # way — the learning loop's ground truth must never depend on the brain.
+        try:
+            from app.core.event_log import handle_outcome_command
+            outcome_reply = await handle_outcome_command(text)
+            if outcome_reply:
+                await tg_queue.add_message(chat_id, f"📊 {outcome_reply}")
+                return
+        except Exception as e:
+            logger.warning(f"[Telegram] Outcome intercept failed (continuing to brain): {e}")
+
         # Route to Brain
         result = await router.handle_message(text, chat_id=chat_id, history=None)
         
