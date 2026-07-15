@@ -406,23 +406,6 @@ TOOLS = [
 {
         "type": "function",
         "function": {
-            "name": "monitor_client_ads",
-            "description": "Monitor a client's Meta Ad Account performance (spend, leads, CPL) and check for budget drain.",
-            "parameters": {
-                "type": 'object',
-                "properties": {
-                    "client_id": {'type': 'integer'},
-                    "ad_account_id": {'type': 'string', 'description': "Meta Ad Account ID (e.g., '1234567890')"},
-                    "access_token": {'type': 'string'},
-                    "cpl_threshold": {'type': 'number', 'description': 'Maximum allowed Cost Per Lead before warning (default 50.0)'},
-                },
-                "required": ['client_id', 'ad_account_id', 'access_token'],
-            },
-        }
-    },
-{
-        "type": "function",
-        "function": {
             "name": "morning_brief",
             "description": "Generate daily morning executive briefing containing pipeline metrics, ROLL averages, HOT replies, and task schedule.",
             "parameters": {
@@ -445,21 +428,6 @@ TOOLS = [
                     "platform": {'type': 'string', 'description': 'Platform: twitter, linkedin, instagram, facebook'},
                 },
                 "required": ['text'],
-            },
-        }
-    },
-{
-        "type": "function",
-        "function": {
-            "name": "pause_meta_campaign",
-            "description": "Emergency pause of a Meta Ad Campaign to prevent further budget loss.",
-            "parameters": {
-                "type": 'object',
-                "properties": {
-                    "campaign_id": {'type': 'string', 'description': 'ID of the campaign to pause'},
-                    "access_token": {'type': 'string'},
-                },
-                "required": ['campaign_id', 'access_token'],
             },
         }
     },
