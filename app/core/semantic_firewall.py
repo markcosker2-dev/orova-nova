@@ -343,7 +343,11 @@ def validate_parameter(value: Any, prop: ParameterProperty, path: str) -> Option
 def validate_against_schema(params: Dict[str, Any], schema: ParameterSchema) -> List[str]:
     """Validate all parameters against schema"""
     errors = []
-    
+    # Defense in depth: a no-arg tool call can arrive as params=None
+    # (model emits arguments='null'); treat it as an empty dict.
+    if not isinstance(params, dict):
+        params = {}
+
     # Check required
     for req in schema.required:
         if req not in params:

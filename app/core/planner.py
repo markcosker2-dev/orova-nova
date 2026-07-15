@@ -478,6 +478,11 @@ class TaskPlanner:
                     args = json.loads(tc.function.arguments) if isinstance(tc.function.arguments, str) else (tc.function.arguments or {})
                 except (json.JSONDecodeError, TypeError, ValueError):
                     args = {}
+                # Models emit arguments='null' for no-arg tools; json.loads
+                # turns that into None, which crashed the firewall with
+                # "'NoneType' object has no attribute 'items'" (live 2026-07-15).
+                if not isinstance(args, dict):
+                    args = {}
 
                 # Repeat call detection
                 h = _call_hash(fn_name, args)
