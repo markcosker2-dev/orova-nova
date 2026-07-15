@@ -376,6 +376,24 @@ class UnifiedAIClient:
         result = await self.chat(prompt, role="fast", **kwargs)
         return result.content or ""
 
+    @staticmethod
+    def _strip_openai_only_schema_fields(node):
+        """Remove JSON-Schema fields Gemini's Schema proto rejects.
+
+        OpenAI strict-mode tools carry `additionalProperties` (and we mark
+        `strict` on some); Gemini fails the WHOLE request with 'Unknown field
+        for Schema: additionalProperties' — which took out the tier-2 fallback
+        exactly when Groq 400'd (live 2026-07-15). Strips recursively; returns
+        a cleaned copy, never mutates the shared TOOLS definitions."""
+        _BANNED = {"additionalProperties", "strict", "$schema", "minLength",
+                   "maxLength", "pattern", "default", "examples"}
+        if isinstance(node, dict):
+            return {k: UnifiedAIClient._strip_openai_only_schema_fields(v)
+                    for k, v in node.items() if k not in _BANNED}
+        if isinstance(node, list):
+            return [UnifiedAIClient._strip_openai_only_schema_fields(v) for v in node]
+        return node
+
     def _convert_tools_to_gemini(self, tools: List[Dict]) -> List:
         """Convert OpenAI-style tool definitions to Gemini function calling format.
         Returns a single function_declarations array containing all tools, as Gemini expects."""
@@ -386,7 +404,7 @@ class UnifiedAIClient:
                 declarations.append({
                     "name": func["name"],
                     "description": func.get("description", ""),
-                    "parameters": func.get("parameters", {})
+                    "parameters": self._strip_openai_only_schema_fields(func.get("parameters", {}))
                 })
         return [{"function_declarations": declarations}] if declarations else None
 
