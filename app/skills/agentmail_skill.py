@@ -303,7 +303,15 @@ async def _send_via_agentmail(to: str, subject: str, body: str, skip_proofread: 
             )
         except Exception as db_err:
             logger.error(f"Failed to log success outcome: {db_err}")
-            
+
+        # Unified event log (ADR-0007): one wiring point covers every email
+        # send in the system — hunt, escalation, drip, reply. Fail-open.
+        from app.core.event_log import alog_event
+        await alog_event(lead_id, "outreach_sent", "courier",
+                         payload={"to": to, "subject": final_subject, "strategy": strategy,
+                                  "niche": niche, "quality_score": quality_score},
+                         variant_id=strategy, campaign_id=client_id)
+
         return {"status": "success", "to": to, "message_id": msg_id, "score": quality_score}
     except Exception as e:
         logger.error(f"[AgentMail] Send failed to {to}: {e}", exc_info=True)

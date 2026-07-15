@@ -155,6 +155,14 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"[SELF_LEARN] Table init failed: {e}")
 
+    # [ADR-0007] Unified SDR event log (append-only pipeline ground truth)
+    try:
+        from app.core.event_log import ensure_events_table
+        if await ensure_events_table():
+            logger.info("[EVENTS] Event log ready")
+    except Exception as e:
+        logger.warning(f"[EVENTS] init failed (non-fatal): {e}")
+
     if await DatabaseManager.is_empty():
         # Drive snapshot FIRST: it restores everything (leads, outcomes,
         # learned strategies, memories). Sheets only holds leads, so trying
@@ -171,6 +179,9 @@ async def lifespan(app: FastAPI):
             try:
                 DatabaseManager._init_sqlite_fallback()
                 await DatabaseManager.run_phase5_migrations()
+                # Restored snapshot may predate the events table — re-ensure it.
+                from app.core.event_log import ensure_events_table as _ensure_events
+                await _ensure_events()
                 logger.info(f"♻️ Restored database snapshot from Drive: {restore_res.get('filename')}")
                 restored_ok = True
             except Exception as adopt_err:
@@ -1475,6 +1486,10 @@ async def import_leads_csv(request: Request, authorized: bool = Depends(require_
         }
         lead["score"] = score_lead_icp(lead)["score"]
         lead_id = await DatabaseManager.asave_lead(lead, default_vertical=lead["vertical"], client_id=0)
+        # Unified event log (ADR-0007): CSV import is a Scout source too.
+        from app.core.event_log import alog_event
+        await alog_event(lead_id, "lead_discovered", "scout",
+                         payload={"source": "csv_import", "score": lead["score"]})
         seen_names.add(business.lower())
         if email:
             seen_emails.add(email.lower())

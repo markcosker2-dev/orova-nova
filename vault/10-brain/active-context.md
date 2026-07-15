@@ -11,6 +11,21 @@ status: active
 > Session-start file. Read this first (CLAUDE.md rule). Keep it current when the
 > direction changes materially.
 
+## 🎯 IDENTITY: HermesClaw is an SDR (owner, 2026-07-14/15 — FINAL)
+
+**HermesClaw's sole purpose is to be the best autonomous AI SDR for OROVA**
+(ADR-0006). North-star metric: **booked meetings**. The Electron GUI is archived
+out of the repo (`archive/electron-gui` branch); the repo is now
+`app/ + knowledge/ + vault/ + mission-control/ + scripts/ + tests/`.
+Target architecture: the Pipeline Blackboard (Prospect state machine + unified
+event log, ADR-0007 — event log live, additive). Shipped in the Phase-0 batch
+(PRs #72–#74 + event log, 2026-07-15): deterministic ICP scoring (replaces the
+flat-50 scorer), CSV lead import (`POST /api/leads/import-csv`), repo
+subtraction (openclaw_instance/, dead skills, artifacts), GUI archival.
+Rejected channels (legal grounds, ADR-0006): LinkedIn automation (ToS), cold
+SMS (TCPA). Next in queue: CAN-SPAM footer, Telegram outcome-capture,
+dossier v1 (stage-gated), M2 of ADR-0005.
+
 ## ICP decision (owner, 2026-07-13)
 
 **The ICP stays MIXED** — automotive + custom home builders + luxury RE +
