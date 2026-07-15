@@ -56,6 +56,92 @@ def validate_contact(email: str = None, phone: str = None, country: str = "US") 
 # ─── LEAD SCORING ───────────────────────────────────────────────────────
 # Simple rule-based + ML-ready scoring for lead prioritization
 
+# ── Deterministic ICP scoring (SDR refocus, 2026-07-14) ────────────────────
+# The old score_lead() weighed company_size / B2B-industry / email-opens —
+# data the hunt pipeline NEVER has (worker.py passes "unknown" for all of
+# them), so every live lead scored exactly 50 and the score was decorative.
+# score_lead_icp() scores only on fields enrichment actually collects, so the
+# score discriminates and Mark's "email the best 10" is a real ranking.
+
+# Luxury/premium signals in the business name or vertical (OROVA's lead
+# vertical is luxury automotive; the ICP stays mixed per owner 2026-07-13).
+_ICP_LUXURY_KEYWORDS = (
+    "exotic", "luxury", "supercar", "ferrari", "lamborghini", "porsche",
+    "bentley", "rolls", "mclaren", "aston", "maserati", "high end", "high-end",
+    "premium", "prestige", "elite", "custom home", "estate",
+)
+_ICP_VERTICAL_KEYWORDS = (
+    # automotive services (the lead vertical)
+    "dealer", "dealership", "rental", "detail", "ceramic", "ppf",
+    "paint protection", "wrap", "tint", "performance", "tuning", "restoration",
+    "motorsport", "collision",
+    # rest of the mixed ICP
+    "builder", "remodel", "renovation", "real estate", "realty", "interior design",
+    "landscape", "med spa", "medspa",
+)
+_GENERIC_EMAIL_PREFIXES = (
+    "info@", "contact@", "support@", "hello@", "admin@", "office@", "sales@",
+    "service@", "team@", "enquiries@", "inquiries@", "help@",
+)
+
+
+def score_lead_icp(lead: dict) -> dict:
+    """Deterministic 0-100 ICP-fit score from fields the pipeline collects.
+
+    Weights (documented so the score is debuggable, not vibes):
+      +25 owner name found (a real person to write to — the #1 reply factor)
+      +25 direct/personal email  (+10 if only a generic inbox)
+      +10 phone (E.164)
+      +10 website
+      +20 luxury/premium keyword in name or vertical (can-afford-$4k signal)
+      +10 ICP vertical keyword match
+    Thresholds: >=70 HOT (email first, everything verified), 45-69 WARM,
+    25-44 COLD, <25 SKIP (not worth Mark's time).
+    """
+    name = (lead.get("owner") or lead.get("owner_name") or "").strip()
+    email = (lead.get("email") or "").strip().lower()
+    phone = (lead.get("phone") or "").strip()
+    website = (lead.get("website") or "").strip()
+    haystack = f"{lead.get('business') or ''} {lead.get('vertical') or ''} {lead.get('niche') or ''}".lower()
+
+    score = 0
+    breakdown = {}
+
+    has_owner = len(name.split()) >= 2
+    breakdown["owner_name"] = 25 if has_owner else 0
+
+    if email:
+        if email.startswith(_GENERIC_EMAIL_PREFIXES):
+            breakdown["email"] = 10
+        else:
+            breakdown["email"] = 25
+    else:
+        breakdown["email"] = 0
+
+    breakdown["phone"] = 10 if phone.startswith("+") and len(phone) >= 11 else 0
+    breakdown["website"] = 10 if website.startswith("http") else 0
+    breakdown["luxury_signal"] = 20 if any(k in haystack for k in _ICP_LUXURY_KEYWORDS) else 0
+    breakdown["vertical_match"] = 10 if any(k in haystack for k in _ICP_VERTICAL_KEYWORDS) else 0
+
+    score = sum(breakdown.values())
+
+    if score >= 70:
+        recommendation = "🔥 HOT — direct owner contact, on-ICP: email today"
+    elif score >= 45:
+        recommendation = "⭐ WARM — contactable, partial fit: email this week"
+    elif score >= 25:
+        recommendation = "📧 COLD — thin contact data: enrich further before outreach"
+    else:
+        recommendation = "⏭️ SKIP — not worth outreach time"
+
+    return {
+        "score": int(score),
+        "breakdown": breakdown,
+        "recommendation": recommendation,
+        "company": lead.get("business", ""),
+    }
+
+
 def score_lead(company_name: str, company_size: str = "unknown", industry: str = "unknown", 
                response_signals: dict = None, contact_type: str = "unknown") -> dict:
     """

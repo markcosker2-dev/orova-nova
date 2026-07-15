@@ -22,7 +22,7 @@ from app.skills.outbound_dialer import trigger_retell_call
 from app.skills.agentmail_skill import check_replies, send_outreach
 from app.core.database import DatabaseManager
 from app.skills.light_enrich import enrich_lead_lite
-from app.skills.lead_validator import score_lead
+from app.skills.lead_validator import score_lead_icp
 from app.skills.opportunity_scanner import scan_opportunity
 from app.skills.email_sequence_skill import start_drip_campaign
 
@@ -366,16 +366,13 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
                     # [Enrichment] Find owner, email, phone, website
                     lead = await enrich_lead_lite(lead)
 
-                    # ── [NEW] Run actual AI scoring ──
+                    # ── Deterministic ICP scoring (fields enrichment actually
+                    # collects; the old scorer got "unknown" for everything and
+                    # returned a flat 50 for every live lead) ──
                     try:
-                        score_result = score_lead(
-                            company_name=lead.get("business", ""),
-                            company_size="unknown",
-                            industry=lead.get("vertical", niche) or "unknown",
-                            contact_type="unknown",
-                            response_signals=None,
-                        )
+                        score_result = score_lead_icp(lead)
                         lead["score"] = score_result.get("score", 0)
+                        logger.info(f"[SCORE] {lead.get('business','?')}: {lead['score']} — {score_result.get('recommendation','')}")
                     except Exception as e:
                         logger.warning(f"[SCORE] Lead scoring failed: {e}")
                         lead["score"] = 0
