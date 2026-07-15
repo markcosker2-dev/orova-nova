@@ -183,11 +183,36 @@ async def _verify_email_deliverable(email: str) -> dict:
     return {"valid": True, "reason": "OK"}
 
 
+# ── CAN-SPAM compliance footer ───────────────────────────────────────────────
+# Cold commercial email legally requires a clear opt-out mechanism and a valid
+# physical postal address (15 U.S.C. §7704). The opt-out ships always; the
+# address comes from BUSINESS_POSTAL_ADDRESS (owner action: a registered-agent
+# or PO-box address — logged once as a warning until set).
+
+_OPT_OUT_LINE = 'Not relevant? Reply "no thanks" and I won\'t write again.'
+_warned_no_postal = False
+
+
+def _apply_compliance_footer(body: str) -> str:
+    """Append the CAN-SPAM footer. Idempotent — never double-appends."""
+    global _warned_no_postal
+    if _OPT_OUT_LINE in (body or ""):
+        return body
+    postal = os.getenv("BUSINESS_POSTAL_ADDRESS", "").strip()
+    if not postal and not _warned_no_postal:
+        logger.warning("[CAN-SPAM] BUSINESS_POSTAL_ADDRESS not set — emails ship "
+                       "with opt-out but no postal address (required for full "
+                       "CAN-SPAM compliance; set it on Render).")
+        _warned_no_postal = True
+    ident = f"OROVA · {postal}" if postal else "OROVA"
+    return f"{body}\n\n—\n{ident}\n{_OPT_OUT_LINE}"
+
+
 async def send_outreach(
-    to: str, 
-    subject: str, 
-    body: str, 
-    skip_proofread: bool = False, 
+    to: str,
+    subject: str,
+    body: str,
+    skip_proofread: bool = False,
     recipient_context: str = "",
     lead_id: int = 0,
     strategy: str = "pas",
@@ -272,6 +297,11 @@ async def _send_via_agentmail(to: str, subject: str, body: str, skip_proofread: 
                     logger.error(f"Failed to log rejected outcome: {db_err}")
                     
                 return {"status": "rejected", "reason": fixes, "score": quality_score}
+
+    # CAN-SPAM: every commercial email carries a clear opt-out (and the postal
+    # address once configured). Applied AFTER the proofreader so boilerplate is
+    # never QA'd against the 75-word copy budget.
+    final_body = _apply_compliance_footer(final_body)
 
     try:
         # Send using AgentMail client synchronous call wrapped inside run_in_executor
