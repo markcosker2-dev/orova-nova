@@ -21,6 +21,147 @@ DB_PATH = os.path.join(DATA_DIR, "orova.db")
 
 logger = logging.getLogger(__name__)
 
+# The one canonical schema. _init_tables creates missing tables from it, and
+# _migrate_columns diffs existing tables against it (via an in-memory reference
+# DB) so restored Drive snapshots from any schema era converge to this shape.
+CANONICAL_SCHEMA_SQL = """
+    CREATE TABLE IF NOT EXISTS leads (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        business TEXT,
+        owner TEXT,
+        url TEXT,
+        website TEXT,
+        email TEXT,
+        phone TEXT,
+        vertical TEXT,
+        status TEXT DEFAULT 'New',
+        notes TEXT,
+        icebreaker TEXT,
+        score REAL DEFAULT 0,
+        client_id INTEGER DEFAULT 0,
+        email_status TEXT DEFAULT '',
+        owner_title TEXT DEFAULT '',
+        linkedin_url TEXT DEFAULT '',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS clients (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_name TEXT,
+        niche TEXT,
+        target_location TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS memories (
+        id TEXT PRIMARY KEY,
+        category TEXT,
+        content TEXT,
+        client_id INTEGER DEFAULT 0,
+        embedding TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS metrics (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        client_id INTEGER DEFAULT 0,
+        metric_key TEXT,
+        metric_value REAL DEFAULT 0,
+        recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS state_store (
+        key TEXT PRIMARY KEY,
+        value TEXT,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS learned_patterns (
+        id TEXT PRIMARY KEY,
+        task_type TEXT NOT NULL DEFAULT '',
+        winning_approach TEXT NOT NULL DEFAULT '',
+        client_id INTEGER NOT NULL DEFAULT 0,
+        pattern_type TEXT,
+        content TEXT,
+        decay_score REAL DEFAULT 1.0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS client_quotas (
+        client_id INTEGER PRIMARY KEY,
+        apollo_credits_used INTEGER DEFAULT 0,
+        apollo_credits_limit INTEGER DEFAULT 10000,
+        emails_sent_today INTEGER DEFAULT 0,
+        emails_daily_limit INTEGER DEFAULT 50,
+        reset_date TEXT DEFAULT (date('now'))
+    );
+    CREATE TABLE IF NOT EXISTS outreach_outcomes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        action TEXT,
+        strategy TEXT,
+        niche TEXT,
+        recipient TEXT,
+        lead_id INTEGER,
+        result TEXT,
+        quality_score REAL,
+        send_hour INTEGER,
+        send_day INTEGER,
+        metadata TEXT,
+        client_id INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS learned_strategies (
+        id TEXT PRIMARY KEY,
+        strategy_type TEXT,
+        strategy_value TEXT,
+        win_rate REAL,
+        sample_size INTEGER,
+        confidence TEXT,
+        active INTEGER DEFAULT 1,
+        client_id INTEGER DEFAULT 0,
+        wilson_score REAL DEFAULT 0,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS skill_versions (
+        id TEXT PRIMARY KEY,
+        skill_name TEXT NOT NULL,
+        version_label TEXT NOT NULL,
+        code_hash TEXT,
+        source TEXT NOT NULL DEFAULT 'builtin',
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS skill_outcomes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        skill_name TEXT NOT NULL,
+        version_id TEXT NOT NULL,
+        outcome TEXT NOT NULL,
+        latency_ms REAL,
+        client_id INTEGER DEFAULT 0,
+        metadata TEXT DEFAULT '{}',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_skill_outcomes_name ON skill_outcomes(skill_name, version_id);
+    CREATE TABLE IF NOT EXISTS improvement_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        subject_type TEXT NOT NULL,
+        subject_name TEXT NOT NULL,
+        action TEXT NOT NULL,
+        rationale TEXT,
+        client_id INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS drip_campaigns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        lead_id INTEGER UNIQUE,
+        sequence_type TEXT,
+        status TEXT DEFAULT 'active',
+        current_step INTEGER DEFAULT 0,
+        last_sent_at TIMESTAMP,
+        next_send_at TIMESTAMP,
+        client_id INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+"""
+
 
 class _DBBase:
     """Base class providing connection pool management and query primitives."""
@@ -136,138 +277,7 @@ class _DBBase:
 
     @classmethod
     def _init_tables(cls, conn):
-        conn.executescript("""
-            CREATE TABLE IF NOT EXISTS leads (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                business TEXT,
-                owner TEXT,
-                url TEXT,
-                website TEXT,
-                email TEXT,
-                phone TEXT,
-                vertical TEXT,
-                status TEXT DEFAULT 'New',
-                notes TEXT,
-                icebreaker TEXT,
-                score REAL DEFAULT 0,
-                client_id INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS clients (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                business_name TEXT,
-                niche TEXT,
-                target_location TEXT,
-                is_active INTEGER DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS memories (
-                id TEXT PRIMARY KEY,
-                category TEXT,
-                content TEXT,
-                client_id INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS metrics (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                client_id INTEGER DEFAULT 0,
-                metric_key TEXT,
-                metric_value REAL DEFAULT 0,
-                recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS state_store (
-                key TEXT PRIMARY KEY,
-                value TEXT,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS learned_patterns (
-                id TEXT PRIMARY KEY,
-                task_type TEXT NOT NULL DEFAULT '',
-                winning_approach TEXT NOT NULL DEFAULT '',
-                client_id INTEGER NOT NULL DEFAULT 0,
-                pattern_type TEXT,
-                content TEXT,
-                decay_score REAL DEFAULT 1.0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS client_quotas (
-                client_id INTEGER PRIMARY KEY,
-                apollo_credits_used INTEGER DEFAULT 0,
-                apollo_credits_limit INTEGER DEFAULT 10000,
-                emails_sent_today INTEGER DEFAULT 0,
-                emails_daily_limit INTEGER DEFAULT 50,
-                reset_date TEXT DEFAULT (date('now'))
-            );
-            CREATE TABLE IF NOT EXISTS outreach_outcomes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                action TEXT,
-                strategy TEXT,
-                niche TEXT,
-                recipient TEXT,
-                lead_id INTEGER,
-                result TEXT,
-                quality_score REAL,
-                send_hour INTEGER,
-                send_day INTEGER,
-                metadata TEXT,
-                client_id INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS learned_strategies (
-                id TEXT PRIMARY KEY,
-                strategy_type TEXT,
-                strategy_value TEXT,
-                win_rate REAL,
-                sample_size INTEGER,
-                confidence TEXT,
-                active INTEGER DEFAULT 1,
-                client_id INTEGER DEFAULT 0,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS skill_versions (
-                id TEXT PRIMARY KEY,
-                skill_name TEXT NOT NULL,
-                version_label TEXT NOT NULL,
-                code_hash TEXT,
-                source TEXT NOT NULL DEFAULT 'builtin',
-                active INTEGER NOT NULL DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS skill_outcomes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                skill_name TEXT NOT NULL,
-                version_id TEXT NOT NULL,
-                outcome TEXT NOT NULL,
-                latency_ms REAL,
-                client_id INTEGER DEFAULT 0,
-                metadata TEXT DEFAULT '{}',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE INDEX IF NOT EXISTS idx_skill_outcomes_name ON skill_outcomes(skill_name, version_id);
-            CREATE TABLE IF NOT EXISTS improvement_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                subject_type TEXT NOT NULL,
-                subject_name TEXT NOT NULL,
-                action TEXT NOT NULL,
-                rationale TEXT,
-                client_id INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS drip_campaigns (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                lead_id INTEGER UNIQUE,
-                sequence_type TEXT,
-                status TEXT DEFAULT 'active',
-                current_step INTEGER DEFAULT 0,
-                last_sent_at TIMESTAMP,
-                next_send_at TIMESTAMP,
-                client_id INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
+        conn.executescript(CANONICAL_SCHEMA_SQL)
         conn.commit()
         cls._ensure_leads_unique_index(conn)
         cls._migrate_columns(conn)
@@ -310,27 +320,60 @@ class _DBBase:
 
     @classmethod
     def _migrate_columns(cls, conn):
-        """Add missing columns to existing tables (safe, idempotent)."""
-        migrations = [
-            ("leads", "updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
-            ("leads", "email_status", "TEXT DEFAULT ''"),
-            ("leads", "owner_title", "TEXT DEFAULT ''"),
-            ("leads", "linkedin_url", "TEXT DEFAULT ''"),
-            ("memories", "embedding", "TEXT"),
-            ("metrics", "metric_value", "REAL DEFAULT 0"),
-            ("learned_strategies", "wilson_score", "REAL DEFAULT 0"),
-            ("learned_patterns", "task_type", "TEXT"),
-            ("learned_patterns", "winning_approach", "TEXT"),
-            ("learned_patterns", "client_id", "INTEGER DEFAULT 0"),
-            ("learned_patterns", "created_at", "TIMESTAMP"),
-        ]
-        for table, column, col_def in migrations:
-            try:
-                conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_def}")
-                conn.commit()
-                logger.info(f"[DB MIGRATION] Added {table}.{column}")
-            except Exception:
-                pass  # Column already exists, ignore
+        """Reconcile existing tables against the canonical schema (idempotent).
+
+        Restored Drive snapshots can predate current columns, and CREATE TABLE
+        IF NOT EXISTS leaves an existing table's shape untouched — so every
+        canonical column must be ALTER-added here when missing. A hand-kept
+        migration list drifted (metrics.metric_key, state_store.updated_at
+        were absent) and its CURRENT_TIMESTAMP defaults were silently rejected
+        by SQLite (ADD COLUMN allows only constant defaults), which left the
+        2026-07-19 production scheduler looping on `no such column`. Diffing
+        against a reference DB built from CANONICAL_SCHEMA_SQL can't drift.
+        Non-constant defaults are dropped from added columns; legacy rows read
+        NULL there, which all queries tolerate.
+        """
+        import sqlite3
+        ref = sqlite3.connect(":memory:")
+        try:
+            ref.executescript(CANONICAL_SCHEMA_SQL)
+            tables = [
+                r[0] for r in ref.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ).fetchall()
+                if not r[0].startswith("sqlite_")
+            ]
+            for table in tables:
+                live_cols = {
+                    r[1] for r in conn.execute(f'PRAGMA table_info("{table}")').fetchall()
+                }
+                if not live_cols:
+                    continue  # freshly created by the executescript above
+                for _cid, name, coltype, _notnull, dflt, _pk in ref.execute(
+                    f'PRAGMA table_info("{table}")'
+                ).fetchall():
+                    if name in live_cols:
+                        continue
+                    col_def = f'"{name}" {coltype}'.strip()
+                    added = False
+                    if dflt is not None:
+                        try:
+                            conn.execute(
+                                f'ALTER TABLE "{table}" ADD COLUMN {col_def} DEFAULT {dflt}'
+                            )
+                            added = True
+                        except sqlite3.OperationalError:
+                            pass  # non-constant default (CURRENT_TIMESTAMP etc.) — retry plain
+                    if not added:
+                        try:
+                            conn.execute(f'ALTER TABLE "{table}" ADD COLUMN {col_def}')
+                        except sqlite3.OperationalError as e:
+                            logger.warning(f"[DB MIGRATION] Could not add {table}.{name}: {e}")
+                            continue
+                    logger.info(f"[DB MIGRATION] Added {table}.{name}")
+            conn.commit()
+        finally:
+            ref.close()
 
         # Backfill NULL key columns in learned_patterns so the unique index
         # won't fail on legacy rows with NULL task_type/winning_approach/client_id.

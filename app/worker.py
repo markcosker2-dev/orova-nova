@@ -1049,15 +1049,31 @@ def reply_and_drip_check_job():
 # ═══════════════════════════════════════════════════════
 # THE SCHEDULE — 9 Autonomous Lanes
 # ═══════════════════════════════════════════════════════
-schedule.every(APPROVAL_CHECK_MINUTES).minutes.do(fast_lane_job)      # Lane 1: Approvals + calls
-schedule.every(HUNT_INTERVAL_MINUTES).minutes.do(slow_lane_job)        # Lane 2: Lead hunting
-schedule.every(REPLY_CHECK_MINUTES).minutes.do(reply_and_drip_check_job) # Lane 3: Reply + Drip monitoring
-schedule.every(COLD_CALL_CHECK_MINUTES).minutes.do(cold_escalation_job)  # Lane 4: Cold lead → call
-schedule.every(3).hours.do(cloud_backup_job)                           # Lane 5: Google Drive Backup (3h: caps learning-data loss on Render restarts)
-schedule.every().day.at("17:00").do(ceo_brain_job)                     # Lane 6: CEO Morning Brief (17:00 UTC = ~9-10 AM Pacific)
-schedule.every(2).hours.do(health_check_job)                           # Lane 7: Pipeline Health Check
-schedule.every(6).hours.do(self_improvement_job)                       # Lane 8: Strategy Self-Improvement
-schedule.every(1).hours.do(sequence_drip_job)                          # Lane 9: Drip Sequence Sender
+def _safe_job(job_fn):
+    """Run a lane job, containing any exception.
+
+    The schedule library advances a job's next_run only AFTER the job function
+    returns — a raising job stays perpetually due, re-fires on every 1-second
+    tick, and its exception aborts that run_pending() pass so later-due lanes
+    (including the backup lane) never run. Observed live 2026-07-19: Lane 7
+    looping at 1 Hz on a schema error, starving all other lanes. Containing
+    the exception here keeps the lane on its normal cadence instead.
+    """
+    try:
+        job_fn()
+    except Exception as e:
+        logger.error(f"[SCHED] {job_fn.__name__} failed (contained; lane stays on cadence): {e}")
+
+
+schedule.every(APPROVAL_CHECK_MINUTES).minutes.do(_safe_job, fast_lane_job)      # Lane 1: Approvals + calls
+schedule.every(HUNT_INTERVAL_MINUTES).minutes.do(_safe_job, slow_lane_job)        # Lane 2: Lead hunting
+schedule.every(REPLY_CHECK_MINUTES).minutes.do(_safe_job, reply_and_drip_check_job) # Lane 3: Reply + Drip monitoring
+schedule.every(COLD_CALL_CHECK_MINUTES).minutes.do(_safe_job, cold_escalation_job)  # Lane 4: Cold lead → call
+schedule.every(3).hours.do(_safe_job, cloud_backup_job)                           # Lane 5: Google Drive Backup (3h: caps learning-data loss on Render restarts)
+schedule.every().day.at("17:00").do(_safe_job, ceo_brain_job)                     # Lane 6: CEO Morning Brief (17:00 UTC = ~9-10 AM Pacific)
+schedule.every(2).hours.do(_safe_job, health_check_job)                           # Lane 7: Pipeline Health Check
+schedule.every(6).hours.do(_safe_job, self_improvement_job)                       # Lane 8: Strategy Self-Improvement
+schedule.every(1).hours.do(_safe_job, sequence_drip_job)                          # Lane 9: Drip Sequence Sender
 
 
 # ── Graceful shutdown event ──────────────────────────────────
