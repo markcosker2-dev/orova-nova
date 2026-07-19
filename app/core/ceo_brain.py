@@ -19,6 +19,16 @@ from app.skills.agentmail_skill import _send_telegram_alert, check_replies
 logger = logging.getLogger(__name__)
 
 
+def _coerce_client_id(client_id) -> int:
+    """Models sometimes pass a client NAME ('OROVA') where the schema says
+    integer — Gemini forwards it unvalidated, so guard at the boundary."""
+    try:
+        return int(client_id)
+    except (TypeError, ValueError):
+        logger.warning(f"[CEO_BRAIN] Non-numeric client_id {client_id!r} — defaulting to 0")
+        return 0
+
+
 # In-memory store for pending auto-execute proposals (survives within a process)
 _pending_proposals: dict = {}  # task_id -> {"tasks": [...], "created_at": datetime, "timer": asyncio.Task}
 _AUTO_EXECUTE_TIMEOUT = 1800  # 30 minutes in seconds
@@ -224,6 +234,7 @@ class CEOBrain:
         Pulls pipeline health metrics, rolling averages, HOT replies,
         and proposes the day's schedule. Sends report to Telegram.
         """
+        client_id = _coerce_client_id(client_id)
         logger.info("[CEO_BRAIN] Generating morning briefing...")
         
         # 1. Gather Metrics
@@ -554,6 +565,7 @@ class CEOBrain:
         Runs periodically (every 2 hours) to check the health of the pipeline.
         Returns a health score (0-100) and action items if issues are detected.
         """
+        client_id = _coerce_client_id(client_id)
         logger.info("[CEO_BRAIN] Running pipeline health check...")
         
         # 1. Gather Metrics

@@ -411,7 +411,7 @@ TOOLS = [
             "parameters": {
                 "type": 'object',
                 "properties": {
-                    "client_id": {'type': 'integer', 'description': 'Client ID'},
+                    "client_id": {'type': 'integer', 'description': 'Numeric client ID. OROVA is client 0 — always pass 0 (or omit) unless a different NUMBER is explicitly given. Never pass a name.'},
                 },
             },
         }
@@ -439,7 +439,7 @@ TOOLS = [
             "parameters": {
                 "type": 'object',
                 "properties": {
-                    "client_id": {'type': 'integer', 'description': 'Client ID'},
+                    "client_id": {'type': 'integer', 'description': 'Numeric client ID. OROVA is client 0 — always pass 0 (or omit) unless a different NUMBER is explicitly given. Never pass a name.'},
                 },
             },
         }
