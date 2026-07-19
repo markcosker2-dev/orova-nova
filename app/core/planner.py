@@ -130,6 +130,33 @@ def _call_hash(fn_name: str, fn_args: dict) -> str:
     payload = json.dumps({"fn": fn_name, "args": fn_args}, sort_keys=True)
     return hashlib.md5(payload.encode()).hexdigest()
 
+def _normalise_tool_calls(tool_calls) -> list:
+    """Coerce tool calls to plain OpenAI-format dicts before they enter
+    message history. Groq returns SDK objects and Gemini returns
+    SimpleNamespace — either one poisons the OTHER provider on the next
+    step (Gemini's converter needs dicts, Groq's serializer needs
+    JSON-able values; both crashed live 2026-07-19)."""
+    out = []
+    for tc in tool_calls or []:
+        if isinstance(tc, dict):
+            fn = tc.get("function") or {}
+            tc_id, name, args = tc.get("id"), fn.get("name"), fn.get("arguments")
+        else:
+            fn = getattr(tc, "function", None)
+            tc_id = getattr(tc, "id", None)
+            name = getattr(fn, "name", None)
+            args = getattr(fn, "arguments", None)
+        if not name:
+            continue
+        if not isinstance(args, str):
+            try:
+                args = json.dumps(args if args is not None else {})
+            except TypeError:
+                args = "{}"
+        out.append({"id": tc_id or f"call_{len(out)}", "type": "function",
+                    "function": {"name": name, "arguments": args}})
+    return out
+
 _EMAIL_RE = re.compile(r"[\w.+\-]+@[\w\-]+\.[a-zA-Z]{2,}", re.IGNORECASE)
 # Load Nova's full persona from soul.py at module init time
 try:
@@ -469,7 +496,8 @@ class TaskPlanner:
                 )
                 return {"status": "ok", "agent": agent_id, "steps": step, "response": content or "Task complete."}
 
-            messages.append({"role": "assistant", "content": content, "tool_calls": tool_calls})
+            messages.append({"role": "assistant", "content": content,
+                             "tool_calls": _normalise_tool_calls(tool_calls)})
 
             for tc in tool_calls:
                 fn_name = tc.function.name

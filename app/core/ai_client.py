@@ -4,6 +4,7 @@ import asyncio
 import json
 import re
 import time
+import uuid
 from typing import List, Dict, Optional, Any
 from types import SimpleNamespace
 from collections import defaultdict
@@ -69,6 +70,31 @@ def _record_success(model_name: str):
 async def _backoff(attempt: int, base: float = 1.0, cap: float = 8.0):
     delay = min(base * (2 ** attempt), cap)
     await asyncio.sleep(delay)
+
+
+def _err_status(e: Exception):
+    """HTTP status from an SDK exception, if it carries one."""
+    return getattr(e, "status_code", None) or getattr(getattr(e, "response", None), "status_code", None)
+
+
+def _err_body(e: Exception) -> str:
+    """Provider response body (or str(e)) — the part that says WHY."""
+    body = getattr(e, "body", None)
+    return str(body if body else e)[:500]
+
+
+def _tc_read(tc, *path, default=None):
+    """Read a nested field from a tool call that may be a dict, an OpenAI SDK
+    object, or a SimpleNamespace — message history carries all three."""
+    node = tc
+    for key in path:
+        if isinstance(node, dict):
+            node = node.get(key)
+        else:
+            node = getattr(node, key, None)
+        if node is None:
+            return default
+    return node
 
 class UnifiedAIClient:
     """
@@ -158,41 +184,82 @@ class UnifiedAIClient:
         if isinstance(messages, str):
             messages = [{"role": "user", "content": messages}]
 
+        # Per-request failure ledger: every tier that fails (or is skipped)
+        # leaves a structured record, so the terminal error can always say WHY.
+        request_id = uuid.uuid4().hex[:8]
+        failures: List[Dict] = []
+
+        def _record_provider_failure(provider: str, model: str, exc: Optional[Exception],
+                                     detail: str = "", log_stack: bool = True):
+            rec = {
+                "request_id": request_id, "role": role,
+                "provider": provider, "model": model,
+                "status": _err_status(exc) if exc else None,
+                "error": type(exc).__name__ if exc else "Skipped",
+                "detail": (detail or (_err_body(exc) if exc else ""))[:500],
+            }
+            failures.append(rec)
+            logger.error("[AI-FAIL] %s", json.dumps(rec, default=str),
+                         exc_info=exc if log_stack and exc else None)
+
         if not self.groq_client and not self.google_client and not self.primary_client:
-            return SimpleNamespace(content="[!!] No AI providers available.", tool_calls=None)
+            logger.error(f"[AI-FAIL {request_id}] No AI providers configured "
+                         f"(GROQ_API_KEY / GOOGLE_API_KEY / OPENROUTER_API_KEY all missing or failed init)")
+            return SimpleNamespace(
+                content="[!!] No AI providers available — no provider API key is configured or all failed init. "
+                        "Check GROQ_API_KEY / GOOGLE_API_KEY / OPENROUTER_API_KEY.",
+                tool_calls=None)
 
         # ─── TIER 1: Groq (Primary — full tool support, free tier available) ───
         if self.groq_client:
-            try:
-                groq_kwargs = {
-                    "model": self.GROQ_MODEL, "messages": messages,
-                    "temperature": temperature, "max_tokens": max_tokens, "timeout": 60.0,
-                }
-                if tools:
-                    groq_kwargs["tools"] = tools
-                    groq_kwargs["tool_choice"] = tool_choice or "auto"
-                    logger.info(f"[*] Groq ({role}): Querying with {len(tools)} tools")
-                else:
-                    logger.info(f"[*] Groq ({role}): Querying (text-only)")
+            # 'tool_use_failed' 400s are the model emitting args that violate a
+            # tool schema (live 2026-07-19: morning_brief client_id="OROVA" vs
+            # integer) — a bad generation, not an outage, so one retry is cheap
+            # and usually lands.
+            for groq_attempt in (1, 2):
+                try:
+                    groq_kwargs = {
+                        "model": self.GROQ_MODEL, "messages": messages,
+                        "temperature": temperature, "max_tokens": max_tokens, "timeout": 60.0,
+                    }
+                    if tools:
+                        groq_kwargs["tools"] = tools
+                        groq_kwargs["tool_choice"] = tool_choice or "auto"
+                        logger.info(f"[*] Groq ({role}) req={request_id}: Querying with {len(tools)} tools")
+                    else:
+                        logger.info(f"[*] Groq ({role}) req={request_id}: Querying (text-only)")
 
-                response = await self.groq_client.chat.completions.create(**groq_kwargs)
-                if response.choices:
-                    msg = response.choices[0].message
-                    if msg.tool_calls:
-                        logger.info(f"[+] Groq ({role}): OK with {len(msg.tool_calls)} tool call(s)")
-                        return msg
-                    if not tools:
-                        logger.info(f"[+] Groq ({role}): OK (text)")
-                        return msg
-                    logger.warning(f"[!] Groq ({role}): text when tools available — reprompting")
-                    return GroqLimpResponse(content=msg.content)
-            except Exception as e:
-                logger.warning(f"[!] Groq failed: {e}")
+                    response = await self.groq_client.chat.completions.create(**groq_kwargs)
+                    if response.choices:
+                        msg = response.choices[0].message
+                        if msg.tool_calls:
+                            logger.info(f"[+] Groq ({role}): OK with {len(msg.tool_calls)} tool call(s)")
+                            return msg
+                        if not tools:
+                            logger.info(f"[+] Groq ({role}): OK (text)")
+                            return msg
+                        logger.warning(f"[!] Groq ({role}): text when tools available — reprompting")
+                        return GroqLimpResponse(content=msg.content)
+                    _record_provider_failure("groq", self.GROQ_MODEL, None,
+                                             detail="empty choices in response", log_stack=False)
+                    break
+                except Exception as e:
+                    if groq_attempt == 1 and "tool_use_failed" in _err_body(e):
+                        logger.warning(f"[!] Groq ({role}) req={request_id}: model emitted "
+                                       f"schema-invalid tool args — retrying once. {_err_body(e)[:200]}")
+                        continue
+                    _record_provider_failure("groq", self.GROQ_MODEL, e)
+                    break
+        else:
+            _record_provider_failure("groq", self.GROQ_MODEL, None,
+                                     detail="not configured (GROQ_API_KEY missing or init failed)",
+                                     log_stack=False)
 
         # ─── TIER 2: Native Google Gemini (Free, with proper conversation format) ───
+        gemini_model_name = "gemini-2.5-flash" if tools else "gemini-2.5-flash-lite"
         if self.google_client:
             try:
-                logger.info(f"[*] Gemini ({role}): Querying...")
+                logger.info(f"[*] Gemini ({role}) req={request_id}: Querying...")
                 system_instruction = ""
                 contents = self._convert_messages_to_gemini(messages)
 
@@ -206,7 +273,6 @@ class UnifiedAIClient:
                     "max_output_tokens": max_tokens
                 }
 
-                gemini_model_name = "gemini-2.5-flash" if tools else "gemini-2.5-flash-lite"
                 model = self.google_client.GenerativeModel(
                     model_name=gemini_model_name,
                     system_instruction=system_instruction if system_instruction else None
@@ -259,11 +325,17 @@ class UnifiedAIClient:
 
                     if text or tool_calls:
                         return SimpleNamespace(content=text, tool_calls=tool_calls)
+                    _record_provider_failure("gemini", gemini_model_name, None,
+                                             detail="empty response (no text, no tool calls)",
+                                             log_stack=False)
             except Exception as e:
-                logger.warning(f"[!] Gemini failed: {e}")
+                _record_provider_failure("gemini", gemini_model_name, e)
+        else:
+            _record_provider_failure("gemini", gemini_model_name, None,
+                                     detail="not configured (GOOGLE_API_KEY missing or init failed)",
+                                     log_stack=False)
 
         # ─── TIER 3: OpenRouter (Tertiary) ───
-        last_error = None
         if self.primary_client:
             primary_model = self.ROLE_MODELS.get(role, self.ROLE_MODELS["default"])
             chain = [primary_model] + [m for m in self.FALLBACK_CHAIN if m != primary_model]
@@ -271,9 +343,11 @@ class UnifiedAIClient:
             for attempt, model_name in enumerate(chain):
                 if _is_open(model_name):
                     logger.info(f"[BREAKER] Skipping {model_name} — circuit open")
+                    _record_provider_failure("openrouter", model_name, None,
+                                             detail="circuit breaker open — skipped", log_stack=False)
                     continue
                 try:
-                    logger.info(f"[*] OpenRouter ({role}): Trying {model_name}")
+                    logger.info(f"[*] OpenRouter ({role}) req={request_id}: Trying {model_name}")
                     kwargs = {
                         "model": model_name, "messages": messages, "tools": tools,
                         "temperature": temperature, "max_tokens": max_tokens, "timeout": 60.0
@@ -285,18 +359,33 @@ class UnifiedAIClient:
                         _record_success(model_name)
                         logger.info(f"[+] OpenRouter ({role}): {model_name} OK")
                         return response.choices[0].message
+                    _record_provider_failure("openrouter", model_name, None,
+                                             detail="empty choices in response", log_stack=False)
                 except Exception as e:
-                    last_error = str(e)
                     _record_failure(model_name)
-                    if any(kw in last_error.lower() for kw in ("credit", "quota", "balance", "429", "rate")):
+                    _record_provider_failure("openrouter", model_name, e)
+                    if any(kw in _err_body(e).lower() for kw in ("credit", "quota", "balance", "429", "rate")):
                         logger.warning(f"[!] Rate limit on {model_name}. Backing off...")
                         await _backoff(attempt)
-                    else:
-                        logger.warning(f"[!] {model_name} failed: {e}")
                     continue
+        else:
+            _record_provider_failure("openrouter", "-", None,
+                                     detail="not configured (OPENROUTER_API_KEY missing or init failed)",
+                                     log_stack=False)
 
+        # Terminal failure: every tier left a record above. Summarize per
+        # provider for the user-facing message; the full ledger is in the logs
+        # under [AI-FAIL] with this request_id.
+        reasons = "; ".join(
+            f"{f['provider']}" + (f"[{f['model']}]" if f.get("model") not in (None, "-") else "") +
+            f": {f['error']}" + (f" HTTP {f['status']}" if f.get("status") else "") +
+            (f" — {f['detail'][:120]}" if f.get("detail") else "")
+            for f in failures
+        ) or "no failure records (bug — report this)"
+        logger.error(f"[AI-FAIL {request_id}] ALL providers failed for role '{role}': "
+                     f"{json.dumps(failures, default=str)[:2000]}")
         return SimpleNamespace(
-            content=f"[!!] All AI providers failed for role '{role}'. Last error: {last_error[:100] if last_error else 'Unknown'}",
+            content=f"[!!] All AI providers failed for role '{role}' (req {request_id}). {reasons}",
             tool_calls=None
         )
 
@@ -321,14 +410,23 @@ class UnifiedAIClient:
                 content = msg.get("content", "")
                 if content:
                     parts.append({"text": content})
+                # tool_calls may be dicts, OpenAI SDK objects, or SimpleNamespace
+                # (Groq returns SDK objects; assuming dicts crashed the whole
+                # Gemini tier with "'ChatCompletionMessageToolCall' object has
+                # no attribute 'get'", live 2026-07-19).
                 for tc in (msg.get("tool_calls") or []):
                     try:
-                        args = tc.get("function", {}).get("arguments", "{}")
+                        name = _tc_read(tc, "function", "name")
+                        if not name:
+                            continue
+                        args = _tc_read(tc, "function", "arguments", default="{}")
                         if isinstance(args, str):
-                            args = json.loads(args)
+                            args = json.loads(args) if args.strip() else {}
+                        if not isinstance(args, dict):
+                            args = {}
                         parts.append({
                             "function_call": {
-                                "name": tc["function"]["name"],
+                                "name": name,
                                 "args": args
                             }
                         })
@@ -353,11 +451,14 @@ class UnifiedAIClient:
         return contents
 
     def _find_tool_name_from_id(self, tool_call_id: str, messages: list) -> str:
-        """Look backwards through messages to find the tool call name by ID."""
+        """Look backwards through messages to find the tool call name by ID.
+        Tool calls may be dicts or SDK objects — read defensively."""
         for msg in reversed(messages):
-            for tc in (msg.get("tool_calls") or []):
-                if tc.get("id") == tool_call_id:
-                    return tc.get("function", {}).get("name", "")
+            tool_calls = (msg.get("tool_calls") if isinstance(msg, dict)
+                          else getattr(msg, "tool_calls", None)) or []
+            for tc in tool_calls:
+                if _tc_read(tc, "id") == tool_call_id:
+                    return _tc_read(tc, "function", "name", default="")
         return ""
 
     # ── Convenience Methods ────────────────────────────────────────
