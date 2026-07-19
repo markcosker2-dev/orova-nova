@@ -51,7 +51,9 @@ phonenumbers==8.13.0
 dnspython==2.6.1
 
 # [NEW] spaCy NER for owner name extraction (en_core_web_sm ~12MB disk, ~100-150MB RAM)
-spacy>=3.7,<4.0
+# Pinned 2026-07-13: an unpinned range lets a future spaCy release (compile-heavy
+# via thinc/blis) break the Render build the way unpinned scrapling did.
+spacy==3.8.14
 
 # [NEW] Email Templating & Lead Scoring (Free ML)
 jinja2==3.1.2
@@ -66,6 +68,9 @@ sqlmodel==0.0.14
 # [NEW] Quick Win: Timezone Detection (Premium UX)
 timezonefinder==6.2.0
 firecrawl-py==1.1.0
-scrapling
- 
+# scrapling REMOVED 2026-07-13: never imported in shipped source (only stale
+# .pyc of the deleted scrapling_scraper experiment referenced it). It was
+# unpinned, so its 2026-07-12 0.4.11 release + heavy native subtree (lxml,
+# curl_cffi, w3lib) landed in every Render build for zero runtime benefit.
+
 psutil==5.9.8
