@@ -861,16 +861,19 @@ async def enrich_lead_4step(url: str, business_name: str = "", state: str = "", 
 
     registry_owner = ""
     registry_title = ""
+    registry_source = ""
     try:
         from app.skills.owner_finder import resolve_owner
         hit = await resolve_owner(business_name, state=state, domain=domain, score=score)
         if hit.get("owner"):
             registry_owner = hit["owner"]
             registry_title = hit.get("title", "")
+            # resolve_owner names its winning stage (ca_registry, wa_registry,
+            # opencorporates, website, serpapi) — keep it; a registry officer
+            # name from a legal filing outranks any text-mined guess.
+            registry_source = hit.get("source", "owner_finder")
     except Exception as e:
         logger.debug(f"[ENRICH] owner_finder registry lookup failed for {business_name}: {e}")
-
-    results = []
 
     # Run all strategies concurrently. Removed three junk producers (live-verified
     # 2026-07-05): _state_registry_lookup returned the registry's own contact email
@@ -878,53 +881,56 @@ async def enrich_lead_4step(url: str, business_name: str = "", state: str = "", 
     # ("Service subject to Terms of Use"), and _ddg_owner_verification uses the
     # deprecated duckduckgo_search. Real owner names come from owner_finder (above)
     # + _scrape_website; email/phone from the site and Google Business.
-    tasks = [
-        _scrape_website(url),
-        _bbb_lookup(business_name, domain),
-        _google_business_lookup(business_name, domain),
+    # Priority = list order: the business's own site over BBB over Google.
+    strategies = [
+        ("website", _scrape_website(url)),
+        ("bbb", _bbb_lookup(business_name, domain)),
+        ("google_business", _google_business_lookup(business_name, domain)),
     ]
+    strategy_results = await asyncio.gather(*(coro for _, coro in strategies),
+                                            return_exceptions=True)
+    results = [(name, res) for (name, _), res in zip(strategies, strategy_results)
+               if isinstance(res, dict)]
 
-    strategy_results = await asyncio.gather(*tasks, return_exceptions=True)
+    # Merge in priority order, RECORDING the source of every field — the old
+    # merge collapsed everything anonymously, so Mission Control could never
+    # tell a legal-filing officer name from an AI-scraped guess.
+    final = {"owner_name": registry_owner, "owner_title": registry_title,
+             "email": "", "phone": "",
+             "owner_source": registry_source if registry_owner else "",
+             "email_source": "", "phone_source": "",
+             "email_status": "", "phone_verified": False}
 
-    for i, res in enumerate(strategy_results):
-        if isinstance(res, dict):
-            results.append(res)
-
-    # Merge results with priority
-    final = {"owner_name": registry_owner, "owner_title": registry_title, "email": "", "phone": ""}
-
-    # Priority 1: Website scraping (most reliable for contact info)
-    for res in results:
+    phones_seen: dict = {}  # source -> E.164, for cross-source corroboration
+    for src, res in results:
         if res.get("email") and not final["email"]:
             final["email"] = res["email"]
-        if res.get("phone") and not final["phone"]:
-            final["phone"] = res["phone"]
+            final["email_source"] = src
+            final["email_status"] = "found"
+        norm = _normalize_phone_to_e164(res.get("phone", "")) if res.get("phone") else ""
+        if norm:
+            phones_seen[src] = norm
+            if not final["phone"]:
+                final["phone"] = norm
+                final["phone_source"] = src
         if res.get("owner_name") and not final["owner_name"]:
             final["owner_name"] = res["owner_name"]
+            final["owner_source"] = src
 
-    # Priority 2: WHOIS (good for owner name)
-    for res in results:
-        if res.get("owner_name") and not final["owner_name"]:
-            final["owner_name"] = res["owner_name"]
+    # Two independent sources agreeing on the same number is real verification
+    # (site + Google Business Profile is the classic pair).
+    if final["phone"] and list(phones_seen.values()).count(final["phone"]) >= 2:
+        final["phone_verified"] = True
 
-    # Priority 3: State registry
-    for res in results:
-        if res.get("owner_name") and not final["owner_name"]:
-            final["owner_name"] = res["owner_name"]
-        if res.get("email") and not final["email"]:
-            final["email"] = res["email"]
-
-    # Priority 4: DDG verification
-    for res in results:
-        if res.get("owner_name") and not final["owner_name"]:
-            final["owner_name"] = res["owner_name"]
-
-    # Validate final phone
-    final["phone"] = _normalize_phone_to_e164(final["phone"])
-
-    # Fallback: Email guess if we have owner name + domain but no email
+    # Fallback: pattern-guessed email — mark it GUESSED. The old code returned
+    # the guess bare and light_enrich later stamped unlabeled emails 'found',
+    # so guesses masqueraded as scraped facts (confidence 65 instead of 35).
     if not final["email"] and final["owner_name"] and domain:
-        final["email"] = _guess_email(final["owner_name"], domain)
+        guess = _guess_email(final["owner_name"], domain)
+        if guess:
+            final["email"] = guess
+            final["email_source"] = "pattern_guess"
+            final["email_status"] = "guessed"
 
     return final
 
@@ -1191,8 +1197,17 @@ async def find_leads_v3(count: int = 5, query: str = "business leads") -> dict:
         async with semaphore:
             result = await enrich_lead_4step(lead.get("url", ""), lead.get("business", ""), state=state)
             result["business"] = lead.get("business", "") or extract_domain(lead.get("url", "")) or "Unknown"
-            # Prefer the Maps phone (normalized to E.164 so the call lane can dial it).
-            result["phone"] = _normalize_phone_to_e164(lead.get("phone", "")) or result.get("phone", "")
+            # Prefer the Maps phone (normalized to E.164 so the call lane can
+            # dial it) — and when Maps and an enrichment source agree on the
+            # number, that's two independent sources: mark it verified.
+            maps_phone = _normalize_phone_to_e164(lead.get("phone", ""))
+            if maps_phone:
+                if result.get("phone") and result["phone"] == maps_phone:
+                    result["phone_verified"] = True
+                    result["phone_source"] = f"maps+{result.get('phone_source') or 'enrichment'}"
+                else:
+                    result["phone"] = maps_phone
+                    result["phone_source"] = "maps"
             result["website"] = result.get("website", "") or lead.get("url", "")
             return result
     
@@ -1219,6 +1234,14 @@ async def find_leads_v3(count: int = 5, query: str = "business leads") -> dict:
             "url": lead.get("url", ""),
             "score": lead.get("score", 0),
             "status": lead.get("status", "New"),
+            # Provenance survives to storage — which source produced each
+            # field, whether the email is found vs guessed, and whether two
+            # independent sources corroborated the phone.
+            "owner_source": lead.get("owner_source", ""),
+            "email_source": lead.get("email_source", ""),
+            "email_status": lead.get("email_status", ""),
+            "phone_source": lead.get("phone_source", ""),
+            "phone_verified": bool(lead.get("phone_verified", False)),
         })
     
     if not clean_output:

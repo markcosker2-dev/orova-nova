@@ -188,10 +188,11 @@ def contact_confidence(lead: dict) -> dict:
       'verified' (Verifalia deliverable) 90 · 'found' (scraped from the
       business's own site/API source) 65 · 'guessed' (pattern guess, MX ok) 35
       · present with unknown provenance 50; generic inboxes (info@…) −15.
-    phone — E.164-normalized & valid 70 (no verification source exists for
-      phones; never claim more) · present but unnormalized 30.
-    owner — plausible two-word name 60 · +20 when a title corroborates it
-      (LinkedIn pass = independent second signal) · +10 for a profile URL.
+    phone — corroborated by 2+ independent sources (phone_verified) 90 ·
+      E.164-normalized & valid 70 · present but unnormalized 30.
+    owner — base by provenance: state-registry/legal-filing source 85 ·
+      other/unknown source 60; +10 when a title corroborates it, +5 for a
+      LinkedIn profile URL (cap 95 — nothing is 100 without a human check).
     """
     email = (lead.get("email") or "").strip().lower()
     phone = (lead.get("phone") or "").strip()
@@ -209,20 +210,23 @@ def contact_confidence(lead: dict) -> dict:
         phone_conf = 0
     elif phone.startswith("+") and not is_placeholder_phone(phone):
         try:
-            phone_conf = 70 if phonenumbers.is_valid_number(phonenumbers.parse(phone)) else 30
+            valid = phonenumbers.is_valid_number(phonenumbers.parse(phone))
         except phonenumbers.NumberParseException:
-            phone_conf = 30
+            valid = False
+        phone_conf = (90 if lead.get("phone_verified") else 70) if valid else 30
     else:
         phone_conf = 30
 
+    _REGISTRY_SOURCES = ("ca_sos", "wa_sos", "or_sos", "opencorporates")
     if not owner or len(owner.split()) < 2:
         owner_conf = 0
     else:
-        owner_conf = 60
+        owner_conf = 85 if (lead.get("owner_source") or "") in _REGISTRY_SOURCES else 60
         if (lead.get("owner_title") or "").strip():
-            owner_conf += 20
-        if (lead.get("linkedin_url") or "").strip():
             owner_conf += 10
+        if (lead.get("linkedin_url") or "").strip():
+            owner_conf += 5
+        owner_conf = min(owner_conf, 95)
 
     return {"email": email_conf, "phone": phone_conf, "owner": owner_conf}
 
