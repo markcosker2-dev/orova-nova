@@ -79,8 +79,23 @@ class _LeadRepo:
 
     @classmethod
     def save_lead(cls, lead: dict, default_vertical: str = None, client_id: int = 0) -> int:
-        """Save a lead with automatic deduplication. Returns lead_id or -1 if duplicate.
-        Dedup: SELECT check inside transaction + UNIQUE index as hard backstop."""
+        """Save a lead with automatic deduplication and the storage gate.
+        Returns lead_id, -1 if duplicate, or -2 if the gate rejected the row.
+        Dedup: SELECT check inside transaction + UNIQUE index as hard backstop.
+
+        Storage gate (Phase 0): every ingest path (hunt, CSV import, Sheets
+        restore) converges here, so this is where fabricated/placeholder data
+        is stopped. Unverifiable fields are stored EMPTY; the score is always
+        recomputed server-side (a Sheets fixture once arrived pre-scored 85)."""
+        from app.skills.lead_validator import validate_lead_for_storage
+        gate = validate_lead_for_storage(lead)
+        if not gate["ok"]:
+            logger.warning(f"[LEAD-GATE] REJECTED lead: {'; '.join(gate['reasons'])}")
+            return -2
+        if gate["reasons"]:
+            logger.info(f"[LEAD-GATE] cleaned lead '{gate['lead'].get('business')}': "
+                        f"{'; '.join(gate['reasons'])}")
+        lead = gate["lead"]
         email = lead.get("email", "").strip()
         url = lead.get("url") or lead.get("website", "")
         domain = ""

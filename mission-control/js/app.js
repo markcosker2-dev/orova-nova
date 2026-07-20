@@ -615,11 +615,15 @@ async function renderLeads() {
             'Meeting Booked': '🟣', 'Email Sent': '📧', 'Denied': '🔴'
         };
         var statusIcon = statusMap[lead.status] || '⚪';
+        // Missing data renders as an explicit em-dash — never substitute
+        // another field and never show placeholder values (Phase 0 rule).
+        var dash = '<span class="leads-empty" title="not available — no verified value">—</span>';
+        var cell = function (v) { return v ? esc(v) : dash; };
         return '<tr>'
-            + '<td>' + esc(lead.business || '') + '</td>'
-            + '<td>' + esc(lead.contact || '') + '</td>'
-            + '<td>' + esc(lead.phone || '') + '</td>'
-            + '<td>' + esc(lead.vertical || '') + '</td>'
+            + '<td>' + cell(lead.business) + '</td>'
+            + '<td>' + cell(lead.owner || lead.contact) + '</td>'
+            + '<td>' + cell(lead.phone) + '</td>'
+            + '<td>' + cell(lead.vertical) + '</td>'
             + '<td><span class="health-value ' + scoreClass + '">' + score + '</span></td>'
             + '<td>' + statusIcon + ' ' + esc(lead.status || 'New') + '</td>'
             + '</tr>';

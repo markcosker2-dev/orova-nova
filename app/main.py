@@ -211,6 +211,16 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"[CEO_BRAIN] Could not reload pending proposals after restore: {e}")
 
+    # [HYGIENE] Lead data-integrity sweep — every boot, AFTER any restore.
+    # Junk lives in the Drive snapshot and the Sheet (the live DB held the
+    # repo's own sample_webhook_payload.json fixture as a "lead"), so cleaning
+    # SQLite once is not enough: each deploy restores the junk again.
+    try:
+        from app.core.lead_hygiene import quarantine_invalid_leads
+        await quarantine_invalid_leads()
+    except Exception as e:
+        logger.warning(f"[HYGIENE] boot sweep failed (non-fatal): {e}")
+
     # [HERMESCLAW] Register all autonomous API endpoints
     from app.core.hermesclaw_endpoints import register_hermesclaw_routes
     register_hermesclaw_routes(app)
@@ -699,10 +709,14 @@ async def api_agent_retry(request: Request, background: BackgroundTasks, authori
 
 
 @app.get("/api/leads")
-async def get_leads(limit: int = 100, authorized: bool = Depends(require_dashboard_api_key)):
+async def get_leads(limit: int = 100, include_invalid: bool = False,
+                    authorized: bool = Depends(require_dashboard_api_key)):
+    """Mission Control leads. Rows quarantined by the hygiene sweep
+    (status='Invalid': fixture data, phone-as-name, no business) are excluded
+    unless include_invalid=1 — validated records only, per Phase 0."""
     query = """
-        SELECT 
-            id, business, 
+        SELECT
+            id, business,
             COALESCE(owner, '') as owner,
             url, 
             COALESCE(website, '') as website,
@@ -717,8 +731,9 @@ async def get_leads(limit: int = 100, authorized: bool = Depends(require_dashboa
             COALESCE(linkedin_url, '') as linkedin_url,
             client_id, created_at
         FROM leads
+        {where}
         ORDER BY id DESC LIMIT ?
-    """
+    """.format(where="" if include_invalid else "WHERE COALESCE(status,'') != 'Invalid'")
     leads = await DatabaseManager.query(query, (limit,), fetchall=True)
     return {"status": "ok", "leads": [dict(r) for r in leads]}
 
