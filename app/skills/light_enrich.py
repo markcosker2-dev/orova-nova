@@ -551,24 +551,13 @@ def _walk_json_for_person(obj: Any) -> Optional[str]:
 
 
 def _is_plausible_name(text: str) -> bool:
-    if not text or len(text) < 4 or len(text) > 50:
+    # Canonical check lives in lead_validator.is_plausible_person_name —
+    # this copy was the WEAKEST of three ("Good People"/"We Proudly" passed
+    # its 8-word stoplist, live 2026-07-20). Keeps only its local denylists.
+    from app.skills.lead_validator import is_plausible_person_name
+    if text in FALSE_POSITIVE_NAMES or text in LOCATION_BLACKLIST:
         return False
-    parts = text.split()
-    if len(parts) < 2 or len(parts) > 4:
-        return False
-    if not all(re.match(r"^[A-Za-z'\-]+$", p) for p in parts):
-        return False
-    if not parts[0][0].isupper():
-        return False
-    if text in FALSE_POSITIVE_NAMES:
-        return False
-    stop_words = {"and", "the", "for", "with", "from", "our", "your", "their"}
-    if any(p.lower() in stop_words for p in parts):
-        return False
-    # Reject names that are purely location names
-    if text in LOCATION_BLACKLIST:
-        return False
-    return True
+    return is_plausible_person_name(text)
 
 
 async def _ddg_enrich_contact(biz_name: str, domain: str) -> Tuple[Optional[str], Optional[str]]:

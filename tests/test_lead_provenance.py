@@ -94,6 +94,50 @@ def test_confidence_owner_caps_at_95():
     assert out["owner"] == 95
 
 
+# ── person-name plausibility: the live fakes must die ────────────────────────
+
+def test_live_fake_owner_names_rejected():
+    from app.skills.lead_validator import is_plausible_person_name
+    # stored as real owners in production, 2026-07-20 hunt
+    for fake in ("THANKS TO", "We Proudly", "Good People", "Member Circles",
+                 "Auto Repair", "Free Quote"):
+        assert not is_plausible_person_name(fake), fake
+
+
+def test_real_names_still_pass():
+    from app.skills.lead_validator import is_plausible_person_name
+    for real in ("Todd Rowsell", "Darren O'Gara", "Maria Santos",
+                 "Sarah van Dyke", "Jean-Pierre Dubois", "SMITH JOHN"):
+        assert is_plausible_person_name(real), real
+
+
+def test_gate_drops_implausible_owner_and_derived_guessed_email():
+    from app.skills.lead_validator import validate_lead_for_storage
+    # the exact live row: fake owner + email fabricated FROM the fake owner
+    result = validate_lead_for_storage({
+        "business": "Calabasas Luxury Motorcars",
+        "owner": "THANKS TO",
+        "email": "thanks@calabasasluxurymotorcars.com",
+        "phone": "+18889922249",
+    })
+    assert result["ok"] is True
+    assert result["lead"]["owner"] == ""
+    assert result["lead"]["email"] == ""  # fabrication squared — gone
+    assert result["lead"]["phone"] == "+18889922249"  # real data untouched
+
+
+def test_gate_keeps_unrelated_email_when_owner_dropped():
+    from app.skills.lead_validator import validate_lead_for_storage
+    # live row: fake owner but a REAL generic inbox — inbox survives
+    result = validate_lead_for_storage({
+        "business": "The Luxury Collection Los Gatos",
+        "owner": "Good People",
+        "email": "info@astonmartinlosgatos.com",
+    })
+    assert result["lead"]["owner"] == ""
+    assert result["lead"]["email"] == "info@astonmartinlosgatos.com"
+
+
 # ── canonical schema carries the provenance columns ──────────────────────────
 
 def test_canonical_schema_has_provenance_columns():

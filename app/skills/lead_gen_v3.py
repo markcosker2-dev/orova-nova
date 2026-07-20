@@ -63,65 +63,14 @@ FALSE_POSITIVE_NAMES = frozenset({
     "Book Now", "In Silver Lake",
 })
 
-# Business / entity / web-page words that are never a person's first-or-last
-# name. If ANY token of a candidate matches, it's a business or scraped page
-# phrase ("Maintenance Manual", "Member Circles", "Auto Repair"), not an owner.
-# Deliberately excludes words that are also common surnames (Baker, Page,
-# Mason, Taylor, Wood, Berry, Marsh) to avoid rejecting real people.
-_NON_NAME_WORDS = frozenset({
-    "auto", "automotive", "repair", "repairs", "maintenance", "manual", "manuals",
-    "service", "services", "servicing", "dealer", "dealers", "dealership",
-    "detailing", "collision", "bodyshop", "towing", "roadside", "transmission",
-    "brakes", "tire", "tires", "wheel", "wheels", "engine", "upholstery",
-    "ceramic", "coating", "coatings", "tint", "tinting", "wrap", "wraps",
-    "remodel", "remodeling", "renovation", "construction", "builders", "roofing",
-    "plumbing", "hvac", "landscaping", "realty", "realtors", "brokerage",
-    "llc", "inc", "ltd", "corp", "corporation", "incorporated", "company",
-    "motors", "motor", "enterprises", "holdings", "group", "industries",
-    "solutions", "systems", "technologies", "associates", "management",
-    "member", "members", "circles", "center", "centre", "store", "shop",
-    "mobile", "express", "premium", "luxury", "exotic", "rental", "rentals",
-    "leasing", "financing", "warranty", "insurance", "appointment", "quote",
-    "welcome", "about", "contact", "team", "staff", "login", "search",
-    "results", "privacy", "policy", "terms", "menu", "gallery",
-})  # NOTE: deliberately omit surname-collisions (Page, Home, Baker, Mason, Wood, Berry, Marsh)
-
-# Lowercase particles legitimately embedded in a person's name (allowed to be
-# non-capitalized so the Title-Case check below doesn't reject them).
-_NAME_PARTICLES = frozenset({
-    "van", "von", "de", "del", "della", "der", "den", "la", "le", "du", "da",
-    "di", "dos", "das", "bin", "al", "ter", "ten", "st",
-})
-
-
 def _is_plausible_name(text: str) -> bool:
-    if not text or len(text) < 4 or len(text) > 50:
-        return False
-    parts = text.split()
-    if len(parts) < 2 or len(parts) > 4:
-        return False
-    if not all(re.match(r"^[A-Za-z\'\-]+$", p) for p in parts):
-        return False
-    if not parts[0][0].isupper():
-        return False
-    # Every token must be capitalized (or a known lowercase name particle).
-    # Real names are Title Case ("Todd Rowsell", "Darren O'Gara"); sentence
-    # fragments scraped as owners ("When you are an", "Keith Mayou While others",
-    # "Christine Lally Department of") always carry a lowercase function word —
-    # this rejects them where the shape/denylist checks did not (2026-07-13).
-    for p in parts:
-        core = p.lstrip("'-")
-        if not core:
-            return False
-        if not core[0].isupper() and p.lower() not in _NAME_PARTICLES:
-            return False
+    # Canonical check moved to lead_validator.is_plausible_person_name
+    # (three divergent copies let "THANKS TO" through, live 2026-07-20);
+    # this module keeps only its extra FALSE_POSITIVE_NAMES denylist.
+    from app.skills.lead_validator import is_plausible_person_name
     if text in FALSE_POSITIVE_NAMES:
         return False
-    # Reject if any token is a business/entity/page word — the #1 source of
-    # junk "owner" names from scraped titles and WHOIS org fields.
-    if any(p.lower().strip("'-") in _NON_NAME_WORDS for p in parts):
-        return False
-    return True
+    return is_plausible_person_name(text)
 
 def _normalize_phone_to_e164(phone: str) -> str:
     """Validate and format phone to E.164 using the `phonenumbers` library.
