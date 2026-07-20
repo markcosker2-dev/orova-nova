@@ -493,6 +493,22 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
                 f"Found **{count}** new leads for '{query}'.\n\n"
                 f"{summary_text[:500]}"
             )
+
+            # Snapshot to Drive NOW — deploys wipe the ephemeral disk, and the
+            # 12-hour backup interval left a window where freshly hunted leads
+            # existed only on disk. Live 2026-07-20: the first real hunt (5
+            # on-ICP dealers) was destroyed by the next merge's deploy because
+            # no snapshot ran between hunt and deploy. Fail-open: a backup
+            # failure must never mark the hunt failed.
+            try:
+                from app.skills.vault_skill import backup_database
+                bk = await backup_database()
+                if bk.get("ok"):
+                    logger.info(f"   -> 💾 Post-hunt snapshot uploaded: {bk.get('filename')}")
+                else:
+                    logger.warning(f"   -> ⚠️ Post-hunt snapshot failed: {bk.get('error')}")
+            except Exception as bk_err:
+                logger.warning(f"   -> ⚠️ Post-hunt snapshot error (non-fatal): {bk_err}")
         else:
             logger.info("   -> No leads found this shift.")
 
