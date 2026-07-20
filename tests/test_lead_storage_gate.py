@@ -244,9 +244,9 @@ def test_sweep_quarantines_prod_junk_and_cleans_partial_rows(hygiene_db):
     # Row 3: junk phone emptied (NOT replaced with anything), score recomputed
     assert rows[3]["status"] == "New"
     assert rows[3]["phone"] == ""
-    # owner(25) + direct email(25) + luxury(20) + vertical(10); url column
-    # doesn't earn the website points and the junk phone earns nothing
-    assert rows[3]["score"] == 80
+    # owner(25) + direct email(25) + website-via-url(10) + luxury(20) +
+    # vertical(10); the junk phone earns nothing
+    assert rows[3]["score"] == 90
     # Row 4: contacted + already clean — completely untouched
     assert rows[4]["score"] == 60 and rows[4]["status"] == "Email Sent"
 

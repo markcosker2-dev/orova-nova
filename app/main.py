@@ -1534,17 +1534,28 @@ async def import_leads_csv(request: Request, authorized: bool = Depends(require_
 
 
 @app.post("/api/actions/hunt-leads")
-async def action_hunt_leads(authorized: bool = Depends(require_dashboard_api_key)):
+async def action_hunt_leads(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
+    """Kick a lead hunt. Optional JSON body/query params `niche` and
+    `location` override the TARGET_NICHE env rotation — the env value on
+    Render has been stale-generic since 2026-07-15 and only Mark can edit
+    it, so an explicit niche here is the unblocked path to on-ICP hunts."""
     from app.worker import run_lead_hunt_slow_lane, start_worker_scheduler, stop_worker_scheduler
     import asyncio as _asyncio
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    niche = (payload.get("niche") or request.query_params.get("niche") or "").strip() or None
+    location = (payload.get("location") or request.query_params.get("location") or "").strip() or None
     task = _asyncio.create_task(
-        run_lead_hunt_slow_lane(client_id=0, niche=None, location=None)
+        run_lead_hunt_slow_lane(client_id=0, niche=niche, location=location)
     )
     task.add_done_callback(
         lambda t: logger.error(f"[HUNT] Background task failed: {t.exception()!r}")
         if not t.cancelled() and t.exception() else None
     )
-    return {"status": "ok", "message": "Lead hunt job initiated"}
+    return {"status": "ok", "message": "Lead hunt job initiated",
+            "niche": niche or "(TARGET_NICHE rotation)", "location": location or "(default)"}
 
 @app.post("/api/actions/send-emails")
 async def action_send_emails(authorized: bool = Depends(require_dashboard_api_key)):

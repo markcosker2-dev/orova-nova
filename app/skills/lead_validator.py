@@ -297,7 +297,11 @@ def score_lead_icp(lead: dict) -> dict:
     name = (lead.get("owner") or lead.get("owner_name") or "").strip()
     email = (lead.get("email") or "").strip().lower()
     phone = (lead.get("phone") or "").strip()
-    website = (lead.get("website") or "").strip()
+    # Hunted leads often carry the site in `url` with `website` unset —
+    # credit either, but never a directory link (a Yelp page isn't the
+    # business's own web presence).
+    _url = (lead.get("url") or "").strip()
+    website = (lead.get("website") or ("" if "yelp.com" in _url.lower() else _url)).strip()
     haystack = f"{lead.get('business') or ''} {lead.get('vertical') or ''} {lead.get('niche') or ''}".lower()
 
     score = 0
