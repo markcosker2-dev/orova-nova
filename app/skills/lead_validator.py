@@ -31,6 +31,202 @@ def validate_phone_number(phone: str, country_code: str = "US") -> dict:
         logger.warning(f"[Validator] Invalid phone {phone}: {e}")
         return {"valid": False, "phone": phone, "reason": str(e)}
 
+# ─── STORAGE GATE (Phase 0 data integrity, 2026-07-20) ──────────────────────
+# The single set of rules deciding what may enter the leads table. Live prod
+# had (a) the repo's own sample_webhook_payload.json fixture stored as a lead
+# ("Acme Remodeling Co" / jane.doe@acme.com / +1-555-123-4567 / score 85 taken
+# verbatim from the payload) via the ungated Sheets restore, and (b) a row
+# with no business name whose phone rendered in Mission Control's Business
+# column. Rule: if a field can't be verified it is stored EMPTY — never a
+# placeholder, never fabricated.
+
+_PLACEHOLDER_EMAIL_DOMAINS = {
+    "example.com", "example.org", "example.net", "test.com", "acme.com",
+    "email.com", "domain.com", "yourcompany.com", "yourdomain.com",
+    "company.com", "sample.com", "mailinator.com", "acme.example.com",
+}
+_PLACEHOLDER_EMAIL_LOCALS = {"test", "example", "sample", "demo", "placeholder", "noreply", "no-reply", "donotreply"}
+# Fixture/sample markers that mean the whole row is fake, not a real prospect.
+_FIXTURE_BUSINESS_RE = re.compile(r"\b(acme|example|lorem|ipsum|fake|placeholder)\b", re.IGNORECASE)
+_FIXTURE_OWNER_RE = re.compile(r"\b(jane|john)\s+doe\b|\btest\s+user\b", re.IGNORECASE)
+_EMAIL_LIKE_RE = re.compile(r"[\w.+\-]+@[\w\-]+\.[a-zA-Z]{2,}")
+
+
+def _looks_like_phone(text: str) -> bool:
+    """True when a string is a phone number wearing a name tag (e.g. the
+    live 'Business: 14047334400' row)."""
+    if not text:
+        return False
+    digits = re.sub(r"\D", "", text)
+    compact = re.sub(r"\s", "", text)
+    return len(digits) >= 7 and compact and (len(digits) / len(compact)) > 0.6
+
+
+def is_placeholder_email(email: str) -> bool:
+    email = (email or "").strip().lower()
+    if "@" not in email:
+        return False
+    local, _, domain = email.rpartition("@")
+    return (domain in _PLACEHOLDER_EMAIL_DOMAINS
+            or domain.endswith((".example.com", ".test"))
+            or local in _PLACEHOLDER_EMAIL_LOCALS)
+
+
+def clean_email_for_storage(email: str) -> str:
+    """Normalized email, or '' when invalid/placeholder. Never store junk.
+
+    Format + placeholder check ONLY — no DNS deliverability lookup here.
+    Storage runs inside DB transactions and the boot sweep; a network hiccup
+    must not silently drop a real address. Deliverability stays an
+    outreach-time concern (validate_email_address)."""
+    email = (email or "").strip()
+    if not email:
+        return ""
+    if is_placeholder_email(email):
+        logger.info(f"[LEAD-GATE] dropped placeholder email: {email}")
+        return ""
+    try:
+        valid = validate_email(email, check_deliverability=False)
+        return valid.normalized.lower()
+    except EmailNotValidError:
+        logger.info(f"[LEAD-GATE] dropped malformed email: {email}")
+        return ""
+
+
+def is_placeholder_phone(phone: str) -> bool:
+    """Fictional/dummy numbers: NANP 555 exchange, repeated or sequential digits."""
+    digits = re.sub(r"\D", "", phone or "")
+    if not digits:
+        return False
+    national = digits[1:] if len(digits) == 11 and digits[0] == "1" else digits
+    if len(national) == 10 and (national[3:6] == "555" or national[:3] == "555"):
+        return True  # 555 exchange (fictional range) or 555 area code (sample data)
+    if len(set(digits)) == 1:
+        return True  # 0000000000, 1111111111, …
+    if digits in ("1234567890", "0123456789", "12345678901"):
+        return True
+    return False
+
+
+def clean_phone_for_storage(phone: str, country: str = "US") -> str:
+    """E.164 phone, or '' when invalid/placeholder. Never store fake numbers."""
+    phone = (phone or "").strip()
+    if not phone:
+        return ""
+    if is_placeholder_phone(phone):
+        logger.info(f"[LEAD-GATE] dropped placeholder phone: {phone}")
+        return ""
+    result = validate_phone_number(phone, country)
+    return result["e164"] if result["valid"] else ""
+
+
+def clean_url_for_storage(url: str) -> str:
+    """URL, or '' when it points at a documentation/placeholder host."""
+    url = (url or "").strip()
+    if not url:
+        return ""
+    host = re.sub(r"^https?://", "", url.lower()).split("/")[0].split(":")[0]
+    bare = host[4:] if host.startswith("www.") else host
+    if bare in ("example.com", "example.org", "example.net", "test.com") or \
+            bare.endswith((".example.com", ".example.org", ".example.net", ".test")):
+        logger.info(f"[LEAD-GATE] dropped placeholder URL: {url}")
+        return ""
+    return url
+
+
+def validate_lead_for_storage(lead: dict) -> dict:
+    """The storage gate. Returns {ok, lead (cleaned copy), reasons (list)}.
+
+    ok=False → the row must not be stored/displayed at all (no business name,
+    phone-number-as-name, or recognizable fixture data). ok=True → store the
+    cleaned copy: unverifiable email/phone/url are EMPTIED, with the drop
+    recorded in reasons. Callers must persist the cleaned copy, not the input.
+    """
+    cleaned = dict(lead)
+    reasons = []
+
+    business = (cleaned.get("business") or "").strip()
+    if not business:
+        return {"ok": False, "lead": cleaned, "reasons": ["no business name"]}
+    if _looks_like_phone(business):
+        return {"ok": False, "lead": cleaned, "reasons": [f"business name is a phone number: {business!r}"]}
+    if "@" in business and _EMAIL_LIKE_RE.search(business):
+        return {"ok": False, "lead": cleaned, "reasons": [f"business name is an email address: {business!r}"]}
+    if _FIXTURE_BUSINESS_RE.search(business):
+        return {"ok": False, "lead": cleaned, "reasons": [f"fixture/sample business name: {business!r}"]}
+    cleaned["business"] = business
+
+    owner = (cleaned.get("owner") or cleaned.get("owner_name") or "").strip()
+    if owner and _FIXTURE_OWNER_RE.search(owner):
+        reasons.append(f"dropped fixture owner name {owner!r}")
+        owner = ""
+    cleaned["owner"] = owner
+    cleaned.pop("owner_name", None)
+
+    for field, cleaner in (("email", clean_email_for_storage),
+                           ("phone", clean_phone_for_storage),
+                           ("url", clean_url_for_storage),
+                           ("website", clean_url_for_storage)):
+        raw = (cleaned.get(field) or "").strip()
+        if raw:
+            kept = cleaner(raw)
+            if not kept:
+                reasons.append(f"dropped unverifiable {field} {raw!r}")
+            cleaned[field] = kept
+
+    # The stored score is always server-computed — never trusted from a
+    # payload (the Sheets fixture arrived pre-scored at 85).
+    cleaned["score"] = score_lead_icp(cleaned)["score"]
+    return {"ok": True, "lead": cleaned, "reasons": reasons}
+
+
+def contact_confidence(lead: dict) -> dict:
+    """Deterministic 0-100 confidence per contact field, from signals the
+    pipeline already records. Computed (not stored) so it can never go stale.
+
+    email — anchored on email_status set by enrichment:
+      'verified' (Verifalia deliverable) 90 · 'found' (scraped from the
+      business's own site/API source) 65 · 'guessed' (pattern guess, MX ok) 35
+      · present with unknown provenance 50; generic inboxes (info@…) −15.
+    phone — E.164-normalized & valid 70 (no verification source exists for
+      phones; never claim more) · present but unnormalized 30.
+    owner — plausible two-word name 60 · +20 when a title corroborates it
+      (LinkedIn pass = independent second signal) · +10 for a profile URL.
+    """
+    email = (lead.get("email") or "").strip().lower()
+    phone = (lead.get("phone") or "").strip()
+    owner = (lead.get("owner") or lead.get("owner_name") or "").strip()
+
+    if not email:
+        email_conf = 0
+    else:
+        status = (lead.get("email_status") or "").strip().lower()
+        email_conf = {"verified": 90, "found": 65, "guessed": 35}.get(status, 50)
+        if email.startswith(_GENERIC_EMAIL_PREFIXES):
+            email_conf = max(email_conf - 15, 10)
+
+    if not phone:
+        phone_conf = 0
+    elif phone.startswith("+") and not is_placeholder_phone(phone):
+        try:
+            phone_conf = 70 if phonenumbers.is_valid_number(phonenumbers.parse(phone)) else 30
+        except phonenumbers.NumberParseException:
+            phone_conf = 30
+    else:
+        phone_conf = 30
+
+    if not owner or len(owner.split()) < 2:
+        owner_conf = 0
+    else:
+        owner_conf = 60
+        if (lead.get("owner_title") or "").strip():
+            owner_conf += 20
+        if (lead.get("linkedin_url") or "").strip():
+            owner_conf += 10
+
+    return {"email": email_conf, "phone": phone_conf, "owner": owner_conf}
+
+
 def validate_contact(email: str = None, phone: str = None, country: str = "US") -> dict:
     """
     Validate both email and phone. Returns combined result.

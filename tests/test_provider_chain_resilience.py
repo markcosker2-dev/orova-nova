@@ -168,3 +168,45 @@ def test_coerce_client_id():
     assert _coerce_client_id(None) == 0
     assert _coerce_client_id("3") == 3
     assert _coerce_client_id(7) == 7
+
+
+# ── breaker covers Tiers 1-2: quota exhaustion must fail fast, not hammer ────
+
+def test_breaker_opens_groq_and_gemini_after_repeated_429(monkeypatch):
+    from app.core import ai_client as mod
+    mod._BREAKER.clear()
+
+    calls = {"n": 0}
+
+    async def always_429(**kw):
+        calls["n"] += 1
+        e = RuntimeError("rate limit reached")
+        e.status_code = 429
+        raise e
+
+    client = _bare_client(groq=_completions(always_429))
+    for _ in range(mod._BREAKER_THRESHOLD):
+        asyncio.run(client.chat("hi"))
+    hammered = calls["n"]
+
+    # Breaker is now open: further calls skip Groq entirely and say so.
+    resp = asyncio.run(client.chat("hi"))
+    assert calls["n"] == hammered
+    assert "circuit breaker open" in resp.content
+    mod._BREAKER.clear()
+
+
+def test_breaker_success_resets_groq(monkeypatch):
+    from app.core import ai_client as mod
+    mod._BREAKER.clear()
+    ok_msg = SimpleNamespace(content="ok", tool_calls=None)
+
+    async def ok(**kw):
+        return SimpleNamespace(choices=[SimpleNamespace(message=ok_msg)])
+
+    mod._BREAKER["groq"]["failures"] = mod._BREAKER_THRESHOLD - 1
+    client = _bare_client(groq=_completions(ok))
+    resp = asyncio.run(client.chat("hi"))
+    assert resp.content == "ok"
+    assert mod._BREAKER["groq"]["failures"] == 0
+    mod._BREAKER.clear()
