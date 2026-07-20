@@ -619,18 +619,33 @@ async function renderLeads() {
         // another field and never show placeholder values (Phase 0 rule).
         var dash = '<span class="leads-empty" title="not available — no verified value">—</span>';
         var conf = lead.confidence || {};
+        var confClass = function (pct) { return pct >= 70 ? 'health-ok' : (pct >= 40 ? 'health-warn' : 'health-error'); };
         var cell = function (v, confKey) {
             if (!v) return dash;
             var pct = confKey && typeof conf[confKey] === 'number' ? conf[confKey] : null;
-            var badge = pct !== null ? ' <span class="leads-empty" title="confidence from verification signals">· ' + pct + '%</span>' : '';
+            var badge = pct !== null ? ' <span class="health-value ' + confClass(pct) + '" title="confidence from verification signals">' + pct + '%</span>' : '';
             return esc(v) + badge;
         };
+        // Decision-maker cell: name · title · confidence, with the evidence
+        // ledger (which sources named this person) as the tooltip — "why we
+        // believe this". Never shows a name we didn't verify.
+        var dmCell = function () {
+            if (!lead.owner) return dash;
+            var sources = (lead.evidence || []).map(function (e) { return e.source; })
+                .filter(function (v, i, a) { return v && a.indexOf(v) === i; });
+            var title = lead.owner_title ? ' <span class="leads-empty">· ' + esc(lead.owner_title) + '</span>' : '';
+            var pct = typeof conf.owner === 'number' ? conf.owner : null;
+            var tip = sources.length ? 'sources: ' + sources.join(', ') : 'source: ' + (lead.owner_source || 'unverified');
+            var badge = pct !== null ? ' <span class="health-value ' + confClass(pct) + '" title="' + esc(tip) + '">' + pct + '%</span>' : '';
+            return esc(lead.owner) + title + badge;
+        };
+        var icpTip = lead.icp_reason ? ' title="' + esc(lead.icp_reason) + '"' : '';
         return '<tr>'
             + '<td>' + cell(lead.business) + '</td>'
-            + '<td>' + cell(lead.owner, 'owner') + '</td>'
+            + '<td>' + dmCell() + '</td>'
             + '<td>' + cell(lead.phone, 'phone') + '</td>'
             + '<td>' + cell(lead.vertical) + '</td>'
-            + '<td><span class="health-value ' + scoreClass + '">' + score + '</span></td>'
+            + '<td' + icpTip + '><span class="health-value ' + scoreClass + '">' + score + '</span></td>'
             + '<td>' + statusIcon + ' ' + esc(lead.status || 'New') + '</td>'
             + '</tr>';
     }).join('');

@@ -733,6 +733,8 @@ async def get_leads(limit: int = 100, include_invalid: bool = False,
             COALESCE(email_source, '') as email_source,
             COALESCE(phone_source, '') as phone_source,
             COALESCE(phone_verified, 0) as phone_verified,
+            COALESCE(owner_confidence, 0) as owner_confidence,
+            COALESCE(evidence_json, '') as evidence_json,
             client_id, created_at
         FROM leads
         {where}
@@ -742,10 +744,22 @@ async def get_leads(limit: int = 100, include_invalid: bool = False,
     rows = [dict(r) for r in leads]
     # Per-field contact confidence, computed from stored verification signals
     # (email_status, E.164 validity, LinkedIn corroboration) — never stored,
-    # so it can't go stale or be fabricated by an ingest payload.
-    from app.skills.lead_validator import contact_confidence
+    # so it can't go stale or be fabricated by an ingest payload. The evidence
+    # ledger (why we believe the decision maker) is parsed for the UI.
+    import json as _json
+    from app.skills.lead_validator import contact_confidence, score_lead_icp
     for r in rows:
         r["confidence"] = contact_confidence(r)
+        try:
+            r["evidence"] = _json.loads(r.get("evidence_json") or "[]")
+        except Exception:
+            r["evidence"] = []
+        r.pop("evidence_json", None)
+        # "Why worth contacting" — the ICP scorer's own verdict, surfaced.
+        try:
+            r["icp_reason"] = score_lead_icp(r).get("recommendation", "")
+        except Exception:
+            r["icp_reason"] = ""
     return {"status": "ok", "leads": rows}
 
 @app.get("/api/metrics")
@@ -1560,6 +1574,23 @@ async def action_hunt_leads(request: Request, authorized: bool = Depends(require
     )
     return {"status": "ok", "message": "Lead hunt job initiated",
             "niche": niche or "(TARGET_NICHE rotation)", "location": location or "(default)"}
+
+@app.post("/api/actions/reenrich-leads")
+async def action_reenrich_leads(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
+    """Persistence lane: re-run the decision-maker waterfall on stored leads
+    whose buyer is missing or weakly identified, upgrading them in place.
+    Body/query `limit` (default 25) caps how many are processed."""
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    try:
+        limit = int(payload.get("limit") or request.query_params.get("limit") or 25)
+    except Exception:
+        limit = 25
+    from app.skills.contact_waterfall import reenrich_stored_leads
+    result = await reenrich_stored_leads(limit=max(1, min(limit, 100)))
+    return {"status": "ok", **result}
 
 @app.post("/api/actions/send-emails")
 async def action_send_emails(authorized: bool = Depends(require_dashboard_api_key)):

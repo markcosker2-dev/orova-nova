@@ -226,10 +226,15 @@ def validate_lead_for_storage(lead: dict) -> dict:
 
     owner = (cleaned.get("owner") or cleaned.get("owner_name") or "").strip()
     dropped_owner_first = ""
+    # A positive owner_confidence means the decision-maker waterfall already
+    # cross-referenced and vetted this name (incl. recognized single first
+    # names like "Blake"); trust it over the shape heuristic. The heuristic
+    # still guards ungated ingest (CSV/Sheets) where confidence is 0.
+    owner_vetted = int(cleaned.get("owner_confidence") or 0) > 0
     if owner and _FIXTURE_OWNER_RE.search(owner):
         reasons.append(f"dropped fixture owner name {owner!r}")
         owner = ""
-    elif owner and not is_plausible_person_name(owner):
+    elif owner and not owner_vetted and not is_plausible_person_name(owner):
         # live 2026-07-20: "THANKS TO", "We Proudly", "Good People" stored as
         # owners — scraped sentence fragments, not people.
         reasons.append(f"dropped implausible owner name {owner!r}")
@@ -303,7 +308,13 @@ def contact_confidence(lead: dict) -> dict:
         phone_conf = 30
 
     _REGISTRY_SOURCES = ("ca_sos", "wa_sos", "or_sos", "opencorporates")
-    if not owner or len(owner.split()) < 2:
+    if not owner:
+        owner_conf = 0
+    elif int(lead.get("owner_confidence") or 0) > 0:
+        # The waterfall already cross-referenced sources into a real
+        # confidence — that ledger-derived number is authoritative.
+        owner_conf = int(lead["owner_confidence"])
+    elif len(owner.split()) < 2:
         owner_conf = 0
     else:
         owner_conf = 85 if (lead.get("owner_source") or "") in _REGISTRY_SOURCES else 60
