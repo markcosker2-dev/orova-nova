@@ -180,6 +180,53 @@ def validate_lead_for_storage(lead: dict) -> dict:
     return {"ok": True, "lead": cleaned, "reasons": reasons}
 
 
+def contact_confidence(lead: dict) -> dict:
+    """Deterministic 0-100 confidence per contact field, from signals the
+    pipeline already records. Computed (not stored) so it can never go stale.
+
+    email — anchored on email_status set by enrichment:
+      'verified' (Verifalia deliverable) 90 · 'found' (scraped from the
+      business's own site/API source) 65 · 'guessed' (pattern guess, MX ok) 35
+      · present with unknown provenance 50; generic inboxes (info@…) −15.
+    phone — E.164-normalized & valid 70 (no verification source exists for
+      phones; never claim more) · present but unnormalized 30.
+    owner — plausible two-word name 60 · +20 when a title corroborates it
+      (LinkedIn pass = independent second signal) · +10 for a profile URL.
+    """
+    email = (lead.get("email") or "").strip().lower()
+    phone = (lead.get("phone") or "").strip()
+    owner = (lead.get("owner") or lead.get("owner_name") or "").strip()
+
+    if not email:
+        email_conf = 0
+    else:
+        status = (lead.get("email_status") or "").strip().lower()
+        email_conf = {"verified": 90, "found": 65, "guessed": 35}.get(status, 50)
+        if email.startswith(_GENERIC_EMAIL_PREFIXES):
+            email_conf = max(email_conf - 15, 10)
+
+    if not phone:
+        phone_conf = 0
+    elif phone.startswith("+") and not is_placeholder_phone(phone):
+        try:
+            phone_conf = 70 if phonenumbers.is_valid_number(phonenumbers.parse(phone)) else 30
+        except phonenumbers.NumberParseException:
+            phone_conf = 30
+    else:
+        phone_conf = 30
+
+    if not owner or len(owner.split()) < 2:
+        owner_conf = 0
+    else:
+        owner_conf = 60
+        if (lead.get("owner_title") or "").strip():
+            owner_conf += 20
+        if (lead.get("linkedin_url") or "").strip():
+            owner_conf += 10
+
+    return {"email": email_conf, "phone": phone_conf, "owner": owner_conf}
+
+
 def validate_contact(email: str = None, phone: str = None, country: str = "US") -> dict:
     """
     Validate both email and phone. Returns combined result.

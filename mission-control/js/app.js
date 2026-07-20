@@ -618,11 +618,17 @@ async function renderLeads() {
         // Missing data renders as an explicit em-dash — never substitute
         // another field and never show placeholder values (Phase 0 rule).
         var dash = '<span class="leads-empty" title="not available — no verified value">—</span>';
-        var cell = function (v) { return v ? esc(v) : dash; };
+        var conf = lead.confidence || {};
+        var cell = function (v, confKey) {
+            if (!v) return dash;
+            var pct = confKey && typeof conf[confKey] === 'number' ? conf[confKey] : null;
+            var badge = pct !== null ? ' <span class="leads-empty" title="confidence from verification signals">· ' + pct + '%</span>' : '';
+            return esc(v) + badge;
+        };
         return '<tr>'
             + '<td>' + cell(lead.business) + '</td>'
-            + '<td>' + cell(lead.owner || lead.contact) + '</td>'
-            + '<td>' + cell(lead.phone) + '</td>'
+            + '<td>' + cell(lead.owner || lead.contact, 'owner') + '</td>'
+            + '<td>' + cell(lead.phone, 'phone') + '</td>'
             + '<td>' + cell(lead.vertical) + '</td>'
             + '<td><span class="health-value ' + scoreClass + '">' + score + '</span></td>'
             + '<td>' + statusIcon + ' ' + esc(lead.status || 'New') + '</td>'

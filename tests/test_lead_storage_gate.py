@@ -22,6 +22,7 @@ from app.skills.lead_validator import (
     clean_email_for_storage,
     clean_url_for_storage,
     is_placeholder_phone,
+    contact_confidence,
     _looks_like_phone,
 )
 
@@ -138,6 +139,35 @@ def test_placeholder_phone_and_phone_like_heuristics():
     assert _looks_like_phone("+1 (404) 733-4400")
     assert not _looks_like_phone("Kunkel & Daughters 4x4")
     assert not _looks_like_phone("")
+
+
+# ── contact confidence: derived from verification signals, never stored ──────
+
+def test_confidence_empty_fields_are_zero():
+    assert contact_confidence({}) == {"email": 0, "phone": 0, "owner": 0}
+
+
+def test_confidence_tracks_email_verification_status():
+    base = {"email": "maria@prestigeexotics.com"}
+    assert contact_confidence({**base, "email_status": "verified"})["email"] == 90
+    assert contact_confidence({**base, "email_status": "found"})["email"] == 65
+    assert contact_confidence({**base, "email_status": "guessed"})["email"] == 35
+    assert contact_confidence(base)["email"] == 50  # unknown provenance
+    # generic inbox penalty
+    assert contact_confidence({"email": "info@dealer.com", "email_status": "found"})["email"] == 50
+
+
+def test_confidence_phone_requires_e164():
+    assert contact_confidence({"phone": "+14047334400"})["phone"] == 70
+    assert contact_confidence({"phone": "404-733-4400"})["phone"] == 30  # unnormalized
+
+
+def test_confidence_owner_grows_with_corroboration():
+    assert contact_confidence({"owner": "Maria"})["owner"] == 0  # single word
+    assert contact_confidence({"owner": "Maria Santos"})["owner"] == 60
+    assert contact_confidence({"owner": "Maria Santos", "owner_title": "Owner"})["owner"] == 80
+    assert contact_confidence({"owner": "Maria Santos", "owner_title": "Owner",
+                               "linkedin_url": "https://linkedin.com/in/msantos"})["owner"] == 90
 
 
 # ── save_lead integration: rejection happens before any DB write ─────────────

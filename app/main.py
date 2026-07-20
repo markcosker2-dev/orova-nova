@@ -735,7 +735,14 @@ async def get_leads(limit: int = 100, include_invalid: bool = False,
         ORDER BY id DESC LIMIT ?
     """.format(where="" if include_invalid else "WHERE COALESCE(status,'') != 'Invalid'")
     leads = await DatabaseManager.query(query, (limit,), fetchall=True)
-    return {"status": "ok", "leads": [dict(r) for r in leads]}
+    rows = [dict(r) for r in leads]
+    # Per-field contact confidence, computed from stored verification signals
+    # (email_status, E.164 validity, LinkedIn corroboration) — never stored,
+    # so it can't go stale or be fabricated by an ingest payload.
+    from app.skills.lead_validator import contact_confidence
+    for r in rows:
+        r["confidence"] = contact_confidence(r)
+    return {"status": "ok", "leads": rows}
 
 @app.get("/api/metrics")
 async def get_metrics(client_id: int = 0, authorized: bool = Depends(require_dashboard_api_key)):
