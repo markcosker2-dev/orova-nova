@@ -299,9 +299,13 @@ def score_lead_icp(lead: dict) -> dict:
     phone = (lead.get("phone") or "").strip()
     # Hunted leads often carry the site in `url` with `website` unset —
     # credit either, but never a directory link (a Yelp page isn't the
-    # business's own web presence).
+    # business's own web presence). Host check is dot-anchored on the parsed
+    # netloc — 'notyelp.com' and 'site.com/yelp.com' must not match (CodeQL).
+    from urllib.parse import urlparse
     _url = (lead.get("url") or "").strip()
-    website = (lead.get("website") or ("" if "yelp.com" in _url.lower() else _url)).strip()
+    _host = urlparse(_url).netloc.lower().split(":")[0]
+    _is_yelp = _host == "yelp.com" or _host.endswith(".yelp.com")
+    website = (lead.get("website") or ("" if _is_yelp else _url)).strip()
     haystack = f"{lead.get('business') or ''} {lead.get('vertical') or ''} {lead.get('niche') or ''}".lower()
 
     score = 0

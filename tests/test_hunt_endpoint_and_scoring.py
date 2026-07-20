@@ -38,6 +38,16 @@ def test_score_website_column_still_wins_over_url():
     assert both["website"] == 10
 
 
+def test_score_yelp_check_is_host_anchored():
+    # 'notyelp.com' is NOT Yelp — must earn the credit (CodeQL: substring
+    # matching at arbitrary positions is not sanitization)
+    assert score_lead_icp({**_base(), "url": "https://notyelp.com"})["breakdown"]["website"] == 10
+    # yelp.com in the PATH of a real site is not a directory link either
+    assert score_lead_icp({**_base(), "url": "https://vivid.com/about-yelp.com"})["breakdown"]["website"] == 10
+    # any true yelp subdomain IS Yelp
+    assert score_lead_icp({**_base(), "url": "https://m.yelp.com/biz/x"})["breakdown"]["website"] == 0
+
+
 # ── hunt endpoint: explicit niche/location pass through to the worker ────────
 
 def test_hunt_endpoint_passes_niche_and_location():
