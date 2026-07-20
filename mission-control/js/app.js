@@ -627,7 +627,7 @@ async function renderLeads() {
         };
         return '<tr>'
             + '<td>' + cell(lead.business) + '</td>'
-            + '<td>' + cell(lead.owner || lead.contact, 'owner') + '</td>'
+            + '<td>' + cell(lead.owner, 'owner') + '</td>'
             + '<td>' + cell(lead.phone, 'phone') + '</td>'
             + '<td>' + cell(lead.vertical) + '</td>'
             + '<td><span class="health-value ' + scoreClass + '">' + score + '</span></td>'
