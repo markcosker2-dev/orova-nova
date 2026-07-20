@@ -96,5 +96,33 @@ resolution = _score_and_select_email · MC validation = gate + sweep + filter.
 - Firewall blocked a benign `check_replies` for "hey" (goal-alignment 0.00 +
   auto-deny on thin history) — worth a look at thresholds.
 
+## Part 2 — CEO mandate: lead intelligence (same day, PRs #84–#87)
+
+- **First real production hunts ran** ("exotic car dealer California",
+  explicit niche via the new hunt-endpoint override): 5 real on-ICP dealers
+  land in Mission Control with real phones and domain emails. Nothing was
+  emailed — the approval gate held (autopilot off).
+- **ADR-0008**: audit verdict — keep the waterfall (registries/site/GBP are
+  the right free sources), fix the plumbing that destroyed provenance at
+  three joints. Per-field `owner_source`/`email_source`/`phone_source`/
+  `phone_verified` now flow discovery → DB → API → UI.
+- **Fabrication class found via the live hunt and killed**: scraped sentence
+  fragments stored as owners ("THANKS TO", "We Proudly", "Good People") and
+  an email fabricated FROM the fake name (thanks@…). One canonical
+  `is_plausible_person_name` replaced three divergent copies; the storage
+  gate drops implausible owners + derived guessed emails.
+- **Cross-source phone verification live**: Maps + website agreement →
+  `phone_verified=1` → confidence 90 (3 of 5 leads on the verified rerun).
+- **Durability chain fixed after losing the first hunt to a deploy wipe**:
+  post-hunt Drive snapshot (PR #86) → surfaced that the **Drive OAuth token
+  is expired (invalid_grant, every backup failing silently)** → Sheets-sync
+  fallback on Drive failure (PR #87). Scores are honest now (75/60/60/60/50
+  — fake-owner points gone).
+
+### Owner actions added
+6. **Re-authorize the Google Drive OAuth token on Render** — full-fidelity
+   snapshots (learning data + events) are broken until then; leads survive
+   via the Sheets fallback only.
+
 ## Linked
-- [[session-2026-07-15-sdr-refocus-handoff]] · [[hermesclaw-orova-master]] · [[active-context]]
+- [[session-2026-07-15-sdr-refocus-handoff]] · [[0008-lead-intelligence-provenance]] · [[hermesclaw-orova-master]] · [[active-context]]
