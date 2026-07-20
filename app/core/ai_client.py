@@ -211,7 +211,13 @@ class UnifiedAIClient:
                 tool_calls=None)
 
         # ─── TIER 1: Groq (Primary — full tool support, free tier available) ───
-        if self.groq_client:
+        # Breaker: live 2026-07-20, worker lanes hammered a 429'd Groq+Gemini
+        # once per second — the breaker (already guarding Tier 3) now covers
+        # Tiers 1-2 so quota exhaustion fails fast for the cooldown instead.
+        if self.groq_client and _is_open("groq"):
+            _record_provider_failure("groq", self.GROQ_MODEL, None,
+                                     detail="circuit breaker open — skipped", log_stack=False)
+        elif self.groq_client:
             # 'tool_use_failed' 400s are the model emitting args that violate a
             # tool schema (live 2026-07-19: morning_brief client_id="OROVA" vs
             # integer) — a bad generation, not an outage, so one retry is cheap
@@ -231,6 +237,7 @@ class UnifiedAIClient:
 
                     response = await self.groq_client.chat.completions.create(**groq_kwargs)
                     if response.choices:
+                        _record_success("groq")
                         msg = response.choices[0].message
                         if msg.tool_calls:
                             logger.info(f"[+] Groq ({role}): OK with {len(msg.tool_calls)} tool call(s)")
@@ -248,6 +255,7 @@ class UnifiedAIClient:
                         logger.warning(f"[!] Groq ({role}) req={request_id}: model emitted "
                                        f"schema-invalid tool args — retrying once. {_err_body(e)[:200]}")
                         continue
+                    _record_failure("groq")
                     _record_provider_failure("groq", self.GROQ_MODEL, e)
                     break
         else:
@@ -257,7 +265,10 @@ class UnifiedAIClient:
 
         # ─── TIER 2: Native Google Gemini (Free, with proper conversation format) ───
         gemini_model_name = "gemini-2.5-flash" if tools else "gemini-2.5-flash-lite"
-        if self.google_client:
+        if self.google_client and _is_open("gemini"):
+            _record_provider_failure("gemini", gemini_model_name, None,
+                                     detail="circuit breaker open — skipped", log_stack=False)
+        elif self.google_client:
             try:
                 logger.info(f"[*] Gemini ({role}) req={request_id}: Querying...")
                 system_instruction = ""
@@ -324,11 +335,13 @@ class UnifiedAIClient:
                                 logger.info(f"[+] Gemini ({role}): text parsed -> {len(tool_calls)} tool call(s)")
 
                     if text or tool_calls:
+                        _record_success("gemini")
                         return SimpleNamespace(content=text, tool_calls=tool_calls)
                     _record_provider_failure("gemini", gemini_model_name, None,
                                              detail="empty response (no text, no tool calls)",
                                              log_stack=False)
             except Exception as e:
+                _record_failure("gemini")
                 _record_provider_failure("gemini", gemini_model_name, e)
         else:
             _record_provider_failure("gemini", gemini_model_name, None,
