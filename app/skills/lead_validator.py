@@ -51,6 +51,74 @@ _FIXTURE_BUSINESS_RE = re.compile(r"\b(acme|example|lorem|ipsum|fake|placeholder
 _FIXTURE_OWNER_RE = re.compile(r"\b(jane|john)\s+doe\b|\btest\s+user\b", re.IGNORECASE)
 _EMAIL_LIKE_RE = re.compile(r"[\w.+\-]+@[\w\-]+\.[a-zA-Z]{2,}")
 
+# ─── Person-name plausibility (single source of truth) ──────────────────────
+# Three divergent copies of this check lived in lead_gen_v3, light_enrich and
+# owner_finder; the weakest one let scraped sentence fragments through as
+# owner names — live 2026-07-20: "THANKS TO", "We Proudly", "Good People"
+# stored as owners, and the email guesser then fabricated
+# thanks@calabasasluxurymotorcars.com FROM the fake name. This is the
+# canonical check; the skill modules delegate here and may add their own
+# extra denylists on top.
+
+_NAME_PARTICLES = frozenset({
+    "van", "von", "de", "del", "della", "der", "den", "la", "le", "du", "da",
+    "di", "dos", "das", "bin", "al", "ter", "ten", "st",
+})
+
+_NON_NAME_TOKENS = frozenset({
+    # business/entity/page words (from lead_gen_v3, the strongest copy)
+    "auto", "automotive", "repair", "repairs", "maintenance", "manual", "manuals",
+    "service", "services", "servicing", "dealer", "dealers", "dealership",
+    "detailing", "collision", "bodyshop", "towing", "roadside", "transmission",
+    "brakes", "tire", "tires", "wheel", "wheels", "engine", "upholstery",
+    "ceramic", "coating", "coatings", "tint", "tinting", "wrap", "wraps",
+    "remodel", "remodeling", "renovation", "construction", "builders", "roofing",
+    "plumbing", "hvac", "landscaping", "realty", "realtors", "brokerage",
+    "llc", "inc", "ltd", "corp", "corporation", "incorporated", "company",
+    "motors", "motor", "enterprises", "holdings", "group", "industries",
+    "solutions", "systems", "technologies", "associates", "management",
+    "member", "members", "circles", "center", "centre", "store", "shop",
+    "mobile", "express", "premium", "luxury", "exotic", "rental", "rentals",
+    "leasing", "financing", "warranty", "insurance", "appointment", "quote",
+    "welcome", "about", "contact", "team", "staff", "login", "search",
+    "results", "privacy", "policy", "terms", "menu", "gallery",
+    # sentence-fragment function words (live fakes 2026-07-20)
+    "thanks", "thank", "to", "we", "our", "you", "your", "their", "they",
+    "us", "and", "the", "for", "with", "from", "proudly", "proud", "good",
+    "people", "all", "best", "since", "family", "owned", "operated", "here",
+    "why", "choose", "buy", "sell", "browse", "view", "call", "today", "now",
+    "more", "learn", "inventory", "sales", "customer", "customers",
+})
+# NOTE: deliberately omits words that are also common surnames (Baker, Page,
+# Mason, Taylor, Wood, Berry, Marsh, Home) to avoid rejecting real people.
+# "good" IS a rare surname — accepted trade-off after the live "Good People"
+# fake: never-fabricate outranks rare-name completeness, and registry-sourced
+# names (owner_finder) bypass this check entirely.
+
+
+def is_plausible_person_name(text: str) -> bool:
+    """True when `text` is shaped like a real person's name — Title Case
+    2-4 alpha tokens, lowercase only for known name particles (van/de/…),
+    and no token from the business/sentence-fragment denylist."""
+    if not text or len(text) < 4 or len(text) > 50:
+        return False
+    parts = text.split()
+    if len(parts) < 2 or len(parts) > 4:
+        return False
+    if not all(re.match(r"^[A-Za-z'\-]+$", p) for p in parts):
+        return False
+    if not parts[0][0].isupper():
+        return False
+    for p in parts:
+        core = p.lstrip("'-")
+        if not core:
+            return False
+        if not core[0].isupper() and p.lower() not in _NAME_PARTICLES:
+            return False
+    if any(p.lower().strip("'-") in _NON_NAME_TOKENS for p in parts):
+        return False
+    return True
+
 
 def _looks_like_phone(text: str) -> bool:
     """True when a string is a phone number wearing a name tag (e.g. the
@@ -157,11 +225,28 @@ def validate_lead_for_storage(lead: dict) -> dict:
     cleaned["business"] = business
 
     owner = (cleaned.get("owner") or cleaned.get("owner_name") or "").strip()
+    dropped_owner_first = ""
     if owner and _FIXTURE_OWNER_RE.search(owner):
         reasons.append(f"dropped fixture owner name {owner!r}")
         owner = ""
+    elif owner and not is_plausible_person_name(owner):
+        # live 2026-07-20: "THANKS TO", "We Proudly", "Good People" stored as
+        # owners — scraped sentence fragments, not people.
+        reasons.append(f"dropped implausible owner name {owner!r}")
+        dropped_owner_first = owner.split()[0].lower().strip("'-")
+        owner = ""
     cleaned["owner"] = owner
     cleaned.pop("owner_name", None)
+
+    # An email GUESSED from a name we just rejected is fabrication squared
+    # (live: thanks@calabasasluxurymotorcars.com from "THANKS TO") — drop it.
+    email_now = (cleaned.get("email") or "").strip().lower()
+    if dropped_owner_first and email_now:
+        local = email_now.split("@")[0]
+        if local == dropped_owner_first or local.startswith(dropped_owner_first + "."):
+            reasons.append(f"dropped email {email_now!r} derived from rejected owner name")
+            cleaned["email"] = ""
+            cleaned["email_status"] = ""
 
     for field, cleaner in (("email", clean_email_for_storage),
                            ("phone", clean_phone_for_storage),
@@ -188,10 +273,11 @@ def contact_confidence(lead: dict) -> dict:
       'verified' (Verifalia deliverable) 90 · 'found' (scraped from the
       business's own site/API source) 65 · 'guessed' (pattern guess, MX ok) 35
       · present with unknown provenance 50; generic inboxes (info@…) −15.
-    phone — E.164-normalized & valid 70 (no verification source exists for
-      phones; never claim more) · present but unnormalized 30.
-    owner — plausible two-word name 60 · +20 when a title corroborates it
-      (LinkedIn pass = independent second signal) · +10 for a profile URL.
+    phone — corroborated by 2+ independent sources (phone_verified) 90 ·
+      E.164-normalized & valid 70 · present but unnormalized 30.
+    owner — base by provenance: state-registry/legal-filing source 85 ·
+      other/unknown source 60; +10 when a title corroborates it, +5 for a
+      LinkedIn profile URL (cap 95 — nothing is 100 without a human check).
     """
     email = (lead.get("email") or "").strip().lower()
     phone = (lead.get("phone") or "").strip()
@@ -209,20 +295,23 @@ def contact_confidence(lead: dict) -> dict:
         phone_conf = 0
     elif phone.startswith("+") and not is_placeholder_phone(phone):
         try:
-            phone_conf = 70 if phonenumbers.is_valid_number(phonenumbers.parse(phone)) else 30
+            valid = phonenumbers.is_valid_number(phonenumbers.parse(phone))
         except phonenumbers.NumberParseException:
-            phone_conf = 30
+            valid = False
+        phone_conf = (90 if lead.get("phone_verified") else 70) if valid else 30
     else:
         phone_conf = 30
 
+    _REGISTRY_SOURCES = ("ca_sos", "wa_sos", "or_sos", "opencorporates")
     if not owner or len(owner.split()) < 2:
         owner_conf = 0
     else:
-        owner_conf = 60
+        owner_conf = 85 if (lead.get("owner_source") or "") in _REGISTRY_SOURCES else 60
         if (lead.get("owner_title") or "").strip():
-            owner_conf += 20
-        if (lead.get("linkedin_url") or "").strip():
             owner_conf += 10
+        if (lead.get("linkedin_url") or "").strip():
+            owner_conf += 5
+        owner_conf = min(owner_conf, 95)
 
     return {"email": email_conf, "phone": phone_conf, "owner": owner_conf}
 

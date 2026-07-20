@@ -42,6 +42,10 @@ CANONICAL_SCHEMA_SQL = """
         email_status TEXT DEFAULT '',
         owner_title TEXT DEFAULT '',
         linkedin_url TEXT DEFAULT '',
+        owner_source TEXT DEFAULT '',
+        email_source TEXT DEFAULT '',
+        phone_source TEXT DEFAULT '',
+        phone_verified INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );

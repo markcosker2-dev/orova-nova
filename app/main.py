@@ -729,6 +729,10 @@ async def get_leads(limit: int = 100, include_invalid: bool = False,
             COALESCE(email_status, '') as email_status,
             COALESCE(owner_title, '') as owner_title,
             COALESCE(linkedin_url, '') as linkedin_url,
+            COALESCE(owner_source, '') as owner_source,
+            COALESCE(email_source, '') as email_source,
+            COALESCE(phone_source, '') as phone_source,
+            COALESCE(phone_verified, 0) as phone_verified,
             client_id, created_at
         FROM leads
         {where}

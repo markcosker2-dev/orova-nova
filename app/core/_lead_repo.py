@@ -129,14 +129,16 @@ class _LeadRepo:
                 # Insert — same transaction, no race window
                 vertical = lead.get("vertical") or default_vertical or ""
                 cursor = conn.execute(
-                    """INSERT INTO leads (business, owner, url, website, email, phone, vertical, status, notes, icebreaker, score, client_id, email_status, owner_title, linkedin_url, updated_at)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, CURRENT_TIMESTAMP)""",
+                    """INSERT INTO leads (business, owner, url, website, email, phone, vertical, status, notes, icebreaker, score, client_id, email_status, owner_title, linkedin_url, owner_source, email_source, phone_source, phone_verified, updated_at)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, CURRENT_TIMESTAMP)""",
                     (lead.get("business",""), lead.get("owner",""), lead.get("url",""),
                      lead.get("website",""), email, lead.get("phone",""),
                      vertical, lead.get("status","New"), lead.get("notes",""),
                      lead.get("icebreaker",""), lead.get("score",0), cid,
                      lead.get("email_status",""), lead.get("owner_title",""),
-                     lead.get("linkedin_url",""))
+                     lead.get("linkedin_url",""), lead.get("owner_source",""),
+                     lead.get("email_source",""), lead.get("phone_source",""),
+                     1 if lead.get("phone_verified") else 0)
                 )
                 lead_id = cursor.lastrowid
                 conn.commit()

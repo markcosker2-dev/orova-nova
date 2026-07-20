@@ -165,9 +165,9 @@ def test_confidence_phone_requires_e164():
 def test_confidence_owner_grows_with_corroboration():
     assert contact_confidence({"owner": "Maria"})["owner"] == 0  # single word
     assert contact_confidence({"owner": "Maria Santos"})["owner"] == 60
-    assert contact_confidence({"owner": "Maria Santos", "owner_title": "Owner"})["owner"] == 80
+    assert contact_confidence({"owner": "Maria Santos", "owner_title": "Owner"})["owner"] == 70
     assert contact_confidence({"owner": "Maria Santos", "owner_title": "Owner",
-                               "linkedin_url": "https://linkedin.com/in/msantos"})["owner"] == 90
+                               "linkedin_url": "https://linkedin.com/in/msantos"})["owner"] == 75
 
 
 # ── save_lead integration: rejection happens before any DB write ─────────────
