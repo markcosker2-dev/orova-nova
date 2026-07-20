@@ -500,15 +500,37 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
             # on-ICP dealers) was destroyed by the next merge's deploy because
             # no snapshot ran between hunt and deploy. Fail-open: a backup
             # failure must never mark the hunt failed.
+            snapshot_ok = False
             try:
                 from app.skills.vault_skill import backup_database
                 bk = await backup_database()
-                if bk.get("ok"):
+                snapshot_ok = bool(bk.get("ok"))
+                if snapshot_ok:
                     logger.info(f"   -> 💾 Post-hunt snapshot uploaded: {bk.get('filename')}")
                 else:
                     logger.warning(f"   -> ⚠️ Post-hunt snapshot failed: {bk.get('error')}")
             except Exception as bk_err:
                 logger.warning(f"   -> ⚠️ Post-hunt snapshot error (non-fatal): {bk_err}")
+
+            # Drive down → fall back to the Sheets tier (the second restore
+            # source at boot). Live 2026-07-20: the Drive OAuth token is
+            # expired ('invalid_grant'), so without this the hunt's leads
+            # exist only on the ephemeral disk until the next deploy wipes
+            # them. Sheets uses separate working credentials.
+            if not snapshot_ok:
+                try:
+                    from app.skills.sheets_sync import sync_lead_to_sheets
+                    rows = await DatabaseManager.query(
+                        "SELECT * FROM leads ORDER BY id DESC LIMIT ?", (count,),
+                        fetchall=True)
+                    synced = 0
+                    for row in rows or []:
+                        res = await sync_lead_to_sheets(dict(row))
+                        if res.get("ok"):
+                            synced += 1
+                    logger.info(f"   -> 📋 Sheets fallback: {synced}/{len(rows or [])} leads synced")
+                except Exception as sh_err:
+                    logger.warning(f"   -> ⚠️ Sheets fallback failed too (non-fatal): {sh_err}")
         else:
             logger.info("   -> No leads found this shift.")
 

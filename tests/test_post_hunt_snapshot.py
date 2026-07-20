@@ -57,5 +57,39 @@ def test_backup_failure_does_not_fail_the_hunt():
     patches = _common_patches([lead])
     with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], \
          patch("app.skills.vault_skill.backup_database", new_callable=AsyncMock,
-               side_effect=RuntimeError("drive down")):
+               side_effect=RuntimeError("drive down")), \
+         patch("app.skills.sheets_sync.sync_lead_to_sheets", new_callable=AsyncMock,
+               return_value={"ok": True}), \
+         patch("app.worker.DatabaseManager.query", new_callable=AsyncMock,
+               return_value=[]):
         _run_hunt()  # must not raise
+
+
+def test_drive_failure_falls_back_to_sheets_sync():
+    """Live 2026-07-20: Drive OAuth token expired (invalid_grant) — without
+    the Sheets fallback the hunt's leads die with the next deploy's wipe."""
+    lead = {"business": "Vivid Motors", "url": "https://vividmotors.com",
+            "owner_name": "", "email": "", "phone": "", "score": 0}
+    patches = _common_patches([lead])
+    saved_row = {"id": 7, "business": "Vivid Motors", "url": "https://vividmotors.com"}
+    with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], \
+         patch("app.skills.vault_skill.backup_database", new_callable=AsyncMock,
+               return_value={"ok": False, "error": "invalid_grant"}), \
+         patch("app.worker.DatabaseManager.query", new_callable=AsyncMock,
+               return_value=[saved_row]), \
+         patch("app.skills.sheets_sync.sync_lead_to_sheets", new_callable=AsyncMock,
+               return_value={"ok": True}) as mock_sync:
+        _run_hunt()
+    mock_sync.assert_awaited_once()
+    assert mock_sync.await_args.args[0]["business"] == "Vivid Motors"
+
+
+def test_sheets_fallback_skipped_when_drive_succeeds():
+    lead = {"business": "Vivid Motors", "url": "https://vividmotors.com",
+            "owner_name": "", "email": "", "phone": "", "score": 0}
+    patches = _common_patches([lead])
+    with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], \
+         patches[6], \
+         patch("app.skills.sheets_sync.sync_lead_to_sheets", new_callable=AsyncMock) as mock_sync:
+        _run_hunt()
+    mock_sync.assert_not_awaited()
