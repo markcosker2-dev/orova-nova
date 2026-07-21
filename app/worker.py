@@ -510,43 +510,15 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
                 f"{summary_text[:500]}"
             )
 
-            # Snapshot to Drive NOW — deploys wipe the ephemeral disk, and the
-            # 12-hour backup interval left a window where freshly hunted leads
-            # existed only on disk. Live 2026-07-20: the first real hunt (5
-            # on-ICP dealers) was destroyed by the next merge's deploy because
-            # no snapshot ran between hunt and deploy. Fail-open: a backup
-            # failure must never mark the hunt failed.
-            snapshot_ok = False
+            # Durability ladder (canonical helper, ADR-0010/SSoT): Drive
+            # snapshot, Sheets fallback on failure. Extracted 2026-07-21 —
+            # the hunt, CSV import, and reenrich paths all lost work to
+            # disk wipes before sharing this one entry point. Fail-open.
             try:
-                from app.skills.vault_skill import backup_database
-                bk = await backup_database()
-                snapshot_ok = bool(bk.get("ok"))
-                if snapshot_ok:
-                    logger.info(f"   -> 💾 Post-hunt snapshot uploaded: {bk.get('filename')}")
-                else:
-                    logger.warning(f"   -> ⚠️ Post-hunt snapshot failed: {bk.get('error')}")
+                from app.core.durability import persist_leads_durably
+                await persist_leads_durably(recent_count=count, source="hunt")
             except Exception as bk_err:
-                logger.warning(f"   -> ⚠️ Post-hunt snapshot error (non-fatal): {bk_err}")
-
-            # Drive down → fall back to the Sheets tier (the second restore
-            # source at boot). Live 2026-07-20: the Drive OAuth token is
-            # expired ('invalid_grant'), so without this the hunt's leads
-            # exist only on the ephemeral disk until the next deploy wipes
-            # them. Sheets uses separate working credentials.
-            if not snapshot_ok:
-                try:
-                    from app.skills.sheets_sync import sync_lead_to_sheets
-                    rows = await DatabaseManager.query(
-                        "SELECT * FROM leads ORDER BY id DESC LIMIT ?", (count,),
-                        fetchall=True)
-                    synced = 0
-                    for row in rows or []:
-                        res = await sync_lead_to_sheets(dict(row))
-                        if res.get("ok"):
-                            synced += 1
-                    logger.info(f"   -> 📋 Sheets fallback: {synced}/{len(rows or [])} leads synced")
-                except Exception as sh_err:
-                    logger.warning(f"   -> ⚠️ Sheets fallback failed too (non-fatal): {sh_err}")
+                logger.warning(f"   -> ⚠️ Post-hunt persistence error (non-fatal): {bk_err}")
         else:
             logger.info("   -> No leads found this shift.")
 
