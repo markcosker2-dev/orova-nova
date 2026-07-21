@@ -29,10 +29,14 @@ async def _get_sheets_lock_async() -> asyncio.Lock:
     return _sheets_lock
 
 async def _append_with_backoff(worksheet, row, retries=4):
-    """Appends a row to a worksheet with exponential backoff for Google API 429 errors."""
+    """Appends a row to a worksheet with exponential backoff for Google API 429 errors.
+
+    RAW input option: without it Sheets parses "+14047334400" as the NUMBER
+    14047334400, which round-trips back as an int and crashed the boot
+    restore (2026-07-21). RAW stores exactly the strings we send."""
     for attempt in range(retries):
         try:
-            await asyncio.to_thread(worksheet.append_row, row)
+            await asyncio.to_thread(worksheet.append_row, row, value_input_option="RAW")
             return {"ok": True, "updated": False}
         except gspread.exceptions.APIError as e:
             if e.response.status_code == 429 and attempt < retries - 1:
@@ -180,17 +184,23 @@ async def restore_leads_from_sheets() -> List[Dict[str, Any]]:
             # this is the LAST line of defense after a deploy wipes Render's
             # ephemeral disk, so a wholesale [] here means total lead loss.
             try:
+                # get_all_records() returns INTS for numeric-looking cells
+                # (Sheets parses "+1404..." as a number) — text fields must
+                # be str()-coerced or downstream .strip() crashes the boot
+                # restore (live 2026-07-21: exit-3 on every fresh deploy).
+                def _s(v):
+                    return "" if v is None else str(v)
                 leads.append({
                     "id": _int_or_none(row.get("ID")),
-                    "business": row.get("Business"),
-                    "owner": row.get("Owner"),
-                    "email": row.get("Email"),
-                    "phone": row.get("Phone"),
-                    "url": row.get("URL"),
-                    "status": row.get("Status") or "New",
+                    "business": _s(row.get("Business")),
+                    "owner": _s(row.get("Owner")),
+                    "email": _s(row.get("Email")),
+                    "phone": _s(row.get("Phone")),
+                    "url": _s(row.get("URL")),
+                    "status": _s(row.get("Status")) or "New",
                     "score": _int_or_none(row.get("Score")),
-                    "source": row.get("Source"),
-                    "date": row.get("Date"),
+                    "source": _s(row.get("Source")),
+                    "date": _s(row.get("Date")),
                     "client_id": _int_or_none(row.get("ClientID")) or 0,
                 })
             except Exception as row_exc:
