@@ -284,11 +284,14 @@ async def _source_website(lead: dict) -> List[Evidence]:
     """Scrape team/about/contact pages for a person + title. Reuses
     light_enrich's page fetch + owner extractor; fail-open."""
     website = lead.get("website") or lead.get("url") or ""
-    if not website.startswith("http") or "yelp.com" in website.lower():
+    if not website.startswith("http"):
         return []
+    import urllib.parse as _up
+    _host = _up.urlparse(website).netloc.lower().split(":")[0]
+    if _host == "yelp.com" or _host.endswith(".yelp.com"):
+        return []  # a Yelp directory page is not the business's own site
     try:
         from app.skills.light_enrich import _fetch_page, _extract_owner_name, _get_domain
-        import urllib.parse as _up
         found: List[Evidence] = []
         home = await _fetch_page(website)
         pages = [website]
