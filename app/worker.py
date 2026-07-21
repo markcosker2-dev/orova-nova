@@ -366,6 +366,22 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
                     # [Enrichment] Find owner, email, phone, website
                     lead = await enrich_lead_lite(lead)
 
+                    # [Decision-maker waterfall] Keep hunting the real buyer
+                    # across sources (email-name inference, registry, team
+                    # pages, search) instead of accepting the first pass. Runs
+                    # before scoring so a discovered owner earns its +25.
+                    try:
+                        from app.skills.contact_waterfall import resolve_decision_maker, apply_decision_maker
+                        if int(lead.get("owner_confidence") or 0) < 70:
+                            dm = await resolve_decision_maker(lead)
+                            apply_decision_maker(lead, dm)
+                            if dm.name:
+                                logger.info(f"[WATERFALL] {lead.get('business','?')}: "
+                                            f"{dm.name} ({dm.title or 'role?'}) "
+                                            f"conf={dm.confidence} via {dm.source}")
+                    except Exception as e:
+                        logger.warning(f"[WATERFALL] decision-maker resolve failed (non-fatal): {e}")
+
                     # ── Deterministic ICP scoring (fields enrichment actually
                     # collects; the old scorer got "unknown" for everything and
                     # returned a flat 50 for every live lead) ──

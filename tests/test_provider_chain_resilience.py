@@ -34,6 +34,20 @@ class _SdkToolCall:
         self.function = SimpleNamespace(name=name, arguments=arguments)
 
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _reset_breaker():
+    """The circuit breaker is a module global; a test that trips it must not
+    leak an OPEN state into the next (the groq/gemini tier now consults it).
+    Clear before AND after every test in this file."""
+    from app.core import ai_client as _mod
+    _mod._BREAKER.clear()
+    yield
+    _mod._BREAKER.clear()
+
+
 def _bare_client(groq=None, google=None, primary=None) -> UnifiedAIClient:
     c = UnifiedAIClient.__new__(UnifiedAIClient)  # no __init__ / no network
     c.groq_client, c.google_client, c.primary_client = groq, google, primary
