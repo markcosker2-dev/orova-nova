@@ -304,35 +304,26 @@ class UnifiedAIClient:
                 )
 
                 if response:
-                    tool_calls = None
-                    text = response.text if response.text else ""
+                    # Walk parts directly — NEVER touch response.text on a
+                    # tool-enabled response. In google-generativeai 0.8.3 the
+                    # .text property RAISES (AttributeError 'whichOneof' /
+                    # ValueError) when any part is a function_call, which
+                    # killed the entire Gemini fallback for every Telegram
+                    # QUESTION (tools present) while text-only "hi" worked —
+                    # because "hi" returns a pure-text response and a question
+                    # returns a function_call part (live 2026-07-21).
+                    text, tool_calls = self._parse_gemini_response(response)
 
-                    if (hasattr(response, "candidates") and response.candidates and
-                        response.candidates[0].content.parts and
-                        any(hasattr(p, "function_call") and p.function_call
-                            for p in response.candidates[0].content.parts)):
-                        tool_calls = []
-                        for part in response.candidates[0].content.parts:
-                            if hasattr(part, "function_call") and part.function_call:
-                                fc = part.function_call
-                                args = dict(fc.args) if fc.args else {}
-                                tool_calls.append(SimpleNamespace(
-                                    id=f"gemini_{fc.name}_{int(time.time()*1000)}",
-                                    type="function",
-                                    function=SimpleNamespace(
-                                        name=fc.name,
-                                        arguments=json.dumps(args)
-                                    )
-                                ))
+                    # Text fallback: parse text for tool calls if tools were
+                    # provided but Gemini answered in prose.
+                    if not tool_calls and text and tools:
+                        parsed = self._extract_tool_calls_from_text(text, tools)
+                        if parsed:
+                            tool_calls = parsed
+                            text = ""
+                            logger.info(f"[+] Gemini ({role}): text parsed -> {len(tool_calls)} tool call(s)")
+                    elif tool_calls:
                         logger.info(f"[+] Gemini ({role}): OK with {len(tool_calls)} tool call(s)")
-                    else:
-                        # Text fallback: parse text for tool calls if tools were provided
-                        if text and tools:
-                            parsed = self._extract_tool_calls_from_text(text, tools)
-                            if parsed:
-                                tool_calls = parsed
-                                text = ""
-                                logger.info(f"[+] Gemini ({role}): text parsed -> {len(tool_calls)} tool call(s)")
 
                     if text or tool_calls:
                         _record_success("gemini")
@@ -401,6 +392,43 @@ class UnifiedAIClient:
             content=f"[!!] All AI providers failed for role '{role}' (req {request_id}). {reasons}",
             tool_calls=None
         )
+
+    @staticmethod
+    def _parse_gemini_response(response):
+        """Extract (text, tool_calls) from a Gemini response by walking parts
+        directly — never via response.text (which raises on function_call
+        parts in google-generativeai 0.8.3). Returns ("", None) safely on any
+        malformed response rather than raising.
+
+        Per-part access is safe: an unset function_call message is falsy, and
+        a function_call part's .text is only read when no call is present."""
+        text_chunks: List[str] = []
+        tool_calls: List = []
+        try:
+            parts = response.candidates[0].content.parts if response.candidates else []
+        except Exception:
+            parts = []
+        for part in parts or []:
+            fc = getattr(part, "function_call", None)
+            name = getattr(fc, "name", "") if fc else ""
+            if fc and name:
+                try:
+                    args = dict(fc.args) if fc.args else {}
+                except Exception:
+                    args = {}
+                tool_calls.append(SimpleNamespace(
+                    id=f"gemini_{name}_{int(time.time()*1000)}",
+                    type="function",
+                    function=SimpleNamespace(name=name, arguments=json.dumps(args)),
+                ))
+            else:
+                try:
+                    pt = getattr(part, "text", "") or ""
+                except Exception:
+                    pt = ""
+                if pt:
+                    text_chunks.append(pt)
+        return "".join(text_chunks), (tool_calls or None)
 
     def _convert_messages_to_gemini(self, messages: list) -> list:
         """Convert OpenAI-format messages to Gemini-format contents.
