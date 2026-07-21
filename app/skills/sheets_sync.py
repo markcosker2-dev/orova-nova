@@ -228,22 +228,15 @@ async def sync_lead_to_sheets(lead: Dict[str, Any], workbook_name: Optional[str]
             lead.get("notes") or "",
         ]
 
+        # Match on STABLE identity — never the SQLite id. The auto-increment
+        # id resets to 1,2,3… on every deploy/OOM wipe, so id-keyed matching
+        # made each re-import overwrite a DIFFERENT business that recycled the
+        # same id: 5 distinct leads collapsed to ~1 sheet row and the boot
+        # restore recovered only 1 (live 2026-07-21). URL (domain) is the
+        # strongest stable key; business name is the fallback and is what the
+        # restore itself dedups on.
         target_row = None
-        if lead.get("id"):
-            try:
-                id_vals = await asyncio.to_thread(worksheet.col_values, 1)
-                search_id = str(lead["id"])
-                if search_id in id_vals:
-                    idx = id_vals.index(search_id) + 1
-                    if idx >= 2:
-                        target_row = idx
-                        logger.info(f"[SheetsSync] Found lead ID {search_id} at row {target_row}")
-                    else:
-                        logger.warning(f"[SheetsSync] Prevented header overwrite: ID '{search_id}' matched row {idx} (header zone)")
-            except Exception as exc:
-                logger.warning(f"[SheetsSync] Find by ID failed: {exc}")
-
-        if not target_row and lead.get("url"):
+        if lead.get("url"):
             try:
                 url_vals = await asyncio.to_thread(worksheet.col_values, 7)
                 search_url = str(lead["url"])
@@ -251,11 +244,22 @@ async def sync_lead_to_sheets(lead: Dict[str, Any], workbook_name: Optional[str]
                     idx = url_vals.index(search_url) + 1
                     if idx >= 2:
                         target_row = idx
-                        logger.info(f"[SheetsSync] Found lead URL {search_url} at row {target_row}")
-                    else:
-                        logger.warning(f"[SheetsSync] Prevented header overwrite: URL matched row {idx}")
+                        logger.info(f"[SheetsSync] Matched lead by URL at row {target_row}")
             except Exception as exc:
                 logger.warning(f"[SheetsSync] Find by URL failed: {exc}")
+
+        if not target_row and lead.get("business"):
+            try:
+                biz_vals = await asyncio.to_thread(worksheet.col_values, 2)
+                search_biz = str(lead["business"]).strip().lower()
+                lowered = [str(v).strip().lower() for v in biz_vals]
+                if search_biz in lowered:
+                    idx = lowered.index(search_biz) + 1
+                    if idx >= 2:  # never the header row
+                        target_row = idx
+                        logger.info(f"[SheetsSync] Matched lead by business name at row {target_row}")
+            except Exception as exc:
+                logger.warning(f"[SheetsSync] Find by business failed: {exc}")
 
         async with await _get_sheets_lock_async():
             # Jitter delay inside the lock to ensure Google respects the rate limit and smooths out throughput
