@@ -1,0 +1,51 @@
+name: Diagnose Render deploys
+
+# Incident tooling (2026-07-21): three consecutive deploy failures with no
+# dashboard access from the engineering environment. This workflow uses the
+# repo's existing RENDER_API_KEY/RENDER_SERVICE_ID secrets to pull service
+# state, recent deploys, and failure events straight from Render's API —
+# with explicit HTTP status codes so empty bodies are never silent.
+# Manual trigger only; never deploys anything.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query Render API
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+        run: |
+          if [ -z "$RENDER_API_KEY" ] || [ -z "$RENDER_SERVICE_ID" ]; then
+            echo "::error::RENDER_API_KEY / RENDER_SERVICE_ID secrets not set"
+            exit 1
+          fi
+
+          call() {
+            local label="$1" url="$2"
+            echo "══════════ $label"
+            local out
+            out=$(curl -sS -w "\nHTTP_STATUS:%{http_code}" \
+              -H "Authorization: Bearer $RENDER_API_KEY" \
+              -H "Accept: application/json" "$url" 2>&1)
+            local status="${out##*HTTP_STATUS:}"
+            local body="${out%$'\n'HTTP_STATUS:*}"
+            echo "status: $status"
+            echo "$body" | jq . 2>/dev/null || echo "$body"
+            echo
+          }
+
+          call "SERVICE (suspended? plan? autoDeploy?)" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID"
+
+          call "RECENT DEPLOYS (status per attempt)" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys?limit=8"
+
+          call "RECENT EVENTS (deploy failure reasons)" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/events?limit=20"
