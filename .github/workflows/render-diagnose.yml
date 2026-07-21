@@ -9,6 +9,10 @@ name: Diagnose Render deploys
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ci/build-repro]   # branch-scoped: lets the run trigger without
+                                 # touching main (dispatch needs default-branch
+                                 # indexing; push does not)
 
 permissions:
   contents: read
