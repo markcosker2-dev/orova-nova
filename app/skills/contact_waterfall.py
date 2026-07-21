@@ -446,4 +446,15 @@ async def reenrich_stored_leads(limit: int = 25, max_confidence: int = 69) -> di
             except Exception as e:
                 logger.warning(f"[WATERFALL] reenrich update lead {lead.get('id')} failed: {e}")
     logger.info(f"[WATERFALL] reenrich: {summary['upgraded']}/{summary['checked']} upgraded")
+
+    # Durability: upgraded decision-maker data is the most valuable state in
+    # the system and lived only on the ephemeral disk (lost to an OOM restart
+    # 2026-07-21). Persist via the canonical ladder. Fail-open.
+    if summary["upgraded"]:
+        try:
+            from app.core.durability import persist_leads_durably
+            await persist_leads_durably(recent_count=max(summary["checked"], 10),
+                                        source="reenrich")
+        except Exception as e:
+            logger.warning(f"[WATERFALL] persistence failed (non-fatal): {e}")
     return summary

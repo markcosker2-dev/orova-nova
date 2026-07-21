@@ -1568,6 +1568,17 @@ async def import_leads_csv(request: Request, authorized: bool = Depends(require_
         imported.append({"line": i, "id": lead_id, "business": business, "score": lead["score"]})
 
     logger.info(f"[CSV IMPORT] imported={len(imported)} skipped={len(skipped)}")
+
+    # Durability: imported leads lived only on the ephemeral disk — an OOM
+    # restart destroyed a 5-lead import on 2026-07-21. Persist like the hunt
+    # does (Drive, then Sheets fallback). Fail-open.
+    if imported:
+        try:
+            from app.core.durability import persist_leads_durably
+            await persist_leads_durably(recent_count=len(imported), source="csv_import")
+        except Exception as e:
+            logger.warning(f"[CSV IMPORT] persistence failed (non-fatal): {e}")
+
     return {"status": "ok", "imported": len(imported), "skipped": len(skipped),
             "leads": imported[:50], "skipped_detail": skipped[:50]}
 
@@ -1600,7 +1611,13 @@ async def action_hunt_leads(request: Request, authorized: bool = Depends(require
 async def action_reenrich_leads(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
     """Persistence lane: re-run the decision-maker waterfall on stored leads
     whose buyer is missing or weakly identified, upgrading them in place.
-    Body/query `limit` (default 25) caps how many are processed."""
+    Body/query `limit` (default 25) caps how many are processed.
+
+    Runs in the BACKGROUND (hunt-leads pattern): the synchronous version
+    exceeded Render's proxy timeout on multi-lead runs and OOM-restarted
+    the 512MB instance (live 2026-07-21). `sync=1` keeps the old inline
+    behavior for single-lead verification calls only (limit forced to 1).
+    Results land in /api/leads and the [WATERFALL] log lines either way."""
     try:
         payload = await request.json()
     except Exception:
@@ -1609,9 +1626,22 @@ async def action_reenrich_leads(request: Request, authorized: bool = Depends(req
         limit = int(payload.get("limit") or request.query_params.get("limit") or 25)
     except Exception:
         limit = 25
+    limit = max(1, min(limit, 100))
+    sync = str(payload.get("sync") or request.query_params.get("sync") or "") in ("1", "true")
+
     from app.skills.contact_waterfall import reenrich_stored_leads
-    result = await reenrich_stored_leads(limit=max(1, min(limit, 100)))
-    return {"status": "ok", **result}
+    if sync:
+        result = await reenrich_stored_leads(limit=1)
+        return {"status": "ok", "mode": "sync", **result}
+
+    import asyncio as _asyncio
+    task = _asyncio.create_task(reenrich_stored_leads(limit=limit))
+    task.add_done_callback(
+        lambda t: logger.error(f"[WATERFALL] Background reenrich failed: {t.exception()!r}")
+        if not t.cancelled() and t.exception() else None
+    )
+    return {"status": "ok", "mode": "background", "message": f"Reenrich queued for up to {limit} leads",
+            "check": "GET /api/leads and [WATERFALL] log lines for results"}
 
 @app.post("/api/actions/send-emails")
 async def action_send_emails(authorized: bool = Depends(require_dashboard_api_key)):
