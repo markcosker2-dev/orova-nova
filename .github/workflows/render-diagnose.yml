@@ -53,3 +53,11 @@ jobs:
 
           call "RECENT EVENTS (deploy failure reasons)" \
             "https://api.render.com/v1/services/$RENDER_SERVICE_ID/events?limit=20"
+
+          # The failing instances exit(3) at startup — pull their actual
+          # boot logs (uvicorn exit 3 = lifespan exception; the traceback
+          # names the line). ownerId comes from the service response.
+          OWNER_ID=$(curl -sS -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_SERVICE_ID" | jq -r '.ownerId')
+          call "BOOT LOGS OF FAILING INSTANCES (last 100 lines)" \
+            "https://api.render.com/v1/logs?ownerId=$OWNER_ID&resource=$RENDER_SERVICE_ID&limit=100"
