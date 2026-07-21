@@ -343,6 +343,20 @@ class UnifiedAIClient:
         if self.primary_client:
             primary_model = self.ROLE_MODELS.get(role, self.ROLE_MODELS["default"])
             chain = [primary_model] + [m for m in self.FALLBACK_CHAIN if m != primary_model]
+            # Free-models-only guard (owner mandate 2026-07-21): OpenRouter
+            # must never bill. Drop any model that isn't a ':free' variant
+            # unless OPENROUTER_ALLOW_PAID=1 is explicitly set. Structural —
+            # a future edit that adds a paid model to the chain can't spend.
+            if os.getenv("OPENROUTER_ALLOW_PAID", "0") != "1":
+                free_chain = [m for m in chain if str(m).endswith(":free")]
+                dropped = [m for m in chain if m not in free_chain]
+                if dropped:
+                    logger.warning(f"[AI] OpenRouter free-only guard dropped paid model(s): {dropped}")
+                chain = free_chain
+                if not chain:
+                    _record_provider_failure("openrouter", "-", None,
+                                             detail="no :free models in chain (free-only guard)",
+                                             log_stack=False)
 
             for attempt, model_name in enumerate(chain):
                 if _is_open(model_name):
