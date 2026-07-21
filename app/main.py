@@ -1623,10 +1623,13 @@ async def action_reenrich_leads(request: Request, authorized: bool = Depends(req
     except Exception:
         payload = {}
     try:
-        limit = int(payload.get("limit") or request.query_params.get("limit") or 25)
+        limit = int(payload.get("limit") or request.query_params.get("limit") or 3)
     except Exception:
-        limit = 25
-    limit = max(1, min(limit, 100))
+        limit = 3
+    # Cap at 5 per run: the waterfall's per-lead page crawls are memory-heavy
+    # and a large batch OOM-restarts the 512MB instance (live 2026-07-21).
+    # Small safe batches; the loop also self-halts on the memory gate.
+    limit = max(1, min(limit, 5))
     sync = str(payload.get("sync") or request.query_params.get("sync") or "") in ("1", "true")
 
     from app.skills.contact_waterfall import reenrich_stored_leads

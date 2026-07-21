@@ -304,9 +304,13 @@ async def _source_website(lead: dict) -> List[Evidence]:
                 if _get_domain(u) == dom and any(
                         k in u.lower() for k in ("team", "about", "staff", "leader", "people", "meet", "management")):
                     pages.append(u)
+            soup.decompose()  # release the parse graph immediately (512MB tier)
         seen = set()
         today = date.today().isoformat()
-        for page in list(dict.fromkeys(pages))[:5]:
+        # Cap at 3 pages (was 5): each page is a full HTML parse; on the
+        # 512MB free tier a wider crawl per lead × a batch of leads is what
+        # tripped the OOM killer (live 2026-07-21).
+        for page in list(dict.fromkeys(pages))[:3]:
             data = home if page == website else await _fetch_page(page)
             html = (data or {}).get("html") or ""
             if not html:
@@ -412,22 +416,46 @@ async def reenrich_stored_leads(limit: int = 25, max_confidence: int = 69) -> di
     """Persistence lane: re-run the waterfall on stored leads whose decision
     maker is missing or weak, upgrading them in place. Idempotent — a lead
     already at high confidence is skipped; a run that finds nothing new
-    changes nothing. Fail-open per lead."""
+    changes nothing. Fail-open per lead.
+
+    Memory- and crash-safe on the 512MB free tier (live 2026-07-21: a
+    limit-10 run OOM-restarted the instance, wiping the disk mid-run):
+    - checks memory before EACH lead and stops gracefully above the cap,
+      so the run can never trip Render's OOM killer;
+    - persists each upgrade to the durable ladder IMMEDIATELY (not once at
+      the end), so an interruption can't lose a completed decision maker;
+    - gc.collect() after each lead to release the BeautifulSoup/page graph
+      the website source builds."""
     import json as _json
+    import gc as _gc
     from app.core.database import DatabaseManager
+    from app.core.hardening import memory_monitor
+    from app.core.durability import persist_leads_durably
 
     rows = await DatabaseManager.query(
         "SELECT * FROM leads WHERE COALESCE(status,'') != 'Invalid' "
         "AND COALESCE(owner_confidence,0) <= ? ORDER BY score DESC LIMIT ?",
         (max_confidence, limit), fetchall=True)
-    summary = {"checked": 0, "upgraded": 0, "found_names": []}
+    summary = {"checked": 0, "upgraded": 0, "found_names": [], "stopped": None}
     for row in rows or []:
+        # Memory gate: never start a lead if we're already near the cap.
+        try:
+            mem = await memory_monitor.check_memory()
+            if mem.get("critical"):
+                summary["stopped"] = f"memory {mem.get('memory_mb', 0):.0f}MB >= cap"
+                logger.warning(f"[WATERFALL] reenrich stopped early — {summary['stopped']}; "
+                               f"remaining leads deferred to next run")
+                break
+        except Exception:
+            pass
+
         lead = dict(row)
         summary["checked"] += 1
         try:
             dm = await resolve_decision_maker(lead)
         except Exception as e:
             logger.debug(f"[WATERFALL] reenrich lead {lead.get('id')} failed: {e}")
+            _gc.collect()
             continue
         existing = int(lead.get("owner_confidence") or 0)
         if dm.name and dm.confidence >= CONFIDENCE_MIN and dm.confidence > existing:
@@ -443,18 +471,19 @@ async def reenrich_stored_leads(limit: int = 25, max_confidence: int = 69) -> di
                     {"id": lead.get("id"), "business": lead.get("business"),
                      "owner": dm.name, "title": dm.title,
                      "confidence": dm.confidence, "source": dm.source})
+                # Crash-safe: persist THIS upgrade now. Drive is dead, so this
+                # is a single Sheets append per upgrade — cheap, and an OOM on
+                # the next lead can't erase what we just found.
+                try:
+                    await persist_leads_durably(recent_count=1, source="reenrich")
+                except Exception as pe:
+                    logger.warning(f"[WATERFALL] per-lead persist failed (non-fatal): {pe}")
             except Exception as e:
                 logger.warning(f"[WATERFALL] reenrich update lead {lead.get('id')} failed: {e}")
-    logger.info(f"[WATERFALL] reenrich: {summary['upgraded']}/{summary['checked']} upgraded")
+        # Release the page/soup graph before the next lead.
+        dm = None
+        _gc.collect()
 
-    # Durability: upgraded decision-maker data is the most valuable state in
-    # the system and lived only on the ephemeral disk (lost to an OOM restart
-    # 2026-07-21). Persist via the canonical ladder. Fail-open.
-    if summary["upgraded"]:
-        try:
-            from app.core.durability import persist_leads_durably
-            await persist_leads_durably(recent_count=max(summary["checked"], 10),
-                                        source="reenrich")
-        except Exception as e:
-            logger.warning(f"[WATERFALL] persistence failed (non-fatal): {e}")
+    logger.info(f"[WATERFALL] reenrich: {summary['upgraded']}/{summary['checked']} upgraded"
+                + (f" (stopped: {summary['stopped']})" if summary["stopped"] else ""))
     return summary

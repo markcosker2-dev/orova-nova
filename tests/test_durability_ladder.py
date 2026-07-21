@@ -43,10 +43,14 @@ def test_everything_failing_never_raises():
     assert out == {"drive": False, "sheets_synced": 0}
 
 
-def test_reenrich_persists_after_upgrades():
-    from app.skills.contact_waterfall import reenrich_stored_leads, DecisionMakerResult, Evidence
+def test_reenrich_persists_per_upgrade_crash_safe():
+    # Persistence now happens PER upgrade (not once at the end) so an OOM
+    # mid-run can't lose a completed decision maker.
+    from app.skills.contact_waterfall import reenrich_stored_leads, DecisionMakerResult
     stored = [{"id": 6, "business": "West Coast Exotic Cars", "owner": "",
-               "owner_confidence": 0, "score": 75}]
+               "owner_confidence": 0, "score": 75},
+              {"id": 7, "business": "Luxury Motorcars", "owner": "",
+               "owner_confidence": 0, "score": 60}]
 
     async def fake_query(sql, params=(), fetchall=False):
         return stored if fetchall else None
@@ -58,8 +62,29 @@ def test_reenrich_persists_after_upgrades():
          patch("app.core.durability.persist_leads_durably",
                new_callable=AsyncMock, return_value={"drive": False, "sheets_synced": 1}) as m_persist:
         summary = asyncio.run(reenrich_stored_leads(limit=5))
-    assert summary["upgraded"] == 1
-    m_persist.assert_awaited_once()
+    assert summary["upgraded"] == 2
+    assert m_persist.await_count == 2  # one durable write per upgrade
+
+
+def test_reenrich_halts_on_memory_pressure():
+    # The memory gate must stop the loop before OOM, deferring the rest.
+    from app.skills.contact_waterfall import reenrich_stored_leads, DecisionMakerResult
+    stored = [{"id": i, "business": f"Biz {i}", "owner": "",
+               "owner_confidence": 0, "score": 60} for i in range(5)]
+
+    async def fake_query(sql, params=(), fetchall=False):
+        return stored if fetchall else None
+
+    dm = DecisionMakerResult(name="Ann Kim", confidence=40, source="serpapi")
+    with patch("app.core.database.DatabaseManager.query", side_effect=fake_query), \
+         patch("app.skills.contact_waterfall.resolve_decision_maker",
+               new_callable=AsyncMock, return_value=dm), \
+         patch("app.core.durability.persist_leads_durably", new_callable=AsyncMock), \
+         patch("app.core.hardening.memory_monitor.check_memory",
+               new_callable=AsyncMock, return_value={"critical": True, "memory_mb": 450}):
+        summary = asyncio.run(reenrich_stored_leads(limit=5))
+    assert summary["checked"] == 0            # halted before touching any lead
+    assert summary["stopped"] is not None
 
 
 def test_reenrich_without_upgrades_does_not_persist():
