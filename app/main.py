@@ -196,9 +196,20 @@ async def lifespan(app: FastAPI):
             logger.warning(f"⚠️ No usable Drive snapshot ({restore_res.get('error') or 'unusable'}). Falling back to Google Sheets leads...")
             leads = await restore_leads_from_sheets()
             if leads:
+                restored = 0
                 for lead in leads:
-                    await DatabaseManager.asave_lead(lead)
-                logger.info(f"♻️ Restored {len(leads)} leads from Google Sheets (leads only — learning data starts fresh)")
+                    # Per-lead guard: ONE malformed Sheet row must never kill
+                    # the lifespan. An unguarded AttributeError here (int
+                    # phone from a numeric Sheet cell) exited every fresh
+                    # deploy with status 3 on 2026-07-21 — three consecutive
+                    # update_failed deploys while the old image kept serving.
+                    try:
+                        if await DatabaseManager.asave_lead(lead) not in (-1, -2):
+                            restored += 1
+                    except Exception as row_err:
+                        logger.error(f"⚠️ Skipping unrestorable Sheets lead "
+                                     f"{str(lead.get('business', '?'))[:40]!r}: {row_err}")
+                logger.info(f"♻️ Restored {restored}/{len(leads)} leads from Google Sheets (leads only — learning data starts fresh)")
             else:
                 logger.warning("⚠️ No restoration source available. Starting with an empty database.")
 
