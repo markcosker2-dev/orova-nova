@@ -455,8 +455,18 @@ async def cmd_stats(update, context):
 
 @app.get("/health")
 async def health_check():
-    """Enhanced health probe for Render's uptime checks — verifies DB + memory."""
-    checks = {"status": "Operational", "timestamp": datetime.utcnow().isoformat()}
+    """Enhanced health probe for Render's uptime checks — verifies DB + memory.
+
+    `build` carries the serving git SHA (ADR-0010 step 1): Render injects
+    RENDER_GIT_COMMIT into the runtime env, so a deploy is only "verified"
+    when this matches the merged commit. HTTP 200 alone proved nothing on
+    2026-07-21 — the old image served 200 for hours while the new deploy
+    silently failed."""
+    checks = {
+        "status": "Operational",
+        "timestamp": datetime.utcnow().isoformat(),
+        "build": (os.getenv("RENDER_GIT_COMMIT") or os.getenv("BUILD_SHA") or "unknown")[:12],
+    }
     # Check DB connectivity
     try:
         if DatabaseManager.is_ready():

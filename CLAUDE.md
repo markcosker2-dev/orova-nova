@@ -22,6 +22,44 @@ When its commands are available (`/claude-council:ask` in the skills list):
 prospects, research them, personalize outreach, start conversations, and book
 meetings for OROVA. The north-star metric is booked meetings.
 
+## Extension-first rule (owner mandate, 2026-07-21)
+
+Before implementing any feature, first ask whether it can be expressed as an
+extension of an existing abstraction — the evidence ledger, the event log,
+the scorer, the pipeline, or the data contract. If yes, extend it. If no,
+justify the new abstraction in an ADR before building it. Prefer subtraction
+and consolidation over expansion. (Origin: ADR-0010; the evidence ledger
+extending to email/phone/title instead of a parallel "trust layer" is the
+canonical example.)
+
+## Single-source-of-truth rule (owner mandate, 2026-07-21)
+
+Every piece of information has exactly one canonical owner; anything else
+holding it is a projection of that owner, never a second writer. Store
+facts, compute views (e.g. store `last_checked`, derive staleness).
+
+| Information | Canonical owner |
+| --- | --- |
+| Prospect data | Prospect contract (`app/core/contracts.py`, ADR-0010) |
+| Contact evidence | Evidence ledger (`evidence_json`) |
+| Pipeline state / history | Event log (`events` table, ADR-0007) |
+| Scores | `score_lead_icp` (server-side recompute) |
+| Business facts | Knowledge compiler (`knowledge/`, ADR-0005) |
+| Decisions | ADRs (`vault/40-decisions/`) |
+| Session history | Vault (`vault/20-ops/sessions/`) |
+| Runtime configuration | Environment (Render env vars / `.env`) |
+
+If two modules own the same information, one must become a projection.
+
+## Three-things rule (owner mandate, 2026-07-21)
+
+Every future feature must clearly improve at least one of: **data quality**,
+**conversion rate**, or **operational reliability**. If it doesn't, don't
+build it. Improvements should be driven by production evidence, not design
+discussion — trustworthy data before automation, evidence before inference,
+consolidation before expansion, production validation before declaring
+success, real customer outcomes before further optimization.
+
 - `app/` — "Nova", the SDR engine (Python/FastAPI, deployed on Render free tier at orova-nova.onrender.com). 9 scheduled worker lanes: hunting, outreach, replies, cold calls (Retell), backups, CEO brain, health, self-improvement, drips.
 - `knowledge/` — canonical business facts + the build-time compiler (ADR-0005).
 - `mission-control/` — the web dashboard served by the FastAPI app.
