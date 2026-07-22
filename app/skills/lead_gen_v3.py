@@ -1086,6 +1086,39 @@ def _infer_state_from_query(query: str) -> str:
     return ""
 
 
+_US_STATE_CODES = frozenset(
+    "AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO "
+    "MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY DC".split()
+)
+_US_STATE_NAMES = {
+    "california": "CA", "oregon": "OR", "washington": "WA", "nevada": "NV",
+    "arizona": "AZ", "texas": "TX", "florida": "FL", "new york": "NY",
+    "colorado": "CO", "utah": "UT", "idaho": "ID",
+}
+
+
+def _state_from_address(address: str) -> str:
+    """US state code from an address string, or '' when not confidently found.
+
+    Prefers the standard '..., CA 95030' / '..., CA,' form (validated against the
+    real state codes), then a full state name. Never guesses — the registry
+    (contact_waterfall._source_registry) needs the RIGHT state, so a wrong one is
+    worse than none.
+    """
+    if not address:
+        return ""
+    a = str(address).strip()
+    # Standard US mailing form: two-letter code before a ZIP, a comma, or the end.
+    m = re.search(r",\s*([A-Za-z]{2})\b(?:\s*,|\s+\d{5}(?:-\d{4})?|\s*$)", a)
+    if m and m.group(1).upper() in _US_STATE_CODES:
+        return m.group(1).upper()
+    al = a.lower()
+    for name, code in _US_STATE_NAMES.items():
+        if re.search(r"\b" + re.escape(name) + r"\b", al):
+            return code
+    return ""
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # MAIN ENTRY POINT
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1158,6 +1191,11 @@ async def find_leads_v3(count: int = 5, query: str = "business leads") -> dict:
                     result["phone"] = maps_phone
                     result["phone_source"] = "maps"
             result["website"] = result.get("website", "") or lead.get("url", "")
+            # Persist the STATE so the decision-maker waterfall + reenrich lane can
+            # fire the Secretary-of-State registry later (they read lead["state"];
+            # without it the authoritative, zero-fabrication name source is dead).
+            # Per-lead address is most accurate; fall back to the query-inferred state.
+            result["state"] = _state_from_address(lead.get("address", "")) or state
             return result
     
     tasks = [_enrich(lead) for lead in unique_leads[:count * 2]]
