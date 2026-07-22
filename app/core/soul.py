@@ -182,7 +182,7 @@ class AgentSoul:
             "write_ad_copy, write_cold_email, write_content\n\n"
             "SHEETS & CRM: append_to_sheet, bulk_enrich_leads, "
             "create_new_sheet, enrich_lead_apollo, sync_to_notion_via_make, "
-            "validate_contact, score_lead\n\n"
+            "validate_contact\n\n"
             "ANALYTICS: conversion_analysis, pipeline_health_check, "
             "pipeline_report, roi_calculator, track_metric, weekly_report\n\n"
             "PIPELINE: dispatch_task, list_pipelines, list_pending, "

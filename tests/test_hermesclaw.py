@@ -385,42 +385,6 @@ class TestWorkerLanes:
         assert "Lane 9" in src or "lane_9" in src.lower() or "sequence_drip_job" in src
 
 
-# ── Lead Scoring ──────────────────────────────────────────────────
-
-class TestLeadScoring:
-    def test_good_lead_passes(self):
-        from app.skills.lead_validator import score_lead_for_orova
-        lead = {
-            "name": "John Smith",
-            "email": "john@luxurytile.com",
-            "phone": "555-123-4567",
-            "source": "apollo_browser"
-        }
-        result = score_lead_for_orova(lead)
-        assert result["filter_decision"] in ("PASS", "BORDERLINE")
-        assert result["orova_score"] >= 5
-
-    def test_minimal_lead_gets_lower_score(self):
-        """A lead with minimal info should score lower than a fully qualified lead."""
-        from app.skills.lead_validator import score_lead_for_orova
-        good_lead = {
-            "name": "John Smith",
-            "email": "john@luxurytile.com",
-            "phone": "555-123-4567",
-            "source": "apollo_browser"
-        }
-        minimal_lead = {
-            "name": "",
-            "email": "info@company.com",
-            "phone": "",
-            "source": "html"
-        }
-        good = score_lead_for_orova(good_lead)
-        bad = score_lead_for_orova(minimal_lead)
-        assert good["orova_score"] > bad["orova_score"], \
-            f"Good lead ({good['orova_score']}) should score higher than minimal lead ({bad['orova_score']})"
-
-
 # ── Runner ────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
