@@ -338,6 +338,60 @@ def contact_confidence(lead: dict) -> dict:
     return {"email": email_conf, "phone": phone_conf, "owner": owner_conf}
 
 
+# Outreach-ready bar (owner requirement 2026-07-22): every lead we contact needs
+# the DECISION-MAKER'S NAME (to bypass the gatekeeper and personalize), a DIRECT
+# email (never a generic info@/sales@ mailbox), and a phone — a business line is
+# fine for calling as long as the name is present (TCPA: business line + name is
+# the compliant cold-call combo; never a personal cell). Computed at read time
+# over the same signals as contact_confidence — never stored.
+_OUTREACH_MIN_NAME_CONF = 60   # below this, the "name" is an unvetted guess
+_OUTREACH_MIN_EMAIL_CONF = 35  # guessed-but-MX-ok or better (generic is penalised in contact_confidence)
+
+
+def outreach_ready(lead: dict) -> dict:
+    """Does this lead clear the outreach bar? Computed, never stored.
+
+    Returns {ready, emailable, callable, has_name, has_direct_email, has_phone,
+    blockers}. The decision-maker NAME is mandatory for every channel. Email must
+    be a DIRECT mailbox — a generic info@/sales@ does not count. Phone may be a
+    business line as long as the name is present (so we can ask for the person).
+    """
+    conf = contact_confidence(lead)
+    email = (lead.get("email") or "").strip().lower()
+
+    has_name = conf["owner"] >= _OUTREACH_MIN_NAME_CONF
+    is_generic = bool(email) and email.startswith(_GENERIC_EMAIL_PREFIXES)
+    has_direct_email = bool(email) and not is_generic and conf["email"] >= _OUTREACH_MIN_EMAIL_CONF
+    has_phone = conf["phone"] > 0
+
+    emailable = has_name and has_direct_email
+    callable_via_gatekeeper = has_name and has_phone
+    ready = emailable or callable_via_gatekeeper
+
+    blockers = []
+    if not has_name:
+        blockers.append("no verified decision-maker name")
+    if not has_direct_email:
+        if is_generic:
+            blockers.append("email is generic (info@/sales@) — needs a direct mailbox")
+        elif not email:
+            blockers.append("no email")
+        else:
+            blockers.append("email unverified / low confidence")
+    if not has_phone:
+        blockers.append("no phone")
+
+    return {
+        "ready": ready,
+        "emailable": emailable,
+        "callable": callable_via_gatekeeper,
+        "has_name": has_name,
+        "has_direct_email": has_direct_email,
+        "has_phone": has_phone,
+        "blockers": blockers,
+    }
+
+
 def validate_contact(email: str = None, phone: str = None, country: str = "US") -> dict:
     """
     Validate both email and phone. Returns combined result.
