@@ -441,8 +441,12 @@ _ICP_VERTICAL_KEYWORDS = (
     "landscape", "med spa", "medspa",
 )
 _GENERIC_EMAIL_PREFIXES = (
-    "info@", "contact@", "support@", "hello@", "admin@", "office@", "sales@",
-    "service@", "team@", "enquiries@", "inquiries@", "help@",
+    "info@", "contact@", "support@", "hello@", "hi@", "admin@", "office@", "sales@",
+    "leads@", "service@", "services@", "team@", "enquiries@", "inquiries@", "help@",
+    "marketing@", "careers@", "jobs@", "hr@", "billing@", "accounts@", "accounting@",
+    "reception@", "frontdesk@", "shop@", "store@", "orders@", "parts@", "finance@",
+    "leasing@", "web@", "webmaster@", "postmaster@", "noreply@", "no-reply@",
+    "general@", "main@", "mail@", "email@",
 )
 
 
