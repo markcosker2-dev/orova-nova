@@ -20,6 +20,8 @@ def _make_test_client():
          patch("app.main.DatabaseManager.query", new_callable=AsyncMock) as mock_query, \
          patch("app.main.tg_queue.start", new_callable=AsyncMock) as mock_tg_start, \
          patch("app.main.tg_queue.stop", new_callable=AsyncMock) as mock_tg_stop, \
+         patch("app.worker.start_worker_scheduler", new=MagicMock()) as mock_sched_start, \
+         patch("app.worker.stop_worker_scheduler", new=MagicMock()) as mock_sched_stop, \
          patch("app.main.vault_scheduler_loop", new_callable=AsyncMock) as mock_vault_scheduler:
         mock_restore_sheets.return_value = []
         mock_restore_latest.return_value = {"ok": False}

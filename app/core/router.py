@@ -14,8 +14,7 @@ logger = logging.getLogger(__name__)
 _EMAIL_RE = re.compile(r"[\w.+\-]+@[\w\-]+\.[a-zA-Z]{2,}", re.IGNORECASE)
 
 class Router:
-    def __init__(self, ai_planner, lead_hunter):
-        self.planner = ai_planner
+    def __init__(self, lead_hunter=None):
         self.lead_hunter = lead_hunter
         self.shortcuts = {
             r"/reset": self._reset_instruction,
@@ -66,22 +65,13 @@ class Router:
                 tracer.trace(request_id, "shortcut_matched", {"pattern": pattern})
                 return await handler(*groups) if groups else await handler()
 
-        email_match = _EMAIL_RE.search(message)
-        send_intent = any(k in lower_msg for k in ["send", "write", "email", "reach out", "follow up"])
-
-        if email_match and send_intent:
-            logger.info(f"[Router] {request_id} Direct-send intercept → {email_match.group(0)}")
-            tracer.trace(request_id, "direct_send", {"email": email_match.group(0)})
-            return await self.planner.execute(
-                message, client_id=chat_id, conversation_history=history, agent_id="nova", _already_intercepted=True
-            )
-
-        tracer.trace(request_id, "planner_execute", {"message_preview": message[:100]})
-        result = await self.planner.execute(
-            message, client_id=chat_id, conversation_history=history, agent_id=agent_id
-        )
+        # Free-form message → lean conversational Nova (human tone, grounded
+        # in the live pipeline snapshot). No agentic tool-loop. Outbound
+        # actions stay with the deterministic shortcuts + approval gate.
+        tracer.trace(request_id, "nova_chat", {"message_preview": message[:100]})
+        from app.core.nova_chat import nova_reply
+        result = await nova_reply(message, chat_id=chat_id, history=history)
         tracer.trace(request_id, "route_complete", {"result_type": type(result).__name__})
-        
         return result
 
     async def _reset_instruction(self):

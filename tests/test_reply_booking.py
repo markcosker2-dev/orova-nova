@@ -71,14 +71,14 @@ def test_booking_queue_sends_on_autopilot(monkeypatch):
     reply_mock = AsyncMock(return_value={"status": "success", "message_id": "m1"})
     with patch.object(worker.DatabaseManager, "get_state", AsyncMock(return_value=[_queued_item()])), \
          patch.object(worker.DatabaseManager, "set_state",
-                      AsyncMock(side_effect=lambda k, v: saved.__setitem__("queue", v))), \
+                      AsyncMock(side_effect=lambda k, v: saved.__setitem__(k, v))), \
          patch.object(worker.DatabaseManager, "query", AsyncMock(return_value={"status": "ok"})), \
          patch("app.skills.agentmail_skill.reply_to_email", reply_mock), \
          patch.object(worker, "send_telegram_report", AsyncMock()):
         asyncio.run(worker.process_pending_booking_replies())
     reply_mock.assert_awaited_once()
     assert reply_mock.await_args.args[0] == "m1"     # replied in-thread
-    assert saved["queue"] == []                       # drained after success
+    assert saved[worker._BOOKING_QUEUE_KEY] == []                       # drained after success
 
 
 def test_booking_queue_holds_when_not_approved(monkeypatch):
@@ -87,14 +87,14 @@ def test_booking_queue_holds_when_not_approved(monkeypatch):
     reply_mock = AsyncMock()
     with patch.object(worker.DatabaseManager, "get_state", AsyncMock(return_value=[_queued_item()])), \
          patch.object(worker.DatabaseManager, "set_state",
-                      AsyncMock(side_effect=lambda k, v: saved.__setitem__("queue", v))), \
+                      AsyncMock(side_effect=lambda k, v: saved.__setitem__(k, v))), \
          patch("app.core.approval_gate.is_action_approved", AsyncMock(return_value=False)), \
          patch("app.core.approval_gate.request_firewall_approval", AsyncMock(return_value="APPROVAL-0001")), \
          patch("app.skills.agentmail_skill.reply_to_email", reply_mock), \
          patch.object(worker, "send_telegram_report", AsyncMock()):
         asyncio.run(worker.process_pending_booking_replies())
     reply_mock.assert_not_awaited()                   # nothing sent without approval
-    assert len(saved["queue"]) == 1                   # stays queued for next cycle
+    assert len(saved[worker._BOOKING_QUEUE_KEY]) == 1                   # stays queued for next cycle
 
 
 def test_run_reply_monitor_classifies_and_queues_hot():
@@ -114,10 +114,10 @@ def test_run_reply_monitor_classifies_and_queues_hot():
          patch.object(worker.DatabaseManager, "aupdate_metrics", AsyncMock()), \
          patch.object(worker.DatabaseManager, "get_state", AsyncMock(return_value=[])), \
          patch.object(worker.DatabaseManager, "set_state",
-                      AsyncMock(side_effect=lambda k, v: saved.__setitem__("queue", v))):
+                      AsyncMock(side_effect=lambda k, v: saved.__setitem__(k, v))):
         hot = asyncio.run(worker.run_reply_monitor(client_id=0))
     assert len(hot) == 1 and hot[0]["message_id"] == "m9"
-    assert saved["queue"][0]["message_id"] == "m9"
+    assert saved[worker._BOOKING_QUEUE_KEY][0]["message_id"] == "m9"
 
 
 # ── Cal.com booking webhook → Google Calendar event ──────────────────────────

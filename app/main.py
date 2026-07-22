@@ -25,7 +25,7 @@ root_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, root_path)
 
 from app.core.ai_client import UnifiedAIClient
-from app.core.planner import TaskPlanner
+from app.core.nova_chat import nova_reply
 from app.core.router import Router
 from app.core.database import DatabaseManager
 from app.core.soul import AgentSoul
@@ -46,8 +46,7 @@ logger.addHandler(BufferHandler())
 
 # --- State ---
 ai_client = UnifiedAIClient()
-planner = TaskPlanner(ai_client)
-router = Router(planner, lead_hunter=find_leads)
+router = Router(lead_hunter=find_leads)
 LOG_BUFFER = []
 TOPIC_AGENT_MAP = {
     "1": "nova", "2": "nova", "3": "nova", "5": "nova", "6": "nova", "7": "nova"
@@ -706,7 +705,7 @@ async def api_agent_retry(request: Request, background: BackgroundTasks, authori
                 break
         _append_log(f"↻ Retrying agent {agent_name} ({tid}): {goal_text}")
         try:
-            res = await planner.execute(goal_text, client_id=cid, agent_id=agent_name)
+            res = await nova_reply(goal_text, chat_id=cid)
             _append_log(f"✅ Retry completed {agent_name} ({tid})")
             for r in AGENT_QUEUE:
                 if r.get('task_id') == tid:
@@ -822,7 +821,7 @@ async def run_agent(request: Request, background: BackgroundTasks, authorized: b
                 break
         _append_log(f"▶ Queued agent run {agent_name} ({tid}): {goal_text}")
         try:
-            res = await planner.execute(goal_text, client_id=cid, agent_id=agent_name)
+            res = await nova_reply(goal_text, chat_id=cid)
             _append_log(f"✅ Agent {agent_name} completed ({tid}): {str(res)[:240]}")
             for r in AGENT_QUEUE:
                 if r.get("task_id") == tid:

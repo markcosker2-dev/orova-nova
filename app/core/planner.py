@@ -95,7 +95,7 @@ _skills_email_seq = _LazyModule("app.skills.email_sequence_skill", ["create_drip
 _skills_copywriting = _LazyModule("app.skills.copywriting_skill", ["write_cold_email", "write_ad_copy"])
 _skills_analytics = _LazyModule("app.skills.analytics_skill", ["pipeline_report", "conversion_analysis", "roi_calculator"])
 _skills_pipeline = _LazyModule("app.core.pipeline", ["run_pipeline", "list_pipelines"])
-_skills_lead_validator = _LazyModule("app.skills.lead_validator", ["validate_contact", "score_lead"])
+_skills_lead_validator = _LazyModule("app.skills.lead_validator", ["validate_contact"])
 _skills_email_templates = _LazyModule("app.skills.email_templates", ["generate_email", "generate_follow_up_sequence"])
 _skills_job_signal = _LazyModule("app.skills.job_signal_hunter", ["hunt_hiring_signals", "generate_hiring_outreach"])
 _skills_apollo = _LazyModule("app.skills.apollo_enrichment", ["enrich_lead_apollo", "bulk_enrich_leads"])
@@ -263,7 +263,6 @@ class TaskPlanner:
             "run_pipeline": _skills_pipeline.run_pipeline,
             "list_pipelines": _skills_pipeline.list_pipelines,
             "validate_contact": _skills_lead_validator.validate_contact,
-            "score_lead": _skills_lead_validator.score_lead,
             "generate_email": _skills_email_templates.generate_email,
             "generate_follow_up_sequence": _skills_email_templates.generate_follow_up_sequence,
             "hunt_hiring_signals": _skills_job_signal.hunt_hiring_signals,
