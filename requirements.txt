@@ -41,7 +41,8 @@ apscheduler==3.10.4
 
 # Optional server tooling (not required for the built-in HTTPServer, but kept for dev)
 uvicorn==0.29.0
-yagmail==0.15.293
+# yagmail==0.15.293  # REMOVED 2026-07-22: zero imports in app/ (AgentMail is the
+#   mailer) — dead weight. Restore from requirements-mega.txt if ever needed.
 
 # [NEW] Email & Phone Validation (Render-friendly, lightweight)
 email-validator==2.2.0
@@ -50,24 +51,27 @@ phonenumbers==8.13.0
 # [NEW] DNS MX verification for email guess validation (free, no API key)
 dnspython==2.6.1
 
-# [NEW] spaCy NER for owner name extraction (en_core_web_sm ~12MB disk, ~100-150MB RAM)
-# Pinned 2026-07-13: an unpinned range lets a future spaCy release (compile-heavy
-# via thinc/blis) break the Render build the way unpinned scrapling did.
-spacy==3.8.14
+# spacy==3.8.14  # REMOVED 2026-07-22: was a 6th-fallback owner-name NER
+#   (~100-150MB RAM + spacy/thinc/blis/numpy image tree). Superseded by the
+#   ADR-0009 decision-maker waterfall (registry + email-localpart + recognized
+#   names); low-precision "any PERSON entity" extraction is the anti-pattern
+#   ADR-0008/0009 moved away from. light_enrich already degrades via
+#   `except ImportError` when the model is absent. Biggest single RAM reclaim.
 
 # [NEW] Email Templating & Lead Scoring (Free ML)
 jinja2==3.1.6
 # scikit-learn==1.3.2  # REMOVED: 80MB+ RAM, replace with rule-based scoring
 
-# [NEW] Priority 1: Job Signal Hunter (Lead Intent)
-python-jobspy==1.1.82
-
-# [NEW] Priority 2: SQLModel (Database ORM)
-sqlmodel==0.0.14
-
-# [NEW] Quick Win: Timezone Detection (Premium UX)
-timezonefinder==6.2.0
-firecrawl-py==1.1.0
+# python-jobspy==1.1.82  # REMOVED 2026-07-22: pulls pandas+numpy (heavy) for a
+#   job-postings scanner that never runs on the live SDR lanes (only reachable
+#   via the bypassed AI-OS planner). job_signal_hunter guards the import now.
+# sqlmodel==0.0.14  # REMOVED 2026-07-22: zero imports (app/models/core.py was
+#   deleted); dragged in the SQLAlchemy tree. DB layer uses raw sqlite3.
+# timezonefinder==6.2.0  # REMOVED 2026-07-22: ~40-50MB polygon data used ONLY by
+#   the dead get_timezone_from_coords path; the pipeline uses the lightweight
+#   get_timezone_from_state lookup (US-only ICP). Coords path removed.
+firecrawl-py==1.1.0  # TODO: removable — key-gated ($0, never keyed); pending a
+#   verify of lead_finder's except breadth. Deferred to a follow-up PR.
 # scrapling REMOVED 2026-07-13: never imported in shipped source (only stale
 # .pyc of the deleted scrapling_scraper experiment referenced it). It was
 # unpinned, so its 2026-07-12 0.4.11 release + heavy native subtree (lxml,

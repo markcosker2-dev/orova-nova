@@ -1,34 +1,20 @@
 """
 Intelligent Call Scheduling - Timezone Detection
 Prevents Nova from calling prospects at 2 AM.
-Uses timezonefinder to detect timezone from company address/coords.
+Detects timezone from a US state code (lightweight lookup — the ICP is US-only).
+
+Note: the coordinate-based path (timezonefinder, ~40-50MB of polygon data) was
+removed 2026-07-22 — it was never called; the pipeline resolves timezone from
+the business's state, and get_timezone_from_state below covers every US state.
 """
 
 import logging
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
-from timezonefinder import TimezoneFinder
 import pytz
 
 logger = logging.getLogger(__name__)
 
-# Lazily initialized timezone finder singleton to avoid import-time heavy I/O blocking
-_tf: Optional[TimezoneFinder] = None
-
-def _get_tf() -> TimezoneFinder:
-    global _tf
-    if _tf is None:
-        _tf = TimezoneFinder()
-    return _tf
-
-def get_timezone_from_coords(latitude: float, longitude: float) -> Optional[str]:
-    """Get IANA timezone string from GPS coordinates."""
-    try:
-        tz = _get_tf().timezone_at(lat=latitude, lng=longitude)
-        return tz
-    except Exception as e:
-        logger.error(f"[TZ] Error getting timezone from coords: {e}")
-        return None
 
 def get_timezone_from_state(state_abbr: str = None, country: str = "US") -> Optional[str]:
     """Rough timezone estimate from US state abbreviation."""

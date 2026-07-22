@@ -6,7 +6,13 @@ This is a strong intent signal: if they're hiring, they have money and a problem
 
 import logging
 from typing import List, Dict, Any
-from jobspy import scrape_jobs
+
+try:
+    from jobspy import scrape_jobs
+except ImportError:
+    # python-jobspy removed from the Render deps 2026-07-22 (it pulled pandas+numpy).
+    # This skill only runs via the bypassed AI-OS planner; it degrades gracefully.
+    scrape_jobs = None
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +54,13 @@ def hunt_hiring_signals(
             "pitch": "I saw you're actively hiring for [role]—our AI closes deals while you find the right person."
         }
     """
+    if scrape_jobs is None:
+        return {
+            "success": False,
+            "signals_found": 0,
+            "companies": [],
+            "error": "job scanning unavailable (python-jobspy not installed on this deploy)",
+        }
     try:
         logger.info(f"[JobSpy] Hunting signals: {job_title} in {location}")
         
