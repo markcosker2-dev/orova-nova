@@ -110,13 +110,67 @@ Everything below prepares for volume that doesn't exist yet — real, but second
 
 ---
 
+## Part C — Web-sourced improvements (2026 best practice)
+Fresh external research this session. Grouped by NEW technique vs VALIDATES the
+existing direction.
+
+### Memory (NEW — highest-value, directly fixes the OOM)
+- **jemalloc** instead of glibc malloc. A 2026 async-FastAPI case study measured RSS
+  creep drop **1.25 → 0.12 MB/hr (~10×)** from the allocator swap alone — freed
+  crawl/BeautifulSoup memory returns to the OS instead of sitting in glibc arenas.
+  This is the direct fix for the batch-reenrich OOM (handoff §4).
+  - Cheap first step (no new dep): `ENV MALLOC_ARENA_MAX=2` in the Dockerfile.
+  - Full fix: `apt-get install -y libjemalloc2` +
+    `ENV LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2` +
+    `ENV MALLOC_CONF=background_thread:true,dirty_decay_ms:1000,muzzy_decay_ms:1000`.
+  - Measure with the existing `psutil` health metric before/after.
+
+### Deliverability / conversion (NEW, mostly code-actionable)
+2026 priority order: (1) warmed inbox → (2) clean DNS → (3) IPs → (4) list hygiene
+→ (5) content → (6) word avoidance. "Don't start at 6 before 1-4." Maps to OROVA:
+- **SPF + DKIM + DMARC, all three, aligned to the From domain** (2-of-3 no longer
+  passes; DMARC ≥ p=none). Non-compliant senders: 22-34% to spam vs 89% inbox.
+  Owner: set up on the sending domain (getorova.com).
+- **RFC 8058 one-click List-Unsubscribe header** — now required by Gmail/Yahoo/Apple.
+  Code: add `List-Unsubscribe` + `List-Unsubscribe-Post` headers in the AgentMail
+  send path (the vault has a CAN-SPAM footer, not the one-click header).
+- **Warmup ramp, not a flat cap** — new domains need 3-4 wks (6 if <90 days): 5-10/day
+  ramping +3-5/day to 30-50/day. Code: make Nova's daily send cap follow a warmup
+  schedule for the first month on a new domain.
+- **Deliverability linter** in the composer/approval gate: plain text, 0 attachments,
+  0-1 links, subject <50 chars, no all-caps, one CTA, plain-text opt-out — validate
+  outgoing mail before send. Keep complaints <0.3%, bounces <2%.
+
+### Outreach quality (NEW)
+- **Signal-based outreach replies at 5-18% vs 1-3% generic.** Signals = leadership
+  change, hiring, expansion, tech adoption. Extend the evidence ledger with a
+  `signals` field (a newly-hired GM the registry waterfall already surfaces IS a
+  leadership-change signal) and lead the email with it. Biggest reply-rate lever.
+- **AI-template detection**: token-swap templates get spam-flagged even when legit.
+  OROVA's bab/pas/aida + `{first_name}` swap is exactly the pattern filters catch —
+  use the dossier/decision-maker evidence for a genuine first line.
+
+### Validates the existing direction (keep going)
+- Waterfall enrichment 85-95% coverage vs 40-70% single-source → ADR-0008/0009 is the
+  2026-correct architecture.
+- Re-verify every 90 days / before any 60+ day-cold segment → the `last_checked` +
+  scheduled-reenrich design (ADR-0010 §4) is exactly right.
+- Human-review-before-send → the approval gate is 2026 best practice, not a limitation.
+
+Sources: PowerDMARC/RedSift (sender rules), Instantly (deliverability + enrichment),
+Autobound/Apollo/Mailforge (AI cold email + spam filters), BetterUp eng (jemalloc).
+
+---
+
 ## Recommended sequence
-1. **PR #99** (memory reclaim) — shipping. ✅ headroom.
-2. Owner: **first send** + booking link + rotate leaked secrets (handoff §3).
-3. `firecrawl-py` removal (A2.1) — trivial follow-up.
-4. **Enrichment consolidation** (A2.2 / ADR-0010 §3) — the durable memory + data-quality win.
-5. **Event-log KPI ladder** (B3) — measurability before more optimization.
-6. Then, only with real outcomes: waterfall stages, ledger-for-all-fields, learning recalibration.
+1. ✅ **PR #99** (5 heavy deps) — merged + deployed (build 362627c, memory ok).
+2. Owner: **first send** + booking link + SPF/DKIM/DMARC + rotate leaked secrets (handoff §3).
+3. **jemalloc / MALLOC_ARENA_MAX** (Part C) — cheap OOM fix; unblocks batch reenrich.
+4. `firecrawl-py` removal (A2.1) — trivial follow-up.
+5. **Deliverability: List-Unsubscribe header + warmup-ramp send cap + composer linter** (Part C).
+6. **Enrichment consolidation** (A2.2 / ADR-0010 §3) — durable memory + data-quality win.
+7. **Event-log KPI ladder** (B3) — measurability before more optimization.
+8. **Signal-based personalization** (Part C) — the reply-rate lever, once sending starts.
 
 Deferred (owner-gated, staged, not now): AI-OS excision (A2.3).
 
