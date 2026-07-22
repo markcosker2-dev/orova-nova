@@ -390,30 +390,52 @@ def _parse_linkedin_title(title: str) -> tuple:
     return name, (role or "")
 
 
+async def _serp_linkedin_search(business: str) -> list:
+    """SerpAPI Google search for linkedin.com/in profiles of `business`.
+
+    Uses SerpAPI, not raw DuckDuckGo — DDG throttles datacenter IPs (Render), so a
+    server-side DDG query returns nothing (find_leads_v3 already flags DDG as
+    "unreliable server-side"). Shares owner_finder's rationed 250/mo SerpAPI budget
+    so LinkedIn lookups can never starve discovery. Returns organic_results
+    ({title, link, snippet}) or []. Fail-open.
+    """
+    import os
+    api_key = os.getenv("SERPAPI_KEY")
+    if not api_key:
+        return []
+    from app.skills.owner_finder import _ration_check_and_increment, SERPAPI_MONTHLY_CAP
+    if not await _ration_check_and_increment("owner_finder:serp_monthly", SERPAPI_MONTHLY_CAP, "month"):
+        logger.info("[WATERFALL] SerpAPI monthly cap reached — skipping LinkedIn")
+        return []
+    try:
+        import httpx
+        params = {"q": f'site:linkedin.com/in "{business}"', "api_key": api_key,
+                  "engine": "google", "num": 6}
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.get("https://serpapi.com/search", params=params)
+        return resp.json().get("organic_results", []) if resp.status_code == 200 else []
+    except Exception as e:
+        logger.debug(f"[WATERFALL] linkedin(serpapi) search failed: {e}")
+        return []
+
+
 async def _source_linkedin(lead: dict) -> List[Evidence]:
-    """Public-LinkedIn decision-maker source via DuckDuckGo result titles.
-    Never scrapes LinkedIn; parses public snippets and requires a company match.
-    Fail-open."""
+    """Public-LinkedIn decision-maker source. Reads SerpAPI Google results for
+    linkedin.com/in profiles (never scrapes LinkedIn; DDG is blocked from Render).
+    The company-match guard is the anti-fabrication protection — a name is only
+    accepted when its result actually names THIS business. Fail-open."""
     business = (lead.get("business") or "").strip()
     if not business:
         return []
     from app.skills.lead_validator import is_plausible_person_name
-    query = f'site:linkedin.com/in "{business}"'
-    try:
-        from duckduckgo_search import DDGS
-        loop = asyncio.get_running_loop()
-        results = await loop.run_in_executor(
-            None, lambda: list(DDGS().text(query, max_results=5, safesearch="off", region="us-en")))
-    except Exception as e:
-        logger.debug(f"[WATERFALL] linkedin source failed: {e}")
-        return []
+    results = await _serp_linkedin_search(business)
     today = date.today().isoformat()
     found: List[Evidence] = []
     seen = set()
     for r in results or []:
-        if "linkedin.com/in/" not in (r.get("href") or "").lower():
+        if "linkedin.com/in/" not in (r.get("link") or "").lower():
             continue
-        blob = f"{r.get('title', '')} {r.get('body', '')}"
+        blob = f"{r.get('title', '')} {r.get('snippet', '')}"
         if not _company_matches(business, blob):
             continue  # result must name THIS business — anti-fabrication guard
         name, title = _parse_linkedin_title(r.get("title", ""))
@@ -422,7 +444,7 @@ async def _source_linkedin(lead: dict) -> List[Evidence]:
             continue
         seen.add(norm)
         found.append(Evidence(name, 68 if title else 60, "linkedin_public",
-                              "search", today, title=title))
+                              "serpapi", today, title=title))
     return found
 
 

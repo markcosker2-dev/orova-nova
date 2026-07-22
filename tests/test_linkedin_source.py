@@ -38,19 +38,20 @@ def test_company_matches_and_rejects():
     assert not _company_matches("West Coast Exotic Cars", "Bob Jones - Owner - Acme Corp | LinkedIn")
 
 
-# ── the source (patched search) ──────────────────────────────────────────────
+# ── the source (patched SerpAPI search) ──────────────────────────────────────
+import app.skills.contact_waterfall as _cw
 
-def _patch_ddgs(monkeypatch, results):
-    class _Fake:
-        def text(self, *a, **k):
-            return results
-    monkeypatch.setattr("duckduckgo_search.DDGS", lambda: _Fake())
+
+def _patch_serp(monkeypatch, results):
+    async def _fake(business):
+        return results
+    monkeypatch.setattr(_cw, "_serp_linkedin_search", _fake)
 
 
 def test_source_extracts_matching_person(monkeypatch):
-    _patch_ddgs(monkeypatch, [
+    _patch_serp(monkeypatch, [
         {"title": "Eric Curran - General Manager - West Coast Exotic Cars | LinkedIn",
-         "href": "https://www.linkedin.com/in/eric-curran", "body": "West Coast Exotic Cars"},
+         "link": "https://www.linkedin.com/in/eric-curran", "snippet": "West Coast Exotic Cars"},
     ])
     evs = asyncio.run(_source_linkedin({"business": "West Coast Exotic Cars"}))
     assert len(evs) == 1
@@ -62,17 +63,17 @@ def test_source_extracts_matching_person(monkeypatch):
 
 def test_source_rejects_wrong_company(monkeypatch):
     # A real person, but their result names a DIFFERENT company → never attached.
-    _patch_ddgs(monkeypatch, [
+    _patch_serp(monkeypatch, [
         {"title": "Bob Jones - Owner - Some Other Dealership | LinkedIn",
-         "href": "https://www.linkedin.com/in/bob-jones", "body": "Some Other Dealership"},
+         "link": "https://www.linkedin.com/in/bob-jones", "snippet": "Some Other Dealership"},
     ])
     assert asyncio.run(_source_linkedin({"business": "West Coast Exotic Cars"})) == []
 
 
 def test_source_skips_company_pages(monkeypatch):
     # /company/ URLs are not a person profile → skipped.
-    _patch_ddgs(monkeypatch, [
+    _patch_serp(monkeypatch, [
         {"title": "West Coast Exotic Cars | LinkedIn",
-         "href": "https://www.linkedin.com/company/west-coast-exotic-cars", "body": ""},
+         "link": "https://www.linkedin.com/company/west-coast-exotic-cars", "snippet": ""},
     ])
     assert asyncio.run(_source_linkedin({"business": "West Coast Exotic Cars"})) == []
