@@ -194,5 +194,34 @@ owner/email/phone/waterfall extraction so each site is fetched once.
 (~2,750 LOC, two modules); a mistake reintroduces the fabrication/guessed-email
 regressions ADR-0008 fixed. Do it with full context and the suite green at each seam.
 
+## Appendix 2 — Name-coverage root cause (production evidence, 2026-07-22)
+Live on-ICP hunt (`exotic car dealer california`) + `outreach_ready` (#101) proved
+the bottleneck is decision-maker NAMES, not discovery:
+- **Discovery works**: found real luxury dealers (Aston Martin Los Gatos, SF Exotic Cars).
+- **0/20 leads clear `outreach_ready`** — every one blocked on "no verified decision-maker name".
+- **ROOT CAUSE: `state=None` on every lead.** `_source_registry` (contact_waterfall)
+  reads `lead.get("state")` → "" → `resolve_owner` can't choose a Secretary of State →
+  the strongest, authoritative, **zero-fabrication** name source never fires in the
+  waterfall/reenrich. `find_leads_v3` infers state from the query for the INITIAL
+  `enrich_lead_4step` registry call (`lead_gen_v3.py:1100`) but never **persists** it
+  on the lead, so the later waterfall + reenrich are stateless.
+- West Coast Exotic's owner "Eric Curran" came from `serpapi` (conf 40), not the
+  registry — hence below the bar + a mismatched `blake@` email.
+
+**Name-engine build (priority; $0; fabrication-safe first):**
+1. **Persist `state` on the lead** (`find_leads_v3` sets `lead["state"]`; add a
+   `_state_from_address` fallback from the captured address, `lead_gen_v3.py:1065`).
+   Unlocks the registry in waterfall + reenrich. Authoritative filings → **no
+   fabrication risk**; testable. Highest value + lowest risk → do first.
+2. **Verify `resolve_owner` actually returns CA SoS officer names** (`owner_finder.py`;
+   vault flagged "API shapes unverified"). Check `/api/logs` for `[WATERFALL]`/registry.
+3. **Add LinkedIn (`site:linkedin.com/in`) + Yelp "Meet the Owner" sources** to
+   `DEFAULT_SOURCES` (code already reserves `source="linkedin_public"`). Scraping →
+   build with offline-tested parsers + `is_plausible_person_name` guards (fabrication risk).
+4. Add `leads@`/`hi@`/… to `lead_validator._GENERIC_EMAIL_PREFIXES` (`leads@` leaked as
+   a "direct email" on SF Exotic Cars).
+
+Target: name on the large majority; the phone + "ask for the owner" covers the tail.
+
 ## Linked
 - [[session-2026-07-22-handoff]] · [[0010-consolidation-before-features]] · [[0009-persistent-decision-maker-waterfall]] · [[0008-lead-intelligence-provenance]] · [[0007-prospect-event-log]] · [[profitability-plan]] · [[active-context]]
