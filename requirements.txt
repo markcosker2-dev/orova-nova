@@ -31,6 +31,11 @@ python-multipart==0.0.31
 pydantic==2.13.0
 pydantic-settings==2.14.2
 pytz==2024.1
+# python-dateutil: parses Cal.com/ISO meeting times in cal_booking + calendar_skill
+# (the booking funnel). Was only present transitively via pandas — declared
+# explicitly 2026-07-22 after removing jobspy/pandas exposed the hidden dependency
+# (cal_booking._duration_minutes was silently falling back to 30min). Tiny (needs six).
+python-dateutil==2.9.0.post0
 
 # reportlab==4.2.0  # REMOVED: not used anywhere in app/ — saves ~15MB RAM
 requests==2.33.0
