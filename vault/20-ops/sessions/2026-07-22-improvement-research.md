@@ -165,14 +165,34 @@ Autobound/Apollo/Mailforge (AI cold email + spam filters), BetterUp eng (jemallo
 ## Recommended sequence
 1. ✅ **PR #99** (5 heavy deps) — merged + deployed (build 362627c, memory ok).
 2. Owner: **first send** + booking link + SPF/DKIM/DMARC + rotate leaked secrets (handoff §3).
-3. **jemalloc / MALLOC_ARENA_MAX** (Part C) — cheap OOM fix; unblocks batch reenrich.
-4. `firecrawl-py` removal (A2.1) — trivial follow-up.
-5. **Deliverability: List-Unsubscribe header + warmup-ramp send cap + composer linter** (Part C).
-6. **Enrichment consolidation** (A2.2 / ADR-0010 §3) — durable memory + data-quality win.
-7. **Event-log KPI ladder** (B3) — measurability before more optimization.
-8. **Signal-based personalization** (Part C) — the reply-rate lever, once sending starts.
+3. ✅ **PR #100** jemalloc + `firecrawl-py` removal — merged + deployed (build 6ab469f, memory ok).
+4. **Enrichment consolidation** (A2.2 / ADR-0010 §3) — durable memory + data-quality win. **← next code session** (traced in the Appendix).
+5. **Event-log KPI ladder** (B3) — measurability before more optimization.
+6. Once the first send + domain exist: List-Unsubscribe header, warmup-ramp send cap, composer linter, signal-based personalization (Part C).
 
 Deferred (owner-gated, staged, not now): AI-OS excision (A2.3).
+
+## Appendix — Enrichment consolidation (ADR-0010 §3): traced 2026-07-22, ready for a focused session
+Confirmed the double-crawl (up to **3 crawls/lead**):
+1. `find_leads` → `find_leads_v3` (`lead_gen_v3.py:1147`) calls `enrich_lead_4step`
+   → crawls the site.
+2. worker hunt lane (`worker.py:327` find_leads → `:367` `enrich_lead_lite`) crawls
+   the SAME site again (`light_enrich`, 1,517 LOC — the MX-gate/Verifalia/
+   `email_status`/confidence pass).
+3. `resolve_decision_maker` (`worker.py:376`, contact_waterfall) crawls team/about
+   pages again.
+
+**Safe approach = MERGE, not skip.** A naive "skip `enrich_lead_lite` if fields
+present" guard would REGRESS data quality — it owns the MX gate, Verifalia,
+`email_status` (verified/found/guessed) and `contact_confidence` that ADR-0008 built;
+`enrich_lead_4step` does not. Fold both into a single crawl-once pass that preserves
+every ADR-0008/0009 signal, then have the hunt lane call the one pass. Reuse the
+shared httpx client (`lead_gen_v3.py:19`) and share the fetched page across
+owner/email/phone/waterfall extraction so each site is fetched once.
+
+**Why it's a dedicated session, not a tail-of-session hack:** revenue-pipeline core
+(~2,750 LOC, two modules); a mistake reintroduces the fabrication/guessed-email
+regressions ADR-0008 fixed. Do it with full context and the suite green at each seam.
 
 ## Linked
 - [[session-2026-07-22-handoff]] · [[0010-consolidation-before-features]] · [[0009-persistent-decision-maker-waterfall]] · [[0008-lead-intelligence-provenance]] · [[0007-prospect-event-log]] · [[profitability-plan]] · [[active-context]]
