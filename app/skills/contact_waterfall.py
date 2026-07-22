@@ -349,6 +349,83 @@ async def _source_search(lead: dict) -> List[Evidence]:
     return []
 
 
+# ── LinkedIn (public search-snippet) source ──────────────────────────────────
+# We never scrape LinkedIn itself (it blocks bots) — we read the TITLES of public
+# DuckDuckGo results for linkedin.com/in profiles, reliably formatted
+# "First Last - Title - Company | LinkedIn". The company-match guard is the
+# anti-fabrication protection: only accept a name whose result actually names
+# THIS business, so a random person is never attached to the lead.
+_BIZ_STOPWORDS = frozenset({
+    "the", "and", "inc", "llc", "co", "company", "corp", "corporation", "group",
+    "of", "ltd", "services", "service", "auto", "cars", "car", "motors", "shop",
+})
+
+
+def _company_matches(business: str, text: str) -> bool:
+    """True when enough of the business's distinctive tokens appear in `text`.
+    Guards against attaching a real LinkedIn person to the wrong company."""
+    toks = [t for t in re.findall(r"[a-z0-9]+", (business or "").lower())
+            if len(t) > 2 and t not in _BIZ_STOPWORDS]
+    if not toks:
+        return False
+    tl = (text or "").lower()
+    hits = sum(1 for t in toks if t in tl)
+    return hits >= (1 if len(toks) == 1 else 2)
+
+
+def _parse_linkedin_title(title: str) -> tuple:
+    """Parse a public LinkedIn result title into (name, job_title); ('', '')
+    when it isn't a parseable person profile. Handles
+    'Jane Doe - GM - West Coast Exotics | LinkedIn',
+    'Jane Doe - West Coast Exotics - LinkedIn',
+    'Jane Doe - GM at West Coast Exotics | LinkedIn'."""
+    if not title:
+        return "", ""
+    t = re.sub(r"\s*[|\-–—]\s*LinkedIn\s*$", "", title.strip(), flags=re.I).strip()
+    parts = [p.strip() for p in re.split(r"\s+[-–—]\s+", t) if p.strip()]
+    if not parts:
+        return "", ""
+    name = parts[0]
+    _, role = detect_title(" ".join(parts[1:])) if len(parts) > 1 else (0, "")
+    return name, (role or "")
+
+
+async def _source_linkedin(lead: dict) -> List[Evidence]:
+    """Public-LinkedIn decision-maker source via DuckDuckGo result titles.
+    Never scrapes LinkedIn; parses public snippets and requires a company match.
+    Fail-open."""
+    business = (lead.get("business") or "").strip()
+    if not business:
+        return []
+    from app.skills.lead_validator import is_plausible_person_name
+    query = f'site:linkedin.com/in "{business}"'
+    try:
+        from duckduckgo_search import DDGS
+        loop = asyncio.get_running_loop()
+        results = await loop.run_in_executor(
+            None, lambda: list(DDGS().text(query, max_results=5, safesearch="off", region="us-en")))
+    except Exception as e:
+        logger.debug(f"[WATERFALL] linkedin source failed: {e}")
+        return []
+    today = date.today().isoformat()
+    found: List[Evidence] = []
+    seen = set()
+    for r in results or []:
+        if "linkedin.com/in/" not in (r.get("href") or "").lower():
+            continue
+        blob = f"{r.get('title', '')} {r.get('body', '')}"
+        if not _company_matches(business, blob):
+            continue  # result must name THIS business — anti-fabrication guard
+        name, title = _parse_linkedin_title(r.get("title", ""))
+        norm = _norm_name(name)
+        if not name or norm in seen or not is_plausible_person_name(name):
+            continue
+        seen.add(norm)
+        found.append(Evidence(name, 68 if title else 60, "linkedin_public",
+                              "search", today, title=title))
+    return found
+
+
 # Ordered chain. Cheapest/strongest-signal first so the stop-early gate fires
 # before we spend network budget: the email we already hold and the legal
 # registry cost little; page scrapes and search cost more.
@@ -356,6 +433,7 @@ DEFAULT_SOURCES: List[Callable] = [
     _source_email_inference,
     _source_registry,
     _source_website,
+    _source_linkedin,
     _source_search,
 ]
 
