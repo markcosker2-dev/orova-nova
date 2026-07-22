@@ -32,13 +32,16 @@ def test_fails_closed_on_db_error():
 
 
 def test_add_suppression_persists_normalized():
+    # Capture set_state PER KEY: the app's background log-flush concurrently
+    # calls set_state('agent_logs', ...), which would clobber a single global
+    # capture. Keying by state-key isolates the DNC write we're asserting on.
     saved = {}
     with patch.object(dnc.DatabaseManager, "get_state", AsyncMock(return_value=[])), \
          patch.object(dnc.DatabaseManager, "set_state",
-                      AsyncMock(side_effect=lambda k, v: saved.__setitem__("v", v))):
+                      AsyncMock(side_effect=lambda k, v: saved.__setitem__(k, v))):
         ok = asyncio.run(dnc.add_suppression("(323) 935-2985", reason="opt-out"))
     assert ok is True
-    assert saved["v"] == ["3239352985"]
+    assert saved[dnc._DNC_KEY] == ["3239352985"]
 
 
 def test_dialer_blocks_suppressed_number(monkeypatch):
