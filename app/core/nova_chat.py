@@ -81,20 +81,20 @@ async def nova_reply(message: str, chat_id: int = 0,
                      history: Optional[List[Dict]] = None) -> str:
     """One warm, grounded conversational turn. No tools, no agentic loop."""
     from app.core.ai_client import UnifiedAIClient
-    snapshot = await _pipeline_snapshot()
-    system = f"{NOVA_PERSONA}\n\n=== LIVE SNAPSHOT ===\n{snapshot}\n====================="
-
-    messages = [{"role": "system", "content": system}]
-    if history:
-        # keep only the last few user/assistant turns, text only
-        for h in history[-6:]:
-            role = h.get("role")
-            content = h.get("content")
-            if role in ("user", "assistant") and isinstance(content, str) and content:
-                messages.append({"role": role, "content": content})
-    messages.append({"role": "user", "content": message})
-
     try:
+        snapshot = await _pipeline_snapshot()
+        system = f"{NOVA_PERSONA}\n\n=== LIVE SNAPSHOT ===\n{snapshot}\n====================="
+
+        messages = [{"role": "system", "content": system}]
+        if history:
+            # keep only the last few user/assistant turns, text only
+            for h in history[-6:]:
+                role = h.get("role")
+                content = h.get("content")
+                if role in ("user", "assistant") and isinstance(content, str) and content:
+                    messages.append({"role": role, "content": content})
+        messages.append({"role": "user", "content": message})
+
         ai = UnifiedAIClient()
         resp = await ai.chat(messages, role="default", temperature=0.6, max_tokens=600)
         text = (getattr(resp, "content", "") or "").strip()
