@@ -75,8 +75,10 @@ jinja2==3.1.6
 # timezonefinder==6.2.0  # REMOVED 2026-07-22: ~40-50MB polygon data used ONLY by
 #   the dead get_timezone_from_coords path; the pipeline uses the lightweight
 #   get_timezone_from_state lookup (US-only ICP). Coords path removed.
-firecrawl-py==1.1.0  # TODO: removable — key-gated ($0, never keyed); pending a
-#   verify of lead_finder's except breadth. Deferred to a follow-up PR.
+# firecrawl-py==1.1.0  # REMOVED 2026-07-22: paid API, key-gated ($0 → never keyed).
+#   Both call sites (lead_finder._source_yelp, light_enrich._firecrawl_scrape) sit
+#   inside `except Exception` + FIRECRAWL_API_KEY gates → ImportError degrades
+#   cleanly. Restore from requirements-mega.txt if a paid tier ever funds it.
 # scrapling REMOVED 2026-07-13: never imported in shipped source (only stale
 # .pyc of the deleted scrapling_scraper experiment referenced it). It was
 # unpinned, so its 2026-07-12 0.4.11 release + heavy native subtree (lxml,
