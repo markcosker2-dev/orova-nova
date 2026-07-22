@@ -767,9 +767,11 @@ async def get_leads(limit: int = 100, include_invalid: bool = False,
     # so it can't go stale or be fabricated by an ingest payload. The evidence
     # ledger (why we believe the decision maker) is parsed for the UI.
     import json as _json
-    from app.skills.lead_validator import contact_confidence, score_lead_icp
+    from app.skills.lead_validator import contact_confidence, outreach_ready, score_lead_icp
     for r in rows:
         r["confidence"] = contact_confidence(r)
+        # Owner bar (2026-07-22): decision-maker name + direct email + phone.
+        r["outreach_ready"] = outreach_ready(r)
         try:
             r["evidence"] = _json.loads(r.get("evidence_json") or "[]")
         except Exception:

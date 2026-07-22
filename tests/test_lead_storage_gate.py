@@ -23,6 +23,7 @@ from app.skills.lead_validator import (
     clean_url_for_storage,
     is_placeholder_phone,
     contact_confidence,
+    outreach_ready,
     _looks_like_phone,
 )
 
@@ -168,6 +169,55 @@ def test_confidence_owner_grows_with_corroboration():
     assert contact_confidence({"owner": "Maria Santos", "owner_title": "Owner"})["owner"] == 70
     assert contact_confidence({"owner": "Maria Santos", "owner_title": "Owner",
                                "linkedin_url": "https://linkedin.com/in/msantos"})["owner"] == 75
+
+
+# ── outreach_ready — the owner bar: decision-maker name + direct email + phone ─
+
+_READY_FULL = {"owner": "Eric Curran", "email": "eric@wcexotics.com",
+               "email_status": "verified", "phone": "+14047334400"}
+
+
+def test_outreach_ready_full_lead_clears_the_bar():
+    r = outreach_ready(_READY_FULL)
+    assert r["ready"] and r["emailable"] and r["callable"]
+    assert r["has_name"] and r["has_direct_email"] and r["has_phone"]
+    assert r["blockers"] == []
+
+
+def test_outreach_ready_generic_email_is_callable_not_emailable():
+    # info@ never counts as a direct email — but name + business phone is still callable.
+    r = outreach_ready({**_READY_FULL, "email": "info@wcexotics.com", "email_status": "found"})
+    assert r["ready"] and r["callable"] and not r["emailable"]
+    assert not r["has_direct_email"]
+    assert any("generic" in b for b in r["blockers"])
+
+
+def test_outreach_ready_name_plus_business_phone_no_email():
+    # The owner's explicit fallback: no email found → business number + the name.
+    r = outreach_ready({"owner": "Eric Curran", "phone": "+14047334400"})
+    assert r["ready"] and r["callable"] and not r["emailable"]
+    assert "no email" in r["blockers"]
+
+
+def test_outreach_ready_requires_the_decision_maker_name():
+    # Perfect email + phone but no name is NOT ready — can't bypass the gatekeeper.
+    r = outreach_ready({"email": "john@dealer.com", "email_status": "verified",
+                        "phone": "+14047334400"})
+    assert not r["ready"] and not r["has_name"]
+    assert "no verified decision-maker name" in r["blockers"]
+
+
+def test_outreach_ready_emailable_without_phone():
+    r = outreach_ready({"owner": "Eric Curran", "email": "eric@wcexotics.com",
+                        "email_status": "found"})
+    assert r["ready"] and r["emailable"] and not r["callable"]
+    assert "no phone" in r["blockers"]
+
+
+def test_outreach_ready_empty_lead_blocks_everything():
+    r = outreach_ready({})
+    assert not r["ready"] and not r["emailable"] and not r["callable"]
+    assert len(r["blockers"]) == 3
 
 
 # ── save_lead integration: rejection happens before any DB write ─────────────
