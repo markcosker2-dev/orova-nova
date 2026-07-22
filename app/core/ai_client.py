@@ -101,10 +101,15 @@ class UnifiedAIClient:
     Unified AI Client — Groq primary, Gemini secondary, OpenRouter tertiary.
     """
 
+    # OpenRouter free-tier model IDs. These MUST be current — OpenRouter's
+    # free catalog turns over, and stale slugs 404 (live 2026-07-22: the old
+    # llama-3.3/qwen3 ':free' IDs all returned 404 NotFound, so the whole
+    # OpenRouter tier was dead despite a valid key). Verified against
+    # https://openrouter.ai/api/v1/models. Re-check if OpenRouter 404s again.
     FLAVORS = {
-        "fast":   "meta-llama/llama-3.3-70b-instruct:free",
-        "smart":  "qwen/qwen3-next-80b-a3b-instruct:free",
-        "genius": "qwen/qwen3-coder:free",
+        "fast":   "openai/gpt-oss-20b:free",
+        "smart":  "google/gemma-4-31b-it:free",
+        "genius": "nvidia/nemotron-3-super-120b-a12b:free",
     }
 
     FLAVOR_FILE = "app/data/model_flavor.json"
@@ -120,14 +125,14 @@ class UnifiedAIClient:
             logger.warning(f"[AI] set_flavor failed: {e}")
 
     ROLE_MODELS = {
-        "default":   "meta-llama/llama-3.3-70b-instruct:free",
-        "nova":      "meta-llama/llama-3.3-70b-instruct:free",
+        "default":   "openai/gpt-oss-20b:free",
+        "nova":      "openai/gpt-oss-20b:free",
     }
 
     FALLBACK_CHAIN = [
-        "meta-llama/llama-3.3-70b-instruct:free",
-        "qwen/qwen3-next-80b-a3b-instruct:free",
-        "qwen/qwen3-coder:free",
+        "openai/gpt-oss-20b:free",
+        "google/gemma-4-31b-it:free",
+        "nvidia/nemotron-3-super-120b-a12b:free",
     ]
 
     GROQ_MODEL = "llama-3.3-70b-versatile"
