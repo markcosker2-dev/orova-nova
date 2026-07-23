@@ -390,6 +390,17 @@ def _parse_linkedin_title(title: str) -> tuple:
     return name, (role or "")
 
 
+def _linkedin_dork(business: str) -> str:
+    """Google dork for a business's public LinkedIn profiles.
+
+    Double quotes are stripped from the business name first: 'Foo "Bar" Inc' would
+    otherwise produce an unbalanced dork (site:linkedin.com/in "Foo "Bar" Inc")
+    and SerpAPI returns nothing useful.
+    """
+    safe = (business or "").replace('"', " ").strip()
+    return f'site:linkedin.com/in "{safe}"'
+
+
 async def _serp_linkedin_search(business: str) -> list:
     """SerpAPI Google search for linkedin.com/in profiles of `business`.
 
@@ -409,7 +420,7 @@ async def _serp_linkedin_search(business: str) -> list:
         return []
     try:
         import httpx
-        params = {"q": f'site:linkedin.com/in "{business}"', "api_key": api_key,
+        params = {"q": _linkedin_dork(business), "api_key": api_key,
                   "engine": "google", "num": 6}
         async with httpx.AsyncClient(timeout=20.0) as client:
             resp = await client.get("https://serpapi.com/search", params=params)
@@ -444,7 +455,7 @@ async def _source_linkedin(lead: dict) -> List[Evidence]:
             continue
         seen.add(norm)
         found.append(Evidence(name, 68 if title else 60, "linkedin_public",
-                              "serpapi", today, title=title))
+                              "search", today, title=title))
     return found
 
 

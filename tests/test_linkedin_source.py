@@ -7,8 +7,26 @@ import asyncio
 from app.skills.contact_waterfall import (
     _parse_linkedin_title,
     _company_matches,
+    _linkedin_dork,
     _source_linkedin,
 )
+
+
+# ── query builder: never emit an unbalanced dork ─────────────────────────────
+
+def test_linkedin_dork_basic():
+    assert _linkedin_dork("West Coast Exotic Cars") == 'site:linkedin.com/in "West Coast Exotic Cars"'
+
+
+def test_linkedin_dork_strips_embedded_quotes():
+    # 'Foo "Bar" Inc' would otherwise unbalance the query and return nothing.
+    dork = _linkedin_dork('Foo "Bar" Inc')
+    assert dork.count('"') == 2       # exactly the wrapping pair
+    assert "Bar" in dork
+
+
+def test_linkedin_dork_handles_empty():
+    assert _linkedin_dork("") == 'site:linkedin.com/in ""'
 
 
 # ── title parser (pure) ──────────────────────────────────────────────────────
