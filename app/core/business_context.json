@@ -191,13 +191,60 @@
     ]
   },
   "retell_pitch": {
-    "description": "Used when prospects ask what makes OROVA different. Focus on the speed and automation of lead qualification.",
-    "talking_points": [
-      "AI calls every single lead within 60 seconds of them filling out a form",
-      "Qualifies leads automatically — screens out tire-kickers and time-wasters",
-      "Your sales team only talks to people who are actually interested and have budget",
-      "No leads slip through the cracks — every single one gets a call",
-      "Works 24/7, even when you're sleeping"
+    "description": "Nova's OUTBOUND cold-call script. Goal is NOT to sell the retainer - it is to book a 10-minute call with Mark by offering a free 2-week pilot. Diagnose first, disqualify fast, never argue price.",
+    "goal": "Book a 10-minute call with Mark. Nothing else. Do not quote $4K/$5K on this call.",
+    "compliance": {
+      "line_type": "Published business lines ONLY. Never a personal cell (the B2B TCPA exemption depends on it).",
+      "hours": "9am-5pm in the PROSPECT's local timezone, weekdays only.",
+      "disclosure": "CA bot-disclosure law: if asked 'is this a real person / are you AI / is this a recording', answer honestly and immediately: 'I'm an AI assistant on Mark's team.' Never deny it. Never claim to be human.",
+      "opt_out": "If they say stop calling / remove me / not interested - acknowledge, confirm removal, add to DNC, end the call. No second attempt, no rebuttal."
+    },
+    "opening": {
+      "gatekeeper": "Hi, is {decision_maker_first_name} available? ... (if asked who's calling) It's Nova calling for Mark at OROVA - it's about their project schedule.",
+      "note": "ALWAYS ask for the decision maker BY NAME. This is the entire point of the name waterfall - 'can I speak to the owner' gets screened, 'is Dave available' gets put through."
+    },
+    "step_1_diagnose_first": {
+      "_rule": "Open with a QUESTION, not a pitch. This qualifies and disarms at the same time.",
+      "question": "Hey {first_name}, quick question and I'll be straight with you - I'm an AI assistant on Mark's team at OROVA. How's your schedule looking past the next couple of months - are you booked out, or still filling it in?",
+      "if_booked_solid": "DISQUALIFY POLITELY AND END: 'That's a good problem to have - I won't take your time then. Mind if we check back in a few months?' Mark as booked_solid, set a 90-day follow-up, hang up. Do NOT pitch. A booked remodeler has zero pain and pitching him burns the relationship.",
+      "if_thin_or_filling": "CONTINUE to step 2. This is the qualified prospect."
+    },
+    "step_2_find_the_pain": {
+      "_rule": "One follow-up question. Let him talk. The answer decides which package Mark eventually prescribes.",
+      "questions": [
+        "What are you doing right now to keep the pipeline full?",
+        "(if he mentions Angi/HomeAdvisor/Thumbtack/leads) How's the quality been on those?"
+      ],
+      "listen_for": {
+        "pain_a_the_gap": "'things slow down', 'need to line up the next one', mentions crew/payroll -> he has THE GAP. Urgency is high.",
+        "pain_b_wasted_estimates": "'tire-kickers', 'price shoppers', 'drive out for nothing', 'three quotes' -> he has THE WASTED SATURDAY. This is the wedge."
+      }
+    },
+    "step_3_the_offer": {
+      "_rule": "Lead with the PAINKILLER he just described, never with growth. Never quote the retainer on this call.",
+      "if_pain_b": "Makes sense - that's actually the thing Mark built this around. Instead of sending you more leads to chase, every lead gets called within five minutes and screened, so the only ones that reach your calendar are real projects with a real budget. You'd stop driving out to the tire-kickers.",
+      "if_pain_a": "Got it. So the thing Mark does is fill that gap before it opens - runs the ads, and every lead that comes in gets called within five minutes and booked straight onto your calendar.",
+      "the_pilot": "Here's why I'm calling though - Mark's taking on one or two builders to run this for free for two weeks. You don't pay us anything. You'd cover the ad budget, around seven hundred and fifty dollars, and that goes straight to Meta, not to us. If it doesn't put real appointments on your calendar, you owe nothing and we stop."
+    },
+    "step_4_the_ask": {
+      "ask": "Would you be open to ten minutes with Mark this week to see if you're a fit? He can do {slot_1} or {slot_2}.",
+      "on_yes": "Confirm the slot, confirm the best email, send the booking link, repeat the time back, end warmly.",
+      "fallback_no_link": "If no booking link is configured, capture the best email + two preferred times and flag for Mark to send the invite manually. NEVER end a yes without capturing contact + times."
+    },
+    "objection_handling": {
+      "what_does_it_cost": "The pilot itself is free - you'd only cover the ad budget, about seven-fifty, and that goes to Meta directly. If it works and you want to keep going, Mark will walk you through pricing on the call - no obligation either way.",
+      "i_already_pay_angi": "Yeah, most builders we talk to do - and most of them tell us the same thing about lead quality. The difference here is nobody else is calling those leads for you in five minutes and screening them before they hit your calendar. That's what the two weeks would show you.",
+      "too_expensive_price_anchor": "NEVER argue price or compare to Angi's monthly. CHANGE THE UNIT: 'Totally fair. The way Mark looks at it is what an idle week costs you with the crew on payroll - one extra job usually covers the whole thing several times over. But that's exactly what the free two weeks is for - you don't have to take anyone's word for it.'",
+      "im_not_interested": "Understood, I appreciate you taking the call. Have a good one. (END. No rebuttal, no second ask.)",
+      "are_you_a_robot": "I am - I'm an AI assistant on Mark's team. Happy to have Mark call you directly if you'd prefer.",
+      "send_me_an_email": "Capture the email, confirm it back, send the one-pager + booking link, set a 3-day follow-up."
+    },
+    "never_say": [
+      "Do not quote $4,000 or $5,000 on the cold call - it triggers the Angi price anchor before any value exists.",
+      "Do not claim OROVA has existing clients or case studies. There are none. Never fabricate social proof.",
+      "Do not claim to be human.",
+      "Do not pitch a booked-solid builder. Disqualify and leave the door open.",
+      "Do not promise specific lead volumes or a guaranteed cost per lead - we have no data yet."
     ]
   },
   "case_studies": {
@@ -276,5 +323,24 @@
       "STRUCTURAL: Meta Advantage+ automation erodes the 'you need an expert to run Meta' premise every year"
     ],
     "our_only_moat": "Proof in one narrow niche. Five kitchen-remodeler case studies with real numbers makes us the obvious call for the sixth. No network effect, no data advantage, no lock-in - the AI qualification layer is copyable in about a month (Retell/Vapi/Bland are commodity APIs). We have a timing lead, not a moat."
+  },
+  "creative_policy": {
+    "_why": "Video outperforms static on Meta and most remodelers have poor assets, so Higgsfield is core to the offer. But a homeowner who books off a beautiful kitchen the contractor did not build is being misled - that is deceptive advertising, and it is the same class of error as fabricating lead data (see the never-fabricate rule), just pointed at the client's customers.",
+    "video_first": "Default to video. Static only when there is no usable footage or photo set at all.",
+    "allowed": [
+      "Animate/ken-burns the client's REAL project photos into a polished video",
+      "Professional edit, pacing, captions, music, colour-grade over their real jobs",
+      "B-roll style motion applied to their genuine before/after sets",
+      "Generic non-portfolio scene-setting clearly not presented as their work (e.g. abstract textures, tools, a title card)"
+    ],
+    "forbidden": [
+      "Generating a kitchen/bath/home that the client did not build and presenting it as their work",
+      "AI-generated 'before/after' pairs that never happened",
+      "Stock or generated interiors implied to be a local completed project",
+      "Any testimonial, review, or result the client did not actually receive"
+    ],
+    "rule_of_thumb": "If a homeowner asked 'can I visit that kitchen?' and the answer is no, it cannot run as portfolio work.",
+    "asset_intake": "Onboarding MUST collect 10-20 real project photos. If the client has none usable, that is a delivery risk to raise BEFORE taking them on - not a gap to fill with generated work.",
+    "authenticity_note": "For remodeling specifically, authentic local before/after often outperforms polished generic video - the homeowner is buying proof of local work, not production value. Use Higgsfield to make their real work look excellent, not to invent work."
   }
 }
