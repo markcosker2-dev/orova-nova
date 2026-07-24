@@ -54,6 +54,41 @@ is live — the generic auto-repair rows in the pipeline are legacy restored dat
 > ⚠️ This ranking is inference from deal economics, **not** customer evidence —
 > zero prospect conversations have happened. ~20 calls with remodelers settles it.
 
+## 🩹 Positioning — sell the painkiller ([[0013-painkiller-positioning-and-real-competition|ADR-0013]])
+
+**Never sell growth ("more leads") — that's a vitamin, and it loses to Angi's ~$400
+price anchor at 16x.** Sell the deadline:
+
+- **Pain A — The Gap:** *"When your crew finishes the job they're on, what's next?"*
+  (job wraps in 3 weeks, six W-2 guys burning $30-40K/mo) → **P1 or P2**
+- **Pain B — The Wasted Saturday:** *"You'll never drive 40 minutes to a tire-kicker
+  again."* (6 dead estimates last month) → **P2 ONLY — P1 makes this pain worse**
+
+**Diagnose before prescribing.** Supersedes profitability-plan §2.2's "always lead
+with P1".
+
+**The real enemy is inertia**, not an agency — zero switching cost, worked for 15
+years. Only a deadline he already feels beats it (hence: backlog <8 weeks + W-2 crew
+on payroll are the hard qualifiers). **Never argue price — change the unit** from
+cost-per-lead to cost-per-idle-week-of-payroll.
+
+**One differentiator only:** every lead phoned + AI-qualified in minutes, so he only
+drives to real buyers. Never pitch "we're AI-operated", "you're talking to our AI
+right now", or "AI creatives" — worthless to the buyer.
+
+## 🔴 THE BLOCKING ACTION (2026-07-24)
+
+**Zero emails have ever been sent. Zero prospect conversations have happened.**
+Everything above is inference. The next move is not code:
+
+1. **Call Eric Curran** — West Coast Exotic Cars, +1 844-488-9232, conf 83
+   (LinkedIn-corroborated). The free practice rep.
+2. **20 remodelers off Google Maps** using the 5 discovery questions in
+   `business_context.json` → `discovery_questions`. **Does not require the pipeline.**
+3. Bring back the transcripts. ≥8/20 hits = the ICP is real; ≤3 = switch to med spas.
+
+**No further positioning or targeting work before those 20 calls.**
+
 ## Where things stand (2026-07-10)
 
 Nova is **live on Render free tier** (`orova-nova.onrender.com`), all 9 lanes

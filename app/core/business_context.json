@@ -1,7 +1,6 @@
 {
   "_description": "Single source of truth for OROVA business context. Loaded by email pipeline, proofreader, and drip templates. All other files (USER.md, brand_guidelines.json, config.py) should align with this.",
   "_last_updated": "2026-07-11",
-
   "company": {
     "name": "OROVA",
     "type": "Marketing Agency",
@@ -12,29 +11,41 @@
     "region": "West Coast US",
     "creative_tooling": "Higgsfield (AI ad creatives)"
   },
-
   "services": [
     {
       "name": "Package 1 — Meta Lead Gen + Ad Creatives",
       "price_monthly_usd": 4000,
-      "pricing_tiers_usd": { "1_month": 4000, "3_month": 10000, "6_month": 18000 },
+      "pricing_tiers_usd": {
+        "1_month": 4000,
+        "3_month": 10000,
+        "6_month": 18000
+      },
       "description": "Meta ads (Facebook + Instagram) lead generation with ad creatives produced via Higgsfield AI. Client handles the leads themselves. Ad spend is separate.",
       "ad_spend_recommended_monthly_usd": "2000-2500",
-      "platforms": ["facebook", "instagram"],
+      "platforms": [
+        "facebook",
+        "instagram"
+      ],
       "includes_crm": false
     },
     {
       "name": "Package 2 — Lead Gen + AI Qualification + CRM + Appointments",
       "price_monthly_usd": 5000,
-      "pricing_tiers_usd": { "1_month": 5000, "3_month": 13000, "6_month": 24000 },
+      "pricing_tiers_usd": {
+        "1_month": 5000,
+        "3_month": 13000,
+        "6_month": 24000
+      },
       "description": "Everything in Package 1, plus OROVA handles the leads: Retell AI cold-call qualification so the client only speaks to leads ready to pay, client CRM kept current (Google Sheets or the client's CRM via Make.com), and appointment booking when the business runs on appointments. The core promise is fewer, higher-quality leads.",
       "ad_spend_recommended_monthly_usd": "2000-2500",
-      "platforms": ["facebook", "instagram"],
+      "platforms": [
+        "facebook",
+        "instagram"
+      ],
       "includes_crm": true,
       "includes_appointments": "optional — only when the business monetizes via appointments"
     }
   ],
-
   "commercial_terms": {
     "new_client_policy": "New clients start on a 1-month trial, then choose 1, 3, or 6 months.",
     "payment_method": "Invoice paid via Wise bank transfer or ACH.",
@@ -46,7 +57,6 @@
     "first_client_pilot": "Client #1 buys PROOF, not revenue. Offer $1,500-$2,000/mo for a 60-day pilot (or performance-tied) in exchange for a testimonial + case-study rights + permission to quote results. Standard P1/P2 pricing resumes from client #2, when a real case study replaces the placeholder and does the selling. Holding the line at $4K with zero case studies is how pre-revenue agencies stay at $0.",
     "all_in_framing": "Always quote and think in ALL-IN terms: retainer + recommended ad spend = ~$6,500-$7,500/mo. The prospect writes checks totalling that number; 'the ad spend is separate' is an accounting fact, not a buying fact, and must never be used to make the ask sound smaller than it is."
   },
-
   "sales_funnel": {
     "steps": [
       "Nova sends a high-quality personalized cold email",
@@ -70,12 +80,20 @@
     },
     "qualified_lead_definition": "A lead is qualified only when they booked an appointment AND actually show up / buy — not merely a booking."
   },
-
   "automation_policy": {
     "_note": "What the agents may do autonomously vs. what requires Mark's approval. Approval gates loosen only as the AI proves itself.",
-    "fully_autonomous": ["lead scraping"],
-    "requires_approval_now": ["send cold email", "make cold call"],
-    "always_requires_approval": ["publish ad creatives", "spend ad budget", "sign a client"],
+    "fully_autonomous": [
+      "lead scraping"
+    ],
+    "requires_approval_now": [
+      "send cold email",
+      "make cold call"
+    ],
+    "always_requires_approval": [
+      "publish ad creatives",
+      "spend ad budget",
+      "sign a client"
+    ],
     "never_unsupervised_risks": [
       "Scraping leads outside the ICP",
       "Sending the wrong outreach to the wrong person",
@@ -83,9 +101,7 @@
       "Creating the wrong ads or spending money incorrectly"
     ]
   },
-
-  "differentiator": "Every other agency emails you leads. OROVA hands you conversations with people already ready to buy — and you've seen it work, because that's exactly how we reached you. The product demos itself (the prospect is a lead in OROVA's own AI machine before they pay), every lead is contacted in minutes and qualified, and it's AI-operated and luxury-focused — not a spray-and-pray generalist shop.",
-
+  "differentiator": "THE differentiator (only one, use it): every lead is phoned and qualified by AI within minutes, so the owner only ever drives to a real buyer. Angi sells the same lead to four competitors and hangs up; Houzz gives a profile; a local agency hands over a form fill. NONE of them call the homeowner in 5 minutes and screen them before the appointment. DO NOT pitch these (worthless to the buyer): 'we are AI-operated so our margins are better' (he does not care about our P&L), 'you are talking to our AI right now' (a party trick - he is buying kitchen leads), 'AI-generated creatives' (every agency claims this in 2026 - commodity).",
   "value_propositions": {
     "primary": "Stop chasing bad leads — only talk to qualified ones",
     "secondary": [
@@ -95,7 +111,6 @@
       "Your pipeline runs 24/7 without you lifting a finger"
     ]
   },
-
   "icp": {
     "description": "West Coast businesses whose deal economics make a ~$6,500-7,500/mo ALL-IN spend ($4K-$5K retainer + $2K-$2.5K ad spend) an obvious return. The client experiences one number — the all-in — not the retainer alone.",
     "qualifying_test": "Does ONE extra closed deal per month more than cover the ~$6,500-7,500 all-in monthly cost? If no, disqualify — the price objection cannot be closed and the lead is a waste of outreach.",
@@ -122,9 +137,28 @@
       "Inconsistent lead flow",
       "Slow follow-up causing missed opportunities",
       "No system to qualify leads before they reach the owner"
-    ]
+    ],
+    "early_adopter_qualifiers": {
+      "_note": "ALL FOUR must be true. These decide fit far more than the vertical does.",
+      "backlog_under_8_weeks": "THE qualifier. Booked solid = zero pain = disqualify, no matter how ideal they look.",
+      "w2_crew_on_payroll": "Fixed cost is the urgency engine. A solo operator can coast; a man with 6 employees cannot.",
+      "owner_runs_own_estimates": "So the wasted time is HIS, not an employee's.",
+      "already_paying_for_leads_and_unhappy": "Angi/HomeAdvisor/Thumbtack/LSA. Proves the wallet already opens for this job-to-be-done."
+    },
+    "pains": {
+      "_diagnose_first": "Ask before prescribing. Empty pipeline -> P1/P2. Drowning in bad leads -> P2 only, never P1.",
+      "pain_a_the_gap": {
+        "what": "Current job wraps in ~3 weeks and nothing is signed after it. Six guys on W-2 payroll (~$30-40K/mo) burning with no revenue; the next step is laying off a lead carpenter he trained for four years.",
+        "felt": "Episodic (quarterly) but existential - this is what creates URGENCY and closes deals.",
+        "prescribe": "Package 1 or Package 2 (he needs volume)."
+      },
+      "pain_b_the_wasted_saturday": {
+        "what": "Drove 40 minutes each way to measure, three hours that night writing the proposal, homeowner ghosted - or wanted a $60K remodel for $22K, or was collecting a third quote. Happened six times last month. Estimates happen nights and weekends because days are job sites.",
+        "felt": "WEEKLY - this is the wedge (clears the daily/weekly bar).",
+        "prescribe": "Package 2 ONLY. P1 makes this pain WORSE (more leads = more wasted Saturdays)."
+      }
+    }
   },
-
   "email_rules": {
     "framework": "Hook-Value-Ask",
     "max_words": 75,
@@ -156,7 +190,6 @@
       "Honor opt-out requests immediately"
     ]
   },
-
   "retell_pitch": {
     "description": "Used when prospects ask what makes OROVA different. Focus on the speed and automation of lead qualification.",
     "talking_points": [
@@ -167,14 +200,12 @@
       "Works 24/7, even when you're sleeping"
     ]
   },
-
   "case_studies": {
     "_note": "Owner rule (2026-07-11 interview): NEVER cite past clients, past results, past verticals, or tenure — not even placeholders. All claims are forward-looking (what OROVA will do for THEM) or system promises (what the machine verifiably does). The scripts below are the ONLY approved responses.",
     "when_asked_for_proof": "Due to our privacy policy we don't share client information — and that same privacy protects you: if we work together, your numbers never get shown to prospects who don't even end up buying.",
     "when_asked_am_i_your_first": "No — I've signed and worked with clients before. (Say no more than this. NEVER mention or identify Mark's previous agency, in any channel, ever.)",
     "promise_ceiling": "Reasonable, believable forward promises only — no guaranteed numbers on a deadline. Always anchor on the system promise: every lead called within minutes and qualified, so the client only speaks to people ready to move."
   },
-
   "compliance": {
     "calling_policy": {
       "rule": "Retell/cold-call lane may ONLY dial a business's published line (source: Yelp/Google Maps/website — Nova's existing phone source). NEVER wire in a personal-cell enrichment source for the automated dialer — the B2B TCPA exemption this lane relies on protects business-line calls soliciting a B2B service; it does NOT extend to a personal cell even for the same B2B pitch.",
@@ -182,11 +213,10 @@
       "source": "vault/20-ops/sessions/2026-07-05-owner-contact-research.md"
     }
   },
-
   "outreach": {
     "initial_email_framework": {
       "hook": "Mention something specific about their business — show you actually looked",
-      "value": "One sentence about what OROVA does that's relevant to them — for a first-touch email to a prospect with no case study yet, lead with Package 1 (Meta lead-gen + creatives); mention Package 2's AI qualification only if they ask 'what do you do with the leads.'",
+      "value": "Lead with the PAINKILLER, never growth. Growth framing ('we'll get you more leads') is a vitamin and competes head-on with Angi's $400 price anchor. Painkiller framing is: 'when your crew finishes the job they're on, what's next?' (Pain A) or 'you'll never drive 40 minutes to a tire-kicker again' (Pain B). DIAGNOSE BEFORE PRESCRIBING: empty pipeline -> P1 or P2; drowning in bad leads -> P2 ONLY (P1 makes that pain worse). This supersedes the earlier 'always lead with Package 1' guidance in profitability-plan 2.2 - see ADR-0013.",
       "ask": "Low-pressure invitation for a 10-15 minute chat",
       "example": "Hi {name},\n\nI was checking out {company} — really impressed by {specific_thing}.\n\nWe run Meta ads for {industry} businesses on the West Coast, and our AI calls and qualifies every lead within minutes — so you only ever talk to people ready to move.\n\nWould a 10-minute call be worth it to see if this fits {company}?\n\nNova @ OROVA"
     },
@@ -207,5 +237,44 @@
       ],
       "source": "Owner interview 2026-07-11 — vault/hermesclaw-orova/playbook/"
     }
+  },
+  "discovery_questions": {
+    "_rules": "Open-ended only. Ask about PAST behaviour, never a hypothetical purchase. Do not mention Meta, AI, or OROVA. Diagnose, do not pitch.",
+    "questions": [
+      "Walk me through how you got your last three jobs.",
+      "Tell me about the last estimate you drove out to that didn't close. What happened?",
+      "What does your schedule look like past [two months out]?",
+      "What have you tried to get more of the right kind of job, and how did that go?",
+      "What happens if the next job isn't signed when the current one wraps?"
+    ],
+    "kill_signals": [
+      "'We're booked into next spring' - no pain, end politely",
+      "All work is referral and he is happy",
+      "Cannot recall a specific wasted estimate",
+      "No payroll (solo operator) - no urgency"
+    ],
+    "validation_bar": "Of 20 calls: >=8 hitting (not booked solid) + (currently paying for leads) + (names a specific wasted estimate in the last 2 weeks) = problem is REAL. <=3 = wrong vertical, switch the lead vertical to med spas. The only real validation: >=2 agree to a PAID pilot."
+  },
+  "competition": {
+    "current_behavior": "Referrals + past clients + yard signs (50-80% of his work), Angi/HomeAdvisor/Thumbtack (~$300-800/mo), architect/designer referral partners, Houzz, Google Local Services Ads, Nextdoor, his own Instagram - and most often: nothing, he waits.",
+    "real_enemy_1_inertia": "Doing nothing and waiting. Awareness MAX, switching cost ZERO, satisfaction 'acceptable'. Costs $0, needs no decision, has worked for 15 years. This is what we lose to most often - 'let me think about it' means 'I'll wait and see if referrals cover it'. ONLY a deadline he already feels beats it: crew on payroll + backlog under 8 weeks.",
+    "real_enemy_2_price_anchor": "He pays Angi ~$400/mo; our all-in ask is ~$6,500. That is 16x. He does not compare us to an agency - he compares us to the number he already pays for what he thinks we sell. NEVER argue the price down. CHANGE THE UNIT: from cost-per-lead to cost-per-idle-week-of-payroll, or cost-per-wasted-Saturday. If the conversation stays on 'leads', Angi's price wins.",
+    "direct": [
+      "Remodeler-only marketing agencies (whole brand is contractors, 30+ case studies) - they beat us on the one thing we lack: PROOF",
+      "Local generalist agency at $1.5-3K/mo - beats us on price and on being handshake-able",
+      "Freelance Meta buyer on Upwork at $500-1.5K/mo - anchors price far below us",
+      "Exclusive per-lead vendors ($50-200/lead) - no retainer, structurally easier to say yes to"
+    ],
+    "indirect": [
+      "Angi/HomeAdvisor/Thumbtack - BEST BEACHHEAD: already paying, already unhappy, month-to-month so easy to leave",
+      "Google Local Services Ads - THREATENS OUR PREMISE: search intent beats interruption for this vertical; pay-per-lead with a Google-guaranteed badge",
+      "Houzz Pro ($65-400/mo) - the vertical platform; cheaper AND bundles estimating + project management",
+      "HIRING A PERSON INSTEAD - $6,500/mo IS a salary. He can hire an estimator he can point at. Founders always miss this one.",
+      "CRM/follow-up software (Jobber, JobNimbus, Buildertrend; $100-400/mo) - solves lead leakage at 3% of our price",
+      "Answering service / virtual receptionist ($200-500/mo) - solves 'I miss calls on the job site'",
+      "Raising prices / taking better jobs - fixes his margin problem with no leads at all",
+      "STRUCTURAL: Meta Advantage+ automation erodes the 'you need an expert to run Meta' premise every year"
+    ],
+    "our_only_moat": "Proof in one narrow niche. Five kitchen-remodeler case studies with real numbers makes us the obvious call for the sixth. No network effect, no data advantage, no lock-in - the AI qualification layer is copyable in about a month (Retell/Vapi/Bland are commodity APIs). We have a timing lead, not a moat."
   }
 }
