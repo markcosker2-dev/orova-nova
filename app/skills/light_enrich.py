@@ -222,6 +222,90 @@ MEDIA_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp', '.ico', '.
 CDN_PATTERNS = ['cloudinary', 'cloudfront', 'amazonaws', 'akamai', 'imgix', 'twimg', 'fbcdn', 'yelpcdn.com']
 
 
+# ─── AD-SIGNAL DETECTION ──────────────────────────────────────────
+# Nova cannot query the Meta Ad Library: the API serves political/issue ads
+# only, the UI is a React app needing a browser Render's free tier can't run,
+# and scraping Meta risks the ad account the entire business depends on
+# (vault/10-brain/traction-playbook.md :: "Why Nova can't scrape the Ad
+# Library"). The same signal is already sitting in the prospect's own homepage
+# HTML for free: a Meta Pixel proves they run Meta ads, and an Angi/HomeAdvisor/
+# Thumbtack listing proves they already PAY for leads and names the competitor
+# we would be displacing. Together those satisfy the ICP qualifier "already
+# paying for leads and unhappy" (ADR-0012).
+
+# Matched as DOMAINS, never as bare substrings: "angi" is a substring of
+# "changing", "ranging", "hanging" and "exchanging", so a substring match would
+# fire on ordinary marketing copy on nearly every remodeler site.
+_LEAD_MARKETPLACES = {
+    "angi": ("angi.com", "angieslist.com"),
+    "homeadvisor": ("homeadvisor.com",),
+    "thumbtack": ("thumbtack.com",),
+    "houzz": ("houzz.com",),
+    "porch": ("porch.com",),
+    "bark": ("bark.com",),
+}
+
+# Pixel-specific markers. Bare "connect.facebook.net" is deliberately NOT one:
+# that host also serves sdk.js for like buttons and social login, neither of
+# which means anyone is buying ads. fbevents.js / fbq( / the facebook.com/tr
+# noscript beacon are the pixel and nothing else.
+_META_PIXEL_MARKERS = ("fbevents.js", "fbq(", "facebook.com/tr")
+
+# Google ADS, not Google Analytics. A bare gtag() carrying a G- measurement ID
+# is plain analytics and sits on roughly half the web — flagging that as "runs
+# ads" would make the field worthless. AW- is the Ads conversion-ID prefix; it
+# is required to be quote/slash/equals-delimited and followed by real digits so
+# a CSS class like "aw-header" can't trip it.
+_GOOGLE_ADS_HOSTS = ("googleadservices.com", "googleads.g.doubleclick.net")
+_GOOGLE_ADS_RE = re.compile(r"""['"/=]aw-\d{6,}""")
+
+_LEADGEN_CTA_MARKERS = (
+    "free estimate", "free quote", "free consultation", "free design consultation",
+    "get a quote", "request a quote", "schedule a consultation",
+    "book a consultation", "get your free",
+)
+
+
+def detect_ad_signals(html: str) -> dict:
+    """Pure: read paid-marketing signals out of a page's HTML.
+
+    Returns {meta_pixel, google_ads, paying_for_leads, marketing_mature}, where
+    paying_for_leads lists WHICH marketplaces are referenced (the competitor to
+    displace). Never raises and never infers — a page that says nothing returns
+    all-falsey rather than a guess.
+    """
+    signals = {"meta_pixel": False, "google_ads": False,
+               "paying_for_leads": [], "marketing_mature": False}
+    if not html or not isinstance(html, str):
+        return signals
+
+    lower = html.lower()
+    signals["meta_pixel"] = any(m in lower for m in _META_PIXEL_MARKERS)
+    signals["google_ads"] = (any(h in lower for h in _GOOGLE_ADS_HOSTS)
+                             or bool(_GOOGLE_ADS_RE.search(lower)))
+    signals["paying_for_leads"] = sorted(
+        name for name, domains in _LEAD_MARKETPLACES.items()
+        if any(d in lower for d in domains)
+    )
+    signals["marketing_mature"] = any(c in lower for c in _LEADGEN_CTA_MARKERS)
+    return signals
+
+
+def ad_signals_json(html: str) -> str:
+    """detect_ad_signals serialized for the leads.ad_signals column.
+
+    Always returns JSON when a page was actually read, so "" keeps meaning
+    "never checked" and {...all false} means "checked, found nothing" — the
+    two are different facts and the column must not conflate them.
+    """
+    if not html:
+        return ""
+    try:
+        return json.dumps(detect_ad_signals(html))
+    except Exception:
+        return ""
+
+
 async def _fetch_page(url: str) -> Optional[Dict[str, str]]:
     """
     Fetch a page and return {"html": ..., "markdown": ...}.
@@ -960,6 +1044,9 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
         # Intelligently discover team and contact pages from the homepage
         homepage_data = await _fetch_page(real_website)
         if homepage_data and homepage_data.get("html"):
+            # Zero extra requests: the homepage HTML is already in hand.
+            if not lead.get("ad_signals"):
+                lead["ad_signals"] = ad_signals_json(homepage_data["html"])
             soup = BeautifulSoup(homepage_data["html"], "html.parser")
             domain_part = _get_domain(real_website)
             discovered_paths = set()

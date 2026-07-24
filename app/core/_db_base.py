@@ -48,6 +48,7 @@ CANONICAL_SCHEMA_SQL = """
         phone_verified INTEGER DEFAULT 0,
         owner_confidence INTEGER DEFAULT 0,
         evidence_json TEXT DEFAULT '',
+        ad_signals TEXT DEFAULT '',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
