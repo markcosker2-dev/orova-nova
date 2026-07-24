@@ -242,22 +242,42 @@ CDN_PATTERNS = ['cloudinary', 'cloudfront', 'amazonaws', 'akamai', 'imgix', 'twi
 #      leads, the exact opposite of the signal we want.
 # Anchoring to a URL host means only an actual link or badge counts. A text
 # mention is not evidence anyone is paying, and must not be treated as such.
-_LEAD_MARKETPLACES = {
+#
+# PAY-PER-LEAD marketplaces: the business buys leads here, so a link or badge
+# IS the ADR-0012 qualifier ("already paying for leads") and names the
+# competitor we would displace.
+_PAY_PER_LEAD_MARKETPLACES = {
     "angi": ("angi.com", "angieslist.com"),
     "homeadvisor": ("homeadvisor.com",),
     "thumbtack": ("thumbtack.com",),
-    "houzz": ("houzz.com",),
     "porch": ("porch.com",),
     "bark": ("bark.com",),
 }
-_LEAD_MARKETPLACE_RES = {
-    name: re.compile(
-        r"(?:https?:)?//(?:[a-z0-9-]+\.)*"
-        + r"(?:" + "|".join(re.escape(d) for d in domains) + r")"
-        + r"(?![a-z0-9.-])"
-    )
-    for name, domains in _LEAD_MARKETPLACES.items()
+
+# DIRECTORY / portfolio platforms: a profile is normally FREE, so a link
+# proves presence, not spend. Separated after live-testing 9 real California
+# remodeler homepages on 2026-07-25 — houzz appeared on 8 of 9, i.e. almost no
+# discriminating power, and while it was pooled with the marketplaces it
+# inflated "paying_for_leads" to 8/9 and made the ICP qualifier meaningless.
+# Kept as context, deliberately NOT counted as paying.
+_DIRECTORY_PLATFORMS = {
+    "houzz": ("houzz.com",),
 }
+
+
+def _host_res(groups: dict) -> dict:
+    return {
+        name: re.compile(
+            r"(?:https?:)?//(?:[a-z0-9-]+\.)*"
+            + r"(?:" + "|".join(re.escape(d) for d in domains) + r")"
+            + r"(?![a-z0-9.-])"
+        )
+        for name, domains in groups.items()
+    }
+
+
+_PAY_PER_LEAD_RES = _host_res(_PAY_PER_LEAD_MARKETPLACES)
+_DIRECTORY_RES = _host_res(_DIRECTORY_PLATFORMS)
 
 # Pixel-specific markers. Bare "connect.facebook.net" is deliberately NOT one:
 # that host also serves sdk.js for like buttons and social login, neither of
@@ -278,6 +298,11 @@ _META_PIXEL_BEACON_RE = re.compile(r"facebook\.com/tr/?\?")
 _GOOGLE_ADS_HOSTS = ("googleadservices.com", "googleads.g.doubleclick.net")
 _GOOGLE_ADS_RE = re.compile(r"""['"/=]aw-\d{6,}""")
 
+# Lead-gen CTA. Live-tested 2026-07-25: this fired on 9 of 9 real remodeler
+# homepages, so its PRESENCE carries almost no information — every contractor
+# offers a free estimate. Kept because its ABSENCE is still meaningful (a site
+# with no capture mechanism at all is not running acquisition), but it must
+# never be treated as a qualifying signal on its own.
 _LEADGEN_CTA_MARKERS = (
     "free estimate", "free quote", "free consultation", "free design consultation",
     "get a quote", "request a quote", "schedule a consultation",
@@ -288,13 +313,16 @@ _LEADGEN_CTA_MARKERS = (
 def detect_ad_signals(html: str) -> dict:
     """Pure: read paid-marketing signals out of a page's HTML.
 
-    Returns {meta_pixel, google_ads, paying_for_leads, marketing_mature}, where
-    paying_for_leads lists WHICH marketplaces are referenced (the competitor to
-    displace). Never raises and never infers — a page that says nothing returns
-    all-falsey rather than a guess.
+    Returns {meta_pixel, google_ads, paying_for_leads, directories,
+    marketing_mature}. `paying_for_leads` names which PAY-PER-LEAD marketplaces
+    are referenced — the competitor to displace, and the ADR-0012 qualifier.
+    `directories` names free-profile platforms separately, because a Houzz
+    profile proves presence, not spend. Never raises and never infers — a page
+    that says nothing returns all-falsey rather than a guess.
     """
     signals = {"meta_pixel": False, "google_ads": False,
-               "paying_for_leads": [], "marketing_mature": False}
+               "paying_for_leads": [], "directories": [],
+               "marketing_mature": False}
     if not html or not isinstance(html, str):
         return signals
 
@@ -304,10 +332,34 @@ def detect_ad_signals(html: str) -> dict:
     signals["google_ads"] = (any(h in lower for h in _GOOGLE_ADS_HOSTS)
                              or bool(_GOOGLE_ADS_RE.search(lower)))
     signals["paying_for_leads"] = sorted(
-        name for name, rx in _LEAD_MARKETPLACE_RES.items() if rx.search(lower)
+        name for name, rx in _PAY_PER_LEAD_RES.items() if rx.search(lower)
+    )
+    signals["directories"] = sorted(
+        name for name, rx in _DIRECTORY_RES.items() if rx.search(lower)
     )
     signals["marketing_mature"] = any(c in lower for c in _LEADGEN_CTA_MARKERS)
     return signals
+
+
+# Derived view over the stored facts — never persisted, per the
+# single-source-of-truth rule (store facts, compute views). This is what turns
+# a bag of booleans into a call order.
+#   hot   — proven Meta advertiser AND proven lead buyer. The exact ICP:
+#           "already paying for leads and unhappy" (ADR-0012). 2 of 9 on the
+#           live 2026-07-25 sample.
+#   warm  — one of the two, not both.
+#   cold  — neither; no evidence of paid acquisition.
+#   None  — never checked. Deliberately distinct from "cold".
+def ad_signal_tier(signals: Optional[dict]) -> Optional[str]:
+    if not signals or not isinstance(signals, dict):
+        return None
+    advertises = bool(signals.get("meta_pixel") or signals.get("google_ads"))
+    buys_leads = bool(signals.get("paying_for_leads"))
+    if advertises and buys_leads:
+        return "hot"
+    if advertises or buys_leads:
+        return "warm"
+    return "cold"
 
 
 def ad_signals_json(html: str) -> str:

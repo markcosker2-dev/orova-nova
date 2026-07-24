@@ -10,7 +10,8 @@ ICP qualifier "already paying for leads" instead of leaving it blank.
 """
 import json
 
-from app.skills.light_enrich import detect_ad_signals, ad_signals_json
+from app.skills.light_enrich import (detect_ad_signals, ad_signals_json,
+                                     ad_signal_tier)
 
 
 # ─── Meta Pixel ──────────────────────────────────────────────────
@@ -84,10 +85,21 @@ def test_angi_badge_names_the_competitor():
 
 def test_multiple_marketplaces_all_recorded_sorted():
     html = """<footer>
-      <a href="https://www.houzz.com/pro/acme">Houzz</a>
+      <a href="https://www.thumbtack.com/ca/acme">Thumbtack</a>
       <a href="https://www.homeadvisor.com/rated.Acme.12345.html">HomeAdvisor</a>
     </footer>"""
-    assert detect_ad_signals(html)["paying_for_leads"] == ["homeadvisor", "houzz"]
+    assert detect_ad_signals(html)["paying_for_leads"] == ["homeadvisor", "thumbtack"]
+
+
+def test_houzz_is_a_directory_not_a_lead_purchase():
+    # LIVE FINDING (2026-07-25, 9 real CA remodeler homepages): houzz appeared
+    # on 8 of 9. Pooled with the pay-per-lead marketplaces it pushed
+    # "paying_for_leads" to 8/9 and made the ADR-0012 qualifier meaningless.
+    # A Houzz profile is free — it proves presence, not spend.
+    html = '<a href="https://www.houzz.com/pro/acme-remodeling">See our Houzz</a>'
+    signals = detect_ad_signals(html)
+    assert signals["paying_for_leads"] == []
+    assert signals["directories"] == ["houzz"]
 
 
 def test_angieslist_legacy_domain_counts_as_angi():
@@ -154,7 +166,8 @@ def test_empty_and_non_string_input_never_raises():
     for bad in ("", None, 12345, b"<html>", []):
         signals = detect_ad_signals(bad)
         assert signals == {"meta_pixel": False, "google_ads": False,
-                           "paying_for_leads": [], "marketing_mature": False}
+                           "paying_for_leads": [], "directories": [],
+                           "marketing_mature": False}
 
 
 def test_detector_never_fabricates_on_a_bare_page():
@@ -177,6 +190,7 @@ def test_full_signal_page_reads_every_field():
         "meta_pixel": True,
         "google_ads": True,
         "paying_for_leads": ["thumbtack"],
+        "directories": [],
         "marketing_mature": True,
     }
 
@@ -196,3 +210,38 @@ def test_unread_page_stays_empty_string_not_all_false_json():
     assert ad_signals_json("") == ""
     assert ad_signals_json(None) == ""
     assert json.loads(ad_signals_json("<html>x</html>"))["meta_pixel"] is False
+
+
+# ─── Derived tier (computed view, never stored) ──────────────────
+
+def test_tier_hot_requires_both_advertising_and_buying_leads():
+    # The ICP: proven Meta advertiser AND proven lead buyer. On the live
+    # 2026-07-25 sample this was 2 of 9 — the two worth calling first.
+    html = ('<script src="https://connect.facebook.net/en_US/fbevents.js"></script>'
+            '<a href="https://www.angi.com/companylist/us/ca/acme.htm">Angi</a>')
+    assert ad_signal_tier(detect_ad_signals(html)) == "hot"
+
+
+def test_tier_warm_when_only_one_side_is_present():
+    pixel_only = '<script src="https://connect.facebook.net/en_US/fbevents.js"></script>'
+    angi_only = '<a href="https://www.angi.com/companylist/us/ca/acme.htm">Angi</a>'
+    assert ad_signal_tier(detect_ad_signals(pixel_only)) == "warm"
+    assert ad_signal_tier(detect_ad_signals(angi_only)) == "warm"
+
+
+def test_tier_cold_for_a_brochure_site():
+    assert ad_signal_tier(detect_ad_signals("<html><body>Acme Homes</body></html>")) == "cold"
+
+
+def test_houzz_alone_does_not_make_a_lead_warm():
+    # The whole point of splitting directories out: 8/9 sites had houzz, so if
+    # it counted, almost every prospect would rank warm and the tier would be
+    # as useless as the raw flag was.
+    html = '<a href="https://www.houzz.com/pro/acme">Houzz</a><p>Free estimate</p>'
+    assert ad_signal_tier(detect_ad_signals(html)) == "cold"
+
+
+def test_tier_none_means_never_checked_not_cold():
+    # "" in the column means nobody looked. That must never read as "no ads".
+    assert ad_signal_tier(None) is None
+    assert ad_signal_tier({}) is None
