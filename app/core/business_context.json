@@ -42,7 +42,9 @@
     "onboarding": "After the Google Meet, Mark sends agreement + invoice, then an onboarding call to get added to the client's ad manager and CRM.",
     "refund_policy": "Partial refunds only — never the full amount. The system build/setup (ad account, creatives, automation, CRM wiring) is non-refundable; a refund returns the unused portion of the retainer minus the build already delivered.",
     "margin_target": "90%+ realistic operating margin at current vendor pricing (see vault/10-brain/profitability-plan.md §3); 75-80% retained as the conservative worst-case floor for external/investor conversations. Ad spend is not an OROVA cost.",
-    "pricing_note": "6-month tier corrected 2026-07-04 to $18K (P1) / $24K (P2) so longer commitments are cheaper per month ($3,000/$4,000 vs the 3-month $3,333/$4,333)."
+    "pricing_note": "6-month tier corrected 2026-07-04 to $18K (P1) / $24K (P2) so longer commitments are cheaper per month ($3,000/$4,000 vs the 3-month $3,333/$4,333).",
+    "first_client_pilot": "Client #1 buys PROOF, not revenue. Offer $1,500-$2,000/mo for a 60-day pilot (or performance-tied) in exchange for a testimonial + case-study rights + permission to quote results. Standard P1/P2 pricing resumes from client #2, when a real case study replaces the placeholder and does the selling. Holding the line at $4K with zero case studies is how pre-revenue agencies stay at $0.",
+    "all_in_framing": "Always quote and think in ALL-IN terms: retainer + recommended ad spend = ~$6,500-$7,500/mo. The prospect writes checks totalling that number; 'the ad spend is separate' is an accounting fact, not a buying fact, and must never be used to make the ask sound smaller than it is."
   },
 
   "sales_funnel": {
@@ -95,17 +97,23 @@
   },
 
   "icp": {
-    "description": "Luxury and premium businesses on the US West Coast that can afford $4K-$5K/mo for marketing plus $2K-$2.5K/mo ad spend.",
+    "description": "West Coast businesses whose deal economics make a ~$6,500-7,500/mo ALL-IN spend ($4K-$5K retainer + $2K-$2.5K ad spend) an obvious return. The client experiences one number — the all-in — not the retainer alone.",
+    "qualifying_test": "Does ONE extra closed deal per month more than cover the ~$6,500-7,500 all-in monthly cost? If no, disqualify — the price objection cannot be closed and the lead is a waste of outreach.",
     "primary_verticals": [
-      "Luxury / premium brands (the core focus)",
-      "Exotic and luxury automotive (dealers, rentals, tuning, detailing, storage, restoration)",
-      "Custom home builders / high-end remodeling",
-      "Luxury real estate agents (individual top producers)"
+      "Custom home builders / high-end remodelers (LEAD vertical — a $100K+ job grosses $20-50K, so a single extra job pays 4-7 months of retainer; owner-operated, already buys marketing, proven Meta lead-gen)",
+      "Med spas / aesthetics / high-ticket elective medical (1-2 extra patients/mo covers the retainer; the most-proven Meta lead-gen vertical, owner/doctor decides alone)",
+      "Luxury real estate agents (individual top producers ONLY — score for production volume first; $4K/mo is a large bite of a solo agent's P&L)"
     ],
     "secondary_verticals": [
+      "Exotic and luxury automotive (OPPORTUNISTIC ONLY — unit economics work (~$10-25K gross/car) but a $200K buyer rarely starts on a Meta lead form; work inbound and existing leads, do not lead the hunt rotation with it)",
       "High-ticket service providers",
       "Private aviation and yacht charter (opportunistic only — decision-makers here are typically family offices/brokerages/fleet operators, not a single owner reachable by cold email; do not hunt these as a default rotation target)",
       "Premium professional services"
+    ],
+    "disqualifiers": [
+      "General auto repair / transmission / oil-change shops — ~$400 gross per job means ~16 extra jobs/mo just to break even, and they do not have $6,500/mo",
+      "Franchised new-car dealerships — OEM co-op budgets and corporate marketing mandates block an independent agency",
+      "Any business already under contract with a marketing agency unless they volunteer dissatisfaction"
     ],
     "region": "West Coast US (CA, OR, WA, NV, AZ — all states, no specific city focus)",
     "budget_minimum_monthly_usd": 4000,

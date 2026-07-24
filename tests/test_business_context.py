@@ -74,9 +74,23 @@ def test_hunt_rotation_excludes_aviation_and_yachting():
     assert "yacht" not in joined
 
 
-def test_hunt_rotation_has_auto_subniches_and_core_verticals():
+def test_hunt_rotation_leads_with_homes_and_demotes_auto():
+    """ADR-0012: the rotation is weighted by ENTRY COUNT — worker.py picks with
+    random.choice(), uniformly — so composition IS the strategy. Custom homes /
+    remodeling leads (one $100K+ job pays 4-7 months of retainer); exotic auto
+    drops to opportunistic (a $200K buyer rarely starts on a Meta lead form)."""
     from app.worker import DEFAULT_HUNT_NICHES
-    joined = " | ".join(DEFAULT_HUNT_NICHES)
-    for expected in ("paint protection film", "ceramic coating", "car wrap",
-                     "custom home builder", "luxury real estate agent"):
+    joined = " | ".join(DEFAULT_HUNT_NICHES).lower()
+    # every core vertical stays reachable
+    for expected in ("custom home builder", "med spa", "luxury real estate agent",
+                     "exotic car dealer"):
         assert expected in joined, f"missing rotation niche: {expected}"
+
+    def _count(keys):
+        return len([n for n in DEFAULT_HUNT_NICHES if any(k in n.lower() for k in keys)])
+
+    homes = _count(("home", "remodel", "kitchen", "bathroom"))
+    auto = _count(("car ", "car'", "auto", "detailing", "car dealer"))
+    assert homes >= len(DEFAULT_HUNT_NICHES) / 2, (
+        f"homes/remodel must LEAD the rotation, got {homes}/{len(DEFAULT_HUNT_NICHES)}")
+    assert auto < homes, f"exotic auto must be opportunistic, got auto={auto} vs homes={homes}"
