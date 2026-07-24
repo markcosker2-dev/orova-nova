@@ -10,6 +10,8 @@ from typing import Optional
 from duckduckgo_search import DDGS
 from bs4 import BeautifulSoup
 
+from app.skills.light_enrich import ad_signals_json
+
 logger = logging.getLogger(__name__)
 
 # Shared httpx client — reuse across all enrichment calls instead of creating per-call
@@ -289,7 +291,6 @@ async def _scrape_website(url: str) -> dict:
                 # owner+email+phone are all set and then never fetches a
                 # homepage at all — which is exactly the best leads.
                 if not result["ad_signals"]:
-                    from app.skills.light_enrich import ad_signals_json
                     result["ad_signals"] = ad_signals_json(text)
 
                 # Extract ALL phones using enhanced extraction (tel: links, data attrs, extended regex)

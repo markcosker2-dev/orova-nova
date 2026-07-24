@@ -233,9 +233,15 @@ CDN_PATTERNS = ['cloudinary', 'cloudfront', 'amazonaws', 'akamai', 'imgix', 'twi
 # we would be displacing. Together those satisfy the ICP qualifier "already
 # paying for leads and unhappy" (ADR-0012).
 
-# Matched as DOMAINS, never as bare substrings: "angi" is a substring of
-# "changing", "ranging", "hanging" and "exchanging", so a substring match would
-# fire on ordinary marketing copy on nearly every remodeler site.
+# Matched as HOSTS INSIDE A URL, never as bare substrings. Two separate traps:
+#   1. "angi" is a substring of "changing"/"ranging"/"hanging"/"exchanging" —
+#      ordinary remodeler copy, so the bare name is unusable;
+#   2. even "angi.com" as a plain substring over-fires. It matches the longer
+#      host "notangi.com", and it matches prose like "unlike angi.com, we
+#      don't sell your info" — which is a business saying it does NOT pay for
+#      leads, the exact opposite of the signal we want.
+# Anchoring to a URL host means only an actual link or badge counts. A text
+# mention is not evidence anyone is paying, and must not be treated as such.
 _LEAD_MARKETPLACES = {
     "angi": ("angi.com", "angieslist.com"),
     "homeadvisor": ("homeadvisor.com",),
@@ -244,12 +250,25 @@ _LEAD_MARKETPLACES = {
     "porch": ("porch.com",),
     "bark": ("bark.com",),
 }
+_LEAD_MARKETPLACE_RES = {
+    name: re.compile(
+        r"(?:https?:)?//(?:[a-z0-9-]+\.)*"
+        + r"(?:" + "|".join(re.escape(d) for d in domains) + r")"
+        + r"(?![a-z0-9.-])"
+    )
+    for name, domains in _LEAD_MARKETPLACES.items()
+}
 
 # Pixel-specific markers. Bare "connect.facebook.net" is deliberately NOT one:
 # that host also serves sdk.js for like buttons and social login, neither of
-# which means anyone is buying ads. fbevents.js / fbq( / the facebook.com/tr
-# noscript beacon are the pixel and nothing else.
-_META_PIXEL_MARKERS = ("fbevents.js", "fbq(", "facebook.com/tr")
+# which means anyone is buying ads.
+_META_PIXEL_MARKERS = ("fbevents.js", "fbq(")
+# The noscript beacon, which must keep its query separator. Bare
+# "facebook.com/tr" is a substring of ordinary page links like
+# facebook.com/treehouseremodeling or facebook.com/tributes — and a business
+# linking its own Facebook page is the single most common thing on these
+# sites, so the loose form would have fired almost everywhere.
+_META_PIXEL_BEACON_RE = re.compile(r"facebook\.com/tr/?\?")
 
 # Google ADS, not Google Analytics. A bare gtag() carrying a G- measurement ID
 # is plain analytics and sits on roughly half the web — flagging that as "runs
@@ -280,12 +299,12 @@ def detect_ad_signals(html: str) -> dict:
         return signals
 
     lower = html.lower()
-    signals["meta_pixel"] = any(m in lower for m in _META_PIXEL_MARKERS)
+    signals["meta_pixel"] = (any(m in lower for m in _META_PIXEL_MARKERS)
+                             or bool(_META_PIXEL_BEACON_RE.search(lower)))
     signals["google_ads"] = (any(h in lower for h in _GOOGLE_ADS_HOSTS)
                              or bool(_GOOGLE_ADS_RE.search(lower)))
     signals["paying_for_leads"] = sorted(
-        name for name, domains in _LEAD_MARKETPLACES.items()
-        if any(d in lower for d in domains)
+        name for name, rx in _LEAD_MARKETPLACE_RES.items() if rx.search(lower)
     )
     signals["marketing_mature"] = any(c in lower for c in _LEADGEN_CTA_MARKERS)
     return signals
@@ -302,7 +321,12 @@ def ad_signals_json(html: str) -> str:
         return ""
     try:
         return json.dumps(detect_ad_signals(html))
-    except Exception:
+    except Exception as e:
+        # Falling back to "" collapses this into "never checked", which is the
+        # one conflation this function exists to prevent — so it must not be
+        # silent. detect_ad_signals returns only bools and a list[str], so
+        # reaching here means something genuinely unexpected.
+        logger.warning(f"[AD-SIGNALS] Serialization failed, recording as unchecked: {e}")
         return ""
 
 

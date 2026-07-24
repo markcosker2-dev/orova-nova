@@ -29,6 +29,15 @@ def test_meta_pixel_detected_from_noscript_beacon():
     assert detect_ad_signals(html)["meta_pixel"] is True
 
 
+def test_own_facebook_page_link_is_not_a_pixel():
+    # FALSE POSITIVE GUARD: bare "facebook.com/tr" is a substring of ordinary
+    # page URLs like /treehouseremodeling and /tributes — and linking your own
+    # Facebook page is the most common thing on a contractor site, so the loose
+    # form fired almost everywhere. The beacon must keep its query separator.
+    html = '<a href="https://www.facebook.com/treehouseremodeling">Follow us</a>'
+    assert detect_ad_signals(html)["meta_pixel"] is False
+
+
 def test_facebook_social_plugin_is_not_a_pixel():
     # FALSE POSITIVE GUARD: connect.facebook.net also serves sdk.js for like
     # buttons and social login. A like button is not an ad buyer.
@@ -93,6 +102,32 @@ def test_ordinary_copy_containing_angi_substring_is_not_a_marketplace():
     # would flag essentially every prospect as "already paying for leads".
     html = """<p>We specialize in changing tired kitchens into showpieces,
       hanging custom cabinetry, and remodels ranging from $80,000 upward.</p>"""
+    assert detect_ad_signals(html)["paying_for_leads"] == []
+
+
+def test_marketplace_subdomain_still_counts():
+    html = '<a href="https://pro.angi.com/dashboard">Our Angi profile</a>'
+    assert detect_ad_signals(html)["paying_for_leads"] == ["angi"]
+
+
+def test_protocol_relative_link_still_counts():
+    html = '<img src="//www.homeadvisor.com/badge/screened-approved.png"/>'
+    assert detect_ad_signals(html)["paying_for_leads"] == ["homeadvisor"]
+
+
+def test_longer_host_ending_in_a_marketplace_domain_does_not_fire():
+    # FALSE POSITIVE GUARD: a plain "angi.com" substring check also matches the
+    # unrelated host notangi.com. The host match must be left-anchored.
+    html = '<a href="https://notangi.com/blog">Not a marketplace</a>'
+    assert detect_ad_signals(html)["paying_for_leads"] == []
+
+
+def test_prose_mention_of_a_marketplace_is_not_evidence_of_paying():
+    # FALSE POSITIVE GUARD, and the one that would have been backwards: a
+    # business writing "unlike angi.com, we don't sell your info" is saying it
+    # does NOT pay for leads. A substring match would have recorded the exact
+    # opposite of the truth and fed it to the ICP qualifier.
+    html = "<p>Unlike angi.com and homeadvisor.com, we never sell your information.</p>"
     assert detect_ad_signals(html)["paying_for_leads"] == []
 
 
