@@ -227,10 +227,11 @@
       "the_pilot": "Here's why I'm calling though - Mark's taking on one or two builders to run this for free for two weeks. You don't pay us anything. You'd cover the ad budget, around seven hundred and fifty dollars, and that goes straight to Meta, not to us. If it doesn't put real appointments on your calendar, you owe nothing and we stop."
     },
     "step_4_the_ask": {
-      "ask": "Would you be open to ten minutes with Mark later this week to see if you're a fit?",
+      "ask": "Would you be open to ten minutes with Mark? He's usually free first thing in the morning - would early work for you, or is later in the afternoon better?",
       "_no_slot_variable": "Do NOT name specific times - no slot variable exists and a literal placeholder on the call is fatal. Ask open ('later this week', 'sometime this week'), then let them state a time and capture it.",
       "on_yes": "Capture their preferred day/time IN THEIR WORDS + best email. Confirm the email back letter by letter if unclear. Send the booking link if one is configured; otherwise flag for Mark to send the invite manually.",
-      "fallback_no_link": "NO BOOKING LINK IS CONFIGURED YET. Never end a yes without capturing best email + their two preferred times, and flagging the lead for Mark. A yes with no capture is a lost deal."
+      "fallback_no_link": "NO BOOKING LINK IS CONFIGURED YET. Never end a yes without capturing best email + their two preferred times, and flagging the lead for Mark. A yes with no capture is a lost deal.",
+      "_timezone_steer": "Mark is in the Philippines (UTC+8), 15 hours ahead of Pacific. Only US 6-9am PT and 4-5pm PT are workable for him. Steer toward 'first thing in the morning' (best - contractors are up early and it is Mark's evening) or 'late afternoon'. NEVER offer US midday. The booking calendar should enforce this too."
     },
     "objection_handling": {
       "what_does_it_cost": "The pilot itself is free - you'd only cover the ad budget, about seven-fifty, and that goes to Meta directly. If it works and you want to keep going, Mark will walk you through pricing on the call - no obligation either way.",
@@ -353,5 +354,19 @@
     "rule_of_thumb": "If a homeowner asked 'can I visit that kitchen?' and the answer is no, it cannot run as portfolio work.",
     "asset_intake": "Onboarding MUST collect 10-20 real project photos. If the client has none usable, that is a delivery risk to raise BEFORE taking them on - not a gap to fill with generated work.",
     "authenticity_note": "For remodeling specifically, authentic local before/after often outperforms polished generic video - the homeowner is buying proof of local work, not production value. Use Higgsfield to make their real work look excellent, not to invent work."
+  },
+  "operating_constraints": {
+    "founder_location": "Mark operates from the Philippines (UTC+8). California prospects are UTC-7 (PDT). Mark is 15 hours AHEAD of the prospect.",
+    "why_retell_is_mandatory": "Dialling US numbers from the Philippines on normal telephony is prohibitively expensive, and US business hours fall in Mark's overnight. Retell is not a convenience here - it is the only economical way to run US outbound. Nova owns ALL cold dialling.",
+    "meeting_window": {
+      "_problem": "Retell books meetings during US business hours, which is the middle of Mark's night. Unconstrained, the calendar will fill with 3am calls he cannot take.",
+      "_fix": "Constrain the booking calendar to slots that are civilised in BOTH zones.",
+      "preferred_us_pacific": "6:00-9:00am PT  ->  9:00pm-midnight PH (same day). BEST slot: contractors are up early, before job sites get busy.",
+      "secondary_us_pacific": "4:00-5:00pm PT  ->  7:00-8:00am PH (next day).",
+      "never": "10:00am-3:00pm PT = 1:00-6:00am PH. Do not offer these.",
+      "action": "Set Cal.com / Calendly availability to the two windows above ONLY. The calendar enforces this so Nova cannot book an unusable slot."
+    },
+    "call_windows": "Retell dials 9am-5pm in the PROSPECT's local timezone (unchanged - this is a TCPA/courtesy rule, not a Mark-availability rule). Retell runs while Mark sleeps; that is the point.",
+    "cost_note": "The conversations that actually matter - the sales meetings - run on Google Meet over the internet, so they cost nothing regardless of geography. Only the cold DIALLING is expensive, and that is exactly what Retell handles. If Mark ever needs to dial personally (a hot lead, debugging a script), VoIP (Skype credit, Google Voice, Twilio) is cents per minute - the cost barrier applies to traditional international telephony, not VoIP."
   }
 }
