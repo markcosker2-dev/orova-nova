@@ -26,15 +26,33 @@ Rejected channels (legal grounds, ADR-0006): LinkedIn automation (ToS), cold
 SMS (TCPA). Next in queue: CAN-SPAM footer, Telegram outcome-capture,
 dossier v1 (stage-gated), M2 of ADR-0005.
 
-## ICP decision (owner, 2026-07-13)
+## 🎯 ICP decision — RE-RANKED (owner, 2026-07-24, [[0012-icp-rerank-and-pilot-pricing|ADR-0012]])
 
-**The ICP stays MIXED** — automotive + custom home builders + luxury RE +
-high-ticket services, per Mark's explicit call on 2026-07-13. The 07-12
-"automotive-only" narrowing proposal is **rejected**; `business_context.json`
-and the 15-niche `DEFAULT_HUNT_NICHES` rotation are correct as-is. The one
-blocker to on-ICP leads: **`TARGET_NICHE` on Render still holds a stale generic
-value that overrides the curated rotation** (confirmed by a live hunt 07-13 —
-returned generic auto shops). Owner must delete it or set it deliberately.
+**Supersedes the 2026-07-13 "ICP stays MIXED" call.** The mix is now **ranked by
+deal economics**, using one filter: *does ONE extra closed deal per month more than
+cover the ~$6,500–7,500 all-in monthly cost?*
+
+1. **Custom home builders / high-end remodelers — LEAD** (one $100K+ job grosses
+   $20–50K → pays 4–7 months of retainer)
+2. **Med spas / aesthetics** (1–2 extra patients/mo covers it; most-proven Meta vertical)
+3. **Luxury RE top producers only**
+
+**Exotic/luxury auto → opportunistic only** (economics work, but a $200K buyer
+rarely starts on a Meta lead form). `DEFAULT_HUNT_NICHES` re-weighted from **50%
+auto** to **~50% homes / 21% med spa / 14% RE / 14% auto** — note the hunt samples
+with `random.choice()`, so *entry count is the weighting*.
+
+**Disqualify on sight:** general auto repair (~$400/job → ~16 jobs/mo to break
+even) · franchised new-car dealers (OEM co-op mandates) · already under agency contract.
+
+**Pricing:** always quote **ALL-IN ~$6.5–7.5K**; client #1 is a **$1,500–2,000/mo
+60-day pilot** that buys a case study, not revenue.
+
+`TARGET_NICHE` is **not set** (owner-confirmed 2026-07-24), so the curated rotation
+is live — the generic auto-repair rows in the pipeline are legacy restored data.
+
+> ⚠️ This ranking is inference from deal economics, **not** customer evidence —
+> zero prospect conversations have happened. ~20 calls with remodelers settles it.
 
 ## Where things stand (2026-07-10)
 

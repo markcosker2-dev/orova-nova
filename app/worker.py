@@ -92,23 +92,35 @@ MAX_DAILY_COST = 5.0            # $5.00 daily safety cap
 # offices/brokerages, not owners reachable by cold email — still huntable
 # via an explicit TARGET_NICHE override.
 DEFAULT_HUNT_NICHES = [
-    # Exotic / luxury automotive (sub-niches)
-    'exotic car dealer california',
-    'luxury car dealership california',
-    'exotic car rental california',
-    'high end car restoration california',
-    'ceramic coating auto detailing california',
-    'paint protection film installer california',
-    'luxury car wrap shop california',
-    # Custom homes / high-end remodeling
+    # Re-ranked 2026-07-23 (ADR-0012) by the qualifying test: does ONE extra
+    # closed deal per month more than cover the ~$6.5-7.5K all-in monthly cost?
+    #
+    # LEAD vertical — custom homes / high-end remodeling. A $100K+ job grosses
+    # $20-50K, so a single extra job pays 4-7 months of retainer; the price
+    # objection dies on the call. Owner-operated, already buys marketing.
+    # NOTE: the hunt picks with random.choice() — UNIFORMLY. So the number of
+    # entries per vertical IS the weighting. Composition below is deliberate:
+    # ~50% homes/remodel, ~20% med spa, ~15% luxury RE, ~15% auto.
     'custom home builder california',
     'luxury home remodeling california',
     'high end kitchen remodeler california',
-    # Luxury real estate (individual top producers) & high-ticket services
+    'high end bathroom remodeler california',
+    'custom home builder los angeles',
+    'luxury home builder san diego',
+    'whole home remodel contractor california',
+    # SECOND (~20%) — med spa / aesthetics: the most-proven Meta lead-gen
+    # economics (1-2 extra patients/mo covers the retainer); the owner decides.
+    'luxury med spa california',
+    'medical spa california',
+    'cosmetic surgery practice california',
+    # THIRD (~15%) — luxury real estate top producers & premium design.
     'luxury real estate agent california',
     'luxury interior designer california',
-    'high end landscape design california',
-    'luxury med spa california',
+    # OPPORTUNISTIC (~15%) — exotic/luxury automotive. Unit economics work
+    # (~$10-25K gross per car) but a $200K buyer rarely starts on a Meta lead
+    # form. Was 7 of 14 entries (50%) before ADR-0012; now 2 of 14.
+    'exotic car dealer california',
+    'ceramic coating auto detailing california',
 ]
 
 

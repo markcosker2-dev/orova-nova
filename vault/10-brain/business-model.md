@@ -28,6 +28,21 @@ New clients start on a **1-month trial**, then choose 1 / 3 / 6 months. Payment
 by invoice via **Wise transfer or ACH**. Ad spend is paid by the client **directly
 to Meta**.
 
+> **Always quote and think ALL-IN: ~$6,500–7,500/mo** (retainer + recommended ad
+> spend). The client writes checks totalling that number and asks "what do I get
+> for $6,500?" — never "what do I get for $4,000?". *"The ad spend is separate"* is
+> an accounting fact, not a buying fact; using it makes the ask sound 60–85%
+> smaller than it is. (ADR-0012)
+
+### Client #1 — pilot pricing (ADR-0012)
+
+**Client #1 buys proof, not revenue.** With zero case studies, offer
+**$1,500–2,000/mo for a 60-day pilot** (or performance-tied) in exchange for a
+testimonial, case-study rights, and permission to quote results. Standard P1/P2
+pricing resumes at **client #2**, once a real case study replaces the placeholder
+and does the selling. Holding the line at $4K with nothing to show is how
+pre-revenue agencies stay at $0. *(Canonical package prices above are unchanged.)*
+
 | Term | Package 1 | Package 2 |
 |---|---|---|
 | 1 month | $4,000 | $5,000 |
@@ -41,14 +56,35 @@ Full operating detail — sales funnel, delivery, automation/approval split — 
 
 ## ICP
 
-Luxury/premium West Coast businesses (CA, OR, WA, NV, AZ) that can afford
-$6–7.5K/mo all-in. **Narrowed 2026-07-10 (owner-approved, [[profitability-plan]]
-§2.1) to three primary verticals that fit the cold-outreach-to-owner motion:**
-exotic/luxury automotive (dealers, detailing/PPF/wrap, restoration), custom
-home builders / high-end remodeling, and luxury real estate agents (individual
-top producers). Private aviation & yacht charter moved to opportunistic-only —
-their decision-makers are family offices/brokerages, not owners reading cold
-email.
+**Re-ranked 2026-07-24 by deal economics ([[0012-icp-rerank-and-pilot-pricing|ADR-0012]]).**
+The filter that decides everything:
+
+> **Does ONE extra closed deal per month more than cover the ~$6,500–7,500 all-in
+> monthly cost?** If no, disqualify — the price objection can't be closed.
+
+West Coast (CA, OR, WA, NV, AZ), ranked:
+
+| # | Vertical | Gross/deal | Deals needed | Why |
+|---|---|---|---|---|
+| **1** | **Custom home builders / high-end remodelers** — LEAD | $20–50K on a $100K+ job | ~0.2 | One extra job pays 4–7 months of retainer. Owner-operated, already buys marketing, proven Meta lead-gen. |
+| **2** | Med spas / aesthetics / high-ticket elective medical | $3–15K per patient | 1–2 | The most-proven Meta lead-gen vertical; the doctor/owner decides alone. |
+| **3** | Luxury real estate — **top producers only** | commission | ~1 | Score for production volume first; $4K/mo is a big bite of a solo agent's P&L. |
+
+**Opportunistic only:** exotic/luxury automotive — the unit economics work
+(~$10–25K gross/car) but a $200K buyer rarely starts on a Meta lead form. Work
+inbound and existing leads; don't lead the hunt with it. (Was the #1 vertical and
+50% of the hunt rotation before ADR-0012.) Private aviation & yacht charter remain
+opportunistic — decision-makers are family offices/brokerages, not owners reading
+cold email.
+
+**Disqualify on sight:** general auto repair / transmission / oil-change (~$400
+gross → ~16 extra jobs/mo to break even, and no $6.5K budget) · franchised new-car
+dealers (OEM co-op + corporate marketing mandates) · anyone already under agency
+contract who hasn't volunteered dissatisfaction.
+
+> ⚠️ This ranking is reasoning from deal economics, **not** from customer
+> conversations — zero have happened. ~20 calls with remodelers could overturn it
+> (a common answer is "we're booked 9 months out"). Validate before scaling on it.
 
 ## Economics of the first client
 
