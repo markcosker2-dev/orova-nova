@@ -1247,6 +1247,12 @@ async def find_leads_v3(count: int = 5, query: str = "business leads") -> dict:
             # paying for leads" is the ICP qualifier (ADR-0012), so it has to
             # survive to storage, not die in the enrichment dict.
             "ad_signals": lead.get("ad_signals", ""),
+            # The state _enrich() resolved above. Without it every stored lead
+            # reaches owner_finder._registry_lookup with state="" and falls to
+            # the OpenCorporates branch, which has no key — so the CA/WA/OR
+            # Secretary-of-State lookups could never fire no matter what keys
+            # were configured. This line is the whole point of computing it.
+            "state": lead.get("state", ""),
         })
     
     if not clean_output:

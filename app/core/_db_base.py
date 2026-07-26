@@ -49,6 +49,7 @@ CANONICAL_SCHEMA_SQL = """
         owner_confidence INTEGER DEFAULT 0,
         evidence_json TEXT DEFAULT '',
         ad_signals TEXT DEFAULT '',
+        state TEXT DEFAULT '',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
