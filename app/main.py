@@ -756,6 +756,7 @@ async def get_leads(limit: int = 100, include_invalid: bool = False,
             COALESCE(owner_confidence, 0) as owner_confidence,
             COALESCE(evidence_json, '') as evidence_json,
             COALESCE(ad_signals, '') as ad_signals,
+            COALESCE(state, '') as state,
             client_id, created_at
         FROM leads
         {where}

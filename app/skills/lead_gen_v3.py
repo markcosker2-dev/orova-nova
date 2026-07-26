@@ -1038,7 +1038,15 @@ async def _source_duckduckgo(query: str, count: int) -> list:
     return leads
 
 
-async def _source_serpapi_maps(query: str, count: int) -> list:
+# google_maps returns ~20 local_results per page; `start` pages through them.
+_SERPAPI_MAPS_PAGE_SIZE = 20
+# Bounded so a single hunt can never drain the shared monthly quota. 3 pages =
+# up to ~60 businesses for 3 units of a 250/mo budget.
+_SERPAPI_MAPS_MAX_PAGES = 3
+
+
+async def _source_serpapi_maps(query: str, count: int,
+                               max_pages: int = _SERPAPI_MAPS_MAX_PAGES) -> list:
     """Reliable discovery via SerpAPI's Google Maps engine.
 
     Returns real business name + phone + website + address. The DDG/Maps-scrape
@@ -1047,42 +1055,81 @@ async def _source_serpapi_maps(query: str, count: int) -> list:
     shares the one SerpAPI monthly quota (250/mo) with owner_finder's SerpAPI
     fallback — it rations against the same counter and skips cleanly when the
     quota is spent or SERPAPI_KEY is unset (falls back to the legacy sources).
+
+    Paginates rather than falling through to those legacy sources when a page
+    comes up short. Two reasons:
+
+    1. A page is billed whether or not we read it. The previous code sliced
+       `[:count]` BEFORE the has-a-website filter, so it threw away results
+       already paid for and then reported a shortfall it had manufactured.
+    2. A DDG lead cannot become a customer. That source yields a bare URL —
+       no name (the business becomes "otbaybuilders.com"), no phone (so the
+       Retell lane can never dial it), and no address, so `_state_from_address`
+       returns "" and owner_finder routes to the dead OpenCorporates branch.
+       Spending one more quota unit on a structured page strictly beats it.
     """
     api_key = os.getenv("SERPAPI_KEY")
     if not api_key:
         return []
-    try:
-        from app.skills.owner_finder import _ration_check_and_increment, SERPAPI_MONTHLY_CAP
-        if not await _ration_check_and_increment("owner_finder:serp_monthly", SERPAPI_MONTHLY_CAP, "month"):
-            logger.info("[SERPMAPS] SerpAPI monthly quota reached — skipping discovery this run.")
-            return []
-    except Exception as e:
-        logger.debug(f"[SERPMAPS] ration check unavailable ({e}); proceeding.")
 
-    leads = []
+    async def _ration_ok() -> bool:
+        try:
+            from app.skills.owner_finder import _ration_check_and_increment, SERPAPI_MONTHLY_CAP
+            return await _ration_check_and_increment(
+                "owner_finder:serp_monthly", SERPAPI_MONTHLY_CAP, "month")
+        except Exception as e:
+            logger.debug(f"[SERPMAPS] ration check unavailable ({e}); proceeding.")
+            return True
+
+    leads: list = []
+    seen: set = set()
+    pages_used = 0
     try:
         async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.get("https://serpapi.com/search", params={
-                "engine": "google_maps", "q": query, "type": "search", "api_key": api_key,
-            })
-        if resp.status_code != 200:
-            logger.warning(f"[SERPMAPS] SerpAPI status {resp.status_code} for '{query}'")
-            return []
-        for b in (resp.json().get("local_results") or [])[:count]:
-            website = (b.get("website") or "").strip()
-            if not website:
-                continue  # need a site to enrich email/owner; skip phone-only listings
-            leads.append({
-                "business": (b.get("title") or "").strip(),
-                "url": website,
-                "phone": (b.get("phone") or "").strip(),
-                "address": (b.get("address") or "").strip(),
-                "source": "serpapi_maps",
-            })
-        logger.info(f"[SERPMAPS] {len(leads)} businesses w/ websites for '{query}'")
+            for page in range(max(1, max_pages)):
+                if len(leads) >= count:
+                    break
+                if not await _ration_ok():
+                    logger.info("[SERPMAPS] SerpAPI monthly quota reached — "
+                                f"stopping discovery after {pages_used} page(s).")
+                    break
+                resp = await client.get("https://serpapi.com/search", params={
+                    "engine": "google_maps", "q": query, "type": "search",
+                    "api_key": api_key, "start": page * _SERPAPI_MAPS_PAGE_SIZE,
+                })
+                pages_used += 1
+                if resp.status_code != 200:
+                    logger.warning(f"[SERPMAPS] SerpAPI status {resp.status_code} for '{query}'")
+                    break
+                results = resp.json().get("local_results") or []
+                if not results:
+                    break  # exhausted — further pages would just burn quota
+                for b in results:
+                    website = (b.get("website") or "").strip()
+                    if not website:
+                        continue  # need a site to enrich email/owner
+                    domain = extract_domain(website)
+                    if domain and domain in seen:
+                        continue
+                    if domain:
+                        seen.add(domain)
+                    leads.append({
+                        "business": (b.get("title") or "").strip(),
+                        "url": website,
+                        "phone": (b.get("phone") or "").strip(),
+                        "address": (b.get("address") or "").strip(),
+                        "source": "serpapi_maps",
+                    })
+                if len(results) < _SERPAPI_MAPS_PAGE_SIZE:
+                    break  # last page
+        logger.info(f"[SERPMAPS] {len(leads)} businesses w/ websites for '{query}' "
+                    f"({pages_used} page(s), {len(leads)}/{count} requested)")
     except Exception as e:
         logger.error(f"[SERPMAPS] Error: {e}")
-    return leads
+    # Truncate AFTER filtering, never before — the old order discarded
+    # website-bearing results in favour of phone-only listings that were
+    # dropped a line later.
+    return leads[:count]
 
 
 # West Coast ICP state names as they appear in the free-text hunt query
@@ -1156,9 +1203,21 @@ async def find_leads_v3(count: int = 5, query: str = "business leads") -> dict:
     except Exception as e:
         logger.warning(f"[V3] SerpAPI Maps failed: {e}")
 
-    # FALLBACK: legacy scrape/DDG sources only if SerpAPI came up short
-    # (no key / quota exhausted). These are unreliable server-side.
-    if len(all_leads) < count:
+    # LAST RESORT ONLY: the legacy scrape/DDG sources. These fire when SerpAPI
+    # produced NOTHING (no key, or quota spent) — not merely when it came up
+    # short, which is what let them dilute perfectly good runs.
+    #
+    # They are a different KIND of result, not just a worse one. Both yield a
+    # bare URL: no business name (it degrades to the domain, so the call script
+    # greets "otbaybuilders.com"), no phone (the Retell lane cannot dial), and
+    # no address — so state resolves to "" and owner_finder routes to the dead
+    # OpenCorporates branch, meaning the decision maker can never be found.
+    # A lead from here can never reach outreach_ready, so topping up a partial
+    # SerpAPI run with them adds rows to the dashboard and zero conversations.
+    if not all_leads:
+        logger.warning("[V3] SerpAPI produced nothing (no key or quota spent) — "
+                       "falling back to legacy sources; expect URL-only leads "
+                       "that cannot be called until re-enriched.")
         try:
             maps_leads = await _source_google_maps(query, count * 2)
             all_leads.extend(maps_leads)
@@ -1247,6 +1306,12 @@ async def find_leads_v3(count: int = 5, query: str = "business leads") -> dict:
             # paying for leads" is the ICP qualifier (ADR-0012), so it has to
             # survive to storage, not die in the enrichment dict.
             "ad_signals": lead.get("ad_signals", ""),
+            # The state _enrich() resolved above. Without it every stored lead
+            # reaches owner_finder._registry_lookup with state="" and falls to
+            # the OpenCorporates branch, which has no key — so the CA/WA/OR
+            # Secretary-of-State lookups could never fire no matter what keys
+            # were configured. This line is the whole point of computing it.
+            "state": lead.get("state", ""),
         })
     
     if not clean_output:
