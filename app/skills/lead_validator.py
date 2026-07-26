@@ -318,7 +318,11 @@ def contact_confidence(lead: dict) -> dict:
     else:
         phone_conf = 30
 
-    _REGISTRY_SOURCES = ("ca_sos", "wa_sos", "or_sos", "opencorporates")
+    # Sources where a real person is named in a legal filing or licence record,
+    # so the name is authoritative rather than text-mined. wa_lni is WA L&I's
+    # contractor licence principal; wa_sos is kept because rows stored before
+    # that swap still carry it.
+    _REGISTRY_SOURCES = ("ca_sos", "wa_sos", "wa_lni", "or_sos", "opencorporates")
     if not owner:
         owner_conf = 0
     elif int(lead.get("owner_confidence") or 0) > 0:

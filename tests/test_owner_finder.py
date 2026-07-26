@@ -54,12 +54,15 @@ def _no_cache_no_ration():
 # ── fallback order: WA registry hit short-circuits everything else ─────────
 
 def test_wa_hit_short_circuits_other_stages(monkeypatch):
-    monkeypatch.setenv("WA_SOS_ENABLED", "1")  # WA is dormant by default (anti-bot gated)
+    # WA now resolves against the L&I contractor licence registry on
+    # data.wa.gov (Socrata list-of-rows), not the anti-bot-gated SoS API.
     monkeypatch.delenv("CA_SOS_API_KEY", raising=False)
     monkeypatch.delenv("OPENCORPORATES_API_KEY", raising=False)
     monkeypatch.delenv("SERPAPI_KEY", raising=False)
 
-    wa_json = {"Rows": [{"GovernorName": "Jane Smith", "AgentName": "Some Agent"}]}
+    wa_json = [{"businessname": "ACME ROOFING LLC",
+                "primaryprincipalname": "SMITH, JANE MARIE",
+                "contractorlicensestatus": "ACTIVE"}]
     client = _client_returning(get_return=_resp(200, wa_json))
 
     with patch("app.skills.owner_finder.httpx.AsyncClient", return_value=client), \
@@ -69,7 +72,7 @@ def test_wa_hit_short_circuits_other_stages(monkeypatch):
         result = asyncio.run(owner_finder.resolve_owner("Acme Roofing", state="WA"))
 
     assert result["owner"] == "Jane Smith"
-    assert result["source"] == "wa_sos"
+    assert result["source"] == "wa_lni"
     assert result["confidence"] > 0
     scrape_mock.assert_not_called()
     serp_mock.assert_not_called()
@@ -335,10 +338,11 @@ def test_resolve_owner_works_with_no_ai_available(monkeypatch):
     # Simulate the documented dead-LLM state: even if ai_client.UnifiedAIClient
     # raises when constructed, resolve_owner must still work since it never
     # touches it.
-    monkeypatch.setenv("WA_SOS_ENABLED", "1")  # WA is dormant by default (anti-bot gated)
     monkeypatch.delenv("CA_SOS_API_KEY", raising=False)
     with patch("app.core.ai_client.UnifiedAIClient", side_effect=RuntimeError("no key")):
-        wa_json = {"Rows": [{"GovernorName": "Pat Reilly"}]}
+        wa_json = [{"businessname": "ACME ROOFING",
+                    "primaryprincipalname": "REILLY, PAT",
+                    "contractorlicensestatus": "ACTIVE"}]
         client = _client_returning(get_return=_resp(200, wa_json))
         with patch("app.skills.owner_finder.httpx.AsyncClient", return_value=client), \
              patch("app.skills.owner_finder._get_db", AsyncMock(return_value=_no_cache_no_ration())):

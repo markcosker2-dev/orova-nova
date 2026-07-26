@@ -9,7 +9,9 @@ only fall back to text-mining when the registry has no hit.
 
 Fallback chain (first hit wins, each step wrapped so a failure never raises):
     1. State-routed registry
-         WA  -> WA SoS JSON API (no key, most robust — built first/most)
+         WA  -> WA L&I contractor licence registry on data.wa.gov (Socrata,
+                no key, no quota). Replaced the WA SoS corporations API, which
+                is anti-bot gated and never returned a name server-side.
          CA  -> CA Statement of Information, gated behind CA_SOS_API_KEY
                 (free-tier cost UNCONFIRMED per research doc — default OFF)
          OR  -> OR registry HTML best-effort parse
@@ -120,48 +122,145 @@ def _is_plausible_name(text: str) -> bool:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# STAGE 1a — Washington Secretary of State (no key, documented API)
+# STAGE 1a — Washington L&I contractor licence registry (no key, open data)
 # ═══════════════════════════════════════════════════════════════════════════
+#
+# Replaces the WA Secretary of State corporations search this function used to
+# call. That host (ccfs-api.prod.sos.wa.gov) is anti-bot gated — verified live
+# 2026-07-04 it answers "System verification in progress, please wait." to any
+# non-browser client, and Render cannot run a browser — so the source was dead
+# and shipped defaulted OFF behind WA_SOS_ENABLED. It never produced a name.
+#
+# WA L&I publishes licensed-contractor data on the state's Socrata open-data
+# portal instead: no key, no quota, and a better fit than the SoS registry
+# because it is contractor-specific rather than all corporations. Verified live
+# 2026-07-25: 75,515 rows at status ACTIVE, and over a 1,000-row sample
+# businessname / primaryprincipalname / phonenumber / address were each 100%
+# populated.
+#
+# Only the principal's NAME is consumed here, to keep this function's contract
+# unchanged. The same row also carries phone + full address, which is worth a
+# follow-up seam (it would give the call lane a number and finally populate
+# lead["state"]) but is deliberately out of scope for this change.
+_WA_LNI_DATASET = "https://data.wa.gov/resource/m8qx-ubtq.json"
+
+# Legal-form suffixes are noise when matching a licence record to a scraped
+# business name ("ACME BUILDERS LLC" vs "Acme Builders"). Stripped from both
+# sides before comparison.
+_BIZ_SUFFIXES = {
+    "LLC", "L.L.C", "INC", "INCORPORATED", "CORP", "CORPORATION", "CO",
+    "COMPANY", "LP", "LLP", "PLLC", "LTD", "PC", "PS", "AND", "&",
+}
+
+
+def _normalize_business(name: str) -> str:
+    """Upper-case, strip punctuation and legal-form suffixes, collapse space."""
+    cleaned = re.sub(r"[^A-Za-z0-9 ]", " ", (name or "").upper())
+    tokens = [t for t in cleaned.split() if t and t not in _BIZ_SUFFIXES]
+    return " ".join(tokens)
+
+
+def _person_from_principal(raw: str) -> str:
+    """'POWER, GREGORY MARK JR' -> 'Gregory Power'.
+
+    L&I stores principals surname-first in caps. Middle names and generational
+    suffixes are dropped so the result is a clean two-token person name (what
+    _is_plausible_name accepts, and what reads correctly in a call script).
+    """
+    raw = (raw or "").strip()
+    if not raw:
+        return ""
+    surname, _, remainder = raw.partition(",")
+    if not remainder.strip():          # no comma — already "FIRST LAST"
+        parts = raw.split()
+        if len(parts) < 2:
+            return ""
+        first, surname = parts[0], parts[-1]
+    else:
+        drop = {"JR", "SR", "II", "III", "IV", "V", "MD", "DDS"}
+        given = [t for t in remainder.split() if t.strip(".").upper() not in drop]
+        if not given:
+            return ""
+        first = given[0]
+    first, surname = first.strip(), surname.strip()
+    if not first or not surname:
+        return ""
+    return f"{first.capitalize()} {surname.capitalize()}"
+
 
 async def _wa_registry_lookup(business: str) -> dict:
-    """WA SoS corporations search — DORMANT by default (anti-bot gated).
+    """Resolve a WA contractor's licence principal — the legally named person.
 
-    Verified live 2026-07-04: WA's real API host (ccfs-api.prod.sos.wa.gov)
-    returns "System verification in progress, please wait." to any non-browser
-    client — it is anti-bot gated and cannot be used server-side (Render has no
-    browser). So this source only runs when WA_SOS_ENABLED=1; otherwise it
-    returns empty immediately and the chain falls through (no wasted call).
-    Re-enabling for real needs a browser-obtained verification token + a POST to
-    the ccfs-api host — the GET stub here just keeps the flag path exercisable.
+    Matching is deliberately STRICT: only a licence whose normalized business
+    name equals the query's exactly is accepted, and if several matching
+    licences name different principals the lookup returns empty rather than
+    picking one. Returning a real person attached to the wrong company would be
+    fabricated lead data, which is the one unforgivable failure here — a miss
+    is always cheaper than a confident wrong name.
+
+    Kill switch: WA_LNI_ENABLED=0. Defaults ON because the source needs no key
+    and costs nothing (unlike the dead SoS endpoint this replaces, which had to
+    default OFF).
     """
-    if not business or os.getenv("WA_SOS_ENABLED", "0") != "1":
+    if not business or os.getenv("WA_LNI_ENABLED", "1") != "1":
+        return dict(_EMPTY)
+    target = _normalize_business(business)
+    # A single-token name is too collision-prone to match on. Live 2026-07-25:
+    # the bare query "Acme" exact-matched a real WA licence literally named
+    # "ACME" and returned its principal — a correct match to the wrong company,
+    # since our scraped business names are frequently truncated or generic.
+    # Two tokens is the cheapest guard against that, and every real remodeler
+    # name in the verification sample cleared it.
+    if not target or len(target.split()) < 2:
         return dict(_EMPTY)
     try:
-        url = "https://ccfs-api.prod.sos.wa.gov/api/BusinessSearch/GetBusinessSearchList"
+        # Prefix search on the FULL normalized name, then exact-match on the
+        # normalized form client-side. The prefix tolerates a legal suffix the
+        # licence carries and the query doesn't ("ACME ROOFING" -> "ACME
+        # ROOFING LLC"); the client-side equality check is what actually
+        # decides acceptance, so a longer name like "ACME ROOFING AND SIDING"
+        # is still rejected.
+        #
+        # Live-verified 2026-07-25 that the prefix must be the whole name, not
+        # just its first token: 'TOP' matches 398 licences and 'BLACK' 368, so
+        # with a per-request window the true match fell outside it and real
+        # businesses ("TOP MODERN CONSTRUCTION") missed. Full-name prefixes
+        # returned exactly one row each.
+        prefix = target.replace("'", "''")
         params = {
-            "SearchEntityName": business,
-            "SearchType": "BusinessName",
-            "SearchCriteria": "Contains",
-            "format": "json",
+            "$where": f"upper(businessname) like '{prefix}%'",
+            "$select": "businessname,primaryprincipalname,contractorlicensestatus",
+            "$limit": "50",
         }
         async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
-            resp = await client.get(url, params=params, headers={"Accept": "application/json"})
+            resp = await client.get(_WA_LNI_DATASET, params=params,
+                                    headers={"Accept": "application/json"})
         if resp.status_code != 200:
+            logger.debug(f"[OWNER_FINDER] WA L&I status {resp.status_code} for {business}")
             return dict(_EMPTY)
-        data = resp.json()
-        rows = data if isinstance(data, list) else data.get("Rows") or data.get("rows") or []
-        if not rows:
+        rows = resp.json() or []
+        exact = [r for r in rows
+                 if _normalize_business(r.get("businessname", "")) == target]
+        if not exact:
             return dict(_EMPTY)
-        row = rows[0]
-        name = (
-            row.get("GovernorName") or row.get("AgentName")
-            or row.get("RegisteredAgentName") or ""
-        ).strip()
-        title = "Governor/Officer" if row.get("GovernorName") else "Registered Agent"
-        if name and _is_plausible_name(name):
-            return {"owner": name, "title": title, "source": "wa_sos", "confidence": 0.85}
+        # An active licence is the better record when duplicates exist.
+        active = [r for r in exact
+                  if (r.get("contractorlicensestatus") or "").upper() == "ACTIVE"]
+        candidates = active or exact
+        names = {_person_from_principal(r.get("primaryprincipalname", ""))
+                 for r in candidates}
+        names.discard("")
+        if len(names) != 1:
+            # Zero names, or an ambiguous multi-principal match — do not guess.
+            logger.debug(f"[OWNER_FINDER] WA L&I ambiguous/empty principal for "
+                         f"{business} ({len(names)} distinct names)")
+            return dict(_EMPTY)
+        name = names.pop()
+        if _is_plausible_name(name):
+            return {"owner": name, "title": "Licence Principal",
+                    "source": "wa_lni", "confidence": 0.9}
     except Exception as e:
-        logger.debug(f"[OWNER_FINDER] WA registry lookup failed for {business}: {e}")
+        logger.debug(f"[OWNER_FINDER] WA L&I lookup failed for {business}: {e}")
     return dict(_EMPTY)
 
 
