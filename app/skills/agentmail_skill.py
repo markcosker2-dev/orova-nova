@@ -228,6 +228,20 @@ async def send_outreach(
         logger.warning(f"[AgentMail] Invalid email format: {to}. Skipping send.")
         return {"status": "error", "error": f"Invalid email format: {to}"}
 
+    # ── Opt-out gate (CAN-SPAM) ──────────────────────────────────────────────
+    # Mirrors the DNC gate the calling lane already has. Until now the reply
+    # classifier DETECTED opt-out language and marked the thread COLD so nothing
+    # auto-replied, but the address was never recorded and nothing checked one
+    # here — so a later drip cycle could email someone who had explicitly asked
+    # to be left alone, breaking the promise the footer's opt-out line makes.
+    # Fail-closed, same as the phone gate.
+    from app.core.dnc import is_email_suppressed
+    if await is_email_suppressed(to):
+        logger.warning("[AgentMail] Blocked send — recipient is on the email "
+                       "opt-out list (or the lookup failed; fail-closed).")
+        return {"status": "error", "skipped": True,
+                "error": "Recipient opted out — send blocked."}
+
     # Deep verification: MX record check + disposable domain block
     verify_result = await _verify_email_deliverable(to)
     if not verify_result["valid"]:
@@ -537,6 +551,17 @@ _OPTOUT_REPLY_SIGNALS = (
     "stop emailing", "take me off", "opt out", "opt-out", "do not contact",
     "leave me alone", "wrong person", "please stop",
 )
+
+
+def is_optout_reply(subject: str, snippet: str) -> bool:
+    """True if this reply asks to be left alone.
+
+    Public because the reply lane needs to SUPPRESS the address, not just
+    classify the thread COLD — and it must read the same keyword list rather
+    than keeping a second copy that can drift.
+    """
+    text = f"{subject or ''} {snippet or ''}".lower()
+    return any(sig in text for sig in _OPTOUT_REPLY_SIGNALS)
 
 
 def _keyword_classify_reply(subject: str, snippet: str) -> str:

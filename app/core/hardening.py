@@ -394,6 +394,46 @@ class RequestTracer:
             if not self.traces[request_id]:
                 del self.traces[request_id]
 
+# ─────── CONCURRENCY LIMITS (single owner) ─────────
+# Fan-out caps for RAM-heavy work on the 512MB free tier. Centralised here,
+# beside memory_monitor, because this module is the canonical owner of resource
+# guarding — memory_monitor measures real RSS and is what the re-enrich lane
+# checks after the 2026-07-21 OOM kill wiped the disk mid-run.
+#
+# These replace app/core/semaphore.py, deleted 2026-07-26. That module declared
+# itself "the single source of truth for all RAM-heavy skill concurrency
+# control" but was imported by NOTHING, while three call sites each hard-coded
+# their own magic number. Its design was also unusable as written: a global
+# limit of 1 would serialise whole lanes past Render's 30s request kill, and
+# would deadlock wherever one guarded coroutine awaits another (enrich_lead_lite
+# -> _fetch_page).
+#
+# Numbers are caps on CONCURRENT work inside one operation, not a process-wide
+# gate. Actual memory decisions stay with memory_monitor.
+#
+# CRAWL: was 10 while the page list is built as [homepage] + prioritized[:4]
+# (max 5, or 7 on the hard-coded fallback) — so the semaphore never blocked and
+# guarded nothing. 4 actually binds, and each slot holds a fetched page plus its
+# BeautifulSoup tree, which is several times the HTML size.
+CONCURRENCY_LIMITS = {
+    "page_crawl": 4,        # concurrent page fetches within one enrichment
+    "lead_enrich": 5,       # concurrent per-lead enrichment within one hunt
+    "lead_enrich_batch": 3, # concurrent leads in enrich_leads_batch
+}
+
+
+def concurrency_limit(name: str) -> int:
+    """Fan-out cap for a named RAM-heavy operation.
+
+    Unknown names fall back to 1 (the safe direction on a 512MB tier) and log,
+    rather than silently running unbounded.
+    """
+    if name in CONCURRENCY_LIMITS:
+        return CONCURRENCY_LIMITS[name]
+    logger.warning(f"[CONCURRENCY] unknown limit {name!r}; defaulting to 1")
+    return 1
+
+
 # ─────── SINGLETON INSTANCES ─────────
 circuit_breaker = CircuitBreaker(name="default")
 rate_limiter = RateLimiter(rate=100, period=60.0)  # 100 requests per minute

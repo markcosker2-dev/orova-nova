@@ -76,7 +76,11 @@ async def _get_shared_client() -> httpx.AsyncClient:
 
 
 _firecrawl_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="firecrawl")
-_crawl_semaphore = asyncio.Semaphore(10)
+# Fan-out cap owned by app/core/hardening.CONCURRENCY_LIMITS (see the note
+# there): was a hard-coded 10 against a page list of at most 5-7, so it never
+# blocked and guarded nothing.
+from app.core.hardening import concurrency_limit as _concurrency_limit
+_crawl_semaphore = asyncio.Semaphore(_concurrency_limit("page_crawl"))
 _NON_DIGIT_RE = re.compile(r'\D')
 
 

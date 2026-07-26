@@ -46,6 +46,62 @@ async def is_suppressed(phone: str) -> bool:
         return True
 
 
+# ── Email suppression ────────────────────────────────────────────────────────
+# The same defect the phone gate fixed, on the other channel: agentmail_skill
+# DETECTS opt-out language ("unsubscribe", "remove me", "no thanks") and
+# classifies the reply COLD so nothing auto-replies — but nothing PERSISTED it,
+# and send_outreach had no pre-send check. A later drip cycle could therefore
+# email someone who had explicitly asked to be left alone, which is the exact
+# CAN-SPAM failure the footer's opt-out promise is supposed to prevent
+# (15 U.S.C. §7704 requires honouring an opt-out within 10 business days).
+#
+# Kept in this module rather than app/core/compliance.py: that module is a
+# second, unused implementation of CAN-SPAM validation, and the live footer
+# already lives in agentmail_skill. Adding a third owner would repeat the
+# divergence this repo has been bitten by before.
+_EMAIL_SUPPRESSION_KEY = "email_suppression_list"
+
+
+def _normalize_email(email: str) -> str:
+    return (email or "").strip().lower()
+
+
+async def is_email_suppressed(email: str) -> bool:
+    """True if `email` must NOT be sent to.
+
+    Fails CLOSED on a lookup error — the cost of skipping one send is nil, the
+    cost of mailing someone who opted out is a compliance breach. An EMPTY
+    address returns True as well: there is nothing to send to.
+    """
+    norm = _normalize_email(email)
+    if not norm:
+        return True
+    try:
+        lst = await DatabaseManager.get_state(_EMAIL_SUPPRESSION_KEY, []) or []
+        return norm in {_normalize_email(x) for x in lst}
+    except Exception as e:
+        logger.error(f"[SUPPRESS] Email lookup failed ({e}) — blocking send (fail-closed).")
+        return True
+
+
+async def add_email_suppression(email: str, reason: str = "") -> bool:
+    """Record an email opt-out. Idempotent."""
+    norm = _normalize_email(email)
+    if not norm or "@" not in norm:
+        return False
+    try:
+        lst = await DatabaseManager.get_state(_EMAIL_SUPPRESSION_KEY, []) or []
+        if norm not in {_normalize_email(x) for x in lst}:
+            lst.append(norm)
+            await DatabaseManager.set_state(_EMAIL_SUPPRESSION_KEY, lst)
+            logger.info(f"[SUPPRESS] Email opt-out recorded (reason: {reason or 'n/a'}).")
+        return True
+    except Exception as e:
+        # Loud: a lost opt-out is a compliance problem, not a cosmetic one.
+        logger.error(f"[SUPPRESS] FAILED to record email opt-out: {e}")
+        return False
+
+
 async def add_suppression(phone: str, reason: str = "") -> bool:
     """Add a number to the DNC list (opt-out / manual). Idempotent."""
     norm = _normalize(phone)
