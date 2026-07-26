@@ -1076,6 +1076,38 @@ async def retell_webhook(request: Request):
     booked = bool(custom.get("appointment booked"))
     summary = analysis.get("call_summary", "")
 
+    # ── Opt-out → DNC (TCPA) ─────────────────────────────────────────────
+    # Both Retell agents are told to honour "take me off your list", but until
+    # now nothing PERSISTED that: the post-call field was captured and then
+    # dropped, so the suppression gate in outbound_dialer never learned about
+    # it and the same person could be dialled again. That is the failure this
+    # closes.
+    #
+    # Direction matters and getting it wrong is catastrophic: on an INBOUND leg
+    # `to_number` is OUR line, so suppressing it would blacklist the agency's
+    # own number and silently kill every future outbound call. Take the
+    # prospect's side of the leg, and refuse to suppress our own number even if
+    # the payload claims we should.
+    if bool(custom.get("opt out requested")):
+        direction = (call.get("direction") or "").strip().lower()
+        prospect_number = (call.get("from_number") if direction == "inbound"
+                           else call.get("to_number")) or ""
+        our_numbers = {n for n in (os.getenv("RETELL_FROM_NUMBER", ""),) if n}
+        if prospect_number and prospect_number not in our_numbers:
+            try:
+                from app.core.dnc import add_suppression
+                await add_suppression(prospect_number, reason="opt-out on call")
+                logger.info(f"[Retell] Opt-out honoured — number suppressed "
+                            f"(direction={direction or 'unknown'})")
+            except Exception as e:
+                # Never swallow this silently: a lost opt-out is a compliance
+                # problem, not a cosmetic one.
+                logger.error(f"[Retell] FAILED to record opt-out suppression: {e}")
+        else:
+            logger.error("[Retell] Opt-out requested but no usable prospect "
+                         f"number (direction={direction or 'unknown'}) — "
+                         "MUST be actioned manually.")
+
     result = "meeting" if booked else (
         "replied" if temperature == "hot" else (
             "answered" if analysis.get("call_successful") else "no_answer"))
