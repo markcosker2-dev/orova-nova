@@ -755,6 +755,7 @@ async def get_leads(limit: int = 100, include_invalid: bool = False,
             COALESCE(phone_verified, 0) as phone_verified,
             COALESCE(owner_confidence, 0) as owner_confidence,
             COALESCE(evidence_json, '') as evidence_json,
+            COALESCE(ad_signals, '') as ad_signals,
             client_id, created_at
         FROM leads
         {where}
@@ -768,6 +769,7 @@ async def get_leads(limit: int = 100, include_invalid: bool = False,
     # ledger (why we believe the decision maker) is parsed for the UI.
     import json as _json
     from app.skills.lead_validator import contact_confidence, outreach_ready, score_lead_icp
+    from app.skills.light_enrich import ad_signal_tier
     for r in rows:
         r["confidence"] = contact_confidence(r)
         # Owner bar (2026-07-22): decision-maker name + direct email + phone.
@@ -777,6 +779,17 @@ async def get_leads(limit: int = 100, include_invalid: bool = False,
         except Exception:
             r["evidence"] = []
         r.pop("evidence_json", None)
+        # Paid-marketing signals read off the prospect's own homepage. None
+        # (vs. all-false) means the page was never read — the UI must be able
+        # to tell "no ads" from "not checked", so an unset column stays None.
+        raw_signals = r.pop("ad_signals", "") or ""
+        try:
+            r["ad_signals"] = _json.loads(raw_signals) if raw_signals else None
+        except Exception:
+            r["ad_signals"] = None
+        # Computed view, never stored: hot = advertises AND buys leads (the
+        # ADR-0012 ICP), warm = one, cold = neither, null = never checked.
+        r["ad_tier"] = ad_signal_tier(r["ad_signals"])
         # "Why worth contacting" — the ICP scorer's own verdict, surfaced.
         try:
             r["icp_reason"] = score_lead_icp(r).get("recommendation", "")

@@ -10,6 +10,8 @@ from typing import Optional
 from duckduckgo_search import DDGS
 from bs4 import BeautifulSoup
 
+from app.skills.light_enrich import ad_signals_json
+
 logger = logging.getLogger(__name__)
 
 # Shared httpx client — reuse across all enrichment calls instead of creating per-call
@@ -246,7 +248,7 @@ async def _ai_extract_owner(page_text: str, host: str) -> dict:
 
 async def _scrape_website(url: str) -> dict:
     """Scrape website for owner name, email, and phone. Scans up to 7 pages and collects ALL candidates."""
-    result = {"owner_name": "", "email": "", "phone": ""}
+    result = {"owner_name": "", "email": "", "phone": "", "ad_signals": ""}
     
     if not url:
         return result
@@ -280,6 +282,16 @@ async def _scrape_website(url: str) -> dict:
                     continue
 
                 text = resp.text
+
+                # Ad signals off the first page we actually get (the homepage
+                # unless it 404s). Pixels and marketplace badges live in the
+                # site-wide <head>/footer template, so any reachable page
+                # carries them. This hook is what covers leads that arrive
+                # already-complete: light_enrich's Step 2 short-circuits when
+                # owner+email+phone are all set and then never fetches a
+                # homepage at all — which is exactly the best leads.
+                if not result["ad_signals"]:
+                    result["ad_signals"] = ad_signals_json(text)
 
                 # Extract ALL phones using enhanced extraction (tel: links, data attrs, extended regex)
                 phones = _extract_phones_from_html(text)
@@ -848,10 +860,12 @@ async def enrich_lead_4step(url: str, business_name: str = "", state: str = "", 
              "email": "", "phone": "",
              "owner_source": registry_source if registry_owner else "",
              "email_source": "", "phone_source": "",
-             "email_status": "", "phone_verified": False}
+             "email_status": "", "phone_verified": False, "ad_signals": ""}
 
     phones_seen: dict = {}  # source -> E.164, for cross-source corroboration
     for src, res in results:
+        if res.get("ad_signals") and not final["ad_signals"]:
+            final["ad_signals"] = res["ad_signals"]
         if res.get("email") and not final["email"]:
             final["email"] = res["email"]
             final["email_source"] = src
@@ -1229,6 +1243,10 @@ async def find_leads_v3(count: int = 5, query: str = "business leads") -> dict:
             "email_status": lead.get("email_status", ""),
             "phone_source": lead.get("phone_source", ""),
             "phone_verified": bool(lead.get("phone_verified", False)),
+            # Paid-marketing signals read off their own homepage — "already
+            # paying for leads" is the ICP qualifier (ADR-0012), so it has to
+            # survive to storage, not die in the enrichment dict.
+            "ad_signals": lead.get("ad_signals", ""),
         })
     
     if not clean_output:

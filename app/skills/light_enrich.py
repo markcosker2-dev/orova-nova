@@ -222,6 +222,166 @@ MEDIA_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp', '.ico', '.
 CDN_PATTERNS = ['cloudinary', 'cloudfront', 'amazonaws', 'akamai', 'imgix', 'twimg', 'fbcdn', 'yelpcdn.com']
 
 
+# ─── AD-SIGNAL DETECTION ──────────────────────────────────────────
+# Nova cannot query the Meta Ad Library: the API serves political/issue ads
+# only, the UI is a React app needing a browser Render's free tier can't run,
+# and scraping Meta risks the ad account the entire business depends on
+# (vault/10-brain/traction-playbook.md :: "Why Nova can't scrape the Ad
+# Library"). The same signal is already sitting in the prospect's own homepage
+# HTML for free: a Meta Pixel proves they run Meta ads, and an Angi/HomeAdvisor/
+# Thumbtack listing proves they already PAY for leads and names the competitor
+# we would be displacing. Together those satisfy the ICP qualifier "already
+# paying for leads and unhappy" (ADR-0012).
+
+# Matched as HOSTS INSIDE A URL, never as bare substrings. Two separate traps:
+#   1. "angi" is a substring of "changing"/"ranging"/"hanging"/"exchanging" —
+#      ordinary remodeler copy, so the bare name is unusable;
+#   2. even "angi.com" as a plain substring over-fires. It matches the longer
+#      host "notangi.com", and it matches prose like "unlike angi.com, we
+#      don't sell your info" — which is a business saying it does NOT pay for
+#      leads, the exact opposite of the signal we want.
+# Anchoring to a URL host means only an actual link or badge counts. A text
+# mention is not evidence anyone is paying, and must not be treated as such.
+#
+# PAY-PER-LEAD marketplaces: the business buys leads here, so a link or badge
+# IS the ADR-0012 qualifier ("already paying for leads") and names the
+# competitor we would displace.
+_PAY_PER_LEAD_MARKETPLACES = {
+    "angi": ("angi.com", "angieslist.com"),
+    "homeadvisor": ("homeadvisor.com",),
+    "thumbtack": ("thumbtack.com",),
+    "porch": ("porch.com",),
+    "bark": ("bark.com",),
+}
+
+# DIRECTORY / portfolio platforms: a profile is normally FREE, so a link
+# proves presence, not spend. Separated after live-testing 9 real California
+# remodeler homepages on 2026-07-25 — houzz appeared on 8 of 9, i.e. almost no
+# discriminating power, and while it was pooled with the marketplaces it
+# inflated "paying_for_leads" to 8/9 and made the ICP qualifier meaningless.
+# Kept as context, deliberately NOT counted as paying.
+_DIRECTORY_PLATFORMS = {
+    "houzz": ("houzz.com",),
+}
+
+
+def _host_res(groups: dict) -> dict:
+    return {
+        name: re.compile(
+            r"(?:https?:)?//(?:[a-z0-9-]+\.)*"
+            + r"(?:" + "|".join(re.escape(d) for d in domains) + r")"
+            + r"(?![a-z0-9.-])"
+        )
+        for name, domains in groups.items()
+    }
+
+
+_PAY_PER_LEAD_RES = _host_res(_PAY_PER_LEAD_MARKETPLACES)
+_DIRECTORY_RES = _host_res(_DIRECTORY_PLATFORMS)
+
+# Pixel-specific markers. Bare "connect.facebook.net" is deliberately NOT one:
+# that host also serves sdk.js for like buttons and social login, neither of
+# which means anyone is buying ads.
+_META_PIXEL_MARKERS = ("fbevents.js", "fbq(")
+# The noscript beacon, which must keep its query separator. Bare
+# "facebook.com/tr" is a substring of ordinary page links like
+# facebook.com/treehouseremodeling or facebook.com/tributes — and a business
+# linking its own Facebook page is the single most common thing on these
+# sites, so the loose form would have fired almost everywhere.
+_META_PIXEL_BEACON_RE = re.compile(r"facebook\.com/tr/?\?")
+
+# Google ADS, not Google Analytics. A bare gtag() carrying a G- measurement ID
+# is plain analytics and sits on roughly half the web — flagging that as "runs
+# ads" would make the field worthless. AW- is the Ads conversion-ID prefix; it
+# is required to be quote/slash/equals-delimited and followed by real digits so
+# a CSS class like "aw-header" can't trip it.
+_GOOGLE_ADS_HOSTS = ("googleadservices.com", "googleads.g.doubleclick.net")
+_GOOGLE_ADS_RE = re.compile(r"""['"/=]aw-\d{6,}""")
+
+# Lead-gen CTA. Live-tested 2026-07-25: this fired on 9 of 9 real remodeler
+# homepages, so its PRESENCE carries almost no information — every contractor
+# offers a free estimate. Kept because its ABSENCE is still meaningful (a site
+# with no capture mechanism at all is not running acquisition), but it must
+# never be treated as a qualifying signal on its own.
+_LEADGEN_CTA_MARKERS = (
+    "free estimate", "free quote", "free consultation", "free design consultation",
+    "get a quote", "request a quote", "schedule a consultation",
+    "book a consultation", "get your free",
+)
+
+
+def detect_ad_signals(html: str) -> dict:
+    """Pure: read paid-marketing signals out of a page's HTML.
+
+    Returns {meta_pixel, google_ads, paying_for_leads, directories,
+    marketing_mature}. `paying_for_leads` names which PAY-PER-LEAD marketplaces
+    are referenced — the competitor to displace, and the ADR-0012 qualifier.
+    `directories` names free-profile platforms separately, because a Houzz
+    profile proves presence, not spend. Never raises and never infers — a page
+    that says nothing returns all-falsey rather than a guess.
+    """
+    signals = {"meta_pixel": False, "google_ads": False,
+               "paying_for_leads": [], "directories": [],
+               "marketing_mature": False}
+    if not html or not isinstance(html, str):
+        return signals
+
+    lower = html.lower()
+    signals["meta_pixel"] = (any(m in lower for m in _META_PIXEL_MARKERS)
+                             or bool(_META_PIXEL_BEACON_RE.search(lower)))
+    signals["google_ads"] = (any(h in lower for h in _GOOGLE_ADS_HOSTS)
+                             or bool(_GOOGLE_ADS_RE.search(lower)))
+    signals["paying_for_leads"] = sorted(
+        name for name, rx in _PAY_PER_LEAD_RES.items() if rx.search(lower)
+    )
+    signals["directories"] = sorted(
+        name for name, rx in _DIRECTORY_RES.items() if rx.search(lower)
+    )
+    signals["marketing_mature"] = any(c in lower for c in _LEADGEN_CTA_MARKERS)
+    return signals
+
+
+# Derived view over the stored facts — never persisted, per the
+# single-source-of-truth rule (store facts, compute views). This is what turns
+# a bag of booleans into a call order.
+#   hot   — proven Meta advertiser AND proven lead buyer. The exact ICP:
+#           "already paying for leads and unhappy" (ADR-0012). 2 of 9 on the
+#           live 2026-07-25 sample.
+#   warm  — one of the two, not both.
+#   cold  — neither; no evidence of paid acquisition.
+#   None  — never checked. Deliberately distinct from "cold".
+def ad_signal_tier(signals: Optional[dict]) -> Optional[str]:
+    if not signals or not isinstance(signals, dict):
+        return None
+    advertises = bool(signals.get("meta_pixel") or signals.get("google_ads"))
+    buys_leads = bool(signals.get("paying_for_leads"))
+    if advertises and buys_leads:
+        return "hot"
+    if advertises or buys_leads:
+        return "warm"
+    return "cold"
+
+
+def ad_signals_json(html: str) -> str:
+    """detect_ad_signals serialized for the leads.ad_signals column.
+
+    Always returns JSON when a page was actually read, so "" keeps meaning
+    "never checked" and {...all false} means "checked, found nothing" — the
+    two are different facts and the column must not conflate them.
+    """
+    if not html:
+        return ""
+    try:
+        return json.dumps(detect_ad_signals(html))
+    except Exception as e:
+        # Falling back to "" collapses this into "never checked", which is the
+        # one conflation this function exists to prevent — so it must not be
+        # silent. detect_ad_signals returns only bools and a list[str], so
+        # reaching here means something genuinely unexpected.
+        logger.warning(f"[AD-SIGNALS] Serialization failed, recording as unchecked: {e}")
+        return ""
+
+
 async def _fetch_page(url: str) -> Optional[Dict[str, str]]:
     """
     Fetch a page and return {"html": ..., "markdown": ...}.
@@ -960,6 +1120,9 @@ async def _enrich_lead_lite_inner(lead: Dict[str, Any]) -> Dict[str, Any]:
         # Intelligently discover team and contact pages from the homepage
         homepage_data = await _fetch_page(real_website)
         if homepage_data and homepage_data.get("html"):
+            # Zero extra requests: the homepage HTML is already in hand.
+            if not lead.get("ad_signals"):
+                lead["ad_signals"] = ad_signals_json(homepage_data["html"])
             soup = BeautifulSoup(homepage_data["html"], "html.parser")
             domain_part = _get_domain(real_website)
             discovered_paths = set()
