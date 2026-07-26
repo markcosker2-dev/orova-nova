@@ -76,7 +76,7 @@ cost-per-lead to cost-per-idle-week-of-payroll.
 drives to real buyers. Never pitch "we're AI-operated", "you're talking to our AI
 right now", or "AI creatives" — worthless to the buyer.
 
-## 🔴 THE BLOCKING ACTION (2026-07-24)
+## 🔴 THE BLOCKING ACTION (2026-07-24, still true 2026-07-26)
 
 **Zero emails have ever been sent. Zero prospect conversations have happened.**
 Everything above is inference. The next move is not code:
@@ -89,6 +89,52 @@ Everything above is inference. The next move is not code:
 
 **No further positioning or targeting work before those 20 calls.**
 
+> Note (2026-07-26): step 2 is now *doubly* manual — see the SerpAPI wall
+> below. The pipeline cannot hand you a remodeler list this month.
+
+## 🚧 DISCOVERY WALL (2026-07-26) — [[0014-licence-registries-as-the-discovery-source|ADR-0014]]
+
+**SerpAPI is exhausted: 250/250 used, 0 searches left** (verified against
+SerpAPI's own account API). A live Seattle hunt returned **0 leads** — 429,
+fell through to the legacy sources, which produced nothing. Automated discovery
+is dead until the monthly reset.
+
+Every commercial alternative was tested live and is closed at $0:
+Meta Ad Library API (EU/UK-only for commercial ads) · Apollo free tier
+(`API_INACCESSIBLE` plan-wide, 0 export credits) · Composio→Facebook
+(Pages-only, search Error #10) · WA SoS (anti-bot gated) · OpenCorporates
+(£2,250/yr) · Yelp Fusion (free tier ambiguous, needs approval).
+
+**The unblock is state contractor licence boards** — free, unlimited, and they
+supply the DECISION MAKER directly:
+
+| Source | Volume | Owner name | Phone |
+|---|---|---|---|
+| WA L&I (`data.wa.gov`, Socrata, no key) | 75,515 ACTIVE | **100%** | **100%** |
+| OR CCB (`data.oregon.gov`, Socrata, no key) | 56,087 active | 95.9% | 100% |
+| CA CSLB | free CSV incl. personnel file — **no API** | — | — |
+
+6,249 WA rows match ACTIVE + GENERAL|RESIDENTIAL + Seattle metro + owner +
+phone. The `wa_lni` owner lookup is already live (PR #113); using these as a
+*discovery* entry point is the next code task. **They carry no email and no
+website**, so email stays unsolved and the ad-signal qualifier needs a domain
+resolved first.
+
+## ✅ Shipped 2026-07-26 (PRs #109–#114, deployed `8e4e78e`)
+
+Ad-signal detector + `ad_tier` (live-validated on 9 real CA remodelers: 2 hot /
+2 warm / 5 cold) · `lead.state` persisted, so the registry router works at all ·
+SerpAPI pagination + fallback demotion · WA L&I owner source replacing the dead
+SoS endpoint · Retell script/voicemail/inbound agent recorded. **533 tests.**
+Detail + what went wrong: [[session-2026-07-26-merge-and-discovery-wall]].
+
+⚠️ **47 leads in production are off-ICP noise** (an Argentine government museum,
+a Crain's automotive journalist, Montana auto shops, `"Says Carmaker"` as an
+owner name). All are `ready: False` so the gate holds, but note the trap:
+`quarantine_invalid_leads` runs at boot and sets `status='Invalid'` — it has
+already run and *kept* these. Clearing them is a hygiene-**rules** change, not
+a sweep re-run.
+
 ## Where things stand (2026-07-10)
 
 Nova is **live on Render free tier** (`orova-nova.onrender.com`), all 9 lanes
@@ -96,7 +142,8 @@ green. The lead engine is rebuilt end-to-end: SerpAPI-Maps discovery →
 registry/SERP owner-name resolver → single-AI-pass extraction (under the 25s
 ceiling) → owner-email finder layer (Tomba/Prospeo/Verifalia — **built, awaiting
 keys**). The gate to everything is still **the first paying client**. Test
-baseline: **197 Python + 40 TS passing**.
+baseline: **533 Python passing** (2026-07-26; the TS suite left with the
+Electron archival per ADR-0006).
 
 ## Deploy/data-loss status (updated 2026-07-13)
 
@@ -104,6 +151,13 @@ baseline: **197 Python + 40 TS passing**.
 but the Drive backup lane is now **WORKING** — creds were added and the first
 `[Vault] Uploaded` was live-verified 2026-07-11. Still: **batch merges** and
 check `/api/logs` for the restore line after each deploy.
+
+**Merge-order trap (learned the hard way 2026-07-26):** GitHub only
+auto-retargets a *stacked* PR to `main` when its base branch is **deleted** on
+merge. Merging a stack with `--delete-branch=false` silently lands the child PRs
+on their intermediate branches, not `main`. Two PRs went missing this way and
+`main` shipped without them. **Always verify the merged code on `main`
+(grep for the actual change), never trust a row of `MERGED` statuses.**
 
 ## Shipped recently (PRs #23–34, 2026-07-06 → 07-10)
 
