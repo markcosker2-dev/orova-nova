@@ -48,6 +48,73 @@ _PLACEHOLDER_EMAIL_DOMAINS = {
 _PLACEHOLDER_EMAIL_LOCALS = {"test", "example", "sample", "demo", "placeholder", "noreply", "no-reply", "donotreply"}
 # Fixture/sample markers that mean the whole row is fake, not a real prospect.
 _FIXTURE_BUSINESS_RE = re.compile(r"\b(acme|example|lorem|ipsum|fake|placeholder)\b", re.IGNORECASE)
+
+# ── Off-ICP domain classes (live 2026-07-26) ────────────────────────────────
+# Production held 47 rows that passed every existing check: an Argentine
+# GOVERNMENT MUSEUM (museo@adolfoalsina.gov.ar), an Argentine news site, and a
+# named automotive journalist at a trade publisher (lvellequette@crain.com).
+# The outreach gate stopped them being contacted, but they still occupied the
+# pipeline — and a journalist receiving OROVA cold outreach is a reputational
+# risk, not a data-quality nit.
+#
+# Deliberately narrow: only classes that can NEVER be a home-remodeling
+# prospect. Anything merely *unlikely* is left alone — a false quarantine of a
+# real contractor costs more than a junk row.
+
+# Institutions. A government agency, school or military site is not a
+# remodeler. Matched as a TLD or as a second-level segment so ".gov.ar" and
+# ".edu.au" are caught alongside ".gov".
+_INSTITUTIONAL_DOMAIN_RE = re.compile(r"\.(gov|edu|mil|int)(\.[a-z]{2})?$", re.IGNORECASE)
+
+# Country-code TLDs plainly outside the US West Coast ICP. Conservative on
+# purpose — ambiguous ones US businesses genuinely use (.co, .io, .ai, .me,
+# .tv, .cc) are NOT listed.
+_FOREIGN_CCTLD_RE = re.compile(
+    r"\.(ar|br|mx|cl|pe|co\.uk|uk|ie|fr|de|es|it|nl|pl|ru|ua|cn|jp|kr|in|pk|"
+    r"ph|id|vn|th|my|sg|au|nz|za|ng|ke|il|tr|gr|pt|se|no|fi|dk|cz|ro|hu)$",
+    re.IGNORECASE)
+
+# Publishers and trade press observed in production. A named journalist is a
+# real person who must never receive cold outreach. Empirical rather than
+# principled, so it is a short explicit list — extend it as junk appears, and
+# never widen it to guesswork.
+_PUBLISHER_DOMAINS = frozenset({
+    "crain.com", "crainsdetroit.com", "automotiveworld.com", "infobae.com",
+    "autonews.com", "wardsauto.com", "just-auto.com", "motortrend.com",
+})
+
+
+def _lead_domains(lead: dict) -> set:
+    """Every domain this lead points at — email host plus website/url host."""
+    out = set()
+    email = (lead.get("email") or "").strip().lower()
+    if "@" in email:
+        out.add(email.rsplit("@", 1)[-1].strip().strip("."))
+    for field in ("website", "url"):
+        raw = (lead.get(field) or "").strip().lower()
+        if not raw:
+            continue
+        host = raw.split("//")[-1].split("/")[0].split("?")[0]
+        host = host.split(":")[0].removeprefix("www.").strip().strip(".")
+        if host:
+            out.add(host)
+    return {d for d in out if "." in d}
+
+
+def off_icp_domain_reason(lead: dict) -> str:
+    """Why this lead can never be a prospect, or '' if nothing disqualifies it.
+
+    Checked against the email host AND the website host, because the observed
+    junk carried the giveaway in either position.
+    """
+    for domain in sorted(_lead_domains(lead)):
+        if domain in _PUBLISHER_DOMAINS:
+            return f"publisher/trade-press domain: {domain!r}"
+        if _INSTITUTIONAL_DOMAIN_RE.search(domain):
+            return f"government/education domain: {domain!r}"
+        if _FOREIGN_CCTLD_RE.search(domain):
+            return f"non-US domain, outside the West Coast ICP: {domain!r}"
+    return ""
 _FIXTURE_OWNER_RE = re.compile(r"\b(jane|john)\s+doe\b|\btest\s+user\b", re.IGNORECASE)
 _EMAIL_LIKE_RE = re.compile(r"[\w.+\-]+@[\w\-]+\.[a-zA-Z]{2,}")
 
@@ -233,6 +300,13 @@ def validate_lead_for_storage(lead: dict) -> dict:
         return {"ok": False, "lead": cleaned, "reasons": [f"business name is an email address: {business!r}"]}
     if _FIXTURE_BUSINESS_RE.search(business):
         return {"ok": False, "lead": cleaned, "reasons": [f"fixture/sample business name: {business!r}"]}
+    # Off-ICP by domain class — a government museum, a foreign site or a trade
+    # publisher can never be a remodeling prospect. Rejected here so the same
+    # rule covers BOTH new ingest and the boot hygiene sweep, which re-runs
+    # this gate over restored rows (app/core/lead_hygiene.py).
+    off_icp = off_icp_domain_reason(cleaned)
+    if off_icp:
+        return {"ok": False, "lead": cleaned, "reasons": [off_icp]}
     cleaned["business"] = business
 
     owner = (cleaned.get("owner") or cleaned.get("owner_name") or "").strip()
