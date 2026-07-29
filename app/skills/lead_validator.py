@@ -133,6 +133,81 @@ def off_icp_vertical_reason(lead: dict) -> str:
     return ""
 
 
+# ── Off-ICP by BUSINESS NAME (2026-07-29) ───────────────────────────────────
+# The vertical gate above only fires on a POPULATED `vertical`. On 2026-07-29,
+# production held exactly one lead: "Keith's Auto Repair" — vertical EMPTY,
+# status 'Contacted'. The boot sweep ran the (then new) gate over it and logged
+# "[HYGIENE] sweep clean: 1 leads OK". A general auto repair shop, the segment
+# ADR-0012 disqualifies on sight, passed the ICP gate because nothing read the
+# business name.
+#
+# This is not an edge case, it is the common case going forward: the licence
+# registries adopted in ADR-0014 carry NO vertical field at all, so a gate keyed
+# solely on `vertical` is blind on precisely the rows discovery is about to
+# start ingesting in volume.
+#
+# Word boundaries are mandatory here, not stylistic. Naive substring matching
+# produces false positives on real in-ICP names:
+#   "mechanic"  matches "Mechanical Contractors"  (a real construction trade)
+#   "tire"      matches "Retirement Living Builders"
+#   "auto"      matches "Autumn Ridge Custom Homes"
+# A wrongly-blocked remodeler is a lost prospect, so every pattern below is
+# anchored and was checked against real in-ICP naming (see
+# tests/test_icp_name_gate.py, which asserts a 0% false-positive rate).
+_OFF_ICP_NAME_RE = re.compile(
+    r"""(?xi)
+    \b auto (?:motive)? \s+ (?: repair | body | service s? | glass | parts |
+                                sales | care | center | centre | shop ) \b
+  | \b car \s+ (?: repair | wash | care | service s? ) \b
+  | \b (?: muffler s? | radiator s? | transmission s? ) \b
+  | \b tire s? \b
+  | \b brake s? \b
+  | \b collision \b
+  | \b mechanic s? \b
+  | \b dealership s? \b
+  | \b towing \b
+  | \b tow \s+ truck s? \b
+  | \b smog \b
+  | \b oil \s+ change \b
+  | \b (?: quick \s+ )? lube \b
+  | \b auto \s* (?: nation | zone | parts ) \b
+    """
+)
+
+
+def off_icp_business_name_reason(lead: dict) -> str:
+    """Why this lead's BUSINESS NAME puts it outside the ADR-0012 ICP, or ''.
+
+    Companion to off_icp_vertical_reason for the (now dominant) case of a lead
+    that carries no vertical label. Same ADR-0012 rule, different evidence.
+
+    Exotic/luxury/classic auto is exempt for the same reason it is exempt from
+    the vertical gate — ADR-0012 keeps it "opportunistic", not excluded. That
+    exemption is what keeps "West Coast Exotic Cars" (a real, deliberately-kept
+    lead) out of the quarantine.
+    """
+    name = (lead.get("business") or "").strip().lower()
+    if not name:
+        return ""
+    if any(m in name for m in _OPPORTUNISTIC_VERTICAL_MARKERS):
+        return ""   # exotic/luxury/classic auto stays opportunistic, per ADR-0012
+    hit = _OFF_ICP_NAME_RE.search(name)
+    if hit:
+        return (f"off-ICP business name {lead.get('business')!r} (matched "
+                f"{hit.group(0).strip()!r}) — ADR-0012 disqualifies general auto "
+                f"repair and franchised dealers on sight")
+    return ""
+
+
+def off_icp_trade_reason(lead: dict) -> str:
+    """The single ADR-0012 trade check: vertical first, then business name.
+
+    One entry point so the storage gate, the boot hygiene sweep and the
+    pre-send gate cannot drift apart — the divergence that let 48 emails ship.
+    """
+    return off_icp_vertical_reason(lead) or off_icp_business_name_reason(lead)
+
+
 def _lead_domains(lead: dict) -> set:
     """Every domain this lead points at — email host plus website/url host."""
     out = set()
@@ -356,13 +431,15 @@ def validate_lead_for_storage(lead: dict) -> dict:
     off_icp = off_icp_domain_reason(cleaned)
     if off_icp:
         return {"ok": False, "lead": cleaned, "reasons": [off_icp]}
-    # Off-ICP by VERTICAL (ADR-0012). Same placement and same reasoning as the
-    # domain rule above: one implementation covers new ingest and the boot
-    # hygiene sweep over restored rows, so the 51 legacy "Automotive" rows are
-    # quarantined rather than emailed again.
-    off_vertical = off_icp_vertical_reason(cleaned)
-    if off_vertical:
-        return {"ok": False, "lead": cleaned, "reasons": [off_vertical]}
+    # Off-ICP by TRADE (ADR-0012) — vertical label first, then business name.
+    # Same placement and same reasoning as the domain rule above: one
+    # implementation covers new ingest and the boot hygiene sweep over restored
+    # rows. The name leg exists because `vertical` is empty on most real rows
+    # (all of the ADR-0014 licence-registry data), which is how "Keith's Auto
+    # Repair" survived the sweep on 2026-07-29.
+    off_trade = off_icp_trade_reason(cleaned)
+    if off_trade:
+        return {"ok": False, "lead": cleaned, "reasons": [off_trade]}
     cleaned["business"] = business
 
     owner = (cleaned.get("owner") or cleaned.get("owner_name") or "").strip()

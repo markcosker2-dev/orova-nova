@@ -259,13 +259,17 @@ async def send_outreach(
     # Defence in depth. The storage gate now quarantines off-ICP rows, but a row
     # already in flight, or restored from an older snapshot, must not slip
     # through here. This is the check that would have stopped all 48 sends.
+    # Reads `business` as well as `vertical`: most rows carry no vertical at all
+    # (licence-registry discovery supplies none), and a vertical-only check let
+    # "Keith's Auto Repair" sit in production as 'Contacted' on 2026-07-29.
     try:
-        from app.skills.lead_validator import off_icp_vertical_reason
+        from app.skills.lead_validator import off_icp_trade_reason
         if lead_id:
             row = await DatabaseManager.query(
-                "SELECT vertical FROM leads WHERE id = ?", (int(lead_id),), fetchone=True)
+                "SELECT vertical, business FROM leads WHERE id = ?",
+                (int(lead_id),), fetchone=True)
             if row:
-                why = off_icp_vertical_reason({"vertical": dict(row).get("vertical")})
+                why = off_icp_trade_reason(dict(row))
                 if why:
                     logger.warning(f"[AgentMail] Blocked send — {why}")
                     return {"status": "error", "skipped": True,
