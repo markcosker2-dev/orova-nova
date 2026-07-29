@@ -76,9 +76,15 @@ cost-per-lead to cost-per-idle-week-of-payroll.
 drives to real buyers. Never pitch "we're AI-operated", "you're talking to our AI
 right now", or "AI creatives" — worthless to the buyer.
 
-## 🔴 THE BLOCKING ACTION (2026-07-24, still true 2026-07-26)
+## 🔴 THE BLOCKING ACTION (2026-07-24, corrected 2026-07-29)
 
-**Zero emails have ever been sent. Zero prospect conversations have happened.**
+> ⚠️ **CORRECTION (2026-07-29):** the long-repeated claim "zero emails have ever been
+> sent" is **FALSE**. Production metrics: **`emails_sent = 48`, `replies_received = 0`.**
+> It came from a stale handoff and was never checked against `/api/metrics`. See
+> [[session-2026-07-29-handoff]] §2-3 — 48 cold emails went to legacy auto-era rows
+> including a government museum and two trade publications. Do not repeat the claim.
+
+**Zero prospect CONVERSATIONS have happened — but 48 emails were sent (0 replies).**
 Everything above is inference. The next move is not code:
 
 1. **Call Eric Curran** — West Coast Exotic Cars, +1 844-488-9232, conf 83
