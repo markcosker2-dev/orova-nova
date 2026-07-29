@@ -128,6 +128,15 @@ from app.skills.sheets_sync import restore_leads_from_sheets, update_lead_status
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # [ENV] Report which capabilities are switched off for want of config, before
+    # anything tries to use them. Replaces the deleted app/config.py: the config
+    # failures that actually bit this system were silently-absent vars (an unset
+    # postal address shipping non-compliant email, a retired Retell field, a flag
+    # gating a dead endpoint), none of which typing would have caught.
+    from app.core.hardening import log_env_contract_once, check_env_contract, health_checks
+    log_env_contract_once()
+    health_checks.register("env_contract", check_env_contract)
+
     # [WORKER] Start autonomous scheduler thread (FastAPI lifespan bootstraps all lanes)
     from app.worker import start_worker_scheduler, stop_worker_scheduler
     start_worker_scheduler()

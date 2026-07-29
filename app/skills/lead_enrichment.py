@@ -129,7 +129,9 @@ async def enrich_lead(url: str, business_name: str = "", existing_phone: str = "
 
 async def enrich_leads_batch(leads: list) -> list:
     """Enrich multiple leads in parallel (max 3 at once)."""
-    sem = asyncio.Semaphore(3)
+    # Fan-out cap owned by app/core/hardening.CONCURRENCY_LIMITS.
+    from app.core.hardening import concurrency_limit
+    sem = asyncio.Semaphore(concurrency_limit("lead_enrich_batch"))
 
     async def _one(lead):
         async with sem:

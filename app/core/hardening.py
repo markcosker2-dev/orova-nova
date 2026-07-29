@@ -3,6 +3,7 @@ Phase 4 Hardening: Comprehensive Error Handling, Retry Logic, and Resilience.
 """
 import asyncio
 import logging
+import os
 import time
 import json
 from functools import wraps
@@ -393,6 +394,139 @@ class RequestTracer:
             ]
             if not self.traces[request_id]:
                 del self.traces[request_id]
+
+# ─────── ENVIRONMENT CONTRACT ─────────
+# Replaces app/config.py (deleted 2026-07-26), which declared a pydantic-settings
+# Settings class, crashed on import (`secret_key Field required` — for a var
+# nothing in the codebase reads), covered 39 of the 62 env vars actually used,
+# and carried stale LLM defaults. Migrating the 106 os.getenv call sites onto it
+# would have risked a boot failure through the revenue-pipeline core on a tier
+# where every deploy wipes SQLite.
+#
+# It also would not have prevented the incidents that actually happened. Those
+# were all config that SILENTLY DID NOTHING, not config that was mistyped:
+#   · BUSINESS_POSTAL_ADDRESS unset -> cold email shipped without the postal
+#     address 15 U.S.C. §7704 requires;
+#   · enable_voicemail_detection -> a field Retell had retired, so it read null
+#     forever and voicemail detection was never on;
+#   · WA_SOS_ENABLED -> gated an endpoint that had been anti-bot-walled for
+#     weeks, so the flag could never do anything.
+# Typing catches none of those. Naming the CAPABILITY each var gates, and
+# reporting at boot which capabilities are consequently switched off, catches
+# all three.
+#
+# Grouped by capability so the report says what is DISABLED, not merely what is
+# absent. `required` means the process cannot serve; everything else degrades a
+# named feature and must never mark the system unhealthy.
+ENV_REQUIRED = {
+    "DASHBOARD_API_KEY": "dashboard + all authenticated API endpoints",
+}
+
+ENV_CAPABILITIES = {
+    "cold calling (Retell)": ("RETELL_API_KEY", "RETELL_AGENT_ID", "RETELL_FROM_NUMBER"),
+    "outbound email (AgentMail)": ("AGENTMAIL_API_KEY",),
+    "CAN-SPAM postal address": ("BUSINESS_POSTAL_ADDRESS",),
+    "meeting booking link": ("CAL_COM_EVENT_SLUG", "CALENDLY_LINK", "GOOGLE_CALENDAR_BOOKING_LINK"),
+    "lead discovery (SerpAPI)": ("SERPAPI_KEY",),
+    "Drive backup / restore": ("GOOGLE_REFRESH_TOKEN", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"),
+    "Sheets fallback persistence": ("GOOGLE_CREDENTIALS_JSON", "GOOGLE_APPLICATION_CREDENTIALS"),
+    "LLM inference": ("GROQ_API_KEY", "GOOGLE_API_KEY", "OPENROUTER_API_KEY"),
+    "Telegram alerts": ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"),
+    "CA owner registry (CALICO)": ("CA_SOS_API_KEY",),
+    "email verification": ("VERIFALIA_USERNAME", "VERIFALIA_PASSWORD"),
+    "email finders": ("TOMBA_API_KEY", "PROSPEO_API_KEY", "HUNTER_API_KEY"),
+    "national DNC scrub": ("DNC_SCRUB_URL", "DNC_SCRUB_API_KEY"),
+}
+
+# A capability needing ANY ONE of its vars rather than all of them (alternative
+# providers), so a single configured option is enough.
+ENV_ANY_OF = frozenset({
+    "meeting booking link", "LLM inference",
+    "Sheets fallback persistence", "email finders",
+})
+
+
+def check_env_contract() -> Dict[str, Any]:
+    """Report which capabilities are switched off for want of configuration.
+
+    Never raises and never reports 'failed' for absent optional config — a
+    deliberately unconfigured feature is not a fault. Missing REQUIRED config is
+    reported as degraded so it surfaces on /health.
+    """
+    missing_required = [f"{v} ({why})" for v, why in ENV_REQUIRED.items()
+                        if not os.getenv(v, "").strip()]
+    disabled = {}
+    for capability, keys in ENV_CAPABILITIES.items():
+        unset = [k for k in keys if not os.getenv(k, "").strip()]
+        if capability in ENV_ANY_OF:
+            if len(unset) == len(keys):
+                disabled[capability] = f"needs any of: {', '.join(keys)}"
+        elif unset:
+            disabled[capability] = f"unset: {', '.join(unset)}"
+    return {
+        "status": "degraded" if missing_required else "ok",
+        "missing_required": missing_required,
+        "disabled_capabilities": disabled,
+        "capabilities_live": len(ENV_CAPABILITIES) - len(disabled),
+        "capabilities_total": len(ENV_CAPABILITIES),
+    }
+
+
+def log_env_contract_once() -> Dict[str, Any]:
+    """Log the contract at boot so a silently-disabled feature is visible in the
+    deploy log rather than discovered weeks later."""
+    report = check_env_contract()
+    for item in report["missing_required"]:
+        logger.critical(f"[ENV] REQUIRED config missing — {item}")
+    if report["disabled_capabilities"]:
+        logger.warning(
+            f"[ENV] {len(report['disabled_capabilities'])} capability(ies) disabled "
+            f"by missing config: " +
+            "; ".join(f"{k} [{v}]" for k, v in report["disabled_capabilities"].items()))
+    logger.info(f"[ENV] {report['capabilities_live']}/{report['capabilities_total']} "
+                f"capabilities configured.")
+    return report
+
+
+# ─────── CONCURRENCY LIMITS (single owner) ─────────
+# Fan-out caps for RAM-heavy work on the 512MB free tier. Centralised here,
+# beside memory_monitor, because this module is the canonical owner of resource
+# guarding — memory_monitor measures real RSS and is what the re-enrich lane
+# checks after the 2026-07-21 OOM kill wiped the disk mid-run.
+#
+# These replace app/core/semaphore.py, deleted 2026-07-26. That module declared
+# itself "the single source of truth for all RAM-heavy skill concurrency
+# control" but was imported by NOTHING, while three call sites each hard-coded
+# their own magic number. Its design was also unusable as written: a global
+# limit of 1 would serialise whole lanes past Render's 30s request kill, and
+# would deadlock wherever one guarded coroutine awaits another (enrich_lead_lite
+# -> _fetch_page).
+#
+# Numbers are caps on CONCURRENT work inside one operation, not a process-wide
+# gate. Actual memory decisions stay with memory_monitor.
+#
+# CRAWL: was 10 while the page list is built as [homepage] + prioritized[:4]
+# (max 5, or 7 on the hard-coded fallback) — so the semaphore never blocked and
+# guarded nothing. 4 actually binds, and each slot holds a fetched page plus its
+# BeautifulSoup tree, which is several times the HTML size.
+CONCURRENCY_LIMITS = {
+    "page_crawl": 4,        # concurrent page fetches within one enrichment
+    "lead_enrich": 5,       # concurrent per-lead enrichment within one hunt
+    "lead_enrich_batch": 3, # concurrent leads in enrich_leads_batch
+}
+
+
+def concurrency_limit(name: str) -> int:
+    """Fan-out cap for a named RAM-heavy operation.
+
+    Unknown names fall back to 1 (the safe direction on a 512MB tier) and log,
+    rather than silently running unbounded.
+    """
+    if name in CONCURRENCY_LIMITS:
+        return CONCURRENCY_LIMITS[name]
+    logger.warning(f"[CONCURRENCY] unknown limit {name!r}; defaulting to 1")
+    return 1
+
 
 # ─────── SINGLETON INSTANCES ─────────
 circuit_breaker = CircuitBreaker(name="default")

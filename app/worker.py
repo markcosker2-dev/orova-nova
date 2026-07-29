@@ -640,6 +640,24 @@ async def run_reply_monitor(client_id=0):
                 email = _parse_email(sender)
                 lead = await _lookup_lead_by_email(email)
 
+                # ── Record an opt-out so it is HONOURED, not just noticed ─────
+                # The classifier already resolves opt-out language to COLD, which
+                # stops an auto-reply on THIS message. It did not stop the next
+                # drip cycle: nothing persisted the address, and send_outreach had
+                # no pre-send check. Both halves are needed — CAN-SPAM requires
+                # honouring an opt-out, not merely detecting one.
+                if intent == "COLD" and email:
+                    try:
+                        from app.skills.agentmail_skill import is_optout_reply
+                        from app.core.dnc import add_email_suppression
+                        if is_optout_reply(subject, snippet):
+                            await add_email_suppression(email, reason="reply opt-out")
+                            logger.info("[REPLY MONITOR] Opt-out honoured — "
+                                        "address added to the email suppression list.")
+                    except Exception as e:
+                        logger.error(f"[REPLY MONITOR] FAILED to record email "
+                                     f"opt-out — MUST be actioned manually: {e}")
+
                 if intent == "HOT" and message_id:
                     hot_items.append({
                         "message_id": message_id,

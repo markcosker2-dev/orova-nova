@@ -29,7 +29,9 @@ openai==1.51.0
 python-dotenv==1.2.2
 python-multipart==0.0.31
 pydantic==2.13.0
-pydantic-settings==2.14.2
+# pydantic-settings removed 2026-07-26 with app/config.py — its only
+# consumer. See app/core/hardening.py ENV_CAPABILITIES for the
+# boot-time config contract that replaced it (audit B3 / Option C).
 pytz==2024.1
 # python-dateutil: parses Cal.com/ISO meeting times in cal_booking + calendar_skill
 # (the booking funnel). Was only present transitively via pandas — declared

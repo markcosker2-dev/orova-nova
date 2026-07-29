@@ -1246,7 +1246,9 @@ async def find_leads_v3(count: int = 5, query: str = "business leads") -> dict:
     
     # Enrich with 4-strategy chain
     enriched_leads = []
-    semaphore = asyncio.Semaphore(5)
+    # Fan-out cap owned by app/core/hardening.CONCURRENCY_LIMITS.
+    from app.core.hardening import concurrency_limit
+    semaphore = asyncio.Semaphore(concurrency_limit("lead_enrich"))
     
     async def _enrich(lead):
         async with semaphore:
