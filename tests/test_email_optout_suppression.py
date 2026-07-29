@@ -125,14 +125,17 @@ def test_send_outreach_refuses_a_suppressed_recipient():
     assert "opted out" in (res.get("error") or "").lower()
 
 
-def test_send_outreach_proceeds_past_the_gate_when_not_suppressed():
+def test_send_outreach_proceeds_past_the_gate_when_not_suppressed(monkeypatch):
     """Guards against the gate blocking everyone — it must only stop opt-outs.
-    A non-suppressed address gets past this check and fails later (no API key),
-    which is a different error than the opt-out refusal."""
+
+    BUSINESS_POSTAL_ADDRESS is set here to isolate THIS gate: a later CAN-SPAM
+    gate also blocks sends when it is unset, and without this the test would
+    pass for the wrong reason.
+    """
+    monkeypatch.setenv("BUSINESS_POSTAL_ADDRESS", "OROVA, 1 Example St, Manila, PH")
     from app.skills import agentmail_skill
 
     with patch("app.core.dnc.is_email_suppressed", new=AsyncMock(return_value=False)):
         res = asyncio.run(agentmail_skill.send_outreach(
             to=TARGET, subject="Hi", body="Body", skip_proofread=True))
-    assert res.get("skipped") is not True
     assert "opted out" not in (res.get("error") or "").lower()

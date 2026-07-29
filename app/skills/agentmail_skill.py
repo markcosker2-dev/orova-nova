@@ -242,6 +242,40 @@ async def send_outreach(
         return {"status": "error", "skipped": True,
                 "error": "Recipient opted out — send blocked."}
 
+    # ── CAN-SPAM postal address: FAIL CLOSED ─────────────────────────────────
+    # 15 U.S.C. §7704 requires a valid physical postal address in commercial
+    # email. This path used to warn-and-send, and on 2026-07-25 that shipped 48
+    # cold emails without one. Every other risky path here fails closed (DNC,
+    # opt-out, storage gate); this one failed open, which is exactly why it went
+    # unnoticed. Any real address unblocks it — a PO box counts.
+    if not os.getenv("BUSINESS_POSTAL_ADDRESS", "").strip():
+        logger.error("[AgentMail] Blocked send — BUSINESS_POSTAL_ADDRESS is not "
+                     "set, so the footer would ship without the physical address "
+                     "CAN-SPAM requires. Set it on Render to unblock.")
+        return {"status": "error", "skipped": True,
+                "error": "BUSINESS_POSTAL_ADDRESS unset — send blocked (CAN-SPAM)."}
+
+    # ── ICP gate (ADR-0012): never email a disqualified vertical ─────────────
+    # Defence in depth. The storage gate now quarantines off-ICP rows, but a row
+    # already in flight, or restored from an older snapshot, must not slip
+    # through here. This is the check that would have stopped all 48 sends.
+    try:
+        from app.skills.lead_validator import off_icp_vertical_reason
+        if lead_id:
+            row = await DatabaseManager.query(
+                "SELECT vertical FROM leads WHERE id = ?", (int(lead_id),), fetchone=True)
+            if row:
+                why = off_icp_vertical_reason({"vertical": dict(row).get("vertical")})
+                if why:
+                    logger.warning(f"[AgentMail] Blocked send — {why}")
+                    return {"status": "error", "skipped": True,
+                            "error": f"Off-ICP lead — send blocked. {why}"}
+    except Exception as e:
+        # Never let a lookup failure become an unchecked send.
+        logger.error(f"[AgentMail] ICP pre-send check failed ({e}) — blocking send.")
+        return {"status": "error", "skipped": True,
+                "error": "ICP pre-send check failed — send blocked (fail-closed)."}
+
     # Deep verification: MX record check + disposable domain block
     verify_result = await _verify_email_deliverable(to)
     if not verify_result["valid"]:

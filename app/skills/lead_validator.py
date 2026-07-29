@@ -84,6 +84,55 @@ _PUBLISHER_DOMAINS = frozenset({
 })
 
 
+# ── Off-ICP verticals (ADR-0012, enforced 2026-07-26) ───────────────────────
+# ADR-0012 re-ranked the ICP to custom home builders / high-end remodelers and
+# says to "disqualify on sight: general auto repair (~$400/job -> ~16 jobs/mo to
+# break even) - franchised new-car dealers (OEM co-op mandates)".
+#
+# That decision was never enforced in code, and the cost was real: on 2026-07-25
+# the outreach lane worked through 51 legacy rows all tagged vertical
+# "Automotive" and sent 48 cold emails — to google.com, an Argentine government
+# museum, autotrader.com, two trade publications, and placeholder addresses like
+# name@hotmail.com. Zero replies, 550 rejections from Microsoft, and sender
+# reputation spent on a segment the ICP had already ruled out.
+#
+# The lesson generalises: a strategy decision that lives only in an ADR is not a
+# control. Encoded here so the SAME rule quarantines stored rows at the boot
+# hygiene sweep and blocks a send.
+#
+# NOT disqualified: exotic/luxury auto, which ADR-0012 keeps as "opportunistic
+# only" rather than excluded.
+_OFF_ICP_VERTICALS = {
+    "automotive",           # the generic bucket that produced repair shops + trade press
+    "auto repair",
+    "auto service",
+    "car repair",
+    "mechanic",
+    "car dealer",
+    "auto dealer",
+    "dealership",
+}
+_OPPORTUNISTIC_VERTICAL_MARKERS = ("exotic", "luxury", "classic", "supercar")
+
+
+def off_icp_vertical_reason(lead: dict) -> str:
+    """Why this lead's vertical is outside the ADR-0012 ICP, or '' if it is fine.
+
+    Empty verticals are NOT disqualified — absence of a label is not evidence of
+    being off-ICP, and other gate rules judge such rows.
+    """
+    vertical = (lead.get("vertical") or "").strip().lower()
+    if not vertical:
+        return ""
+    if any(m in vertical for m in _OPPORTUNISTIC_VERTICAL_MARKERS):
+        return ""   # exotic/luxury auto stays opportunistic, per ADR-0012
+    if vertical in _OFF_ICP_VERTICALS or any(
+            v in vertical for v in ("auto repair", "auto service", "car repair")):
+        return (f"off-ICP vertical {vertical!r} — ADR-0012 disqualifies general "
+                f"auto repair and franchised dealers on sight")
+    return ""
+
+
 def _lead_domains(lead: dict) -> set:
     """Every domain this lead points at — email host plus website/url host."""
     out = set()
@@ -307,6 +356,13 @@ def validate_lead_for_storage(lead: dict) -> dict:
     off_icp = off_icp_domain_reason(cleaned)
     if off_icp:
         return {"ok": False, "lead": cleaned, "reasons": [off_icp]}
+    # Off-ICP by VERTICAL (ADR-0012). Same placement and same reasoning as the
+    # domain rule above: one implementation covers new ingest and the boot
+    # hygiene sweep over restored rows, so the 51 legacy "Automotive" rows are
+    # quarantined rather than emailed again.
+    off_vertical = off_icp_vertical_reason(cleaned)
+    if off_vertical:
+        return {"ok": False, "lead": cleaned, "reasons": [off_vertical]}
     cleaned["business"] = business
 
     owner = (cleaned.get("owner") or cleaned.get("owner_name") or "").strip()
