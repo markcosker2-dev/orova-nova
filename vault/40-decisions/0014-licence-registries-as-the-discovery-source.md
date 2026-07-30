@@ -53,6 +53,29 @@ whole CALICO / waterfall effort exists to solve. Measured live:
 6,249 WA rows match ACTIVE + GENERAL|RESIDENTIAL + Seattle metro + owner +
 phone. That is more on-ICP records than a year of SerpAPI quota could produce.
 
+> ⚠️ **CORRECTION (2026-07-30, seam 1 implementation — PR #120).** The "6,249
+> on-ICP rows" figure above **overcounts**, because it assumes
+> `specialtycode1desc = 'GENERAL'` means "general contractor". It does not.
+> Reading real rows shows the GENERAL bucket is full of landscapers, window
+> cleaners, drywall, tile, masonry and one-person handymen. Two extra filters
+> are needed — licence *type* and a business-name filter. Measured live against
+> the dataset on 2026-07-30 (a wider metro city list than the original count):
+>
+> | filter | rows |
+> |---|---|
+> | `contractorlicensestatus='ACTIVE'` | 75,463 |
+> | + specialty `GENERAL`\|`RESIDENTIAL` | 55,942 |
+> | + Seattle metro + owner & phone present | 16,322 |
+> | + `contractorlicensetypecodedesc='CONSTRUCTION CONTRACTOR'` | 15,069 |
+> | **+ passes the ICP business-name filter** | **~4,280 (28.4%)** |
+>
+> Fill on `businessname` / `primaryprincipalname` / `phonenumber` /
+> `address1` is confirmed at **100%**, as originally measured.
+>
+> ~4,280 is still far more on-ICP records than Nova can call, so the decision
+> below stands unchanged — but the name filter is load-bearing, not optional,
+> and anyone quoting a row count from this ADR should quote 4,280.
+
 ## Decision
 
 **Adopt state contractor licence registries as the primary source for

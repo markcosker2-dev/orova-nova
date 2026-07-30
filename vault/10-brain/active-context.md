@@ -120,11 +120,50 @@ supply the DECISION MAKER directly:
 | OR CCB (`data.oregon.gov`, Socrata, no key) | 56,087 active | 95.9% | 100% |
 | CA CSLB | free CSV incl. personnel file — **no API** | — | — |
 
-6,249 WA rows match ACTIVE + GENERAL|RESIDENTIAL + Seattle metro + owner +
-phone. The `wa_lni` owner lookup is already live (PR #113); using these as a
-*discovery* entry point is the next code task. **They carry no email and no
-website**, so email stays unsolved and the ad-signal qualifier needs a domain
-resolved first.
+~4,280 WA rows are on-ICP (corrected 2026-07-30 — see below). The `wa_lni`
+owner lookup went live in PR #113 and **discovery shipped in PR #120**
+(deployed `612b8245e53a`). **They carry no email and no website**, so email
+stays unsolved and the ad-signal qualifier needs a domain resolved first.
+
+> ⚠️ **CORRECTION (2026-07-30):** ADR-0014's "6,249 on-ICP rows" **overcounts**.
+> Specialty `GENERAL` does NOT mean "general contractor" — the bucket is full of
+> landscapers, window cleaners, drywall, tile and one-person handymen. Adding
+> licence *type* (`CONSTRUCTION CONTRACTOR`) and a business-name filter gives
+> **~4,280** (28.4% of 15,069). Fill on name/owner/phone/address is confirmed
+> 100%. Still far more than Nova can call, so the decision stands — but quote
+> 4,280, not 6,249.
+
+## 🔴 THE NEW BLOCKING ACTION (2026-07-30) — nothing will dial these leads
+
+**Discovery is fixed; the phone channel is now the blocker, and it is an
+architecture problem, not a data one.**
+
+Lane 4 (`escalate_cold_leads`, the only *scheduled* dialler) selects via
+`get_cold_leads`, which requires:
+
+```sql
+WHERE status IN ('Email Sent','Contacted')
+  AND datetime(updated_at) < datetime('now','-5 days')
+```
+
+Licence-sourced leads are stored `status='New'`. **They can never be selected.**
+Lane 4 is an *escalation* lane — it was built for "we emailed them, no reply in
+5 days, now phone them", so it is architecturally DOWNSTREAM of email. With cold
+email deliberately deferred and fail-closed, Lane 4's input set is permanently
+empty. Seam 1's 4,280 callable leads will sit untouched.
+
+**Paths that CAN dial without a prior email (all already built):**
+- `outreach_orchestrator.make_call(phone, context)` — the right primitive:
+  daily cap, business-hours gate and rate limiting already inside it.
+- `worker._execute_approved_call` — driven by a Google Sheet row set to
+  "Approved" (manual).
+- The planner's `trigger_retell_call` tool, via `POST /api/agents/run`.
+
+**Next code task: a phone-first lane** that selects
+`status='New' AND phone != '' AND outreach_ready.callable` and calls
+`make_call`. It reuses the existing primitive and caps, so it is an extension,
+not a new abstraction. This is the last thing between the repo and its first
+transcript.
 
 ## ✅ Shipped 2026-07-26 (PRs #109–#114, deployed `8e4e78e`)
 

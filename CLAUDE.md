@@ -99,6 +99,6 @@ Your auto-memory directory is for your own recall. Anything Mark should be able 
 
 ## Practical notes
 
-- Tests: `python -m pytest tests -q` (289+ passing baseline). Knowledge gate: `python scripts/compile_knowledge.py --check`.
+- Tests: `python -m pytest tests -q` (718+ passing baseline). Knowledge gate: `python scripts/compile_knowledge.py --check`.
 - httpx must stay 0.27.2 (starlette 0.27 TestClient vs mcp/ollama constraints — see requirements.txt comment).
 - Production knowledge (CEO briefs, leads) is pulled into the vault with `python scripts/vault_pull.py` (needs `RENDER_EXTERNAL_URL` + `DASHBOARD_API_KEY` in `.env`).

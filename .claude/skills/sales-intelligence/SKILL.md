@@ -1,6 +1,6 @@
 ---
 name: sales-intelligence
-description: OROVA's sales craft layer for luxury-automotive outbound — cold email, cold calls, objection handling, follow-up cadence, and message QA. Use when writing, reviewing, or improving any outreach (email, Retell call script, follow-up, break-up note), when handling an objection or reply, or when tuning business_context.json / the Retell prompt. Triggers: "cold email", "cold call", "outreach", "follow-up", "objection", "book a meeting", "sales script", "personalize", "QA this message".
+description: OROVA's sales craft layer for outbound to custom home builders, high-end remodelers and med spas (ADR-0012) — cold calls, objection handling, follow-up cadence, and message QA. Phone is the live channel; cold email is deferred (ADR-0014 / 2026-07-30). Use when writing, reviewing, or improving any outreach (Retell call script, post-call follow-up, break-up note), when handling an objection or reply, or when tuning business_context.json / the Retell prompt. Triggers: "cold call", "call script", "outreach", "follow-up", "objection", "book a meeting", "sales script", "personalize", "QA this message".
 ---
 
 # OROVA Sales Intelligence
