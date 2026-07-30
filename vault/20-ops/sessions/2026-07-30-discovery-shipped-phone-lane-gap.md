@@ -22,7 +22,7 @@ status: active
 
 Discovery is fixed. The blocker moved, and it is an **architecture** problem.
 
-Lane 4 (`escalate_cold_leads` in `app/worker.py`) is the only *scheduled*
+Lane 4 (`run_cold_lead_escalation` in `app/worker.py`) is the only *scheduled*
 dialler. It selects leads via `_lead_repo.get_cold_leads`, which requires:
 
 ```sql
@@ -40,8 +40,10 @@ Net effect: seam 1 can discover ~4,280 on-ICP, phone-verified, callable WA
 remodelers and **not one of them will be dialled** by any scheduled lane.
 
 **Paths that CAN dial without a prior email (all already built):**
-- `outreach_orchestrator.make_call(phone, context)` — the right primitive:
-  daily cap, business-hours gate, rate limiting already inside.
+- `outreach_orchestrator.make_throttled_call(...)` — has a daily cap,
+  business-hours gate and rate limiting inside, BUT keeps its own separate
+  `_daily_call_count`; a second lane through it would double the effective
+  `MAX_CALLS_PER_DAY`. Rejected for that reason.
 - `worker._execute_approved_call` — Google Sheet row set to "Approved" (manual).
 - The planner's `trigger_retell_call` tool via `POST /api/agents/run`.
 

@@ -138,7 +138,7 @@ stays unsolved and the ad-signal qualifier needs a domain resolved first.
 **Discovery is fixed; the phone channel is now the blocker, and it is an
 architecture problem, not a data one.**
 
-Lane 4 (`escalate_cold_leads`, the only *scheduled* dialler) selects via
+Lane 4 (`run_cold_lead_escalation`, the only *scheduled* dialler) selects via
 `get_cold_leads`, which requires:
 
 ```sql
@@ -153,8 +153,11 @@ email deliberately deferred and fail-closed, Lane 4's input set is permanently
 empty. Seam 1's 4,280 callable leads will sit untouched.
 
 **Paths that CAN dial without a prior email (all already built):**
-- `outreach_orchestrator.make_call(phone, context)` — the right primitive:
-  daily cap, business-hours gate and rate limiting already inside it.
+- `outreach_orchestrator.make_throttled_call(...)` — has a daily cap,
+  business-hours gate and rate limiting inside it, BUT it keeps its own
+  separate `_daily_call_count`, so routing a second lane through it would let
+  the two counters each spend a full `MAX_CALLS_PER_DAY` and silently double
+  the cap. Not used for that reason.
 - `worker._execute_approved_call` — driven by a Google Sheet row set to
   "Approved" (manual).
 - The planner's `trigger_retell_call` tool, via `POST /api/agents/run`.
