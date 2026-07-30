@@ -1132,6 +1132,197 @@ async def _source_serpapi_maps(query: str, count: int,
     return leads[:count]
 
 
+# ── WA L&I contractor licences as a DISCOVERY source (ADR-0014 seam 1) ───────
+# SerpAPI is the only working discovery source and it is exhausted (250/250,
+# 0 left). This dataset is free, needs no key, has no quota, and inverts the
+# hard direction of the pipeline: instead of discovering a business and then
+# hunting for its owner, the licence record gives the legally-named principal
+# and a phone number up front.
+#
+# Live-measured 2026-07-30 against the real dataset (not the ADR's numbers):
+#   75,463  ACTIVE licences
+#   55,942  + specialty GENERAL|RESIDENTIAL
+#   16,322  + Seattle metro + owner and phone present
+#   15,069  + licence type CONSTRUCTION CONTRACTOR
+#   ~4,280  + passes the ICP name filter below (28.4% of the 15,069)
+# Fill on businessname / primaryprincipalname / phonenumber / address1: 100%.
+#
+# CORRECTION to ADR-0014, found by reading real rows: specialty 'GENERAL' does
+# NOT mean "general contractor". The GENERAL bucket is full of landscapers,
+# window cleaners, drywall, tile, masonry and handymen — the ADR's
+# "6,249 on-ICP rows" figure counts those. Licence type and the name filter
+# below are what actually isolate remodelers, and they are why this source
+# emits ~4.3K rows rather than 15K.
+#
+# Deliberately NOT filtered on: employee count (absent from the dataset) and
+# licence age / bond amount as a size proxy. ADR-0014 flags that proxy as
+# unvalidated, so it stays out until there is evidence for it.
+_WA_LNI_ENV_FLAG = "WA_LNI_DISCOVERY_ENABLED"
+
+# Seattle metro. Uppercase because the dataset stores city inconsistently
+# ("AUBURN" and "Auburn" both occur), so matching is done on upper(city).
+_WA_METRO_CITIES = (
+    "SEATTLE", "BELLEVUE", "KIRKLAND", "REDMOND", "RENTON", "KENT", "BOTHELL",
+    "ISSAQUAH", "SAMMAMISH", "MERCER ISLAND", "SHORELINE", "EDMONDS",
+    "LYNNWOOD", "EVERETT", "TACOMA", "FEDERAL WAY", "AUBURN", "BURIEN",
+    "WOODINVILLE", "KENMORE", "SNOHOMISH", "PUYALLUP",
+)
+
+# Two tiers, because one flat keyword list gets this wrong in both directions.
+#
+# STRONG: unambiguously a remodeler/builder. Accepted even alongside a trade
+# word, so "ACTION ROOFING & REMODELING" and "ARK ROOFING & RENOVATIONS" are
+# kept — a roofer who also remodels is in-ICP, and a flat denylist dropped them.
+_ICP_STRONG_RE = re.compile(
+    r"(?i)\b(remodel\w*|renovat\w*|custom\s+home\w*|home\s*build\w*|homebuild\w*|"
+    r"design[\s/+-]*build|kitchen|bath\w*|builders?|fine\s+home\w*)\b")
+
+# GENERIC: consistent with a remodeler but also with any trade. Accepted only
+# when no trade word is present, so "2K CONSTRUCTION" is kept while
+# "ANDY TILE CONSTRUCTION" and "AFS CONSTRUCTION + HANDYMAN" are not.
+_ICP_GENERIC_RE = re.compile(
+    r"(?i)\b(construction|constructs?|contracting|residential|carpentry)\b")
+
+# Trades and services that are not the ADR-0012 ICP. Only consulted for
+# GENERIC-tier names (see above).
+_NON_ICP_TRADE_RE = re.compile(
+    r"(?i)\b(landscap\w*|lawn|window\s+clean\w*|janitorial|maid|carpet\s+clean\w*|"
+    r"pressure\s+wash\w*|power\s+wash\w*|tree\s+(service|care|removal)|"
+    r"gutter\w*|pool\s+(service|clean\w*)|moving|hauling|junk|handy\w*|"
+    r"cleaning|sprinkler|fence|paint\w*|drywall|tile|masonry|concrete|"
+    r"flooring|roof\w*|plumb\w*|electric\w*|hvac|septic|excavat\w*|"
+    r"demolition|solar|sign\w*|glass|asphalt|paving|insulation)\b")
+
+
+def wa_lni_icp_reason(business_name: str) -> str:
+    """'' if this licence holder looks like an ADR-0012 remodeler, else why not.
+
+    Precision-biased on purpose. There are ~15K licence rows in the metro and
+    Nova needs tens of calls, so a missed remodeler costs nothing while a
+    landscaper in the call queue wastes a Retell dial and Mark's credibility.
+    Known and accepted misses: abbreviated names ("1ST CHOICE HOME IMPRVMNT")
+    and bare-word names ("SMITH & SONS LLC") carry no usable signal.
+    """
+    name = (business_name or "").strip()
+    if not name:
+        return "no business name"
+    if _ICP_STRONG_RE.search(name):
+        return ""
+    if _ICP_GENERIC_RE.search(name):
+        trade = _NON_ICP_TRADE_RE.search(name)
+        if trade:
+            return f"specialty trade, not a remodeler ({trade.group(0).lower()!r})"
+        return ""
+    return "no remodeling/building signal in the name"
+
+
+async def _source_wa_lni_licences(count: int, cities: tuple = _WA_METRO_CITIES) -> list:
+    """Discover WA remodelers from the L&I licence registry. Free, no key, no quota.
+
+    Emits the same lead shape as the other sources but with NO url/website —
+    licence data carries neither, and resolving a domain is ADR-0014 seam 2, not
+    this one. Callers must therefore not assume a URL is present.
+
+    What each row DOES carry is what the phone lane needs: a real business name,
+    the legally-named principal, and a phone at 100% fill. Retell owns all cold
+    dialling, so these are immediately actionable without any enrichment.
+
+    Kill switch: WA_LNI_DISCOVERY_ENABLED=0.
+    """
+    if os.getenv(_WA_LNI_ENV_FLAG, "1") != "1":
+        logger.info("[WA_LNI] discovery disabled by env flag")
+        return []
+    # Reuse owner_finder's helpers rather than reimplementing them — it already
+    # queries this dataset (PR #113) and owns the "LAST, FIRST" principal
+    # parsing and the legal-suffix normalisation.
+    from app.skills.owner_finder import (
+        _WA_LNI_DATASET, _person_from_principal, _is_plausible_name,
+    )
+
+    city_list = ",".join(f"'{c}'" for c in cities)
+    where = (
+        "contractorlicensestatus='ACTIVE'"
+        " AND contractorlicensetypecodedesc='CONSTRUCTION CONTRACTOR'"
+        " AND specialtycode1desc in('GENERAL','RESIDENTIAL')"
+        f" AND upper(city) in({city_list})"
+        " AND primaryprincipalname IS NOT NULL"
+        " AND phonenumber IS NOT NULL"
+    )
+    # Over-fetch: only ~28% of rows survive the ICP name filter, so asking for
+    # `count` rows would reliably under-deliver. 6x plus headroom, capped at the
+    # Socrata page limit.
+    fetch = min(max(count * 6, 200), 1000)
+    leads: list = []
+    seen_phones: set = set()
+    try:
+        client = await _get_http_client()
+        resp = await client.get(_WA_LNI_DATASET, params={
+            "$where": where,
+            "$select": ("businessname,primaryprincipalname,phonenumber,address1,"
+                        "city,state,zip,contractorlicensenumber,"
+                        "licenseeffectivedate,businesstypecodedesc"),
+            "$limit": str(fetch),
+            # Newest licences first: a recently-licensed contractor is more
+            # likely to still be building a client base, and it makes repeated
+            # runs return a stable, non-arbitrary slice.
+            "$order": "licenseeffectivedate DESC",
+        }, headers={"Accept": "application/json"})
+        if resp.status_code != 200:
+            logger.warning(f"[WA_LNI] status {resp.status_code} — no leads this run")
+            return []
+        rows = resp.json() or []
+    except Exception as e:
+        logger.error(f"[WA_LNI] fetch failed: {e}")
+        return []
+
+    skipped_icp = 0
+    for row in rows:
+        if len(leads) >= count:
+            break
+        business = (row.get("businessname") or "").strip()
+        if wa_lni_icp_reason(business):
+            skipped_icp += 1
+            continue
+        phone = _normalize_phone_to_e164(row.get("phonenumber") or "")
+        if not phone or phone in seen_phones:
+            continue          # no dialable number, or a shared/duplicate line
+        owner = _person_from_principal(row.get("primaryprincipalname") or "")
+        if not owner or not _is_plausible_name(owner):
+            continue          # never store a principal we can't parse cleanly
+        seen_phones.add(phone)
+        addr = " ".join(p for p in (
+            (row.get("address1") or "").strip(),
+            (row.get("city") or "").strip(),
+            (row.get("state") or "WA").strip(),
+            (row.get("zip") or "").strip(),
+        ) if p)
+        leads.append({
+            "business": business,
+            "owner_name": owner,
+            "owner_title": "Licence Principal",
+            "owner_source": "wa_lni",
+            "owner_confidence": 90,
+            "phone": phone,
+            "phone_source": "wa_lni",
+            # A state licence register is an authoritative published business
+            # line, which is exactly what TCPA permits calling.
+            "phone_verified": True,
+            "address": addr,
+            "state": "WA",
+            "url": "",
+            "website": "",
+            "email": "",
+            "source": "wa_lni_licences",
+            "notes": (f"WA L&I licence {row.get('contractorlicensenumber') or '?'}"
+                      f" · {row.get('businesstypecodedesc') or '?'}"
+                      f" · effective {(row.get('licenseeffectivedate') or '')[:10]}"),
+        })
+
+    logger.info(f"[WA_LNI] {len(leads)} in-ICP leads from {len(rows)} licence rows "
+                f"({skipped_icp} failed the ICP name filter)")
+    return leads
+
+
 # West Coast ICP state names as they appear in the free-text hunt query
 # (e.g. "exotic car dealer california") — the only jurisdiction signal
 # available at this call site today. Best-effort only; owner_finder routes
@@ -1195,13 +1386,30 @@ async def find_leads_v3(count: int = 5, query: str = "business leads") -> dict:
     logger.info(f"[LEAD GEN V3] Searching for {count} leads: '{query}'")
     
     all_leads = []
+    # Licence-registry leads travel a separate path: they carry owner + phone
+    # from a legal record but NO url, so they can neither be deduped by domain
+    # nor enriched by _scrape_website. Kept apart rather than special-cased
+    # inside the web flow.
+    licence_leads = []
 
-    # PRIMARY: SerpAPI Google Maps — reliable, structured business data.
-    try:
-        serp_leads = await _source_serpapi_maps(query, count * 3)
-        all_leads.extend(serp_leads)
-    except Exception as e:
-        logger.warning(f"[V3] SerpAPI Maps failed: {e}")
+    # PRIMARY for WA: the L&I licence registry (ADR-0014). Free, no key, no
+    # quota, and it supplies the decision maker directly — which is why the ADR
+    # demotes search to enrichment. Runs first so a spent SerpAPI quota (the
+    # current state: 250/250) no longer means zero discovery.
+    if state == "WA":
+        try:
+            licence_leads = await _source_wa_lni_licences(count)
+        except Exception as e:
+            logger.warning(f"[V3] WA L&I discovery failed: {e}")
+
+    # SerpAPI Google Maps — reliable, structured, but quota-bound. Skipped when
+    # the licence source already filled the request.
+    if len(licence_leads) < count:
+        try:
+            serp_leads = await _source_serpapi_maps(query, count * 3)
+            all_leads.extend(serp_leads)
+        except Exception as e:
+            logger.warning(f"[V3] SerpAPI Maps failed: {e}")
 
     # LAST RESORT ONLY: the legacy scrape/DDG sources. These fire when SerpAPI
     # produced NOTHING (no key, or quota spent) — not merely when it came up
@@ -1214,7 +1422,10 @@ async def find_leads_v3(count: int = 5, query: str = "business leads") -> dict:
     # OpenCorporates branch, meaning the decision maker can never be found.
     # A lead from here can never reach outreach_ready, so topping up a partial
     # SerpAPI run with them adds rows to the dashboard and zero conversations.
-    if not all_leads:
+    # The legacy sources are strictly worse than a licence lead (URL only: no
+    # name, no phone, no address), so they stay silent whenever the registry
+    # produced anything at all.
+    if not all_leads and not licence_leads:
         logger.warning("[V3] SerpAPI produced nothing (no key or quota spent) — "
                        "falling back to legacy sources; expect URL-only leads "
                        "that cannot be called until re-enriched.")
@@ -1280,11 +1491,37 @@ async def find_leads_v3(count: int = 5, query: str = "business leads") -> dict:
     # Sort by completeness (leads with all 3 fields first)
     enriched_leads.sort(key=lambda l: sum(1 for f in [l.get("owner_name"), l.get("email"), l.get("phone")] if f), reverse=True)
     
-    # Take top N
-    final = enriched_leads[:count]
-    
+    # Licence leads need no enrichment — owner and phone already come from a
+    # legal record — so they are emitted directly and take precedence. A lead
+    # Retell can dial today beats a URL-only row that may never be callable.
+    licence_out = []
+    for lead in licence_leads[:count]:
+        licence_out.append({
+            "business": lead.get("business", ""),
+            "owner_name": lead.get("owner_name", ""),
+            "owner_title": lead.get("owner_title", ""),
+            "email": "",            # licence data carries none; never guessed
+            "phone": lead.get("phone", ""),
+            "website": "",          # ADR-0014 seam 2 resolves domains, not this
+            "url": "",
+            "score": 0,             # recomputed server-side by the storage gate
+            "status": "New",
+            "owner_source": lead.get("owner_source", "wa_lni"),
+            "owner_confidence": lead.get("owner_confidence", 0),
+            "email_source": "",
+            "email_status": "",
+            "phone_source": lead.get("phone_source", "wa_lni"),
+            "phone_verified": bool(lead.get("phone_verified", False)),
+            "ad_signals": "",       # needs a domain, so it cannot run yet
+            "state": lead.get("state", "WA"),
+            "notes": lead.get("notes", ""),
+        })
+
+    # Take top N, minus the slots the licence leads already filled
+    final = enriched_leads[:max(0, count - len(licence_out))]
+
     # Build clean output — include ALL fields for sheets pipeline
-    clean_output = []
+    clean_output = list(licence_out)
     for lead in final:
         clean_output.append({
             "business": lead.get("business", ""),
@@ -1314,8 +1551,10 @@ async def find_leads_v3(count: int = 5, query: str = "business leads") -> dict:
             # Secretary-of-State lookups could never fire no matter what keys
             # were configured. This line is the whole point of computing it.
             "state": lead.get("state", ""),
+            "owner_confidence": lead.get("owner_confidence", 0),
+            "notes": lead.get("notes", ""),
         })
-    
+
     if not clean_output:
         return {
             "text": f"No leads found for '{query}'. Try a more specific query like 'roofing contractors Miami'.",
