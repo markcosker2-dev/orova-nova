@@ -79,6 +79,8 @@ HUNT_INTERVAL_MINUTES = 60
 APPROVAL_CHECK_MINUTES = 2
 REPLY_CHECK_MINUTES = 5
 COLD_CALL_CHECK_MINUTES = 30    # Check for cold leads to auto-call
+PHONE_FIRST_CHECK_MINUTES = int(os.getenv("PHONE_FIRST_CHECK_MINUTES", "20"))
+PHONE_FIRST_BATCH = int(os.getenv("PHONE_FIRST_BATCH", "25"))   # rows evaluated per pass
 MAX_RUNS_PER_DAY = 10
 MAX_CALLS_PER_DAY = int(os.getenv("MAX_CALLS_PER_DAY", "5"))           # Safety cap for Retell calls
 COLD_LEAD_DAYS_THRESHOLD = int(os.getenv("COLD_LEAD_DAYS_THRESHOLD", "5"))    # Days before escalating to phone call
@@ -995,6 +997,172 @@ async def run_cold_lead_escalation(client_id=0):
 
 
 # ═══════════════════════════════════════════════════════
+# LANE 4b: PHONE-FIRST — call leads that were never emailed
+# ═══════════════════════════════════════════════════════
+async def run_phone_first_lane(client_id=0):
+    """Dial never-contacted leads. The channel that actually works.
+
+    Why this lane exists (2026-07-30): Lane 4 above is an ESCALATION lane —
+    get_cold_leads requires status IN ('Email Sent','Contacted'), so it only
+    ever sees leads that were already emailed. That makes it structurally
+    downstream of email. Cold email is deliberately deferred and fails closed
+    (ADR-0014: 0 of 8 providers permit cold outreach), so Lane 4's input set is
+    permanently EMPTY — and the ~4,280 on-ICP WA licence leads from ADR-0014
+    seam 1, which carry a published business phone at 100% fill, could never be
+    called by any scheduled lane.
+
+    Every existing guardrail is reused rather than reimplemented:
+      · DNC + National DNC Registry — inside trigger_retell_call (TCPA)
+      · approval gate — gate_allows("call"), so calls QUEUE for Mark unless
+        CALLS_AUTOPILOT=1. This lane does not widen who gets dialled without
+        approval; it only widens which leads are eligible to be proposed.
+      · MAX_CALLS_PER_DAY — the same daily_call_counter + _call_counter_lock
+        Lane 4 uses. Deliberately NOT outreach_orchestrator.make_call, which
+        keeps its own separate _daily_call_count: routing this lane through it
+        would let the two counters each spend a full MAX_CALLS_PER_DAY, i.e.
+        silently double the cap.
+      · callability — outreach_ready() in lead_validator (single source of truth)
+
+    TCPA note: these are published business lines from a state licence
+    register, never personal cells.
+
+    Kill switch: PHONE_FIRST_ENABLED=0.
+    """
+    global daily_call_counter
+
+    if os.getenv("PHONE_FIRST_ENABLED", "1") != "1":
+        logger.info("📞 [PHONE-FIRST] Disabled by env flag.")
+        return
+
+    logger.info(f"📞 [PHONE-FIRST] [Client {client_id}] Looking for uncontacted callable leads...")
+    try:
+        loop = asyncio.get_running_loop()
+
+        pst_tz = pytz.timezone('America/Los_Angeles')
+        now_pst = datetime.now(pst_tz)
+        if now_pst.hour < 9 or now_pst.hour >= 17:
+            logger.info(f"⏳ [PHONE-FIRST] Outside prime calling hours "
+                        f"({now_pst.strftime('%I:%M %p')} PST). Waiting.")
+            return
+
+        with _call_counter_lock:
+            if daily_call_counter >= MAX_CALLS_PER_DAY:
+                logger.info(f"📞 [PHONE-FIRST] Daily call cap ({MAX_CALLS_PER_DAY}) reached. Skipping.")
+                return
+
+        leads = await DatabaseManager.aget_uncontacted_callable_leads(
+            limit=PHONE_FIRST_BATCH, client_id=client_id)
+        if not leads:
+            logger.info(f"📞 [PHONE-FIRST] [Client {client_id}] No uncontacted callable leads.")
+            return
+
+        from app.skills.lead_validator import outreach_ready
+        from app.core.approval_gate import gate_allows
+
+        called = 0
+        skipped_not_callable = 0
+
+        for lead in leads:
+            lead_id = lead.get("id")
+            business = lead.get("business", "Unknown")
+            phone = lead.get("phone", "")
+            contact = lead.get("owner", "")
+
+            # outreach_ready owns callability — it requires a decision-maker
+            # NAME alongside the number, so Retell can ask for the person
+            # rather than cold-opening on whoever answers.
+            readiness = outreach_ready(lead)
+            if not readiness.get("callable"):
+                skipped_not_callable += 1
+                logger.debug(f"📞 [PHONE-FIRST] Skipping {business} — not callable: "
+                             f"{readiness.get('blockers')}")
+                continue
+
+            if not await gate_allows(
+                "call",
+                {"lead_id": lead_id, "phone": phone},
+                reason=f"First-touch call to {business} ({contact}) — {phone}",
+            ):
+                logger.info(f"📞 [PHONE-FIRST] Call to {business} awaiting approval.")
+                continue
+
+            with _call_counter_lock:
+                if daily_call_counter >= MAX_CALLS_PER_DAY:
+                    logger.info("📞 [PHONE-FIRST] Daily cap reached mid-batch. Stopping.")
+                    break
+                daily_call_counter += 1
+
+            context = {
+                "business_name": business,
+                "contact_name": contact,
+                "owner_name": contact,
+                "owner_title": lead.get("owner_title", ""),
+                "niche": lead.get("vertical", ""),
+                # No prior contact, so the escalation lane's "we emailed you"
+                # framing would be a lie. Say nothing about a prior touch and
+                # let the Retell prompt open cold.
+                "icebreaker": (lead.get("icebreaker") or "").replace("Pending review...", "").strip(),
+                "call_type": "phone_first",
+                "lead_id": lead_id,
+                "client_id": client_id,
+            }
+
+            try:
+                import inspect
+                if inspect.iscoroutinefunction(trigger_retell_call):
+                    result = await trigger_retell_call(phone, context)
+                else:
+                    result = await loop.run_in_executor(None, trigger_retell_call, phone, context)
+
+                if result.get("skipped"):
+                    # Retell unconfigured, or DNC/suppression blocked the number.
+                    logger.info(f"⏭️ [PHONE-FIRST] Call skipped for {business}: "
+                                f"{result.get('error', 'not configured')}")
+                    with _call_counter_lock:
+                        daily_call_counter -= 1      # release the reserved slot
+                    continue
+
+                if result.get("success"):
+                    called += 1
+                    call_id = result.get("call_id")
+                    logger.info(f"✅ [PHONE-FIRST] Called {business}. Call ID: {call_id}")
+                    await DatabaseManager.query(
+                        "UPDATE leads SET status = 'Cold Call Initiated', "
+                        "updated_at = CURRENT_TIMESTAMP WHERE id = ? AND client_id = ?",
+                        (int(lead_id), int(client_id))
+                    )
+                    await send_telegram_report(
+                        f"📞 **First-Touch Call** [Client {client_id}]\n\n"
+                        f"**{business}** ({contact or 'no name'})\n"
+                        f"Phone: `{phone}`\n"
+                        f"Call ID: `{call_id}`"
+                    )
+                else:
+                    logger.warning(f"⚠️ [PHONE-FIRST] Call failed for {business}: "
+                                   f"{result.get('error', 'Unknown')}")
+                    with _call_counter_lock:
+                        daily_call_counter -= 1
+                    await DatabaseManager.query(
+                        "UPDATE leads SET status = 'Ready for Call', "
+                        "updated_at = CURRENT_TIMESTAMP WHERE id = ? AND client_id = ?",
+                        (int(lead_id), int(client_id))
+                    )
+            except Exception as call_err:
+                logger.error(f"❌ [PHONE-FIRST] Call error for {business}: {call_err}")
+                with _call_counter_lock:
+                    daily_call_counter -= 1
+
+            if called:
+                await asyncio.sleep(5)      # spacing between dials
+
+        logger.info(f"📞 [PHONE-FIRST] [Client {client_id}] {called} call(s) placed; "
+                    f"{skipped_not_callable} lead(s) not callable.")
+
+    except Exception as e:
+        logger.error(f"Phone-First Lane Error (Client {client_id}): {e}")
+
+
+# ═══════════════════════════════════════════════════════
 # SCHEDULE WRAPPERS
 # ═══════════════════════════════════════════════════════
 def fast_lane_job():
@@ -1035,6 +1203,14 @@ def cold_escalation_job():
     client_list = [{"id": 0}] + (clients if clients else [])
     async def run_all():
         tasks = [run_cold_lead_escalation(client_id=c.get("id", 0)) for c in client_list]
+        await asyncio.gather(*tasks, return_exceptions=True)
+    _run_async(run_all())
+
+def phone_first_job():
+    clients = DatabaseManager.get_clients()
+    client_list = [{"id": 0}] + (clients if clients else [])
+    async def run_all():
+        tasks = [run_phone_first_lane(client_id=c.get("id", 0)) for c in client_list]
         await asyncio.gather(*tasks, return_exceptions=True)
     _run_async(run_all())
 
@@ -1125,6 +1301,7 @@ schedule.every(APPROVAL_CHECK_MINUTES).minutes.do(_safe_job, fast_lane_job)     
 schedule.every(HUNT_INTERVAL_MINUTES).minutes.do(_safe_job, slow_lane_job)        # Lane 2: Lead hunting
 schedule.every(REPLY_CHECK_MINUTES).minutes.do(_safe_job, reply_and_drip_check_job) # Lane 3: Reply + Drip monitoring
 schedule.every(COLD_CALL_CHECK_MINUTES).minutes.do(_safe_job, cold_escalation_job)  # Lane 4: Cold lead → call
+schedule.every(PHONE_FIRST_CHECK_MINUTES).minutes.do(_safe_job, phone_first_job)   # Lane 4b: Never-contacted → call (phone-first; Lane 4 only sees already-emailed leads)
 schedule.every(3).hours.do(_safe_job, cloud_backup_job)                           # Lane 5: Google Drive Backup (3h: caps learning-data loss on Render restarts)
 schedule.every().day.at("17:00").do(_safe_job, ceo_brain_job)                     # Lane 6: CEO Morning Brief (17:00 UTC = ~9-10 AM Pacific)
 schedule.every(2).hours.do(_safe_job, health_check_job)                           # Lane 7: Pipeline Health Check

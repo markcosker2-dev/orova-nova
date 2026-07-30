@@ -48,6 +48,45 @@ class _LeadRepo:
         return await loop.run_in_executor(None, lambda: cls.get_cold_leads(days_threshold, client_id))
 
     @classmethod
+    def get_uncontacted_callable_leads(cls, limit: int = 25, client_id: int = 0) -> List[Dict[str, Any]]:
+        """Leads with a phone that have NEVER been contacted on any channel.
+
+        The counterpart to get_cold_leads. That one requires
+        status IN ('Email Sent','Contacted'), i.e. it only ever sees leads that
+        were ALREADY emailed — which makes the escalation lane structurally
+        downstream of email. With cold email deliberately deferred (ADR-0014,
+        2026-07-30) nothing could ever enter that set, so licence-sourced leads
+        (status 'New', phone at 100% fill) were undialable by any scheduled lane.
+
+        Highest ICP score first, so the best leads get the day's call budget.
+        Callability itself is NOT decided here — outreach_ready() in
+        lead_validator owns that (single source of truth); this only narrows the
+        rows worth evaluating.
+        """
+        with cls.connection() as conn:
+            try:
+                cursor = conn.execute(
+                    """SELECT * FROM leads
+                       WHERE client_id = ?
+                       AND COALESCE(status,'') = 'New'
+                       AND COALESCE(phone,'') != ''
+                       ORDER BY COALESCE(score, 0) DESC, id ASC
+                       LIMIT ?""",
+                    (client_id, int(limit))
+                )
+                return [dict(row) for row in cursor.fetchall()]
+            except Exception as e:
+                logger.error(f"Error fetching uncontacted callable leads: {e}")
+                return []
+
+    @classmethod
+    async def aget_uncontacted_callable_leads(cls, limit: int = 25, client_id: int = 0) -> List[Dict[str, Any]]:
+        """Async wrapper for get_uncontacted_callable_leads."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None, lambda: cls.get_uncontacted_callable_leads(limit, client_id))
+
+    @classmethod
     def _is_duplicate_lead(cls, email: str, domain: str = "", client_id: int = 0) -> bool:
         """Check if a lead with the same email or domain already exists in the DB."""
         with cls.connection() as conn:
