@@ -8,6 +8,8 @@ import os
 import logging
 import json
 import datetime
+import hashlib
+import time as _time
 from datetime import timedelta
 import asyncio
 
@@ -528,6 +530,13 @@ class CEOBrain:
 
     SERP_QUOTA_WARN_RATIO = 0.9
 
+    # Health-alert debounce (2026-07-30). The health lane fires every 2 hours
+    # and its conditions are structural, so an identical alert was paged 12x a
+    # day forever. Re-page only when the alert SET changes, or once a day so a
+    # persisting problem is not silently forgotten.
+    HEALTH_ALERT_STATE_KEY = "health_alert_debounce"
+    HEALTH_ALERT_COOLDOWN_S = 24 * 3600
+
     async def _check_serp_quota(self) -> str:
         """Return a warning string when the shared SerpAPI monthly quota is
         >=90% spent, else "". Sends one dedicated Telegram alert per
@@ -585,7 +594,14 @@ class CEOBrain:
             "SELECT COUNT(*) as cnt FROM outreach_outcomes WHERE action='email_sent' AND datetime(created_at) >= datetime('now', '-1 day')"
         )
         yesterday_sends = yesterday_sends_row["cnt"] if yesterday_sends_row else 0
-        if yesterday_sends == 0:
+        # Only a health problem if sending is actually POSSIBLE. Cold email is
+        # deliberately deferred (ADR-0014 / 2026-07-30: 0 of 8 providers permit
+        # cold outreach, and agentmail_skill fails closed without
+        # BUSINESS_POSTAL_ADDRESS per CAN-SPAM §7704). Alerting that the
+        # intended configuration is in effect is noise no action can clear —
+        # and it was half the reason this check paged every 2 hours forever.
+        email_sending_possible = bool(os.getenv("BUSINESS_POSTAL_ADDRESS", "").strip())
+        if yesterday_sends == 0 and email_sending_possible:
             health_score -= 20
             alerts.append("No outreach emails sent in the last 24 hours.")
             
@@ -620,7 +636,19 @@ class CEOBrain:
 
         health_score = max(0, health_score)
         
-        # If health score drops below 70, alert CEO
+        # ── Alert CEO, but only when there is something NEW to say ───────────
+        # This lane runs every 2 hours. Its alert conditions are structural
+        # ("lead inventory is low", "no emails sent"), so they stay true for
+        # days and this block re-sent a byte-identical Telegram message 12x a
+        # day, indefinitely — and re-scheduled the same corrective tasks each
+        # time. Owner report, 2026-07-30: "the telegram part keeps spamming the
+        # same thing again and again."
+        #
+        # Debounced on a fingerprint of the alert SET, using the same
+        # state_store mechanism _check_serp_quota already uses (extension, not
+        # a second bookkeeping system). A changed alert set pages immediately;
+        # an unchanged one waits out the cooldown. Fail-open: a state read or
+        # write error must send rather than swallow a real alert.
         if health_score < 70:
             alert_msg = (
                 f"⚠️ **Orova Pipeline Health Warning**\n\n"
@@ -628,13 +656,41 @@ class CEOBrain:
                 f"Alerts:\n" + "\n".join(f"• {a}" for a in alerts) + "\n\n"
                 f"Nova is auto-scheduling corrective tasks."
             )
-            await _send_telegram_alert(alert_msg)
-            
-        # If health score drops below 70, auto-execute corrective tasks
-        if health_score < 70:
-            corrective_tasks = await self.propose_tasks(metrics, client_id)
-            if corrective_tasks:
-                await self._schedule_auto_execute(corrective_tasks, client_id, source="health_alert")
+            should_alert = True
+            fingerprint = hashlib.sha256(
+                "|".join(sorted(alerts)).encode("utf-8")).hexdigest()[:16]
+            try:
+                prev = await DatabaseManager.get_state(self.HEALTH_ALERT_STATE_KEY) or {}
+                if not isinstance(prev, dict):
+                    prev = {}
+                age_s = _time.time() - float(prev.get("sent_at") or 0)
+                if (prev.get("fingerprint") == fingerprint
+                        and age_s < self.HEALTH_ALERT_COOLDOWN_S):
+                    should_alert = False
+                    logger.info(
+                        f"[CEO_BRAIN] Health alert unchanged ({fingerprint}, "
+                        f"{age_s/3600:.1f}h ago) — suppressing duplicate Telegram "
+                        f"alert. Score {health_score}/100, {len(alerts)} alert(s)."
+                    )
+            except Exception as e:
+                logger.debug(f"[CEO_BRAIN] Health alert debounce unavailable ({e}); sending.")
+
+            if should_alert:
+                await _send_telegram_alert(alert_msg)
+                try:
+                    await DatabaseManager.set_state(
+                        self.HEALTH_ALERT_STATE_KEY,
+                        {"fingerprint": fingerprint, "sent_at": _time.time(),
+                         "score": health_score},
+                    )
+                except Exception as e:
+                    logger.debug(f"[CEO_BRAIN] Could not persist health alert state: {e}")
+
+                # Corrective tasks ride the SAME gate. Re-proposing them every
+                # 2 hours queued duplicate work for a condition already known.
+                corrective_tasks = await self.propose_tasks(metrics, client_id)
+                if corrective_tasks:
+                    await self._schedule_auto_execute(corrective_tasks, client_id, source="health_alert")
 
         return {
             "health_score": health_score,
