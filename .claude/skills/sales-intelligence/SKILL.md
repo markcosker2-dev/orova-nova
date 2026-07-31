@@ -1,9 +1,23 @@
 ---
 name: sales-intelligence
-description: OROVA's sales craft layer for luxury-automotive outbound — cold email, cold calls, objection handling, follow-up cadence, and message QA. Use when writing, reviewing, or improving any outreach (email, Retell call script, follow-up, break-up note), when handling an objection or reply, or when tuning business_context.json / the Retell prompt. Triggers: "cold email", "cold call", "outreach", "follow-up", "objection", "book a meeting", "sales script", "personalize", "QA this message".
+description: OROVA's sales craft layer for outbound to custom home builders, high-end remodelers and med spas (ADR-0012) — cold calls, objection handling, follow-up cadence, and message QA. Phone is the live channel; cold email is deferred (ADR-0014 / 2026-07-30). Use when writing, reviewing, or improving any outreach (Retell call script, post-call follow-up, break-up note), when handling an objection or reply, or when tuning business_context.json / the Retell prompt. Triggers: "cold call", "call script", "outreach", "follow-up", "objection", "book a meeting", "sales script", "personalize", "QA this message".
 ---
 
 # OROVA Sales Intelligence
+
+> ⚠️ **ICP MOVED — body rewrite pending (2026-07-30).** ADR-0012 re-ranked the ICP
+> to **custom home builders / high-end remodelers** (lead), then med spas, then
+> luxury RE, and **disqualifies general auto repair and franchised dealers on
+> sight**. PRs #119 and #120 now enforce that in code. The channel also moved:
+> **phone (Retell) is live; cold email is deferred** (ADR-0014 — 0 of 8 providers
+> permit cold outreach).
+>
+> Everything below still describes the **luxury-automotive** era, including
+> `references/luxury-automotive.md`. Treat the *craft* (structure, objection
+> handling, QA gate, follow-up cadence) as still valid and the *vertical
+> specifics* as historical. Exotic/luxury auto remains "opportunistic only" per
+> ADR-0012, so the automotive reference is not deleted — it is deprioritised.
+> **Do not use the automotive hooks for a remodeler.**
 
 The craft layer for OROVA's outbound to **luxury automotive** businesses (dealers,
 exotic rentals, detailers, wrap/PPF, performance, restoration). This skill makes
@@ -46,7 +60,7 @@ on-brand, and tuned to book qualified conversations.
 | Build/adjust the follow-up sequence or break-up | `references/follow-up-sequencing.md` |
 | Score a message before it sends (the QA gate) | `references/qa-checklist.md` |
 | Get the exact positioning / what we sell / forbidden language | `references/positioning.md` |
-| Vertical-specific hooks (dealer/rental/detail/wrap/perf/resto) | `references/luxury-automotive.md` |
+| Vertical hooks for exotic/luxury AUTO only — historical, opportunistic per ADR-0012. No remodeler/med-spa reference file exists yet; use `references/positioning.md` for those. | `references/luxury-automotive.md` |
 | Push changes into Nova/Retell, or wire A/B + learning | `references/integration.md` |
 
 Keep outputs tight: a cold email is ≤75 words, a call opener is two sentences.
