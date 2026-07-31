@@ -156,8 +156,8 @@ async def api_trigger_lane(lane: int, client_id: int = 0):
     """Manually trigger a specific worker lane for testing."""
     from app.worker import (
         run_ceo_fast_lane, run_lead_hunt_slow_lane, run_reply_monitor,
-        run_cold_lead_escalation, cloud_backup_job, ceo_brain_job,
-        health_check_job, self_improvement_job, sequence_drip_job
+        run_cold_lead_escalation, run_phone_first_lane, cloud_backup_job,
+        ceo_brain_job, health_check_job, self_improvement_job, sequence_drip_job
     )
     lane_map = {
         1: lambda: run_ceo_fast_lane(client_id),
@@ -169,10 +169,15 @@ async def api_trigger_lane(lane: int, client_id: int = 0):
         7: health_check_job,
         8: self_improvement_job,
         9: sequence_drip_job,
+        # Lane 4b as 10 — the phone-first dialler. Lane 4 only ever sees
+        # already-emailed leads, so this is the one that can call a fresh
+        # licence-sourced lead. Triggering it by hand is the fastest route to
+        # the first transcript.
+        10: lambda: run_phone_first_lane(client_id),
     }
     fn = lane_map.get(lane)
     if not fn:
-        raise HTTPException(status_code=400, detail=f"Unknown lane {lane}. Valid: 1-9")
+        raise HTTPException(status_code=400, detail=f"Unknown lane {lane}. Valid: 1-10")
     from app.worker import _run_async
     _run_async(fn())
     return {"status": "ok", "message": f"Lane {lane} triggered"}
