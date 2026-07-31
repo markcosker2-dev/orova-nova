@@ -1017,14 +1017,40 @@ async def run_phone_first_lane(client_id=0):
         CALLS_AUTOPILOT=1. This lane does not widen who gets dialled without
         approval; it only widens which leads are eligible to be proposed.
       · MAX_CALLS_PER_DAY — the same daily_call_counter + _call_counter_lock
-        Lane 4 uses. Deliberately NOT outreach_orchestrator.make_call, which
-        keeps its own separate _daily_call_count: routing this lane through it
-        would let the two counters each spend a full MAX_CALLS_PER_DAY, i.e.
-        silently double the cap.
+        Lane 4 uses. Deliberately NOT outreach_orchestrator.make_throttled_call,
+        which keeps its own separate _daily_call_count: routing this lane
+        through it would let the two counters each spend a full
+        MAX_CALLS_PER_DAY, i.e. silently double the cap.
       · callability — outreach_ready() in lead_validator (single source of truth)
 
-    TCPA note: these are published business lines from a state licence
-    register, never personal cells.
+    ⚠️ COMPLIANCE — UNRESOLVED. Do NOT set CALLS_AUTOPILOT=1 for WA numbers
+    until the question below is answered by a lawyer. An earlier version of this
+    docstring claimed "published business lines from a state licence register,
+    never personal cells" as if that settled TCPA. **It does not**, on three
+    counts found in the 2026-07-30 review:
+
+      1. TCPA §227(b)(1)(A)(iii) covers artificial/prerecorded voice to ANY
+         wireless number and has NO B2B exemption (EBR is defined only for
+         §(c)). $500/call, $1,500 willful. Licence records routinely list a
+         mobile as the business line and do not say which.
+      2. RCW 80.36.400 appears to bar "automatic dialing and announcing device"
+         commercial solicitation in Washington outright — no B2B exemption, no
+         consent cure — and violation is a per-se Consumer Protection Act claim.
+      3. is_dnc_registered() FAILS OPEN and is unconfigured in production, so
+         there is currently zero National DNC Registry protection. Scrubbing
+         would not cure §227(b) anyway — different subsection.
+
+    Also missing for WA: a recorded recording-announcement as the first
+    utterance (RCW 9.73.030, two-party consent — Retell records every call) and
+    caller identification within 30 seconds (RCW 19.158.040).
+
+    The open question is narrow: is a TWO-WAY conversational agent an "ADAD" /
+    "artificial voice message" at all, or do those terms reach only one-way
+    prerecorded announcements? That is worth one paid hour of a WA
+    consumer-protection lawyer before this lane is enabled.
+
+    This lane is safe to MERGE — it is inert while CALLS_AUTOPILOT=0, and the
+    approval gate means calls only queue for Mark.
 
     Kill switch: PHONE_FIRST_ENABLED=0.
     """

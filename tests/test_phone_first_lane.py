@@ -110,7 +110,7 @@ class TestGuardrails:
         r["dialer"].assert_not_awaited()
 
     def test_cap_is_shared_with_lane_4_not_a_second_counter(self):
-        """Routing through outreach_orchestrator.make_call would use its own
+        """Routing through outreach_orchestrator.make_throttled_call would use its own
         _daily_call_count and silently double MAX_CALLS_PER_DAY across lanes.
         This asserts the lane increments the SHARED worker counter."""
         r = _run_lane([LICENCE_LEAD], counter=0)
