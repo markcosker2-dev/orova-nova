@@ -556,7 +556,27 @@ def contact_confidence(lead: dict) -> dict:
 # the compliant cold-call combo; never a personal cell). Computed at read time
 # over the same signals as contact_confidence — never stored.
 _OUTREACH_MIN_NAME_CONF = 60   # below this, the "name" is an unvetted guess
-_OUTREACH_MIN_EMAIL_CONF = 35  # guessed-but-MX-ok or better (generic is penalised in contact_confidence)
+
+# 65 = 'found' (scraped from the business's own site) or 'verified'. A pure
+# pattern GUESS scores 35 and must never clear this bar.
+#
+# This was 35, and that is exactly how the 2026-07-25 incident happened: a
+# guessed address scored 35, the threshold was `>= 35`, so 48 invented strings
+# came back emailable with an EMPTY blocker list and were mailed. Microsoft
+# answered `550 5.4.1` — Directory-Based Edge Blocking, i.e. "no such mailbox"
+# — for the ones that were pure fabrication.
+#
+# The old comment read "guessed-but-MX-ok". That reasoning is the trap: the MX
+# check proves the DOMAIN accepts mail, and says nothing about whether the
+# MAILBOX exists. `marc@realcompany.com` passes MX and still bounces when there
+# is no Marc. Provenance was already recorded correctly (email_status
+# 'guessed'); nothing acted on it. A label that no gate reads is not a control.
+#
+# Consequence, accepted deliberately: a lead whose email could only be guessed
+# is no longer `emailable`. It stays `callable` when a phone and name exist, so
+# nothing is lost from the phone lane — and per ADR-0008 a miss always beats a
+# fabricated contact.
+_OUTREACH_MIN_EMAIL_CONF = 65
 
 
 def outreach_ready(lead: dict) -> dict:
