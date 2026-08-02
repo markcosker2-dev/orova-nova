@@ -86,6 +86,14 @@ MAX_CALLS_PER_DAY = int(os.getenv("MAX_CALLS_PER_DAY", "5"))           # Safety 
 COLD_LEAD_DAYS_THRESHOLD = int(os.getenv("COLD_LEAD_DAYS_THRESHOLD", "5"))    # Days before escalating to phone call
 MAX_DAILY_COST = 5.0            # $5.00 daily safety cap
 
+# Hunt-report Telegram debounce (2026-08-02). Same shape as the health lane's
+# debounce in ceo_brain (#122): a state key plus a cooldown, keyed on a
+# fingerprint of what was actually found. 24h is deliberately long — the hunt
+# runs many times a day and rediscovers the same businesses after every deploy
+# wipe, which is exactly the spam the owner reported.
+HUNT_REPORT_STATE_KEY = "hunt_report_debounce"
+HUNT_REPORT_COOLDOWN_S = float(os.getenv("HUNT_REPORT_COOLDOWN_S", str(24 * 3600)))
+
 # Default hunt rotation — mirrors business_context.json's primary_verticals
 # (profitability-plan §2.1/§5.2, owner-approved 2026-07-10). Exotic auto is
 # split into sub-niches so the champion/challenger loop can learn WHICH
@@ -102,7 +110,22 @@ DEFAULT_HUNT_NICHES = [
     # objection dies on the call. Owner-operated, already buys marketing.
     # NOTE: the hunt picks with random.choice() — UNIFORMLY. So the number of
     # entries per vertical IS the weighting. Composition below is deliberate:
-    # ~50% homes/remodel, ~20% med spa, ~15% luxury RE, ~15% auto.
+    # ~58% homes/remodel, ~25% med spa, ~17% luxury RE.
+    #
+    # Automotive removed from the rotation 2026-08-02 on owner report ("why is
+    # nova in telegram always sending me automotive leads?"). It was 2 of 14
+    # entries, so ~14% of every hunt was an automotive search — and the ICP gate
+    # did not catch the results, for two reasons proven by probe:
+    #   1. worker.py sets lead["vertical"] = niche, i.e. the QUERY STRING. The
+    #      query 'exotic car dealer california' contains "exotic", which tripped
+    #      the ADR-0012 opportunistic exemption for EVERY lead it returned —
+    #      including plain dealers and repair shops that are nothing of the kind.
+    #   2. 'ceramic coating auto detailing california' returns detailing/tint/
+    #      wrap/PPF shops, none of which appear in any off-ICP list.
+    # Both holes are fixed in lead_validator, but the cheapest control is not to
+    # search for it: ADR-0012 ranks exotic auto "opportunistic only", and a
+    # rotation slot spends discovery budget on it every seventh run.
+    # Exotic/luxury auto remains reachable via an explicit TARGET_NICHE override.
     'custom home builder california',
     'luxury home remodeling california',
     'high end kitchen remodeler california',
@@ -118,11 +141,6 @@ DEFAULT_HUNT_NICHES = [
     # THIRD (~15%) — luxury real estate top producers & premium design.
     'luxury real estate agent california',
     'luxury interior designer california',
-    # OPPORTUNISTIC (~15%) — exotic/luxury automotive. Unit economics work
-    # (~$10-25K gross per car) but a $200K buyer rarely starts on a Meta lead
-    # form. Was 7 of 14 entries (50%) before ADR-0012; now 2 of 14.
-    'exotic car dealer california',
-    'ceramic coating auto detailing california',
 ]
 
 
@@ -518,11 +536,59 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
             except Exception:
                 pass
 
-            await send_telegram_report(
-                f"☀️ **Lead Hunt Complete**\n\n"
-                f"Found **{count}** new leads for '{query}'.\n\n"
-                f"{summary_text[:500]}"
-            )
+            # ── Hunt-report debounce (2026-08-02) ────────────────────────────
+            # Owner report: "i need Nova to stop spamming me with the thing
+            # only once and done". This send was unconditional, and the lead
+            # dedupe it relies on lives in the DB (main.py) — which is wiped by
+            # every deploy on Render's ephemeral disk. So the same businesses
+            # were rediscovered and re-announced indefinitely.
+            #
+            # Debounced on a fingerprint of the BUSINESS-NAME SET, reusing the
+            # same state_store mechanism the health lane already uses (#122) —
+            # an extension, not a second bookkeeping system. A genuinely
+            # different batch pages immediately; an identical one stays quiet.
+            # Fail-open: a state read/write error must send, never swallow.
+            #
+            # Honest limit: the state store is that same wiped-on-deploy DB, so
+            # a redeploy resets the memory. It collapses the steady-state spam,
+            # it does not survive a restart. The durable fix is the Drive
+            # restore (owner action) — without it nothing in Nova remembers.
+            import hashlib as _hashlib
+            _names = sorted({(l.get("business") or "").strip().lower()
+                             for l in leads if (l.get("business") or "").strip()})
+            _fingerprint = _hashlib.sha256(
+                "|".join(_names).encode("utf-8")).hexdigest()[:16]
+            _should_report = True
+            try:
+                _prev = await DatabaseManager.get_state(HUNT_REPORT_STATE_KEY) or {}
+                if not isinstance(_prev, dict):
+                    _prev = {}
+                _age_s = time.time() - float(_prev.get("sent_at") or 0)
+                if (_prev.get("fingerprint") == _fingerprint
+                        and _age_s < HUNT_REPORT_COOLDOWN_S):
+                    _should_report = False
+                    logger.info(
+                        f"   -> 🔕 Hunt report unchanged ({_fingerprint}, "
+                        f"{_age_s/3600:.1f}h ago) — suppressing duplicate Telegram "
+                        f"report for the same {count} business(es)."
+                    )
+            except Exception as _dbe:
+                logger.debug(f"   -> Hunt report debounce unavailable ({_dbe}); sending.")
+
+            if _should_report:
+                await send_telegram_report(
+                    f"☀️ **Lead Hunt Complete**\n\n"
+                    f"Found **{count}** new leads for '{query}'.\n\n"
+                    f"{summary_text[:500]}"
+                )
+                try:
+                    await DatabaseManager.set_state(
+                        HUNT_REPORT_STATE_KEY,
+                        {"fingerprint": _fingerprint, "sent_at": time.time(),
+                         "count": count, "query": query},
+                    )
+                except Exception as _dbe:
+                    logger.debug(f"   -> Could not persist hunt report state: {_dbe}")
 
             # Durability ladder (canonical helper, ADR-0010/SSoT): Drive
             # snapshot, Sheets fallback on failure. Extracted 2026-07-21 —

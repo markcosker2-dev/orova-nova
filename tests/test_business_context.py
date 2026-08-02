@@ -74,23 +74,30 @@ def test_hunt_rotation_excludes_aviation_and_yachting():
     assert "yacht" not in joined
 
 
-def test_hunt_rotation_leads_with_homes_and_demotes_auto():
+def test_hunt_rotation_leads_with_homes_and_drops_auto():
     """ADR-0012: the rotation is weighted by ENTRY COUNT — worker.py picks with
     random.choice(), uniformly — so composition IS the strategy. Custom homes /
-    remodeling leads (one $100K+ job pays 4-7 months of retainer); exotic auto
-    drops to opportunistic (a $200K buyer rarely starts on a Meta lead form)."""
+    remodeling leads (one $100K+ job pays 4-7 months of retainer).
+
+    CHANGED 2026-08-02 (owner instruction, supersedes the earlier assertion that
+    exotic auto merely be *demoted*): "why is nova in telegram always sending me
+    automotive leads?" -> automotive is out of the rotation entirely, not just
+    outnumbered. At 2 of 14 entries it was still ~14% of every hunt, and the
+    downstream ICP gate did not catch the results (the exotic query string
+    tripped the opportunistic exemption for every row it returned). ADR-0012
+    keeps exotic auto *reachable* — via an explicit TARGET_NICHE override — but
+    Nova no longer spends discovery budget seeking it.
+    """
     from app.worker import DEFAULT_HUNT_NICHES
     joined = " | ".join(DEFAULT_HUNT_NICHES).lower()
-    # every core vertical stays reachable
-    for expected in ("custom home builder", "med spa", "luxury real estate agent",
-                     "exotic car dealer"):
+    for expected in ("custom home builder", "med spa", "luxury real estate agent"):
         assert expected in joined, f"missing rotation niche: {expected}"
 
     def _count(keys):
         return len([n for n in DEFAULT_HUNT_NICHES if any(k in n.lower() for k in keys)])
 
     homes = _count(("home", "remodel", "kitchen", "bathroom"))
-    auto = _count(("car ", "car'", "auto", "detailing", "car dealer"))
+    auto = _count(("car ", "car'", "auto", "detailing", "car dealer", "vehicle"))
     assert homes >= len(DEFAULT_HUNT_NICHES) / 2, (
         f"homes/remodel must LEAD the rotation, got {homes}/{len(DEFAULT_HUNT_NICHES)}")
-    assert auto < homes, f"exotic auto must be opportunistic, got auto={auto} vs homes={homes}"
+    assert auto == 0, f"automotive is out of the rotation entirely, got auto={auto}"
