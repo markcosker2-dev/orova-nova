@@ -199,6 +199,22 @@ async def lifespan(app: FastAPI):
             # have closed the pool during a swap, so re-init unconditionally.
             try:
                 DatabaseManager.reset_sqlite_fresh()
+                # Re-create the non-core schema (2026-08-02). reset_sqlite_fresh
+                # DELETES the database file, which destroys the events and
+                # learning tables built earlier in this same boot — and only the
+                # restore-SUCCESS branch above re-ensured them. Since the Drive
+                # token expires every 7 days, this failure branch is the COMMON
+                # path, which is why production logged `[EVENTS] log
+                # 'lead_discovered' failed (non-fatal): no such table: events`
+                # on a live hunt: ADR-0007's canonical event log did not exist.
+                try:
+                    from app.core.event_log import ensure_events_table as _ensure_events
+                    await _ensure_events()
+                    from app.core.self_learning import ensure_tables as _ensure_learning
+                    await _ensure_learning()
+                    logger.info("[EVENTS] Event + learning tables rebuilt on the fresh DB")
+                except Exception as schema_err:
+                    logger.error(f"⚠️ Could not rebuild schema on the fresh DB: {schema_err}")
             except Exception as reset_err:
                 logger.critical(f"⚠️ DB reset after a failed restore failed: {reset_err}")
             logger.warning(f"⚠️ No usable Drive snapshot ({restore_res.get('error') or 'unusable'}). Falling back to Google Sheets leads...")

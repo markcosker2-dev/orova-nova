@@ -156,6 +156,7 @@ class _LeadRepo:
                     ).fetchone()
                     if row:
                         logger.info(f"[DEDUP] Skipping duplicate lead: {email}")
+                        conn.rollback()   # release the read txn before pooling
                         return -1
                 if domain:
                     row = conn.execute(
@@ -164,6 +165,7 @@ class _LeadRepo:
                     ).fetchone()
                     if row:
                         logger.info(f"[DEDUP] Skipping duplicate lead: {domain}")
+                        conn.rollback()   # release the read txn before pooling
                         return -1
                 # Insert — same transaction, no race window
                 vertical = lead.get("vertical") or default_vertical or ""
@@ -191,6 +193,16 @@ class _LeadRepo:
                 conn.commit()
                 return lead_id
             except Exception as e:
+                # ROLLBACK FIRST (2026-08-02). This handler used to `return -1`
+                # with the failed INSERT's transaction still open, so the
+                # connection went back to the pool holding SQLite's write lock.
+                # Every subsequent save then blocked for busy_timeout and died
+                # `database is locked` — which re-entered this same handler and
+                # poisoned another connection. Five leads found, one saved.
+                try:
+                    conn.rollback()
+                except Exception as rb_err:
+                    logger.error(f"Rollback after failed lead save also failed: {rb_err}")
                 # Hard dedup backstop: UNIQUE index on (lower(email), client_id)
                 # catches any TOCTOU race that slipped past the SELECT check
                 import sqlite3

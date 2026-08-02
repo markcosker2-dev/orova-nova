@@ -297,25 +297,53 @@ class _DBBase:
         Databases created before the UNIQUE index was introduced may already
         contain duplicate (lower(email), client_id) rows, which makes the
         CREATE UNIQUE INDEX fail and aborts the whole init. Dedupe first
-        (keeping the oldest row), then create the index. Rows with NULL
-        email/client_id are left alone — SQLite UNIQUE treats NULLs as
-        distinct, so they never conflict with the index.
+        (keeping the oldest row), then create the index.
+
+        ── The index must be PARTIAL (2026-08-02) ──────────────────────────
+        This used to be a plain UNIQUE index on (lower(email), client_id), on
+        the stated reasoning that "rows with NULL email are left alone —
+        SQLite UNIQUE treats NULLs as distinct, so they never conflict".
+
+        That reasoning is correct about NULL and wrong about this codebase:
+        save_lead writes `lead.get("email", "")`, i.e. the EMPTY STRING, never
+        NULL. `lower('') = ''` is an ordinary value, so every email-less lead
+        collided with every other one. The database could hold exactly ONE
+        email-less lead per client_id, and every subsequent one was silently
+        discarded as `[DEDUP-UNIQUE] Race caught by UNIQUE index:` — with an
+        empty address printed after the colon, which is what made it read like
+        a real dedup instead of a bug.
+
+        That is not an edge case, it is the main line: WA L&I and Yelp (ADR-0014
+        seam 1, the ONLY working discovery sources) carry no email at all. It is
+        the true cause of the production hunt that found 5 leads and saved 1.
+
+        The predicate restores the intended behaviour: dedup real addresses,
+        never treat "no address" as an identity.
         """
         import sqlite3
         create_sql = (
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_email_client "
-            "ON leads(lower(email), client_id)"
+            "ON leads(lower(email), client_id) "
+            "WHERE email IS NOT NULL AND trim(email) != ''"
         )
+        # An existing index of the same name has the OLD, non-partial
+        # definition, and CREATE ... IF NOT EXISTS would silently keep it.
+        # Drop first so the predicate is actually applied on every deploy.
+        conn.execute("DROP INDEX IF EXISTS idx_leads_email_client")
         try:
             conn.execute(create_sql)
         except sqlite3.IntegrityError:
+            # Only ever delete rows that carry a REAL duplicate address. The
+            # previous version of this DELETE filtered on `email IS NOT NULL`,
+            # which includes '' — so the self-heal would have destroyed all but
+            # one email-less lead, precisely the rows discovery now produces.
             removed = conn.execute(
                 """
                 DELETE FROM leads
-                WHERE email IS NOT NULL AND client_id IS NOT NULL
+                WHERE email IS NOT NULL AND trim(email) != '' AND client_id IS NOT NULL
                   AND id NOT IN (
                     SELECT MIN(id) FROM leads
-                    WHERE email IS NOT NULL AND client_id IS NOT NULL
+                    WHERE email IS NOT NULL AND trim(email) != '' AND client_id IS NOT NULL
                     GROUP BY lower(email), client_id
                   )
                 """
@@ -490,7 +518,40 @@ class _DBBase:
 
     @classmethod
     def return_connection(cls, conn):
-        """Return a connection to the pool. If pool is full, close it."""
+        """Return a connection to the pool. If pool is full, close it.
+
+        A connection must NEVER re-enter the pool holding an open transaction
+        (2026-08-02). Production symptom, from the first real hunt: five leads
+        found, ONE saved, the rest dying `Error saving lead: database is locked`
+        at 5-second intervals — exactly busy_timeout elapsing.
+
+        Mechanism: _lead_repo.save_lead had `return` statements inside its
+        `with cls.connection()` block that neither committed nor rolled back —
+        including its `except` handler. A failed INSERT therefore handed a
+        connection back to the pool still holding SQLite's write lock. Every
+        later write on a different pooled connection then blocked for
+        busy_timeout and failed. And because that failure is itself an
+        exception on the same unguarded path, it poisoned another connection:
+        self-amplifying, so the pool degrades until restart.
+
+        Rolling back HERE rather than at each call site fixes the whole bug
+        class — any current or future code that leaves a transaction open is
+        contained. A rollback with nothing to roll back is a cheap no-op.
+        """
+        try:
+            if getattr(conn, "in_transaction", False):
+                conn.rollback()
+        except Exception as e:
+            # A connection we cannot clean is worse than one fewer connection:
+            # drop it rather than return a poisoned one to the pool.
+            logger.warning(f"[DB] Discarding connection that would not roll back: {e}")
+            with cls._pool_lock:
+                cls._active_connections -= 1
+            try:
+                conn.close()
+            except Exception:
+                pass
+            return
         try:
             with cls._pool_lock:
                 cls._active_connections -= 1
