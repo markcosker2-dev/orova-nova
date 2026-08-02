@@ -114,6 +114,31 @@ _OFF_ICP_VERTICALS = {
 }
 _OPPORTUNISTIC_VERTICAL_MARKERS = ("exotic", "luxury", "classic", "supercar")
 
+# Cosmetic/appearance auto services — added 2026-08-02 after the owner asked
+# why Telegram kept surfacing automotive leads. These fail the ADR-0012
+# qualifying test harder than the repair shops already listed above: a ceramic
+# coating or a tint job grosses a few hundred dollars, so covering a
+# ~$6.5-7.5K/mo retainer needs dozens of extra jobs a month, not one.
+#
+# They reached Mark because they appear in NO off-ICP list while
+# `ceramic coating auto detailing california` sat in the hunt rotation — and
+# because `_ICP_VERTICAL_KEYWORDS` in the scorer actively REWARDS "detail",
+# "ceramic", "ppf" and "tint" with +10, a leftover from OROVA's original
+# luxury-automotive vertical. That scorer inversion is NOT fixed here (the
+# owner's standing rule is not to rush the scorer); it is recorded in the PR.
+_OFF_ICP_VERTICAL_SUBSTRINGS = (
+    "auto repair", "auto service", "car repair",
+    "auto detailing", "car detailing", "ceramic coating",
+    "paint protection", "window tint", "vinyl wrap",
+    # The dealer terms live in _OFF_ICP_VERTICALS too, but that set is matched
+    # EXACTLY — and a hunt row's vertical is the whole query string
+    # ('exotic car dealer california'), which never equals a bare label. Without
+    # a substring leg, "Sunset Motors" off that query walked the gate. Genuine
+    # exotic/luxury businesses are still exempt: the business-name carve-out
+    # above returns before this runs.
+    "car dealer", "auto dealer", "dealership",
+)
+
 
 def off_icp_vertical_reason(lead: dict) -> str:
     """Why this lead's vertical is outside the ADR-0012 ICP, or '' if it is fine.
@@ -124,12 +149,28 @@ def off_icp_vertical_reason(lead: dict) -> str:
     vertical = (lead.get("vertical") or "").strip().lower()
     if not vertical:
         return ""
+    # NOTE (2026-08-02): this leg was briefly changed to read the marker from
+    # the BUSINESS NAME instead, on the reasoning that worker.py sets
+    # `vertical = niche` (the raw query string), so an 'exotic car dealer
+    # california' search exempted everything it returned. That was over-reach
+    # and is deliberately NOT done: tests/test_outreach_icp_and_canspam_gates
+    # asserts these verticals survive, and it is right to — a CSV import or a
+    # human labelling `vertical="exotic car dealer"` is real evidence, and
+    # over-blocking silently deletes a segment ADR-0012 chose to keep.
+    #
+    # The residual leak is narrow: a generically-named business (e.g. "Sunset
+    # Motors") found BY an exotic-dealer query stays exempt. That is acceptable,
+    # because a lead found by that query probably IS an exotic dealer — and the
+    # real control is upstream, where automotive was removed from the hunt
+    # rotation entirely. Anything with an off-ICP NAME is still caught by
+    # off_icp_business_name_reason, which runs alongside this leg.
     if any(m in vertical for m in _OPPORTUNISTIC_VERTICAL_MARKERS):
         return ""   # exotic/luxury auto stays opportunistic, per ADR-0012
     if vertical in _OFF_ICP_VERTICALS or any(
-            v in vertical for v in ("auto repair", "auto service", "car repair")):
+            v in vertical for v in _OFF_ICP_VERTICAL_SUBSTRINGS):
         return (f"off-ICP vertical {vertical!r} — ADR-0012 disqualifies general "
-                f"auto repair and franchised dealers on sight")
+                f"auto repair, franchised dealers and cosmetic auto services "
+                f"on sight")
     return ""
 
 
@@ -171,6 +212,17 @@ _OFF_ICP_NAME_RE = re.compile(
   | \b oil \s+ change \b
   | \b (?: quick \s+ )? lube \b
   | \b auto \s* (?: nation | zone | parts ) \b
+  # Cosmetic auto services (2026-08-02). Same 0%-false-positive discipline as
+  # above — each of these was checked against the in-ICP control list before
+  # being added, which is why "wrap" is anchored to "vinyl wrap" (bare \bwraps?\b
+  # is one porch away from blocking a real builder) and "detailing" is used
+  # rather than "detail" (a name may legitimately read "Detail Oriented Homes").
+  | \b detailing \b
+  | \b ceramic \s+ coating \b
+  | \b paint \s+ protection (?: \s+ film )? \b
+  | \b ppf \b
+  | \b window \s+ tint (?: ing )? \b
+  | \b vinyl \s+ wrap s? \b
     """
 )
 
