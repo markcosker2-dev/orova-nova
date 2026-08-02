@@ -201,7 +201,14 @@ async def lifespan(app: FastAPI):
                 DatabaseManager.reset_sqlite_fresh()
             except Exception as reset_err:
                 logger.critical(f"⚠️ DB reset after a failed restore failed: {reset_err}")
-            logger.warning(f"⚠️ No usable Drive snapshot ({restore_res.get('error') or 'unusable'}). Falling back to Google Sheets leads...")
+            # INFO, not WARNING (2026-08-02). Drive is the OPTIONAL tier — its
+            # token expires every 7 days while the OAuth consent screen sits in
+            # Testing, so this line fired on essentially every boot and read
+            # like an incident when it is the documented steady state. Sheets
+            # is the durable tier (app/core/durability.py); the real failure to
+            # shout about is the Sheets path below, not this one.
+            logger.info(f"ℹ️ No Drive snapshot ({restore_res.get('error') or 'unusable'}) — "
+                        f"optional tier. Restoring leads from Google Sheets...")
             leads = await restore_leads_from_sheets()
             if leads:
                 restored = 0

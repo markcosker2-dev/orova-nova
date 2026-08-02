@@ -12,26 +12,68 @@ from unittest.mock import AsyncMock, patch
 from app.core.durability import persist_leads_durably
 
 
-def test_drive_success_skips_sheets():
+_ROWS = [{"id": 1, "business": "A"}, {"id": 2, "business": "B"}]
+
+
+def test_sheets_syncs_even_when_drive_succeeds():
+    """REPLACES test_drive_success_skips_sheets (2026-08-02).
+
+    The old behaviour — and the old test — was that a successful Drive backup
+    SKIPPED the Sheets copy. That made Drive a single point of failure: the
+    moment its 7-day token expired there was nothing in Sheets to fall back
+    to, because the fallback had been suppressed on every run where Drive
+    still worked. Sheets is now Tier 1 and always runs.
+    """
     with patch("app.skills.vault_skill.backup_database", new_callable=AsyncMock,
                return_value={"ok": True, "filename": "snap.db"}), \
-         patch("app.skills.sheets_sync.sync_lead_to_sheets", new_callable=AsyncMock) as m_sync:
-        out = asyncio.run(persist_leads_durably(recent_count=5, source="test"))
-    assert out["drive"] is True
-    m_sync.assert_not_awaited()
-
-
-def test_drive_failure_falls_to_sheets():
-    rows = [{"id": 1, "business": "A"}, {"id": 2, "business": "B"}]
-    with patch("app.skills.vault_skill.backup_database", new_callable=AsyncMock,
-               return_value={"ok": False, "error": "invalid_grant"}), \
          patch("app.core.database.DatabaseManager.query", new_callable=AsyncMock,
-               return_value=rows), \
+               return_value=_ROWS), \
          patch("app.skills.sheets_sync.sync_lead_to_sheets", new_callable=AsyncMock,
                return_value={"ok": True}) as m_sync:
         out = asyncio.run(persist_leads_durably(recent_count=5, source="test"))
-    assert out == {"drive": False, "sheets_synced": 2}
+    assert out["drive"] is True
+    assert out["sheets_synced"] == 2, "a working Drive must NOT suppress the durable tier"
     assert m_sync.await_count == 2
+
+
+def test_sheets_syncs_when_drive_token_is_dead():
+    """The live steady state: invalid_grant every 7 days."""
+    with patch("app.skills.vault_skill.backup_database", new_callable=AsyncMock,
+               return_value={"ok": False, "error": "invalid_grant"}), \
+         patch("app.core.database.DatabaseManager.query", new_callable=AsyncMock,
+               return_value=_ROWS), \
+         patch("app.skills.sheets_sync.sync_lead_to_sheets", new_callable=AsyncMock,
+               return_value={"ok": True}) as m_sync:
+        out = asyncio.run(persist_leads_durably(recent_count=5, source="test"))
+    assert out == {"drive": False, "sheets_synced": 2, "sheets_total": 2}
+    assert m_sync.await_count == 2
+
+
+def test_drive_exploding_does_not_stop_the_sheets_tier():
+    """Drive is optional; an exception there must not cost us the lead data."""
+    with patch("app.skills.vault_skill.backup_database", new_callable=AsyncMock,
+               side_effect=RuntimeError("storageQuotaExceeded")), \
+         patch("app.core.database.DatabaseManager.query", new_callable=AsyncMock,
+               return_value=_ROWS), \
+         patch("app.skills.sheets_sync.sync_lead_to_sheets", new_callable=AsyncMock,
+               return_value={"ok": True}) as m_sync:
+        out = asyncio.run(persist_leads_durably(recent_count=5, source="test"))
+    assert out["sheets_synced"] == 2
+    assert out["drive"] is False
+    assert m_sync.await_count == 2
+
+
+def test_one_bad_row_does_not_stop_the_rest():
+    """A single unsyncable lead must not cost the whole batch."""
+    with patch("app.skills.vault_skill.backup_database", new_callable=AsyncMock,
+               return_value={"ok": False, "error": "invalid_grant"}), \
+         patch("app.core.database.DatabaseManager.query", new_callable=AsyncMock,
+               return_value=_ROWS), \
+         patch("app.skills.sheets_sync.sync_lead_to_sheets", new_callable=AsyncMock,
+               side_effect=[RuntimeError("bad row"), {"ok": True}]):
+        out = asyncio.run(persist_leads_durably(recent_count=5, source="test"))
+    assert out["sheets_synced"] == 1
+    assert out["sheets_total"] == 2
 
 
 def test_everything_failing_never_raises():
@@ -40,7 +82,7 @@ def test_everything_failing_never_raises():
          patch("app.core.database.DatabaseManager.query", new_callable=AsyncMock,
                side_effect=RuntimeError("db down")):
         out = asyncio.run(persist_leads_durably(source="test"))  # must not raise
-    assert out == {"drive": False, "sheets_synced": 0}
+    assert out == {"drive": False, "sheets_synced": 0, "sheets_total": 0}
 
 
 def test_reenrich_persists_per_upgrade_crash_safe():

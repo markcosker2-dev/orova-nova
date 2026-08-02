@@ -46,8 +46,26 @@ def _get_drive_service():
          env var to configure.
       3. GOOGLE_APPLICATION_CREDENTIALS (service-account file path)
 
-    Backups land in the service account's own Drive (its 15GB), read back by
-    the same account on restore — self-contained, no user-Drive sharing needed.
+    CORRECTION 2026-08-02: this docstring used to claim "backups land in the
+    service account's own Drive (its 15GB), self-contained, no user-Drive
+    sharing needed". That is FALSE, and it produced a bad recommendation —
+    "just delete the OAuth vars and fall through to the service account" —
+    which would have replaced a backup that dies weekly with one that never
+    works at all.
+
+    Service accounts have NO Drive storage quota and cannot own files. Tier 2
+    and 3 below therefore fail with `403 storageQuotaExceeded` on a personal
+    Google account; they only work against a Workspace shared drive or via
+    domain-wide delegation. The SAME credential works for Sheets
+    (sheets_sync.py) because the spreadsheet is owned by a real user and
+    merely shared with the service account — nothing is being created in
+    storage the service account would have to own.
+
+    Practical consequence: path 1 (user OAuth) is the only one that works
+    here, and its refresh token expires every 7 days while the OAuth consent
+    screen is External + Testing. Publish the consent screen to make it
+    durable. Until then Drive is best-effort and Sheets is the durable tier
+    (see app/core/durability.py).
     """
     _DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive"]
 
