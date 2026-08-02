@@ -38,7 +38,7 @@ all dead ends:
 | Composio → Facebook | Pages-only; `FACEBOOK_SEARCH_PAGES` returns Error #10 (Workplace-only since 2019) |
 | WA Secretary of State | `ccfs-api.prod.sos.wa.gov` is anti-bot gated; never returned a name server-side |
 | OpenCorporates | £2,250/yr |
-| Yelp Fusion | 2026 free tier ambiguous; needs 1–2 day approval |
+| Yelp Fusion | 2026 free tier ambiguous; needs 1–2 day approval — **❌ WRONG, see correction below** |
 
 **3. Licence boards turn out to be strictly better than what we were
 reaching for.** They supply the *decision maker* directly — the problem the
@@ -75,6 +75,41 @@ phone. That is more on-ICP records than a year of SerpAPI quota could produce.
 > ~4,280 is still far more on-ICP records than Nova can call, so the decision
 > below stands unchanged — but the name filter is load-bearing, not optional,
 > and anyone quoting a row count from this ADR should quote 4,280.
+
+> [!failure] ❌ CORRECTION 2 (2026-07-31) — **Yelp is not a dead end**
+> The dead-ends table above lists Yelp Fusion as *"2026 free tier ambiguous;
+> needs 1–2 day approval"*. **That is wrong.** Yelp is live via Composio with
+> **no API key, no approval, and no payment**, verified by live query on
+> 2026-07-31.
+>
+> | Metro | Contractors returned |
+> |---|---|
+> | Los Angeles | 20,000 |
+> | Portland | 3,600 |
+> | Seattle | 3,300 |
+> | San Diego | 2,400 |
+>
+> It returns business name, phone, address, category, rating and **review
+> count** — which is the business-size proxy this ADR flagged as unsolved
+> ("no employee count... the datasets are full of one-person handymen...
+> needs a proxy, and that proxy is unvalidated"). Review count plus an explicit
+> category label is a better proxy than bond size or licence age, and it is free.
+> It does **not** return a website or an email.
+
+> [!warning] ⚠️ CONSEQUENCE — the sequencing below is no longer right
+> This ADR ordered the work by **which state has a free registry API**: WA first,
+> OR third, **CA last** because CSLB has no API. That put the **#1 ICP geography
+> last for a purely technical reason**, and in practice it let tooling drive
+> targeting instead of the ICP.
+>
+> Yelp dissolves that constraint — it works identically in every metro, and LA
+> alone is 6× Seattle. **Discovery should be West Coast by default, not WA-only.**
+>
+> What remains genuinely state-specific is the **owner name**: Yelp does not
+> supply one, and `outreach_ready` requires a decision-maker name on every
+> channel. WA/OR get it from their registries; **CA needs it from the CSLB CSV or
+> from website scraping** — and website scraping is seam 2 anyway, so *one crawl
+> solves both the email gap and the California gap*.
 
 ## Decision
 

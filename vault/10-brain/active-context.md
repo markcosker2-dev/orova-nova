@@ -4,273 +4,241 @@ description: What's happening on OROVA right now — read this first every sessi
 type: brain
 created: 2026-07-03
 status: active
+tags: [brain, active, session-start]
 ---
 
-# Active Context
+# 🧭 Active Context
 
-> Session-start file. Read this first (CLAUDE.md rule). Keep it current when the
-> direction changes materially.
+> [!abstract] Read this first
+> Session-start file (CLAUDE.md rule). Last full refresh **2026-07-31**.
+> Verify against production before trusting anything here — if a doc and the
+> running system disagree, **the system wins**, and you fix the doc.
 
-## 🎯 IDENTITY: HermesClaw is an SDR (owner, 2026-07-14/15 — FINAL)
+---
 
-**HermesClaw's sole purpose is to be the best autonomous AI SDR for OROVA**
-(ADR-0006). North-star metric: **booked meetings**. The Electron GUI is archived
-out of the repo (`archive/electron-gui` branch); the repo is now
-`app/ + knowledge/ + vault/ + mission-control/ + scripts/ + tests/`.
-Target architecture: the Pipeline Blackboard (Prospect state machine + unified
-event log, ADR-0007 — event log live, additive). Shipped in the Phase-0 batch
-(PRs #72–#74 + event log, 2026-07-15): deterministic ICP scoring (replaces the
-flat-50 scorer), CSV lead import (`POST /api/leads/import-csv`), repo
-subtraction (openclaw_instance/, dead skills, artifacts), GUI archival.
-Rejected channels (legal grounds, ADR-0006): LinkedIn automation (ToS), cold
-SMS (TCPA). Next in queue: CAN-SPAM footer, Telegram outcome-capture,
-dossier v1 (stage-gated), M2 of ADR-0005.
+## 🚦 Status at a glance
 
-## 🎯 ICP decision — RE-RANKED (owner, 2026-07-24, [[0012-icp-rerank-and-pilot-pricing|ADR-0012]])
+| | |
+|---|---|
+| **Build live** | `0c9ddfac6e6c` · `db: ok` · `memory: ok` |
+| **Leads in production** | **0** ⚠️ |
+| **Tests** | 750 passing |
+| **Open PRs** | [#124](https://github.com/markcosker2-dev/orova-nova/pull/124) — never email a guessed address |
+| **Conversations ever** | **0** |
 
-**Supersedes the 2026-07-13 "ICP stays MIXED" call.** The mix is now **ranked by
-deal economics**, using one filter: *does ONE extra closed deal per month more than
-cover the ~$6,500–7,500 all-in monthly cost?*
+> [!danger] The number that matters
+> **0 calls. 0 meetings. 0 prospect conversations, ever.**
+> Discovery is solved. ~29,000 West Coast contractors are reachable for free.
+> **Nothing in the codebase is the constraint any more.**
 
-1. **Custom home builders / high-end remodelers — LEAD** (one $100K+ job grosses
-   $20–50K → pays 4–7 months of retainer)
-2. **Med spas / aesthetics** (1–2 extra patients/mo covers it; most-proven Meta vertical)
-3. **Luxury RE top producers only**
+---
 
-**Exotic/luxury auto → opportunistic only** (economics work, but a $200K buyer
-rarely starts on a Meta lead form). `DEFAULT_HUNT_NICHES` re-weighted from **50%
-auto** to **~50% homes / 21% med spa / 14% RE / 14% auto** — note the hunt samples
-with `random.choice()`, so *entry count is the weighting*.
+## 🎯 Identity — HermesClaw is an SDR
 
-**Disqualify on sight:** general auto repair (~$400/job → ~16 jobs/mo to break
-even) · franchised new-car dealers (OEM co-op mandates) · already under agency contract.
+> [!info] Owner decision, 2026-07-14/15 — FINAL ([[0006-sdr-refocus|ADR-0006]])
+> HermesClaw's sole purpose is to be the best autonomous AI SDR for OROVA.
+> **North-star metric: booked meetings.**
+> Repo is `app/ + knowledge/ + vault/ + mission-control/ + scripts/ + tests/`.
+> Rejected channels on legal grounds: LinkedIn automation (ToS), cold SMS (TCPA).
 
-**Pricing:** always quote **ALL-IN ~$6.5–7.5K**; client #1 is a **$1,500–2,000/mo
-60-day pilot** that buys a case study, not revenue.
+---
 
-`TARGET_NICHE` is **not set** (owner-confirmed 2026-07-24), so the curated rotation
-is live — the generic auto-repair rows in the pipeline are legacy restored data.
+## 👥 ICP — ranked by deal economics
 
-> ⚠️ This ranking is inference from deal economics, **not** customer evidence —
-> zero prospect conversations have happened. ~20 calls with remodelers settles it.
+> [!success] [[0012-icp-rerank-and-pilot-pricing|ADR-0012]] — the qualifying test
+> *Does ONE extra closed deal per month more than cover the ~$6.5–7.5K all-in cost?*
+>
+> 1. **Custom home builders / high-end remodelers — LEAD.** One $100K+ job grosses $20–50K → pays 4–7 months of retainer.
+> 2. **Med spas / aesthetics.** 1–2 extra patients/mo covers it; most-proven Meta vertical.
+> 3. **Luxury RE top producers only.**
+>
+> **Opportunistic:** exotic/luxury auto. Economics work, but a $200K buyer rarely starts on a Meta lead form.
 
-## 🩹 Positioning — sell the painkiller ([[0013-painkiller-positioning-and-real-competition|ADR-0013]])
+> [!failure] Disqualify on sight
+> General auto repair (~$400/job → ~16 jobs/mo to break even) · franchised
+> new-car dealers (OEM co-op mandates) · already under agency contract.
+>
+> **Now enforced in code** — `lead_validator.off_icp_trade_reason` checks
+> vertical *and* business name (PR #119, after a live bypass).
 
-**Never sell growth ("more leads") — that's a vitamin, and it loses to Angi's ~$400
-price anchor at 16x.** Sell the deadline:
+> [!warning] Geography — corrected 2026-07-31
+> The ICP is the **whole West Coast**, not WA. Earlier work anchored on
+> Washington because that's where the free registry API was — tooling drove
+> targeting, which is backwards. **California is the #1 geography.**
+>
+> | Metro | Contractors on Yelp |
+> |---|---|
+> | **Los Angeles** | **20,000** |
+> | Portland | 3,600 |
+> | Seattle | 3,300 |
+> | San Diego | 2,400 |
 
-- **Pain A — The Gap:** *"When your crew finishes the job they're on, what's next?"*
-  (job wraps in 3 weeks, six W-2 guys burning $30-40K/mo) → **P1 or P2**
-- **Pain B — The Wasted Saturday:** *"You'll never drive 40 minutes to a tire-kicker
-  again."* (6 dead estimates last month) → **P2 ONLY — P1 makes this pain worse**
+> [!quote] Honest caveat
+> This ranking is inference from deal economics, **not customer evidence**.
+> Zero prospect conversations have happened. ~20 real conversations settle it.
 
-**Diagnose before prescribing.** Supersedes profitability-plan §2.2's "always lead
-with P1".
+---
 
-**The real enemy is inertia**, not an agency — zero switching cost, worked for 15
-years. Only a deadline he already feels beats it (hence: backlog <8 weeks + W-2 crew
-on payroll are the hard qualifiers). **Never argue price — change the unit** from
-cost-per-lead to cost-per-idle-week-of-payroll.
+## 🩹 Positioning — sell the painkiller
 
-**One differentiator only:** every lead phoned + AI-qualified in minutes, so he only
-drives to real buyers. Never pitch "we're AI-operated", "you're talking to our AI
-right now", or "AI creatives" — worthless to the buyer.
+> [!tip] [[0013-painkiller-positioning-and-real-competition|ADR-0013]]
+> **Never sell growth ("more leads")** — that's a vitamin, and it loses to
+> Angi's ~$400 price anchor at 16×. **Sell the deadline.**
+>
+> - **Pain A — The Gap:** *"When your crew finishes the job they're on, what's next?"* → P1 or P2
+> - **Pain B — The Wasted Saturday:** *"You'll never drive 40 minutes to a tire-kicker again."* → **P2 ONLY** — P1 makes this pain worse
+>
+> **Diagnose before prescribing.**
 
-## 🔴 THE BLOCKING ACTION (2026-07-24, corrected 2026-07-29)
+> [!info] The real enemy is inertia
+> Not another agency — he's worked his way for 15 years at zero switching cost.
+> Only a deadline he already feels beats it. Hence the hard qualifiers:
+> **backlog <8 weeks + W-2 crew on payroll.**
+>
+> **Never argue price** — change the unit from cost-per-lead to
+> **cost-per-idle-week-of-payroll**.
+>
+> **One differentiator only:** every lead phoned + AI-qualified in minutes, so he
+> only drives to real buyers. Never pitch "we're AI-operated" — worthless to him.
+> *(Different from honestly answering "are you a bot?" — always do that.)*
 
-> ⚠️ **CORRECTION (2026-07-29):** the long-repeated claim "zero emails have ever been
-> sent" is **FALSE**. Production metrics: **`emails_sent = 48`, `replies_received = 0`.**
-> It came from a stale handoff and was never checked against `/api/metrics`. See
-> [[session-2026-07-29-handoff]] §2-3 — 48 cold emails went to legacy auto-era rows
-> including a government museum and two trade publications. Do not repeat the claim.
+---
 
-**Zero prospect CONVERSATIONS have happened — but 48 emails were sent (0 replies).**
-Everything above is inference. The next move is not code:
+## 📡 Channel status
 
-1. **Call Eric Curran** — West Coast Exotic Cars, +1 844-488-9232, conf 83
-   (LinkedIn-corroborated). The free practice rep.
-2. **20 remodelers off Google Maps** using the 5 discovery questions in
-   `business_context.json` → `discovery_questions`. **Does not require the pipeline.**
-3. Bring back the transcripts. ≥8/20 hits = the ICP is real; ≤3 = switch to med spas.
-
-**No further positioning or targeting work before those 20 calls.**
-
-> Note (2026-07-26): step 2 is now *doubly* manual — see the SerpAPI wall
-> below. The pipeline cannot hand you a remodeler list this month.
-
-## 🚧 DISCOVERY WALL (2026-07-26) — [[0014-licence-registries-as-the-discovery-source|ADR-0014]]
-
-**SerpAPI is exhausted: 250/250 used, 0 searches left** (verified against
-SerpAPI's own account API). A live Seattle hunt returned **0 leads** — 429,
-fell through to the legacy sources, which produced nothing. Automated discovery
-is dead until the monthly reset.
-
-Every commercial alternative was tested live and is closed at $0:
-Meta Ad Library API (EU/UK-only for commercial ads) · Apollo free tier
-(`API_INACCESSIBLE` plan-wide, 0 export credits) · Composio→Facebook
-(Pages-only, search Error #10) · WA SoS (anti-bot gated) · OpenCorporates
-(£2,250/yr) · Yelp Fusion (free tier ambiguous, needs approval).
-
-**The unblock is state contractor licence boards** — free, unlimited, and they
-supply the DECISION MAKER directly:
-
-| Source | Volume | Owner name | Phone |
-|---|---|---|---|
-| WA L&I (`data.wa.gov`, Socrata, no key) | 75,515 ACTIVE | **100%** | **100%** |
-| OR CCB (`data.oregon.gov`, Socrata, no key) | 56,087 active | 95.9% | 100% |
-| CA CSLB | free CSV incl. personnel file — **no API** | — | — |
-
-~4,280 WA rows are on-ICP (corrected 2026-07-30 — see below). The `wa_lni`
-owner lookup went live in PR #113 and **discovery shipped in PR #120**
-(deployed `612b8245e53a`). **They carry no email and no website**, so email
-stays unsolved and the ad-signal qualifier needs a domain resolved first.
-
-> ⚠️ **CORRECTION (2026-07-30):** ADR-0014's "6,249 on-ICP rows" **overcounts**.
-> Specialty `GENERAL` does NOT mean "general contractor" — the bucket is full of
-> landscapers, window cleaners, drywall, tile and one-person handymen. Adding
-> licence *type* (`CONSTRUCTION CONTRACTOR`) and a business-name filter gives
-> **~4,280** (28.4% of 15,069). Fill on name/owner/phone/address is confirmed
-> 100%. Still far more than Nova can call, so the decision stands — but quote
-> 4,280, not 6,249.
-
-## 🔴 THE NEW BLOCKING ACTION (2026-07-30) — nothing will dial these leads
-
-**Discovery is fixed; the phone channel is now the blocker, and it is an
-architecture problem, not a data one.**
-
-Lane 4 (`run_cold_lead_escalation`, the only *scheduled* dialler) selects via
-`get_cold_leads`, which requires:
-
-```sql
-WHERE status IN ('Email Sent','Contacted')
-  AND datetime(updated_at) < datetime('now','-5 days')
+```mermaid
+graph LR
+    A[Instagram DM] -->|manual first touch| B[Conversation]
+    C[Phone / Retell] -.->|legally blocked| B
+    D[Cold email] -.->|no addresses + ToS| B
+    B --> E[Nova replies + books]
+    E --> F[Follow-up email — legitimate]
 ```
 
-Licence-sourced leads are stored `status='New'`. **They can never be selected.**
-Lane 4 is an *escalation* lane — it was built for "we emailed them, no reply in
-5 days, now phone them", so it is architecturally DOWNSTREAM of email. With cold
-email deliberately deferred and fail-closed, Lane 4's input set is permanently
-empty. Seam 1's 4,280 callable leads will sit untouched.
+> [!success] ✅ INSTAGRAM — open, legal, free, unblocked
+> The only channel available today.
+> **DM #1 is manual** — the API physically cannot initiate threads
+> (`INSTAGRAM_SEND_TEXT_MESSAGE`: *"Cannot initiate new DM threads"*).
+> Everything after it can be automated. See [[instagram-outreach-plan-2026-07-30]]
+> for 10 qualified targets and drafts, and [[ig-reply-agent-scheduled-task-prompt]].
+>
+> ⚠️ `orova.co` is currently **PRIVATE** — the messaging API returns empty for
+> personal accounts. Must be Business/Creator + public before any of this works.
 
-**Paths that CAN dial without a prior email (all already built):**
-- `outreach_orchestrator.make_throttled_call(...)` — has a daily cap,
-  business-hours gate and rate limiting inside it, BUT it keeps its own
-  separate `_daily_call_count`, so routing a second lane through it would let
-  the two counters each spend a full `MAX_CALLS_PER_DAY` and silently double
-  the cap. Not used for that reason.
-- `worker._execute_approved_call` — driven by a Google Sheet row set to
-  "Approved" (manual).
-- The planner's `trigger_retell_call` tool, via `POST /api/agents/run`.
+> [!danger] ⛔ PHONE — built, merged, and NOT safe to enable
+> Lane merged in PR #123 and **inert** (`CALLS_AUTOPILOT=0`). Do not flip it.
+> - **RCW 80.36.400** appears to bar automated commercial solicitation in WA
+>   outright — no B2B exemption, no consent cure, per-se CPA violation.
+> - **TCPA §227(b)** — $500–1,500/call for artificial voice to any *wireless*
+>   number, **no B2B exemption**. Licence records list mobiles without saying which.
+> - **`is_dnc_registered` fails open and is unconfigured** → zero registry protection.
+> - **No recording announcement** — WA is two-party consent (RCW 9.73.030).
+>
+> **Open question worth one lawyer hour:** is a *two-way conversational* agent an
+> "ADAD"/"artificial voice message" at all, or do those terms reach only one-way
+> prerecorded announcements? That answer unlocks or shelves the channel.
 
-**Next code task: a phone-first lane** that selects
-`status='New' AND phone != '' AND outreach_ready.callable` and calls
-`make_call`. It reuses the existing primitive and caps, so it is an extension,
-not a new abstraction. This is the last thing between the repo and its first
-transcript.
+> [!failure] ❌ COLD EMAIL — deferred, and not for the reason we thought
+> - **0 of 8 providers permit cold outreach**, including AgentMail's own ToS §10.
+> - **No valid addresses.** Licence registries have none; Yelp has none.
+> - The `550 5.4.1` bounces were **invalid recipients** (Directory-Based Edge
+>   Blocking = "no such mailbox"), **not** deliverability. `_guess_email`
+>   fabricated them. PR #124 stops them ever being emailed again.
+> - A shared domain **can** pass SPF/DKIM/DMARC — verified by DNS on
+>   `agentmail.to`. "No domain means no auth" is false.
+>
+> **Post-call follow-up email is NOT cold email** — solicited, transactional,
+> ToS-clean, free on the existing inbox. **Phone/DM manufactures the consent
+> that makes email legitimate.** Sequence the channels; don't choose.
 
-## ✅ Shipped 2026-07-26 (PRs #109–#114, deployed `8e4e78e`)
+---
 
-Ad-signal detector + `ad_tier` (live-validated on 9 real CA remodelers: 2 hot /
-2 warm / 5 cold) · `lead.state` persisted, so the registry router works at all ·
-SerpAPI pagination + fallback demotion · WA L&I owner source replacing the dead
-SoS endpoint · Retell script/voicemail/inbound agent recorded. **533 tests.**
-Detail + what went wrong: [[session-2026-07-26-merge-and-discovery-wall]].
+## 🔍 Discovery — solved, and cheaper than expected
 
-⚠️ **47 leads in production are off-ICP noise** (an Argentine government museum,
-a Crain's automotive journalist, Montana auto shops, `"Says Carmaker"` as an
-owner name). All are `ready: False` so the gate holds, but note the trap:
-`quarantine_invalid_leads` runs at boot and sets `status='Invalid'` — it has
-already run and *kept* these. Clearing them is a hygiene-**rules** change, not
-a sweep re-run.
+> [!success] Sources that work today, all free
+> | Source | Gives | Volume |
+> |---|---|---|
+> | **Yelp** (via Composio, no key, no approval) | business, phone, rating, review count, category | ~29,000 West Coast |
+> | **WA L&I** (`data.wa.gov`, Socrata) | **owner name**, phone, address | ~4,280 on-ICP |
+> | **OR CCB** (`data.oregon.gov`, Socrata) | owner name 95.9%, phone 100% | 56,087 active |
+> | **CA CSLB** | free CSV incl. *personnel* file — no API | — |
 
-## Where things stand (2026-07-10)
+> [!warning] Two corrections to [[0014-licence-registries-as-the-discovery-source|ADR-0014]]
+> 1. **"6,249 on-ICP rows" overcounts.** Specialty `GENERAL` ≠ general contractor —
+>    that bucket is full of landscapers, window cleaners, drywall, tile and
+>    one-person handymen. With licence *type* + a name filter: **~4,280**.
+> 2. **Yelp is NOT a dead end.** ADR-0014 listed it as "free tier ambiguous,
+>    needs approval". It is live via Composio with **no key, no approval, no
+>    payment** — and it supplies the business-size proxy the ADR called unsolved.
 
-Nova is **live on Render free tier** (`orova-nova.onrender.com`), all 9 lanes
-green. The lead engine is rebuilt end-to-end: SerpAPI-Maps discovery →
-registry/SERP owner-name resolver → single-AI-pass extraction (under the 25s
-ceiling) → owner-email finder layer (Tomba/Prospeo/Verifalia — **built, awaiting
-keys**). The gate to everything is still **the first paying client**. Test
-baseline: **533 Python passing** (2026-07-26; the TS suite left with the
-Electron archival per ADR-0006).
+> [!question] The remaining gap — emails
+> Every source gives a phone and withholds the email; that's what data vendors
+> sell. **The fix is seam 2:** resolve a website → scrape the *published* contact
+> address. Nova already scrapes well (`_scrape_website`, 7 pages, validated).
+> Only the name→website step is missing. **This also unblocks California**, since
+> the same crawl yields the owner name CA has no registry API for.
 
-## Deploy/data-loss status (updated 2026-07-13)
+---
 
-**Every merge to `main` still redeploys Render and wipes production SQLite**,
-but the Drive backup lane is now **WORKING** — creds were added and the first
-`[Vault] Uploaded` was live-verified 2026-07-11. Still: **batch merges** and
-check `/api/logs` for the restore line after each deploy.
+## 🔴 The blocking action
 
-**Merge-order trap (learned the hard way 2026-07-26):** GitHub only
-auto-retargets a *stacked* PR to `main` when its base branch is **deleted** on
-merge. Merging a stack with `--delete-branch=false` silently lands the child PRs
-on their intermediate branches, not `main`. Two PRs went missing this way and
-`main` shipped without them. **Always verify the merged code on `main`
-(grep for the actual change), never trust a row of `MERGED` statuses.**
+> [!danger] It is not code. It has not been code for weeks.
+> 1. **`orova.co` → Business/Creator + public**, 3 posts. *(2 min + 20 min)*
+> 2. **Send 5 Instagram DMs** from [[instagram-outreach-plan-2026-07-30]]. *(10 min)*
+> 3. Bring back what they said. **≥8/20 positive = the ICP is real; ≤3 = switch to med spas.**
+>
+> On 2026-07-24 the instruction was written down: *"No further positioning or
+> targeting work before those 20 calls."* Since then: 20+ PRs, zero conversations.
 
-## Shipped recently (PRs #23–34, 2026-07-06 → 07-10)
+---
 
-- **Owner-email finder layer** (`app/skills/email_finder.py`, PR #32): Tomba
-  (25/mo) → Prospeo (75/mo) finders + Verifalia (25/day) HTTP verification of
-  pattern-guessed emails (Deliverable → `verified`, all-bounce → dropped).
-  Env-gated, SQLite-rationed, fails open. See [[owner-email-finder]].
-- **Extraction timeout fix** (PR #29): one AI pass over combined page text
-  instead of per-page Groq calls — live-proven (iLusso → owner + direct email).
-- **SerpAPI Google Maps discovery** (`_source_serpapi_maps`): business + phone
-  (E.164) + website at ~100% on live luxury dealers. Shares the 250/mo quota.
-- **WP4 booking funnel**, **approval gates**, **DNC fail-closed gate**,
-  **learning loops scheduled** (Lane 8), **dead scraper purge** (−3,270 lines),
-  **CI fixed** (Electron E2E + Render deploy), **Sheets restore row-tolerance**
-  (PR #34), **SerpAPI quota alert in the health lane** + `_schedule_background`
-  log-persistence fix (this session).
+## 🛠️ Owner actions — only Mark can do these
 
-## Owner actions (in order — these unblock everything)
+> [!todo] In priority order
+> 1. **Re-auth Google Drive.** Production is at **0 leads** because restore fails
+>    `invalid_grant` and the Sheets fallback restored 0/4. **Better fix:** delete
+>    `GOOGLE_REFRESH_TOKEN`/`CLIENT_ID`/`CLIENT_SECRET` from Render so
+>    `_get_drive_service` falls through to the **service account**
+>    (`GOOGLE_CREDENTIALS_JSON`) — service accounts never expire. Otherwise the
+>    OAuth token dies every 7 days (Testing-mode publishing status).
+> 2. **Set `CAL_COM_EVENT_SLUG`.** Free, ~10 min. **All three booking-link vars are
+>    unset**, so a hot reply on *any* channel has no link to send. Blocks every meeting.
+> 3. **`orova.co` → Business/Creator + public.**
+> 4. **One WA consumer-protection lawyer hour** on the ADAD/§227(b) question.
+> 5. **Keep `CALLS_AUTOPILOT=0`** until 4 comes back.
 
-1. **Google Drive creds on Render** (`GOOGLE_REFRESH_TOKEN`,
-   `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`) — stops the deploy data loss.
-2. **Finder keys** — sign up Tomba/Prospeo/Verifalia **with Nova's AgentMail
-   address** (Tomba rejects webmail signups) and set `TOMBA_API_KEY`+
-   `TOMBA_SECRET`, `PROSPEO_API_KEY`, `VERIFALIA_USERNAME`/`VERIFALIA_PASSWORD`.
-3. **Remove the invalid `OPENROUTER_API_KEY` on Render** (its 401 masks real
-   errors as "All providers failed"; Groq+Gemini carry the load — the live
-   `/api/chat` path is verified working).
-4. `CALENDLY_LINK`/`CAL_COM_EVENT_SLUG` + Cal.com webhook — a HOT reply today
-   queues a booking-link reply **with no link configured**.
-5. SerpAPI $25/mo — the one paid upgrade worth making pre-revenue (the 250/mo
-   free quota is the binding constraint; the health lane now alerts at 90%).
+---
 
-## Code milestone board — ALL SHIPPED (2026-07-10, PRs #32–#42)
+## ✅ Shipped 2026-07-29 → 07-31
 
-Every code milestone on the board is merged, deployed, and live-verified:
-`business_context.json` §6 (owner-approved), CEO-brief funnel math
-(live-verified in a production brief), ADR-0004 Phases 1 **and** 2
-(SkillChallengerEvaluator in Lane 8, no-op until a challenger registers),
-mission-control overflow fix (live-verified in the served CSS + preview at
-577px/375px), Dependabot criticals (**4 → 0**, GitHub banner confirms),
-log-pipeline secret redaction (live-verified: `bot[REDACTED]` in the boot
-log), SerpAPI quota alert, and the owner-email finder layer.
+| PR | What |
+|---|---|
+| #118 | Outreach safety gates, config contract, CAN-SPAM fail-closed |
+| #119 | ICP gate reads business **name**, not just vertical (live bypass) |
+| #120 | WA L&I licence registry as a discovery source (ADR-0014 seam 1) |
+| #121 | ADR-0014 corrections + phone-lane gap recorded |
+| #122 | Telegram alert debounce — Lane 7 was paging the same message 12×/day |
+| #123 | Phone-first lane (merged, **inert**) |
+| #124 | **Open** — never email a pattern-guessed address |
 
-**The gate is now entirely the owner env actions above** — nothing on the
-code side blocks outreach volume.
+---
 
-## Genuinely-later code work (post-revenue or post-volume)
+## 🚧 Standing constraints — don't "fix" these
 
-- Per-client call caps (`MAX_CALLS_PER_DAY` is global — fine at 1 client,
-  binds at 3+; profitability-plan §5).
-- National DNC registry scrub gate ahead of `trigger_retell_call()`
-  (compliance follow-up, needs a paid/free-tier scrub API).
-- Deliverability hardening (SPF/DKIM checks) once a sending domain exists.
-- ADR-0004 Phase 3 (HermesClaw vault service + Render read-gap decision).
-- Remaining Dependabot highs (76, GUI-side, non-critical).
+> [!warning]
+> **$0 pre-revenue** · **Render free tier**: 512 MB, ephemeral disk (deploys wipe
+> SQLite), no browser, no outbound SMTP, 25s enrichment ceiling ·
+> **`httpx==0.27.2` pinned** · **TCPA**: published business lines only, never
+> personal cells · outreach approval-gated unless `*_AUTOPILOT=1` · ads/spend
+> always human-approved · **never fabricate** — no invented leads, case studies,
+> or portfolio work.
 
-## Standing constraints (don't "fix" these)
+---
 
-$0 pre-revenue · Render free tier: 512 MB, ephemeral disk, no browser, no SMTP
-(MX-only verify), 25s enrichment ceiling · `httpx==0.27.2` pinned · TCPA:
-**published business lines only, never personal cells** · cold email/calls/
-replies approval-gated unless `*_AUTOPILOT=1` · ads/spend always human-approved.
+## 🔗 Linked
 
-## Linked
-
-- [[project-brief]] · [[business-model]] · [[system-patterns]] · [[claude-brain]]
-- [[progress]] — running done/remaining · [[profitability-plan]] — funnel math
-- [[session-2026-07-10-handoff]] — full state dump this refresh is based on
+[[project-brief]] · [[business-model]] · [[system-patterns]] · [[traction-playbook]]
+· [[progress]] · [[profitability-plan]]
+· [[session-2026-07-30-discovery-shipped-phone-lane-gap]] — latest session
+· [[instagram-outreach-plan-2026-07-30]] — the 10 targets + drafts
+· [[ig-reply-agent-scheduled-task-prompt]] — the reply automation

@@ -1194,7 +1194,7 @@ _NON_ICP_TRADE_RE = re.compile(
     r"demolition|solar|sign\w*|glass|asphalt|paving|insulation)\b")
 
 
-def wa_lni_icp_reason(business_name: str) -> str:
+def icp_business_name_reason(business_name: str) -> str:
     """'' if this licence holder looks like an ADR-0012 remodeler, else why not.
 
     Precision-biased on purpose. There are ~15K licence rows in the metro and
@@ -1214,6 +1214,35 @@ def wa_lni_icp_reason(business_name: str) -> str:
             return f"specialty trade, not a remodeler ({trade.group(0).lower()!r})"
         return ""
     return "no remodeling/building signal in the name"
+
+
+# Back-compat alias: this filter was introduced for the WA L&I source. Existing
+# callers and tests keep working.
+wa_lni_icp_reason = icp_business_name_reason
+
+
+def off_icp_trade_in_name(business_name: str) -> str:
+    """Only the NEGATIVE half of the name filter: an explicit off-ICP trade word.
+
+    `icp_business_name_reason` also REQUIRES a construction keyword, because the
+    WA licence registry has no category field and the name is the only signal
+    there. That requirement is wrong wherever a category IS available: plenty of
+    real builders are named after their founder. Live 2026-07-31, Yelp returned
+    "Neil Kelly" — a genuine Portland design-build firm, categorised by Yelp as
+    General Contractors — and the keyword requirement rejected it. "Smith & Sons"
+    would fail the same way.
+
+    So sources with trustworthy categories use this narrower check: trust the
+    category for FIT, and use the name only to catch a self-declared contractor
+    that is really a handyman or a tiler.
+    """
+    name = (business_name or "").strip()
+    if not name:
+        return "no business name"
+    hit = _NON_ICP_TRADE_RE.search(name)
+    if hit:
+        return f"specialty trade in name ({hit.group(0).lower()!r})"
+    return ""
 
 
 async def _source_wa_lni_licences(count: int, cities: tuple = _WA_METRO_CITIES) -> list:
@@ -1280,7 +1309,7 @@ async def _source_wa_lni_licences(count: int, cities: tuple = _WA_METRO_CITIES) 
         if len(leads) >= count:
             break
         business = (row.get("businessname") or "").strip()
-        if wa_lni_icp_reason(business):
+        if icp_business_name_reason(business):
             skipped_icp += 1
             continue
         phone = _normalize_phone_to_e164(row.get("phonenumber") or "")
@@ -1321,6 +1350,276 @@ async def _source_wa_lni_licences(count: int, cities: tuple = _WA_METRO_CITIES) 
     logger.info(f"[WA_LNI] {len(leads)} in-ICP leads from {len(rows)} licence rows "
                 f"({skipped_icp} failed the ICP name filter)")
     return leads
+
+
+# ── Yelp Fusion as a WEST-COAST discovery source (2026-07-31) ───────────────
+# ADR-0014 listed Yelp as a dead end ("free tier ambiguous, needs approval").
+# That was wrong, and the consequence was worse than the error: the ADR then
+# sequenced discovery by WHICH STATE HAS A FREE REGISTRY API — WA first, CA
+# last — which put the #1 ICP geography (ADR-0012: California) at the back of
+# the queue for a purely technical reason. Tooling drove targeting.
+#
+# Yelp works identically in every metro. Measured live 2026-07-31:
+#   Los Angeles 20,000 · Portland 3,600 · Seattle 3,300 · San Diego 2,400
+#
+# What Yelp gives that the licence registries do NOT:
+#   · `review_count` + `rating` — a real business-SIZE proxy. ADR-0014 flagged
+#     "no employee count, so the 6-10-person ICP cannot be filtered; the
+#     datasets are full of one-person handymen" and said any proxy was
+#     unvalidated. Review count is better than bond size or licence age, and free.
+#   · explicit CATEGORY labels, so a landscaper is excluded by data rather than
+#     by guessing from its name.
+#
+# What Yelp does NOT give: owner name, website, or email. The owner name is
+# resolved below via owner_finder._registry_lookup (WA/OR live today; CA needs
+# CALICO or seam-2 scraping). Email stays unsolved and is NEVER guessed.
+_YELP_SEARCH_URL = "https://api.yelp.com/v3/businesses/search"
+_YELP_PAGE_SIZE = 50            # Fusion hard maximum per request
+_YELP_MAX_OFFSET = 240          # Fusion rejects offset+limit > 1000; stay well under
+
+# ICP thresholds (ADR-0012). Deliberately moderate — these gate business SIZE
+# and delivery quality, not fit; the category and name filters handle fit.
+_YELP_MIN_REVIEWS = 15   # sustained volume => a crew on payroll, not a side job
+_YELP_MIN_RATING = 4.0   # below this he has a delivery problem, and ads amplify it
+
+# Yelp category ALIASES that are not the ADR-0012 ICP. Checked against every
+# category on the listing, because Yelp returns them unordered and a business
+# tagged both "contractors" and "handyman" is a handyman.
+_YELP_OFF_ICP_CATEGORIES = frozenset({
+    "handyman", "landscaping", "landscapearchitects", "gardeners", "lawnservices",
+    "tiling", "flooring", "carpetinstallation", "countertopinstall", "drywall",
+    "roofing", "gutterservices", "siding", "vinylsiding", "painters",
+    "masonry", "concrete", "fencesgates", "decksrailing", "excavationservices",
+    "plumbing", "electricians", "hvac", "windowsinstallation", "glassandmirrors",
+    "solarinstallation", "movers", "junkremovalandhauling", "homecleaning",
+    "officecleaning", "pressurewashers", "windowwashing", "treeservices",
+    "poolservices", "damagerestoration", "environmentalabatement", "septicservices",
+    "garagedoorservices", "locksmiths", "pestcontrol", "chimneysweeps",
+})
+# At least one of these must be present — otherwise it is not a builder at all.
+_YELP_IN_ICP_CATEGORIES = frozenset({
+    "contractors", "generalcontractors", "homedevelopers", "buildingsupplies",
+    "kitchenandbath", "interiordesign", "architects",
+})
+
+
+async def _source_yelp_businesses(query: str, count: int, location: str,
+                                  resolve_owner: bool = True) -> list:
+    """Discover ICP-fit remodelers/builders from Yelp Fusion for ONE metro.
+
+    Emits the existing lead shape with a real business name, an E.164 phone and
+    a full address — but NO website and NO email (Yelp supplies neither, and an
+    email is never guessed). The owner name is resolved from the state licence
+    registry when `resolve_owner` is set and the state is WA/CA/OR; without a
+    name a lead cannot clear `outreach_ready` on any channel, so this step is
+    what makes a Yelp row actually contactable rather than merely discovered.
+
+    Requires YELP_API_KEY (Yelp Fusion, free developer tier). Composio's Yelp
+    connector is NOT a substitute — that credential lives in the operator's MCP
+    session, not in Nova's runtime on Render.
+
+    Kill switch: YELP_DISCOVERY_ENABLED=0.
+    """
+    api_key = os.getenv("YELP_API_KEY")
+    if not api_key:
+        logger.info("[YELP] YELP_API_KEY not set — Yelp discovery skipped.")
+        return []
+    if os.getenv("YELP_DISCOVERY_ENABLED", "1") != "1":
+        logger.info("[YELP] discovery disabled by env flag")
+        return []
+    if count <= 0 or not (location or "").strip():
+        return []
+
+    leads: list = []
+    seen_phones: set = set()
+    skipped = {"category": 0, "name": 0, "rating": 0, "reviews": 0, "phone": 0}
+    offset = 0
+    try:
+        client = await _get_http_client()
+        while len(leads) < count and offset <= _YELP_MAX_OFFSET:
+            resp = await client.get(
+                _YELP_SEARCH_URL,
+                headers={"Authorization": f"Bearer {api_key}",
+                         "Accept": "application/json"},
+                params={"term": query or "general contractor remodeling",
+                        "location": location,
+                        "limit": _YELP_PAGE_SIZE,
+                        "offset": offset,
+                        "sort_by": "review_count"},
+            )
+            if resp.status_code == 429:
+                logger.warning("[YELP] rate limited (429) — stopping this run.")
+                break
+            if resp.status_code != 200:
+                logger.warning(f"[YELP] status {resp.status_code} for {location!r} "
+                               f"— stopping (no leads from this source).")
+                break
+            businesses = (resp.json() or {}).get("businesses") or []
+            if not businesses:
+                break
+
+            for b in businesses:
+                if len(leads) >= count:
+                    break
+                lead = _yelp_row_to_lead(b, skipped, seen_phones)
+                if lead:
+                    leads.append(lead)
+
+            if len(businesses) < _YELP_PAGE_SIZE:
+                break       # last page — further requests would be wasted
+            offset += _YELP_PAGE_SIZE
+    except Exception as e:
+        logger.error(f"[YELP] search failed for {location!r}: {e}")
+        return leads        # keep whatever was already parsed; never raise
+
+    if resolve_owner and leads:
+        await _yelp_resolve_owners(leads)
+
+    logger.info(f"[YELP] {len(leads)} in-ICP leads for {location!r} "
+                f"(skipped — category {skipped['category']}, name {skipped['name']}, "
+                f"rating {skipped['rating']}, reviews {skipped['reviews']}, "
+                f"phone {skipped['phone']})")
+    return leads
+
+
+def _yelp_row_to_lead(b: dict, skipped: dict, seen_phones: set):
+    """One Yelp business -> a lead dict, or None if it fails an ICP gate.
+
+    Order matters only for the skip counters, which exist so a run that returns
+    nothing can be diagnosed from the log rather than guessed at.
+    """
+    if not isinstance(b, dict) or b.get("is_closed"):
+        return None
+    business = (b.get("name") or "").strip()
+    if not business:
+        return None
+
+    aliases = {(c or {}).get("alias", "") for c in (b.get("categories") or [])
+               if isinstance(c, dict)}
+    if aliases & _YELP_OFF_ICP_CATEGORIES:
+        skipped["category"] += 1
+        return None
+    if not (aliases & _YELP_IN_ICP_CATEGORIES):
+        skipped["category"] += 1
+        return None
+    # Name check as a second opinion — Yelp's categories are self-declared, so
+    # "Bob's Handyman LLC" can still be listed purely as a general contractor.
+    # NARROW check only: the category already established fit, so requiring a
+    # construction keyword here would reject real builders named after their
+    # founder (live: "Neil Kelly", a Portland design-build firm).
+    if off_icp_trade_in_name(business):
+        skipped["name"] += 1
+        return None
+
+    try:
+        rating = float(b.get("rating") or 0)
+        reviews = int(b.get("review_count") or 0)
+    except (TypeError, ValueError):
+        rating, reviews = 0.0, 0
+    if rating < _YELP_MIN_RATING:
+        skipped["rating"] += 1
+        return None
+    if reviews < _YELP_MIN_REVIEWS:
+        skipped["reviews"] += 1
+        return None
+
+    phone = _normalize_phone_to_e164(b.get("phone") or b.get("display_phone") or "")
+    if not phone or phone in seen_phones:
+        skipped["phone"] += 1
+        return None      # unreachable, or a shared/duplicate line
+    seen_phones.add(phone)
+
+    loc = b.get("location") or {}
+    state = (loc.get("state") or "").strip().upper()
+    address = " ".join(p for p in (
+        (loc.get("address1") or "").strip(), (loc.get("city") or "").strip(),
+        state, (loc.get("zip_code") or "").strip()) if p)
+
+    return {
+        "business": business,
+        "owner_name": "",          # Yelp has none; resolved from the registry below
+        "phone": phone,
+        "phone_source": "yelp",
+        "phone_verified": True,    # a claimed listing's published business line
+        "address": address,
+        "state": state if state in _US_STATE_CODES else "",
+        "url": "", "website": "", "email": "",
+        "source": "yelp",
+        "notes": (f"Yelp {rating}★ · {reviews} reviews · "
+                  f"{', '.join(sorted(aliases)) or 'uncategorised'}"),
+    }
+
+
+async def _yelp_resolve_owners(leads: list) -> None:
+    """Fill owner_name from the state licence registry, in place.
+
+    Yelp gives no decision-maker, and `outreach_ready` requires a name on EVERY
+    channel — so without this a Yelp lead is discovered but not contactable.
+    WA and OR resolve today; CA needs CALICO (pending) or seam-2 scraping.
+
+    Failures are per-lead and non-fatal: a lead with no owner is still stored,
+    it simply is not outreach-ready yet. A wrong name would be far worse than a
+    missing one (ADR-0008), which is why the registry lookups match strictly.
+    """
+    from app.core.hardening import concurrency_limit
+    sem = asyncio.Semaphore(concurrency_limit("lead_enrich"))
+
+    async def _one(lead):
+        state = lead.get("state") or ""
+        if not state:
+            return
+        async with sem:
+            try:
+                from app.skills.owner_finder import _registry_lookup
+                hit = await _registry_lookup(lead.get("business", ""), state)
+            except Exception as e:
+                logger.debug(f"[YELP] owner lookup failed for "
+                             f"{lead.get('business','?')}: {e}")
+                return
+        if hit and hit.get("owner"):
+            lead["owner_name"] = hit["owner"]
+            lead["owner_title"] = hit.get("title") or "Licence Principal"
+            lead["owner_source"] = hit.get("source") or "registry"
+            lead["owner_confidence"] = int(float(hit.get("confidence") or 0) * 100)
+
+    await asyncio.gather(*(_one(l) for l in leads), return_exceptions=True)
+    resolved = sum(1 for l in leads if l.get("owner_name"))
+    logger.info(f"[YELP] owner resolved for {resolved}/{len(leads)} leads")
+
+
+# Yelp needs a "City, ST" string, but the hunt query is free text
+# ("luxury home remodeling california"). Metro names are checked first because
+# they are more specific; a bare state falls back to its largest ICP metro.
+_YELP_METROS = {
+    "los angeles": "Los Angeles, CA", "san diego": "San Diego, CA",
+    "san francisco": "San Francisco, CA", "orange county": "Irvine, CA",
+    "sacramento": "Sacramento, CA", "san jose": "San Jose, CA",
+    "seattle": "Seattle, WA", "bellevue": "Bellevue, WA",
+    "tacoma": "Tacoma, WA", "portland": "Portland, OR", "eugene": "Eugene, OR",
+}
+# ADR-0012 ranks California first, so a bare "california" goes to LA — the
+# largest ICP metro on the coast (20,000 contractors vs Seattle's 3,300).
+_YELP_STATE_DEFAULT_METRO = {
+    "california": "Los Angeles, CA", "washington": "Seattle, WA",
+    "oregon": "Portland, OR",
+}
+
+
+def _infer_yelp_location(query: str) -> str:
+    """'City, ST' for Yelp, or '' when the query names no West Coast geography.
+
+    Returning '' is meaningful: Yelp requires a location, so a query we cannot
+    place must skip the source rather than guess a metro and quietly discover
+    leads in the wrong state.
+    """
+    q = (query or "").lower()
+    for metro, formatted in _YELP_METROS.items():
+        if metro in q:
+            return formatted
+    for state, formatted in _YELP_STATE_DEFAULT_METRO.items():
+        if state in q:
+            return formatted
+    return ""
 
 
 # West Coast ICP state names as they appear in the free-text hunt query
@@ -1401,6 +1700,21 @@ async def find_leads_v3(count: int = 5, query: str = "business leads") -> dict:
             licence_leads = await _source_wa_lni_licences(count)
         except Exception as e:
             logger.warning(f"[V3] WA L&I discovery failed: {e}")
+
+    # YELP — the whole West Coast, not just WA. ADR-0014 sequenced discovery by
+    # which state had a free registry API, which put California (the #1 ICP
+    # geography) last for a purely technical reason. Yelp works in every metro,
+    # adds review_count/rating as a business-SIZE proxy the registries lack, and
+    # resolves the owner name from the state registry on the way out.
+    # Env-gated on YELP_API_KEY, so it no-ops cleanly until a key is set.
+    if len(licence_leads) < count:
+        yelp_location = _infer_yelp_location(query)
+        if yelp_location:
+            try:
+                licence_leads.extend(await _source_yelp_businesses(
+                    query, count - len(licence_leads), yelp_location))
+            except Exception as e:
+                logger.warning(f"[V3] Yelp discovery failed: {e}")
 
     # SerpAPI Google Maps — reliable, structured, but quota-bound. Skipped when
     # the licence source already filled the request.
