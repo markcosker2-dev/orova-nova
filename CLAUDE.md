@@ -40,7 +40,7 @@ facts, compute views (e.g. store `last_checked`, derive staleness).
 
 | Information | Canonical owner |
 | --- | --- |
-| Prospect data | Prospect contract (`app/core/contracts.py`, ADR-0010) |
+| Prospect data | Storage gate: `lead_validator.validate_lead_for_storage` → `_lead_repo.save_lead` (the `leads` table) |
 | Contact evidence | Evidence ledger (`evidence_json`) |
 | Pipeline state / history | Event log (`events` table, ADR-0007) |
 | Scores | `score_lead_icp` (server-side recompute) |
@@ -50,6 +50,23 @@ facts, compute views (e.g. store `last_checked`, derive staleness).
 | Runtime configuration | Environment (Render env vars / `.env`) |
 
 If two modules own the same information, one must become a projection.
+
+> **Corrected 2026-08-03.** This table used to name `app/core/contracts.py` as
+> the owner of prospect data. **That file does not exist and never did** —
+> ADR-0010 listed it as a plan, and a table entry pointing at a phantom sends
+> every future session looking for a canonical owner that isn't there. The real
+> owner is the storage gate every ingest path (hunt, CSV import, Sheets restore)
+> converges on. ADR-0010's own closing line applies to its own table:
+> *contracts codify reality, not aspiration.*
+>
+> Two further entries are aspirational rather than false, and are flagged here
+> rather than silently trusted:
+> - **Pipeline state / history → event log.** The `events` table does **not
+>   exist in production** (`no such table: events`), and Google Sheets — not the
+>   event log — currently drives the approval→call state machine. PR #129 fixes
+>   the table; the Sheets coupling is unresolved.
+> - **Contact evidence → evidence ledger.** Real, but most rows now arrive from
+>   licence registries with no email at all, so the ledger is thinly populated.
 
 ## Three-things rule (owner mandate, 2026-07-21)
 
