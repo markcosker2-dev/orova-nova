@@ -11,6 +11,7 @@ import time
 import logging
 
 import httpx
+import phonenumbers
 
 from app.core.database import DatabaseManager
 
@@ -22,14 +23,71 @@ _DNC_HTTP_TIMEOUT = 8.0
 _unconfigured_logged = False
 
 
+_DEFAULT_REGION = "US"
+
+
 def _normalize(phone: str) -> str:
-    """Reduce to digits (keeping a leading +) so formatting differences can't
-    slip a suppressed number past the check."""
-    p = (phone or "").strip()
-    digits = "".join(ch for ch in p if ch.isdigit())
-    if not digits:
+    """Canonical E.164 key for a number, or "" if it cannot be resolved to one.
+
+    ── The bug this replaces (2026-08-03) ──────────────────────────────────
+    The previous implementation reduced to digits and kept a leading "+"
+    verbatim, without ever reconciling the US country code. One number
+    therefore produced several non-matching keys, and a suppressed number
+    queried in a different format was reported as NOT suppressed:
+
+        stored '+13239352985' -> is_suppressed('+13239352985')   = True
+        stored '+13239352985' -> is_suppressed('3239352985')     = False  BYPASS
+        stored '+13239352985' -> is_suppressed('(323) 935-2985') = False  BYPASS
+        stored '+13239352985' -> is_suppressed('13239352985')    = False  BYPASS
+        stored '+13239352985' -> is_suppressed('323-935-2985')   = False  BYPASS
+
+    4 of 6 real-world formats bypassed the gate. Production was safe only by
+    coincidence: every ingestion path already normalises to E.164
+    (lead_gen_v3._normalize_phone_to_e164, light_enrich._normalize_phone_to_e164,
+    lead_finder._normalize_phone) and the sole DNC writer is the Retell webhook
+    (app/main.py:1124), also E.164. Anything reaching the dial lane in another
+    shape — a Sheets/backup restore, a CSV import, a legacy row predating
+    normalisation, or a future manual DNC entry UI — would have been dialled
+    despite being on the list.
+
+    The old unit test could not catch it: it asserted the two mismatched
+    outputs as CORRECT ("(323) 935-2985" -> "3239352985" alongside
+    "+1 323 935 2985" -> "+13239352985"), i.e. it encoded the defect.
+
+    ── Why this is strictly a strengthening ────────────────────────────────
+    Fail-closed behaviour is preserved exactly and extended, never relaxed:
+      · ""/None            -> "" -> is_suppressed True (unchanged)
+      · unparseable input  -> "" -> is_suppressed True (unchanged for "abc";
+        NEWLY blocked for digit-bearing junk like "123" or "ext 456", which
+        previously produced a key that matched nothing and so was dialable)
+      · DB error           -> True, handled by the caller (unchanged)
+    No input that was previously BLOCKED becomes dialable.
+
+    `phonenumbers` is already a hard dependency (lead_validator.py:27 formats
+    to E164 with it), so this introduces no new package.
+    """
+    raw = (phone or "").strip()
+    if not raw:
         return ""
-    return ("+" + digits) if p.startswith("+") else digits
+    try:
+        # A leading "+" means the number carries its own country code; anything
+        # else is interpreted against the US plan, which is the only geography
+        # this system dials (ADR-0012: US West Coast).
+        parsed = phonenumbers.parse(raw, None if raw.startswith("+") else _DEFAULT_REGION)
+        if phonenumbers.is_valid_number(parsed):
+            return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+    except Exception:
+        pass  # fall through to the NANP shape check below
+    # Fallback for values phonenumbers rejects as invalid but which are still
+    # unambiguous NANP shapes (legacy rows, test fixtures, partially-cleaned
+    # imports). Store and query must agree on these too, or the bypass returns.
+    # Deliberately narrow: never invent a country code for any other length.
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    if len(digits) == 10:
+        return "+1" + digits
+    if len(digits) == 11 and digits.startswith("1"):
+        return "+" + digits
+    return ""
 
 
 async def is_suppressed(phone: str) -> bool:
