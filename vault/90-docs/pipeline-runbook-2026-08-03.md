@@ -230,6 +230,71 @@ Recorded so a future session cannot silently re-litigate them.
 
 ---
 
+---
+
+## 8. Update 2026-08-04 — California is open, and three claims were wrong
+
+### CSLB is live and free — California no longer needs Yelp
+
+Downloaded a real file through the CSLB Public Data Portal: **236 B-2
+Residential Remodeling contractors in Los Angeles County**, `.xlsx`, free, no
+signup, no API key.
+
+| Field | Reality |
+|---|---|
+| `PhoneNumber` | **100% fill** (236/236). Format `(323) 470 1937` — NOT E.164 |
+| `BusinessName`, `Address`, `City`, `County`, `ZIP` | full |
+| `Classification(s)` | present — e.g. `B-2 \| C36`. WA L&I has no category field at all |
+| `BusinessType` | Corporation 109 · **Sole Owner 103** · Limited Liability 24 |
+| `WorkersCompCoverageType` | **blank on 224 of 236** — unusable as a filter |
+| Owner / principal name | **ABSENT.** Unlike WA L&I and OR CCB |
+| Email | absent, and stated as policy (B&P Code §27) |
+
+**Query size is the constraint, not access.** One classification in one county
+= 236 rows. The owner's original 8 classifications × 10 counties returned an F5
+rejection and a `504 Gateway Timeout` — the form builds results synchronously.
+**Pull one classification × one county at a time.**
+
+### Three corrections
+
+1. **Yelp is not a free tier.** It is now the *Yelp Places API*: self-serve
+   gives a **30-day trial**, richer APIs are partner-only. The vault's "free via
+   Composio, no key, no approval" was true of **Composio's** credential, which
+   does not transfer to Nova's runtime. **PR #125 is dormant unless paid for.**
+2. **`BusinessType` is not a size or affordability signal.** It is a tax filing
+   status. A sole proprietorship can carry ten W-2 employees; incorporating in
+   construction is usually a *liability* decision, not a growth milestone. An
+   earlier draft of this runbook reasoned from that field to "sole owners can't
+   afford the retainer" — that is wrong, and it contradicts ADR-0012 directly:
+   *"the filter is a deal-size ratio, not affordability."* A B-2 remodeler in LA
+   runs $50–150K jobs; one extra job covers months of retainer at any legal
+   structure.
+3. **SerpAPI renewed 2026-08-04** — 243 searches left, next renewal 2026-09-04.
+   Renewal is **rolling from signup**, not calendar month. It is a 243/month
+   budget for everything, so it cannot be spent one-search-per-lead across a
+   whole county.
+
+### What CSLB does NOT give, and what that blocks
+
+- **No owner name.** WA L&I and OR CCB both supply the principal; California
+  does not. `owner_finder` routes CA to CALICO, gated behind `CA_SOS_API_KEY`,
+  **requested 2026-07-23, no reply**. So CA leads arrive nameless.
+- **No Instagram handle.** Nothing in the pipeline resolves a business name to
+  an IG profile. The existing scheduled task
+  ([[ig-reply-agent-scheduled-task-prompt]]) is a **reply** agent — it answers
+  threads the owner already opened. It cannot discover profiles and cannot
+  initiate. That capability does not exist yet.
+
+### Consequence for the Retell outbound prompt
+
+`outbound_dialer` passes `name` / `full_name` dynamic variables from the lead's
+owner field. **CSLB leads have no owner**, so `name` degrades to `"there"` and
+`full_name` renders empty. The outbound prompt needs a no-name path before any
+California lead is ever dialled — separately from the fact that the phone lane
+is legally shelved (§7).
+
+---
+
 ## Linked
 [[active-context]] · [[0012-icp-rerank-and-pilot-pricing]] ·
 [[0013-painkiller-positioning-and-real-competition]] ·
