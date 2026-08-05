@@ -184,11 +184,35 @@ async def _verify_email_deliverable(email: str) -> dict:
 
 
 # ── CAN-SPAM compliance footer ───────────────────────────────────────────────
-# Cold commercial email legally requires a clear opt-out mechanism and a valid
-# physical postal address (15 U.S.C. §7704). The opt-out ships always; the
-# address comes from BUSINESS_POSTAL_ADDRESS (owner action: a registered-agent
-# or PO-box address — logged once as a warning until set).
+# 15 U.S.C. §7704. CAN-SPAM does NOT require prior consent, so cold B2B email to
+# a work address is lawful in the US — but every commercial message must carry
+# all of the following, and each non-compliant message is its own violation at
+# up to $53,088 (FTC 2026 inflation adjustment):
+#
+#   1. accurate header / routing information        (AgentMail, real inbox)
+#   2. a non-deceptive subject line                 (proofreader gate)
+#   3. CLEAR AND CONSPICUOUS NOTICE THAT THE MESSAGE IS AN ADVERTISEMENT
+#   4. a valid physical postal address              (BUSINESS_POSTAL_ADDRESS)
+#   5. a working opt-out mechanism                  (reply-based, below)
+#   6. opt-outs honoured within 10 business days    (reply monitor -> DNC)
+#   7. monitoring anyone acting on your behalf      (n/a - no affiliates)
+#
+# (3) was MISSING and is added here. The FTC mandates no particular wording or
+# placement — only that the disclosure be clear and conspicuous — so this is
+# phrased plainly rather than shouted, which keeps it honest without reading
+# like a legal notice bolted to a one-paragraph email.
+#
+# The transactional/relationship exemption does NOT apply to this path: cold
+# prospecting mail is commercial by primary purpose. A genuine reply to an
+# inbound enquiry is a different case and does not route through here.
+#
+# ⚠️ (5) has an operational dependency worth stating: the opt-out is REPLY-BASED,
+# so it only remains functional while the sending inbox exists and the reply
+# monitor runs. CAN-SPAM requires the mechanism to work for at least 30 days
+# after sending. Rotating or deleting the AgentMail inbox inside that window
+# breaks compliance for every message already sent.
 
+_AD_DISCLOSURE_LINE = "This is an advertisement from OROVA, a marketing agency."
 _OPT_OUT_LINE = 'Not relevant? Reply "no thanks" and I won\'t write again.'
 _warned_no_postal = False
 
@@ -205,7 +229,8 @@ def _apply_compliance_footer(body: str) -> str:
                        "CAN-SPAM compliance; set it on Render).")
         _warned_no_postal = True
     ident = f"OROVA · {postal}" if postal else "OROVA"
-    return f"{body}\n\n—\n{ident}\n{_OPT_OUT_LINE}"
+    return (f"{body}\n\n—\n{ident}\n"
+            f"{_AD_DISCLOSURE_LINE}\n{_OPT_OUT_LINE}")
 
 
 async def send_outreach(
