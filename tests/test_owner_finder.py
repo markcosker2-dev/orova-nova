@@ -78,6 +78,60 @@ def test_wa_hit_short_circuits_other_stages(monkeypatch):
     serp_mock.assert_not_called()
 
 
+def test_wa_prefix_uses_two_tokens_not_the_whole_name():
+    """The prefix is matched against the RAW businessname, but was built from
+    the NORMALIZED one — so any stripped character in the middle made a name
+    unmatchable. Measured live 2026-08-06 against real ACTIVE WA licences whose
+    own names contain '&', '.' or ',': 2 of 14 resolved. The lookup could not
+    find owners for names in its own registry."""
+    rows = [{"businessname": "168 KITCHEN & BATH CORP",
+             "primaryprincipalname": "WU, ZHOUJUN",
+             "contractorlicensestatus": "ACTIVE"}]
+    client = _client_returning(get_return=_resp(200, rows))
+    with patch("app.skills.owner_finder.httpx.AsyncClient", return_value=client):
+        result = asyncio.run(owner_finder._wa_registry_lookup("168 Kitchen & Bath"))
+    assert result["owner"] == "Zhoujun Wu"
+    where = client.get.call_args.kwargs["params"]["$where"]
+    assert "'168 KITCHEN%'" in where, where          # two tokens, not three
+
+
+def test_wa_falls_back_to_contains_when_prefix_finds_nothing():
+    """Punctuation INSIDE the first two tokens defeats even a two-token prefix:
+    'E&K SOLUTIONS LLC' normalizes to 'E K SOLUTIONS', and 'E K' is not a
+    prefix of the stored name."""
+    rows = [{"businessname": "E&K SOLUTIONS LLC",
+             "primaryprincipalname": "CHEN, KEVIN",
+             "contractorlicensestatus": "ACTIVE"}]
+    calls = []
+
+    async def _get(url, **kw):
+        calls.append(kw["params"]["$where"])
+        return _resp(200, [] if len(calls) == 1 else rows)
+
+    client = MagicMock()
+    client.get = AsyncMock(side_effect=_get)
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=False)
+
+    with patch("app.skills.owner_finder.httpx.AsyncClient", return_value=client):
+        result = asyncio.run(owner_finder._wa_registry_lookup("E&K Solutions"))
+
+    assert result["owner"] == "Kevin Chen"
+    assert len(calls) == 2, "should retry once, not more"
+    assert "like '%SOLUTIONS%'" in calls[1], calls[1]   # contains on longest token
+
+
+def test_wa_looser_search_does_not_loosen_acceptance():
+    """A wider candidate window must not accept a near-miss."""
+    rows = [{"businessname": "ACME ROOFING AND SIDING LLC",
+             "primaryprincipalname": "SMITH, JANE",
+             "contractorlicensestatus": "ACTIVE"}]
+    client = _client_returning(get_return=_resp(200, rows))
+    with patch("app.skills.owner_finder.httpx.AsyncClient", return_value=client):
+        result = asyncio.run(owner_finder._wa_registry_lookup("Acme Roofing"))
+    assert result["owner"] == "", "accepted a different company"
+
+
 def test_wa_miss_falls_through_to_website_scrape(monkeypatch):
     monkeypatch.delenv("CA_SOS_API_KEY", raising=False)
     monkeypatch.delenv("OPENCORPORATES_API_KEY", raising=False)
