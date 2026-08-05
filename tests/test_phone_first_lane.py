@@ -32,10 +32,19 @@ LICENCE_LEAD = {
 
 
 def _run_lane(leads, *, dialer=None, gate=True, counter=0, enabled="1",
-              hour=11, client_id=0):
-    """Drive run_phone_first_lane with everything external faked."""
+              hour=11, client_id=0, consent=True):
+    """Drive run_phone_first_lane with everything external faked.
+
+    `consent` fakes the TCPA prior-express-consent gate. It defaults True so
+    these tests keep exercising the DIALLING behaviour they were written for —
+    the consent gate itself is covered in tests/test_call_consent.py, and one
+    test below pins that the lane actually consults it.
+    """
     dialer = dialer or AsyncMock(return_value={"success": True, "call_id": "call_abc"})
     gate_mock = AsyncMock(return_value=gate)
+    consent_mock = AsyncMock(return_value=(
+        (True, "consent via ig_dm_reply on 2026-08-06T00:00:00Z") if consent
+        else (False, "no prior express consent on record")))
     telegram = AsyncMock()
     updates = []
 
@@ -60,13 +69,15 @@ def _run_lane(leads, *, dialer=None, gate=True, counter=0, enabled="1",
          patch.object(worker.DatabaseManager, "query", AsyncMock(side_effect=fake_query)), \
          patch.object(worker, "send_telegram_report", telegram), \
          patch("app.core.approval_gate.gate_allows", gate_mock), \
+         patch("app.core.call_consent.ai_call_allowed", consent_mock), \
          patch.object(worker, "datetime", fake_datetime), \
          patch.object(worker.asyncio, "sleep", AsyncMock()), \
          patch.dict(os.environ, env, clear=True):
         asyncio.run(worker.run_phone_first_lane(client_id=client_id))
 
     return {"dialer": dialer, "gate": gate_mock, "telegram": telegram,
-            "updates": updates, "counter": worker.daily_call_counter}
+            "consent": consent_mock, "updates": updates,
+            "counter": worker.daily_call_counter}
 
 
 class TestPhoneFirstDials:
@@ -104,6 +115,27 @@ class TestGuardrails:
         r = _run_lane([LICENCE_LEAD], gate=False)
         r["dialer"].assert_not_awaited()
         r["gate"].assert_awaited_once()
+
+    def test_no_consent_blocks_the_call_before_the_approval_gate(self):
+        """TCPA: an AI/artificial voice needs PRIOR EXPRESS CONSENT regardless
+        of the B2B exemption (FCC 24-17). $500/call, trebled to $1,500 wilful.
+
+        A licence-registry number is a PUBLISHED business line, not permission —
+        so this lead is fully `callable` and still must not be dialled. Consent
+        is checked BEFORE the approval gate, so Mark is never asked to approve
+        a call that would be unlawful to place.
+        """
+        r = _run_lane([LICENCE_LEAD], consent=False)
+        r["dialer"].assert_not_awaited()
+        r["consent"].assert_awaited()
+        r["gate"].assert_not_awaited()
+
+    def test_the_lane_actually_consults_the_consent_gate(self):
+        """The harness fakes the gate, so without this the gate could be
+        deleted from the lane and every test here would still pass."""
+        r = _run_lane([LICENCE_LEAD])
+        r["consent"].assert_awaited()
+        assert r["consent"].await_args.args[0] == LICENCE_LEAD["phone"]
 
     def test_daily_cap_is_respected(self):
         r = _run_lane([LICENCE_LEAD], counter=worker.MAX_CALLS_PER_DAY)
