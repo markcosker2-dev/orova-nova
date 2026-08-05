@@ -160,12 +160,22 @@ def _normalize_business(name: str) -> str:
     return " ".join(tokens)
 
 
+# Generational/professional suffixes. Never part of the person's name, and a
+# trailing one silently becomes the SURNAME on the no-comma path if not removed.
+_NAME_SUFFIXES = {"JR", "SR", "II", "III", "IV", "V", "MD", "DDS"}
+
+
 def _person_from_principal(raw: str) -> str:
     """'POWER, GREGORY MARK JR' -> 'Gregory Power'.
 
-    L&I stores principals surname-first in caps. Middle names and generational
-    suffixes are dropped so the result is a clean two-token person name (what
-    _is_plausible_name accepts, and what reads correctly in a call script).
+    Handles both registry conventions:
+      · WA L&I stores principals surname-first in caps ('POWER, GREGORY MARK').
+      · OR CCB stores the RMI given-name-first with no comma
+        ('EDWARD CARL BARRINGTON'), measured live at 0% commas.
+
+    Middle names and generational suffixes are dropped so the result is a clean
+    two-token person name (what _is_plausible_name accepts, and what reads
+    correctly in a call script).
     """
     raw = (raw or "").strip()
     if not raw:
@@ -173,12 +183,22 @@ def _person_from_principal(raw: str) -> str:
     surname, _, remainder = raw.partition(",")
     if not remainder.strip():          # no comma — already "FIRST LAST"
         parts = raw.split()
+        # Drop TRAILING suffixes before taking the surname. Without this,
+        # 'DONALD JOSEPH ZEISE JR' yielded 'Donald Jr' — a name that passes
+        # _is_plausible_name and reaches a call script. Measured live against
+        # OR CCB 2026-08-05: 3.18% of rmi_name values end in a suffix, and OR
+        # rows NEVER carry a comma, so every one of them took this path.
+        # Only trailing tokens are stripped, and never below two tokens, so a
+        # leading particle like the 'MD' in 'MD SHAHRIAR SHAMIM' (a given name,
+        # not a doctorate) is left alone.
+        while len(parts) > 2 and parts[-1].strip(".").upper() in _NAME_SUFFIXES:
+            parts.pop()
         if len(parts) < 2:
             return ""
         first, surname = parts[0], parts[-1]
     else:
-        drop = {"JR", "SR", "II", "III", "IV", "V", "MD", "DDS"}
-        given = [t for t in remainder.split() if t.strip(".").upper() not in drop]
+        given = [t for t in remainder.split()
+                 if t.strip(".").upper() not in _NAME_SUFFIXES]
         if not given:
             return ""
         first = given[0]
