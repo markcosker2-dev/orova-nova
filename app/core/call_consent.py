@@ -1,35 +1,52 @@
-"""Prior-express-consent gate for AI-VOICE outbound calls.
+"""Line-type + consent gate for AI-VOICE outbound calls.
 
-## Why this exists — the legal position, verified 2026-08-06
+## The legal position, corrected 2026-08-06
 
-The calling lane already has a fail-closed DNC gate (`app/core/dnc.py`). DNC is
-necessary and **not sufficient**, because it only answers "did this person ask
-us to stop?". For an AI voice it is the wrong question. The right one is "did
-this person ever say yes?", and by default the answer is no.
+An earlier version of this module asserted that AI cold calling is simply
+unlawful without consent. **That was too broad, and it was wrong.** The
+restriction is *line-type dependent*, and the correction matters because the
+over-broad rule would have blocked calls that are perfectly lawful.
 
-Researched against current guidance rather than assumed:
+Two SEPARATE statutory provisions, commonly conflated:
 
-* The **B2B exemption is real but narrow**. Live-human calls to a verified
-  business landline are generally exempt from federal telemarketing
-  restrictions.
-* **It does not survive an artificial voice.** The FCC's February 2024
-  declaratory ruling (FCC 24-17) holds that AI-generated voices are
-  "artificial" under the TCPA. Prerecorded/artificial-voice calls require
-  **prior express consent regardless of the B2B exemption**.
-* A **personal mobile used for business is treated as residential**, so the
-  business carve-out does not rescue it either.
-* Damages are **$500 per call, trebled to $1,500 for a wilful violation**
-  (47 U.S.C. §227). Per call — a 100-lead list is a six-figure exposure.
+* **§227(b)(1)(B)** — artificial/prerecorded voice to a **"residential
+  telephone line"** requires prior express consent. By its own text this does
+  **not** reach a genuine business landline.
+* **§227(b)(1)(A)(iii)** — a separate clause reaching *any* number assigned to
+  **cellular** service, **or "any service for which the called party is charged
+  for the call."** This one is not limited to residential use, so a business's
+  mobile is squarely covered. Toll-free numbers are arguably covered too, since
+  the called party pays — which makes them the *worst* AI-call candidates, not
+  the safest, counterintuitive as that is.
 
-**Measured consequence for THIS pipeline:** of the 23 numbers queued for
-calling in production on 2026-08-06, `phonenumbers` classified **20 as
-FIXED_OR_MOBILE** — meaning US numbering plus number portability makes it
-*impossible to tell from the number alone* whether it is a landline or a cell.
-Only 3 were unambiguously business (toll-free). We therefore cannot establish
-the exemption applies, even before the artificial-voice problem removes it.
+Separately, the **Do-Not-Call rules (§227(c))** protect *residential*
+subscribers, so B2B calling is largely outside them. DNC compliance alone,
+however, says nothing about the artificial-voice question above.
 
-So: **an AI call without recorded consent is not defensible**, and this gate
-fails closed the same way the DNC one does.
+The FCC's February 2024 declaratory ruling (FCC 24-17) confirms AI-generated
+voices count as "artificial", so all of the above binds an AI caller
+specifically. Damages: **$500 per call, trebled to $1,500 for a wilful
+violation** (47 U.S.C. §227).
+
+### So the rule this module implements
+
+    verified business LANDLINE  ->  lawful, no consent required
+    CELL / TOLL-FREE / UNKNOWN  ->  prior express consent required
+
+### The real operational blocker, measured
+
+Of the 23 numbers queued for calling in production on 2026-08-06:
+
+    20  geographic, landline-or-cell UNKNOWN
+     3  toll-free (called party charged -> treat as consent-required)
+
+`phonenumbers` returns FIXED_OR_MOBILE for **every** US geographic number —
+number portability destroyed prefix-based inference years ago. Determining
+line type for real needs a carrier/HLR lookup, which is a paid API.
+
+**That is the actual blocker: not legality, but not knowing which numbers are
+cells.** Until a line type is known, this gate treats a number as
+consent-required, because guessing wrong is $500-$1,500 per call.
 
 ## What counts as consent
 
@@ -63,6 +80,67 @@ from app.core.database import DatabaseManager
 logger = logging.getLogger(__name__)
 
 _CONSENT_KEY = "ai_call_consent_ledger"
+_LINE_TYPE_KEY = "phone_line_type_cache"
+
+# Toll-free NPAs. Under §227(b)(1)(A)(iii) the called party is charged for the
+# call, so these are treated as consent-required rather than as "obviously a
+# business line" — the opposite of the intuitive reading.
+_TOLL_FREE_NPAS = frozenset({"800", "888", "877", "866", "855", "844", "833", "822"})
+
+LINE_LANDLINE = "landline"
+LINE_MOBILE = "mobile"
+LINE_TOLL_FREE = "toll_free"
+LINE_UNKNOWN = "unknown"
+
+# Only a landline is callable by an artificial voice without consent.
+_CONSENT_EXEMPT_LINE_TYPES = frozenset({LINE_LANDLINE})
+
+
+async def record_line_type(phone: str, line_type: str, source: str = "") -> bool:
+    """Cache a VERIFIED line type for a number.
+
+    `line_type` must be one of landline/mobile/toll_free. This is written by a
+    carrier/HLR lookup (a paid API — not enabled by default) or by a human who
+    has confirmed it. It is never inferred from the number's prefix, because US
+    number portability makes that unreliable.
+    """
+    norm = _normalize(phone)
+    if not norm or line_type not in (LINE_LANDLINE, LINE_MOBILE, LINE_TOLL_FREE):
+        logger.error(f"[LINETYPE] Refused to record {line_type!r} for {phone!r}.")
+        return False
+    try:
+        cache = await DatabaseManager.get_state(_LINE_TYPE_KEY, {}) or {}
+        cache[norm] = {"line_type": line_type, "source": source or "",
+                       "checked_at": time.strftime("%Y-%m-%dT%H:%M:%SZ",
+                                                   time.gmtime())}
+        await DatabaseManager.set_state(_LINE_TYPE_KEY, cache)
+        return True
+    except Exception as e:
+        logger.error(f"[LINETYPE] FAILED to record line type: {e}")
+        return False
+
+
+async def get_line_type(phone: str) -> str:
+    """Best known line type, or LINE_UNKNOWN.
+
+    Toll-free is derivable from the NPA and needs no lookup. Everything else
+    geographic is UNKNOWN until a real lookup says otherwise — `phonenumbers`
+    returns FIXED_OR_MOBILE for every US geographic number, which is not an
+    answer.
+    """
+    norm = _normalize(phone)
+    digits = "".join(ch for ch in norm if ch.isdigit())
+    if len(digits) >= 10 and digits[-10:-7] in _TOLL_FREE_NPAS:
+        return LINE_TOLL_FREE
+    try:
+        cache = await DatabaseManager.get_state(_LINE_TYPE_KEY, {}) or {}
+    except Exception as e:
+        logger.error(f"[LINETYPE] Cache read failed for {phone} ({e}).")
+        return LINE_UNKNOWN
+    entry = cache.get(norm)
+    if isinstance(entry, dict) and entry.get("line_type"):
+        return entry["line_type"]
+    return LINE_UNKNOWN
 
 # Channels through which consent can be captured. Anything not on this list is
 # rejected rather than silently trusted — a source we cannot point at later is
@@ -198,9 +276,27 @@ async def ai_call_allowed(phone: str) -> tuple:
                      f"blocking call (fail-closed).")
         return False, "DNC lookup error (fail-closed)"
 
+    # A VERIFIED business landline is outside both artificial-voice provisions:
+    # §227(b)(1)(B) reaches only a "residential telephone line", and
+    # §227(b)(1)(A)(iii) reaches cellular / called-party-charged services.
+    # No consent is required to place an AI call to one.
+    line = await get_line_type(phone)
+    if line in _CONSENT_EXEMPT_LINE_TYPES:
+        return True, f"verified business {line} — outside §227(b)(1)(B) and (A)(iii)"
+
     rec = await consent_record(phone)
-    if rec is None:
-        return False, ("no prior express consent on record — an AI/artificial "
-                       "voice call requires it regardless of the B2B exemption "
-                       "(FCC 24-17)")
-    return True, f"consent via {rec.get('source')} on {rec.get('recorded_at')}"
+    if rec is not None:
+        return True, (f"consent via {rec.get('source')} on "
+                      f"{rec.get('recorded_at')} (line: {line})")
+
+    if line == LINE_TOLL_FREE:
+        why = ("toll-free — the called party is charged, so §227(b)(1)(A)(iii) "
+               "applies and consent is required")
+    elif line == LINE_MOBILE:
+        why = ("mobile — §227(b)(1)(A)(iii) covers cellular regardless of "
+               "business use, so consent is required")
+    else:
+        why = ("line type UNKNOWN — cannot show it is a landline, and "
+               "§227(b)(1)(A)(iii) makes a cell a $500-$1,500 mistake. Verify "
+               "the line type or record consent")
+    return False, why

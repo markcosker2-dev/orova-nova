@@ -118,11 +118,56 @@ async def test_matches_across_country_code_formatting(store):
 # ── the combined gate ──────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_gate_refuses_without_consent(store):
+async def test_gate_refuses_an_unknown_line_type_without_consent(store):
+    """The common case: a geographic number we cannot prove is a landline."""
     with patch("app.core.dnc.is_suppressed", AsyncMock(return_value=False)):
         allowed, why = await cc.ai_call_allowed("+15035757663")
     assert allowed is False
-    assert "prior express consent" in why
+    assert "UNKNOWN" in why
+
+
+@pytest.mark.asyncio
+async def test_verified_landline_needs_no_consent(store):
+    """CORRECTION 2026-08-06: an earlier version required consent for every
+    number. That was too broad. §227(b)(1)(B) reaches only a RESIDENTIAL line,
+    and (A)(iii) reaches cellular / called-party-charged services — so a
+    verified business landline is outside both, and blocking it was wrong."""
+    await cc.record_line_type("+15035757663", cc.LINE_LANDLINE, source="carrier_lookup")
+    with patch("app.core.dnc.is_suppressed", AsyncMock(return_value=False)):
+        allowed, why = await cc.ai_call_allowed("+15035757663")
+    assert allowed is True
+    assert "landline" in why
+
+
+@pytest.mark.asyncio
+async def test_verified_mobile_still_requires_consent(store):
+    """(A)(iii) covers cellular regardless of business use."""
+    await cc.record_line_type("+15035757663", cc.LINE_MOBILE, source="carrier_lookup")
+    with patch("app.core.dnc.is_suppressed", AsyncMock(return_value=False)):
+        allowed, why = await cc.ai_call_allowed("+15035757663")
+    assert allowed is False
+    assert "mobile" in why
+
+
+@pytest.mark.asyncio
+async def test_toll_free_requires_consent_despite_being_a_business_line(store):
+    """Counterintuitive but statutory: (A)(iii) also covers 'any service for
+    which the called party is charged for the call'. Toll-free is the WORST
+    AI-call candidate, not the safest."""
+    for tf in ("+18888470823", "+18007249946", "+18442264262"):
+        assert await cc.get_line_type(tf) == cc.LINE_TOLL_FREE
+        with patch("app.core.dnc.is_suppressed", AsyncMock(return_value=False)):
+            allowed, why = await cc.ai_call_allowed(tf)
+        assert allowed is False, tf
+        assert "called party is charged" in why
+
+
+@pytest.mark.asyncio
+async def test_line_type_is_never_guessed_from_a_geographic_prefix(store):
+    """US number portability killed prefix inference. Unknown must stay
+    unknown rather than optimistically resolving to landline."""
+    assert await cc.get_line_type("+15035757663") == cc.LINE_UNKNOWN
+    assert await cc.record_line_type("+15035757663", "probably_landline") is False
 
 
 @pytest.mark.asyncio
