@@ -350,22 +350,95 @@ def test_resolve_owner_works_with_no_ai_available(monkeypatch):
     assert result["owner"] == "Pat Reilly"
 
 
-# ── OR best-effort parse ─────────────────────────────────────────────────
+# ── OR CCB licence registry ──────────────────────────────────────────────
+#
+# Replaced the Oregon SECRETARY OF STATE HTML scrape, which was wrong twice
+# over (both verified live 2026-08-06):
+#   · it returned an owner for 0 of 10 real Oregon contractors, and the host
+#     does not answer at all — a full connect timeout.
+#   · even working, a "Registered Agent" is frequently a law firm or an agent
+#     service, not the decision maker.
+# CCB publishes the Responsible Managing Individual, the direct analogue of
+# WA L&I's licence principal. Live hit rate on the same corpus: 13/14.
 
-def test_or_registry_parses_agent_name_from_html():
-    html = "<html><body>Registered Agent: John Doe. Entity Status: Active</body></html>"
-    client = _client_returning(get_return=_resp(200, text=html))
+_OR_ROWS = [   # verbatim shapes from data.oregon.gov/resource/g77e-6bhs.json
+    {"full_name": "VITAN CONSTRUCTION LLC", "rmi_name": "TANYA VALERIA PONOMAREV",
+     "state": "OR"},
+]
+
+
+def test_or_ccb_returns_the_responsible_managing_individual():
+    client = _client_returning(get_return=_resp(200, json_data=_OR_ROWS))
     with patch("app.skills.owner_finder.httpx.AsyncClient", return_value=client):
-        result = asyncio.run(owner_finder._or_registry_lookup("Acme Roofing"))
-    assert result["owner"] == "John Doe"
-    assert result["source"] == "or_sos"
+        result = asyncio.run(owner_finder._or_registry_lookup("Vitan Construction"))
+    assert result["owner"] == "Tanya Ponomarev"
+    assert result["source"] == "or_ccb"
+    assert result["title"] == "Responsible Managing Individual"
+    assert result["confidence"] == 0.9
 
 
-def test_or_registry_skips_cleanly_on_bad_html():
-    client = _client_returning(get_return=_resp(200, text="<html>nothing useful here</html>"))
+def test_or_ccb_requires_an_exact_normalized_name_match():
+    """A near-miss must return nothing, not the wrong company's RMI."""
+    client = _client_returning(get_return=_resp(200, json_data=_OR_ROWS))
     with patch("app.skills.owner_finder.httpx.AsyncClient", return_value=client):
-        result = asyncio.run(owner_finder._or_registry_lookup("Acme Roofing"))
+        result = asyncio.run(owner_finder._or_registry_lookup("Vitan Construction & Design"))
     assert result["owner"] == ""
+
+
+def test_or_ccb_refuses_single_token_names():
+    """'Acme' exact-matched a real licence literally named ACME once — a
+    correct string match to the wrong company."""
+    client = _client_returning(get_return=_resp(200, json_data=_OR_ROWS))
+    with patch("app.skills.owner_finder.httpx.AsyncClient", return_value=client):
+        assert asyncio.run(owner_finder._or_registry_lookup("Vitan"))["owner"] == ""
+
+
+def test_or_ccb_rejects_placeholder_rmi_values():
+    """116 rows carry a sentinel instead of a person. 'RD - NO RMI RQRD'
+    parses to 'Rd Rqrd', which passes _is_plausible_name and would put a
+    nonexistent person into a call script."""
+    for sentinel in ("RD - NO RMI RQRD", "RMI NOT RQ'D", "NO RMI ON FILE",
+                     "NO RMI REQUIRED - DEVELOPER"):
+        rows = [{"full_name": "VITAN CONSTRUCTION LLC", "rmi_name": sentinel,
+                 "state": "OR"}]
+        client = _client_returning(get_return=_resp(200, json_data=rows))
+        with patch("app.skills.owner_finder.httpx.AsyncClient", return_value=client):
+            result = asyncio.run(owner_finder._or_registry_lookup("Vitan Construction"))
+        assert result["owner"] == "", f"{sentinel!r} became an owner name"
+
+
+def test_or_ccb_refuses_to_guess_between_conflicting_individuals():
+    rows = [
+        {"full_name": "VITAN CONSTRUCTION LLC", "rmi_name": "TANYA VALERIA PONOMAREV", "state": "OR"},
+        {"full_name": "VITAN CONSTRUCTION LLC", "rmi_name": "SOMEONE ELSE ENTIRELY", "state": "OR"},
+    ]
+    client = _client_returning(get_return=_resp(200, json_data=rows))
+    with patch("app.skills.owner_finder.httpx.AsyncClient", return_value=client):
+        assert asyncio.run(owner_finder._or_registry_lookup("Vitan Construction"))["owner"] == ""
+
+
+def test_or_ccb_prefers_an_in_state_licence():
+    """The dataset is 'contractors who can legally work in Oregon' — 14.5% of
+    rows are based elsewhere."""
+    rows = [
+        {"full_name": "VITAN CONSTRUCTION LLC", "rmi_name": "OUT OF STATE PERSON", "state": "WA"},
+        {"full_name": "VITAN CONSTRUCTION LLC", "rmi_name": "TANYA VALERIA PONOMAREV", "state": "OR"},
+    ]
+    client = _client_returning(get_return=_resp(200, json_data=rows))
+    with patch("app.skills.owner_finder.httpx.AsyncClient", return_value=client):
+        result = asyncio.run(owner_finder._or_registry_lookup("Vitan Construction"))
+    assert result["owner"] == "Tanya Ponomarev"
+
+
+def test_or_ccb_skips_cleanly_on_non_200():
+    client = _client_returning(get_return=_resp(503, json_data=[]))
+    with patch("app.skills.owner_finder.httpx.AsyncClient", return_value=client):
+        assert asyncio.run(owner_finder._or_registry_lookup("Vitan Construction"))["owner"] == ""
+
+
+def test_or_ccb_kill_switch(monkeypatch):
+    monkeypatch.setenv("OR_CCB_ENABLED", "0")
+    assert asyncio.run(owner_finder._or_registry_lookup("Vitan Construction"))["owner"] == ""
 
 
 # ── unknown/other state routes to OpenCorporates ────────────────────────────

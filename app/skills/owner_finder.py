@@ -305,38 +305,136 @@ async def _ca_registry_lookup(business: str) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# STAGE 1c — Oregon registry (best-effort HTML parse, no documented API)
+# STAGE 1c — Oregon CCB contractor licence registry (no key, open data)
 # ═══════════════════════════════════════════════════════════════════════════
+#
+# Replaces the Oregon SECRETARY OF STATE business-registry scrape this
+# function used to do. That leg was wrong twice over, both verified live
+# 2026-08-06:
+#
+#   1. It produced nothing. Run against 10 real Oregon contractors through the
+#      production code path it returned an owner for 0 of them, and the host
+#      (secure.sos.state.or.us) does not answer at all — a full connect
+#      timeout, not a 403 or a changed layout. Unreachable from one network is
+#      not proof a source is globally dead, but a leg that returns 0/10 is
+#      dead *to us* either way.
+#   2. Even working, it returned the wrong FIELD. A "Registered Agent" is
+#      frequently a law firm or a registered-agent service (CT Corporation and
+#      friends), not the decision maker. Attaching one to a lead gives Retell a
+#      real person's name at the wrong company — the exact failure the WA leg's
+#      strict matching exists to prevent.
+#
+# OR CCB publishes the RESPONSIBLE MANAGING INDIVIDUAL — the licence's legally
+# accountable person, the direct analogue of WA L&I's licence principal — on
+# the state's Socrata portal. Free, no key, no quota. Measured live 2026-08-05
+# over the full dataset: 55,931 rows, `rmi_name` 97.3% populated.
+_OR_CCB_DATASET = "https://data.oregon.gov/resource/g77e-6bhs.json"
+
+# 116 rows carry a sentinel instead of a person: 'RD - NO RMI RQRD',
+# "RMI NOT RQ'D", 'NO RMI ON FILE'. These parse to plausible-looking names
+# ('Rd Rqrd', 'No Rmi') and would put a person who does not exist into a call
+# script. A standalone "RMI" token was verified across all 50,000 non-null
+# rmi_name values to match exactly these rows and no real name — CARMI,
+# TORMIS and MCDIARMID are single tokens and do not match.
+_OR_RMI_PLACEHOLDER_RE = re.compile(r"(?i)\bRMI\b")
+
 
 async def _or_registry_lookup(business: str) -> dict:
-    """OR Business Registry search — no JSON API, so this is a best-effort
-    HTML parse of the public search results page. Skips cleanly on any
-    layout/parse failure since there's no documented, stable structure."""
-    if not business:
+    """Resolve an Oregon contractor's Responsible Managing Individual.
+
+    Matching is deliberately STRICT, mirroring the WA leg: only a licence whose
+    normalized business name equals the query's exactly is accepted, and if
+    several matching licences name different individuals the lookup returns
+    empty rather than picking one. A miss is always cheaper than a confident
+    wrong name.
+
+    Kill switch: OR_CCB_ENABLED=0. Defaults ON because the source needs no key
+    and costs nothing (unlike the dead SoS endpoint it replaces, and unlike the
+    CA leg, which is gated on a key that was never issued).
+    """
+    if not business or os.getenv("OR_CCB_ENABLED", "1") != "1":
+        return dict(_EMPTY)
+    target = _normalize_business(business)
+    # Same single-token guard as WA. Live 2026-07-25 the bare query "Acme"
+    # exact-matched a licence literally named ACME and returned its principal —
+    # a correct string match to the wrong company.
+    if not target or len(target.split()) < 2:
         return dict(_EMPTY)
     try:
-        url = "https://secure.sos.state.or.us/cbrmanager/search.action"
-        params = {"businessName": business}
-        async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT, follow_redirects=True) as client:
-            resp = await client.get(url, params=params)
-        if resp.status_code != 200:
+        # Prefix on the first TWO normalized tokens, exact-match client-side.
+        #
+        # Not the full normalized name: normalization strips punctuation and
+        # legal-form tokens, but the prefix is matched against the RAW
+        # `full_name`, so any stripped token in the MIDDLE makes a full-name
+        # prefix unmatchable. Measured live 2026-08-06 — "MARKS CONSTRUCTION &
+        # REMODELING CO" normalizes to "MARKS CONSTRUCTION REMODELING", which
+        # is not a prefix of the stored "MARKS CONSTRUCTION & REMODELING CO",
+        # so a real licence was missed.
+        #
+        # Not ONE token either: live 2026-07-25 'TOP' matched 398 licences and
+        # 'BLACK' 368, so the true match fell outside the per-request window.
+        # Two tokens is selective enough, and acceptance is still decided by
+        # the exact normalized comparison below — a looser prefix widens the
+        # candidate window without loosening what is accepted.
+        prefix = " ".join(target.split()[:2]).replace("'", "''")
+        select = "full_name,rmi_name,state,license_type,lic_exp_date"
+
+        async def _fetch(where: str, limit: str) -> list:
+            async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
+                resp = await client.get(
+                    _OR_CCB_DATASET,
+                    params={"$where": where, "$select": select, "$limit": limit},
+                    headers={"Accept": "application/json"})
+            if resp.status_code != 200:
+                logger.debug(f"[OWNER_FINDER] OR CCB status {resp.status_code} "
+                             f"for {business}")
+                return []
+            return resp.json() or []
+
+        rows = await _fetch(f"upper(full_name) like '{prefix}%'", "50")
+        exact = [r for r in rows
+                 if _normalize_business(r.get("full_name", "")) == target]
+
+        # Fallback: a prefix cannot match when a STRIPPED character sits between
+        # the first two tokens. Live 2026-08-06 — "R & R MAINTENANCE AND GENERAL
+        # CONTRACTING LLC" normalizes to "R R MAINTENANCE ...", and "R R" is not
+        # a prefix of the stored "R & R ...", so a real licence was missed.
+        # Retry as a CONTAINS on the longest token, which is the most selective
+        # single word available and is immune to punctuation anywhere in the
+        # name. Costs a second request only when the first found nothing.
+        if not exact:
+            tokens = sorted((t for t in target.split() if len(t) >= 5),
+                            key=len, reverse=True)
+            if tokens:
+                needle = tokens[0].replace("'", "''")
+                rows = await _fetch(f"upper(full_name) like '%{needle}%'", "400")
+                exact = [r for r in rows
+                         if _normalize_business(r.get("full_name", "")) == target]
+        if not exact:
             return dict(_EMPTY)
-        soup = BeautifulSoup(resp.text, "html.parser")
-        text = soup.get_text(separator=" ", strip=True)
-        # No re.IGNORECASE: the capture group's own [A-Z][a-z]+ shape is what
-        # bounds a real title-case name — case-insensitive would let the match
-        # run on into surrounding lowercase prose (matches lead_gen_v3's
-        # existing _state_registry_lookup pattern for the same reason).
-        match = re.search(
-            r'(?:Registered\s+Agent|Agent\s+Name)[:\s]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)',
-            text,
-        )
-        if match:
-            name = match.group(1).strip()
-            if _is_plausible_name(name):
-                return {"owner": name, "title": "Registered Agent", "source": "or_sos", "confidence": 0.7}
+        # The dataset is "contractors who can legally work in Oregon", not
+        # "Oregon contractors" — 14.5% of rows are based in another state. When
+        # an in-state licence exists, prefer it.
+        in_state = [r for r in exact if (r.get("state") or "").upper() == "OR"]
+        candidates = in_state or exact
+        names = set()
+        for r in candidates:
+            raw = (r.get("rmi_name") or "").strip()
+            if not raw or _OR_RMI_PLACEHOLDER_RE.search(raw):
+                continue
+            person = _person_from_principal(raw)
+            if person:
+                names.add(person)
+        if len(names) != 1:
+            logger.debug(f"[OWNER_FINDER] OR CCB ambiguous/empty RMI for "
+                         f"{business} ({len(names)} distinct names)")
+            return dict(_EMPTY)
+        name = names.pop()
+        if _is_plausible_name(name):
+            return {"owner": name, "title": "Responsible Managing Individual",
+                    "source": "or_ccb", "confidence": 0.9}
     except Exception as e:
-        logger.debug(f"[OWNER_FINDER] OR registry lookup failed for {business}: {e}")
+        logger.debug(f"[OWNER_FINDER] OR CCB lookup failed for {business}: {e}")
     return dict(_EMPTY)
 
 
