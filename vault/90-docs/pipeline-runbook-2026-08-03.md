@@ -295,6 +295,100 @@ is legally shelved (§7).
 
 ---
 
+## 9. Pricing on the discovery call — structure decided, number deferred
+
+> [!question] Owner objection, 2026-08-04
+> *"If I discount on a discovery call it makes me look weak and makes them
+> think I can't do a good job."* Correct instinct, and the reason the structure
+> below matters more than the number.
+
+**The unit economics, from [[profitability-plan]] §3.1 — this is not a
+close-run thing.** Itemised cost per active client: Retell $10–37 · Twilio
+~$2.50 · SerpAPI $0–25 · Make.com $0–16 · Higgsfield ~$20–50 (estimated,
+unconfirmed, not yet wired) · hosting $0 · LLM $0 · AgentMail $0–20.
+**Total ~$35–150/mo.** At a $2,000/mo pilot that is a **92–98% margin**; at
+list it is higher still. Ad spend never enters — the client pays Meta directly.
+
+Claude plans and Render are **fixed overhead shared across everything**, not
+per-client. A second client costs another ~$35–150, not another Claude plan.
+That is what makes the margin hold, and it is why "these tools are expensive"
+does not translate into "the pilot price is too low".
+
+**The decided structure:**
+1. **Anchor at list** ($4,000 P1 / $5,000 P2). Say the number out loud first.
+2. Never open with a discount. Leading with one forfeits the only thing worth
+   learning from early calls — whether the objection is price at all.
+3. If used, a discount is **paid for**, never given: testimonial + case-study
+   rights + permission to quote results. That is the consideration.
+4. **The step-up is written at signature** (ADR-0012: to $4,500). This is the
+   part that makes it a *ramp*, not a discount. Raising a price on an existing
+   client is one of the hardest things in a solo business; a signed escalation
+   avoids ever having that conversation.
+5. Capped at 2–3 clients, time-boxed to 60 days.
+
+**The number is deliberately NOT decided.** Zero prospect conversations have
+ever happened, so there is no evidence price is even the objection — it could
+as easily be "I don't trust AI calling my customers" or "show me someone you've
+done this for". Decide the number after five real conversations. Deciding it
+now is optimising against an imagined objection.
+
+**Both Retell agents now quote nothing.** Every price, trial and offer was
+stripped 2026-08-04 (see §10). Terms are set by Mark, on the Google Meet.
+
+---
+
+## 10. The unauthorised "free pilot" — found and removed 2026-08-04
+
+Both Retell agents were offering a **free two-week pilot** the owner never
+authorised: *"Mark's taking on one or two builders to run this for free for two
+weeks. You don't pay us anything."*
+
+It did not originate in a prompt. It is baked into `business_context.json` —
+the canonical business-facts file — in **six** places (lines ~194, 227, 238,
+242, 244, 280), and propagates from there into both agents.
+
+**That file contradicts itself:**
+
+| `commercial_terms.first_client_pilot` | `outbound_script.the_pilot` |
+|---|---|
+| "$1,500–$2,000/mo for a 60-day pilot … in exchange for a testimonial + case-study rights" | "run this **for free** for two weeks. You don't pay us anything." |
+
+The same file also says at line 177: *"Never use spam trigger words (**free**,
+guaranteed, make money, act now)"* — while the script says "free" five times.
+
+**Action taken:** both Retell LLM prompts rewritten with a hard rule — *"YOU DO
+NOT MAKE OFFERS. AT ALL."* No price, no range, no ballpark, no trial, no pilot,
+no discount, and never the word "free". Money questions deflect to Mark.
+
+**Still outstanding:** `business_context.json` remains the source of the
+contradiction and has NOT been changed, because the correct replacement is a
+commercial decision, not a code fix. Until it is corrected, anything that reads
+that file can reintroduce the free offer.
+
+---
+
+## 11. Brand collision — orova.ai (checked 2026-08-04)
+
+`orova.ai` is a live **enterprise AI phone-agent platform** for call centres:
+inbound/outbound voice, AI video agents ("Orova Prime"), campaigns at scale,
+SSO/RBAC, SOC 2 / HIPAA / PCI, multi-language (Arabic, Russian), enterprise
+"Contact Sales" motion. No pricing published.
+
+**There is no IP-cloning question to answer.** Cloning requires an artifact to
+clone: OROVA has no public product, no published API, no documentation, no
+architecture write-up and zero customers. Apparent stack similarity across
+voice-AI products (Retell/Vapi/LiveKit paradigms, `/v1/` endpoints) is vendor
+convergence, not derivation.
+
+**The real exposure runs the other way.** An established company in an
+*adjacent* category owns `orova.ai`; OROVA operates as `orova.co` and is
+building AI-voice calling. Same invented word, overlapping market. If they hold
+a mark, the risk sits with OROVA. **Worth a trademark search before the name
+goes on a client agreement or an invoice** — cheap now, expensive after a
+signature.
+
+---
+
 ## Linked
 [[active-context]] · [[0012-icp-rerank-and-pilot-pricing]] ·
 [[0013-painkiller-positioning-and-real-competition]] ·
