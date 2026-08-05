@@ -244,7 +244,7 @@ RENDER_EXTERNAL_URL=<your deployment URL>
 
 **Recommended:**
 ```
-DASHBOARD_API_KEY=nova_admin_2026 (or custom secret)
+DASHBOARD_API_KEY=$DASHBOARD_API_KEY (or custom secret)
 GOOGLE_SHEETS_WORKBOOK=OROVA CRM
 GOOGLE_CREDENTIALS_JSON=<base64-encoded service account JSON>
 ```
@@ -277,7 +277,7 @@ curl -X POST http://localhost:18789/telegram \
 
 # 4. Test lead hunting
 curl -X POST http://localhost:18789/api/actions/hunt-leads \
-  -H "X-API-Key: nova_admin_2026"
+  -H "X-API-Key: $DASHBOARD_API_KEY"
 ```
 
 ### Step 3: Initialize Data Sources
@@ -308,7 +308,7 @@ curl -X POST https://api.telegram.org/bot<TOKEN>/sendMessage \
 
 # Check leads in dashboard
 curl -s https://your-url/api/leads \
-  -H "X-API-Key: nova_admin_2026" | jq
+  -H "X-API-Key: $DASHBOARD_API_KEY" | jq
 ```
 
 ---

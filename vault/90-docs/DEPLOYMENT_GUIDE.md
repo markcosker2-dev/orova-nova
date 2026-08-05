@@ -183,7 +183,7 @@ Add these secrets:
 TELEGRAM_BOT_TOKEN = 1234567890:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi
 TELEGRAM_CHAT_ID = 123456789
 
-DASHBOARD_API_KEY = nova_admin_2026
+DASHBOARD_API_KEY = $DASHBOARD_API_KEY
 
 RENDER_EXTERNAL_URL = https://orova-nova.onrender.com
 ```
@@ -300,7 +300,7 @@ RENDER_EXTERNAL_URL
 ```
 DASHBOARD_API_KEY
   - Secret for Mission Control API
-  - Default: nova_admin_2026
+  - Default: $DASHBOARD_API_KEY
   - Custom value: Any string 16+ chars
   - Used for: /api/* authentication
 
@@ -503,7 +503,7 @@ watch -n 10 'curl -s https://yourdomain/api/health | jq'
 2. If empty, manually trigger hunt:
    ```bash
    curl -X POST https://yourdomain/api/actions/hunt-leads \
-     -H "X-API-Key: nova_admin_2026"
+     -H "X-API-Key: $DASHBOARD_API_KEY"
    ```
 
 3. Check logs for errors:
@@ -614,7 +614,7 @@ Security: https://yourdomain/api/hardening/metrics
 **Manual Backup:**
 ```bash
 curl -X POST https://yourdomain/api/actions/generate-report \
-  -H "X-API-Key: nova_admin_2026"
+  -H "X-API-Key: $DASHBOARD_API_KEY"
 # Returns backup filename
 ```
 

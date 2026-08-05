@@ -277,7 +277,7 @@
 ```
 TELEGRAM_BOT_TOKEN=<from @BotFather>
 RENDER_EXTERNAL_URL=https://your-render-url.onrender.com
-DASHBOARD_API_KEY=nova_admin_2026 (or change to custom)
+DASHBOARD_API_KEY=$DASHBOARD_API_KEY (or change to custom)
 APOLLO_API_KEY=<get from apollo.io dashboard> (optional, for enrichment)
 TAVILY_API_KEY=<get from tavily.com> (optional, for Tavily search)
 FIRECRAWL_API_KEY=<get from firecrawl.dev> (optional, for Firecrawl)
@@ -300,10 +300,10 @@ RETELL_AGENT_ID=<agent ID from Retell> (optional)
 ### 3. Test Each Component
 ```bash
 # Test Telegram connection
-curl -H "X-API-Key: nova_admin_2026" https://your-url/api/health
+curl -H "X-API-Key: $DASHBOARD_API_KEY" https://your-url/api/health
 
 # Test lead finding
-curl -X POST -H "X-API-Key: nova_admin_2026" https://your-url/api/actions/hunt-leads
+curl -X POST -H "X-API-Key: $DASHBOARD_API_KEY" https://your-url/api/actions/hunt-leads
 
 # Test Mission Control dashboard
 Open: https://your-url/
