@@ -1164,9 +1164,11 @@ async def run_phone_first_lane(client_id=0):
 
         from app.skills.lead_validator import outreach_ready
         from app.core.approval_gate import gate_allows
+        from app.core.call_consent import ai_call_allowed
 
         called = 0
         skipped_not_callable = 0
+        skipped_no_consent = 0
 
         for lead in leads:
             lead_id = lead.get("id")
@@ -1184,10 +1186,31 @@ async def run_phone_first_lane(client_id=0):
                              f"{readiness.get('blockers')}")
                 continue
 
+            # ── TCPA: prior express consent, fail-closed ─────────────────────
+            # The DNC gate answers "did they ask us to stop?". For an ARTIFICIAL
+            # voice that is the wrong question — FCC 24-17 (Feb 2024) holds that
+            # AI-generated voices are "artificial" under the TCPA, so a
+            # prerecorded/AI call needs PRIOR EXPRESS CONSENT regardless of the
+            # B2B exemption. Damages are $500/call, trebled to $1,500 for a
+            # wilful violation, PER CALL.
+            #
+            # And we cannot fall back on "it's a business landline": of the 23
+            # numbers queued in production on 2026-08-06, 20 classified as
+            # FIXED_OR_MOBILE — US portability makes landline vs cell
+            # undeterminable from the number alone.
+            #
+            # So an AI call is placed only against a recorded consent event.
+            # Mark's manual IG DM reply is the canonical one for this funnel.
+            allowed, why = await ai_call_allowed(phone)
+            if not allowed:
+                skipped_no_consent += 1
+                logger.info(f"📞 [PHONE-FIRST] NOT calling {business} — {why}.")
+                continue
+
             if not await gate_allows(
                 "call",
                 {"lead_id": lead_id, "phone": phone},
-                reason=f"First-touch call to {business} ({contact}) — {phone}",
+                reason=f"Consented call to {business} ({contact}) — {phone} [{why}]",
             ):
                 logger.info(f"📞 [PHONE-FIRST] Call to {business} awaiting approval.")
                 continue
@@ -1262,7 +1285,8 @@ async def run_phone_first_lane(client_id=0):
                 await asyncio.sleep(5)      # spacing between dials
 
         logger.info(f"📞 [PHONE-FIRST] [Client {client_id}] {called} call(s) placed; "
-                    f"{skipped_not_callable} lead(s) not callable.")
+                    f"{skipped_not_callable} lead(s) not callable; "
+                    f"{skipped_no_consent} lead(s) without prior express consent.")
 
     except Exception as e:
         logger.error(f"Phone-First Lane Error (Client {client_id}): {e}")
