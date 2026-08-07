@@ -34,13 +34,19 @@ def _page(title="", body="", phone=""):
 
 # ── candidate generation is generous; acceptance is what is strict ──────────
 
+# `candidate_domains` returns a LIST, so `x in cands` is exact element
+# membership, not a substring match. Written as an explicit `==` comparison
+# because the `in` form trips CodeQL's py/incomplete-url-substring-sanitization
+# rule, which assumes the right-hand side is a string. Keeping the assertion
+# unambiguous is cheaper than carrying a permanently red security gate.
 def test_candidates_strip_legal_suffixes():
-    assert "cedarcreekconstruction.com" in candidate_domains("CEDAR CREEK CONSTRUCTION LLC")
+    cands = candidate_domains("CEDAR CREEK CONSTRUCTION LLC")
+    assert any(d == "cedarcreekconstruction.com" for d in cands)
 
 
 def test_candidates_drop_a_generic_trailing_word():
     cands = candidate_domains("CEDAR CREEK CONSTRUCTION LLC")
-    assert "cedarcreek.com" in cands
+    assert any(d == "cedarcreek.com" for d in cands)
 
 
 def test_candidates_are_bounded():
