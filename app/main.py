@@ -614,7 +614,7 @@ async def issue_dashboard_token(request: Request, authorized: bool = Depends(req
 async def api_health_check(authorized: bool = Depends(require_dashboard_api_key)):
     """Health probe for Mission Control dashboard — flattens structure for the frontend."""
     from app.core.ai_client import _BREAKER
-    from app.core.hardening import memory_monitor, health_checks, tracer, check_env_contract
+    from app.core.hardening import memory_monitor, health_checks, tracer
 
     now = datetime.utcnow()
     window_24h = now - timedelta(hours=24)
@@ -650,16 +650,22 @@ async def api_health_check(authorized: bool = Depends(require_dashboard_api_key)
         "queue_depth": q_depth,
         "memory": memory_status,
         "learning_stats": learning_stats,
-        # `hardening_health` was computed above and then dropped on the floor,
-        # and `check_env_contract()` — which knows exactly which capabilities are
-        # switched off for want of an env var — was only ever written to the boot
-        # log. So the system could not TELL you it was broken: "meeting booking
-        # link: unset" is the single config gap standing between a prospect
-        # saying yes and a calendar event, and nothing surfaced it at runtime.
-        # A health endpoint that computes a diagnosis and withholds it is worse
-        # than one that never ran the check, because it reads as healthy.
+        # `hardening_health` was computed above and then dropped on the floor.
+        # It already carries the env-capability report: `check_env_contract` is
+        # registered into `health_checks` at startup, so `run_all()` returns it
+        # under "env_contract" — including `disabled_capabilities`.
+        #
+        # So the system COULD diagnose itself and then withheld the diagnosis:
+        # "meeting booking link: unset" is the single config gap standing
+        # between a prospect saying yes and a calendar event existing, and
+        # nothing surfaced it at runtime. A health endpoint that runs the check
+        # and drops the result is worse than one that never checked, because it
+        # reads as healthy.
+        #
+        # Returning `hardening_health` alone is sufficient — calling
+        # `check_env_contract()` a second time here would just run the same
+        # scan twice per request for a duplicate copy of the same dict.
         "hardening": hardening_health,
-        "capabilities": check_env_contract(),
     }
 
 @app.get("/api/hardening/metrics")
