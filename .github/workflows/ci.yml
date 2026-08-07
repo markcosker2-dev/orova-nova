@@ -29,6 +29,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pytest pytest-asyncio
 
+      # Runs BEFORE the tests: a committed credential is an incident, and the
+      # answer to "the tests were slow so I skipped the scan" must be that the
+      # scan already ran. The live DASHBOARD_API_KEY was committed to this
+      # PUBLIC repo in 7 files across 24 commits before this gate existed.
+      - name: Secret scan
+        run: |
+          python scripts/check_secrets.py
+
       - name: Run unit tests
         run: |
           python -m pytest tests/ --maxfail=3 -q

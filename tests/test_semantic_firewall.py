@@ -416,7 +416,7 @@ class TestDataLeakage:
         test_context.tool_name = "write"
         test_context.parameters = {
             "path": "/tmp/config.json",
-            "content": "api_key: sk-1234567890abcdef1234567890abcdef"
+            "content": "api_key: sk-1234567890abcdef1234567890abcdef"  # noqa: secret - fixture, not a live key
         }
         result = await firewall.evaluate(test_context)
         assert result["decision"] == FirewallDecision.REQUIRE_REVIEW
@@ -426,7 +426,7 @@ class TestDataLeakage:
     async def test_github_token_detection(self, firewall, test_context):
         test_context.tool_name = "send_message"
         test_context.parameters = {
-            "message": "My token is ghp_1234567890abcdef1234567890abcdef1234"
+            "message": "My token is ghp_1234567890abcdef1234567890abcdef1234"  # noqa: secret - fixture, not a live token
         }
         result = await firewall.evaluate(test_context)
         # send_message is high-impact -> DENY (since it's in high_impact_tools but not explicitly handled)

@@ -28,7 +28,7 @@ I need you to conduct a deep-dive technical audit of my HermesClaw/OROVA codebas
 
 ### Auth/security
 - Electron proxy sends X-API-Key header but require_dashboard_api_key() only reads X-Dashboard-Secret — find and confirm this mismatch
-- All instances of hardcoded key "nova_admin_2026" in TS files
+- All instances of any hardcoded dashboard key in TS files
 - Any use of == vs secrets.compare_digest() for API key comparison
 - Telegram /telegram webhook — any secret_token validation?
 - Router shortcuts /approve_pruning, /cancel, /status — any chat_id auth?
