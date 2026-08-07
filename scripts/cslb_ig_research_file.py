@@ -288,11 +288,34 @@ def build(master_path, personnel_path, counties, limit, out_path, per_city_cap):
     print(f"[master]    skipped: off-ICP {skipped_icp:,} · no principal {no_owner:,} · bad phone {no_phone:,}")
     print(f"[out]       {len(rows):,} rows -> {out_path}")
     if rows:
-        print("\nfirst 5:")
+        # The preview exists to confirm the JOIN worked — that a principal was
+        # attached and a phone parsed — not to display the data. So it is
+        # REDACTED: these are real people's names and direct business numbers,
+        # and stdout ends up in CI logs, shell history and screenshots. The
+        # unredacted values are in the output CSV, which is the file the
+        # operator actually asked for and can protect.
+        # (Flagged by CodeQL py/clear-text-logging on #152. Correct catch —
+        # public-record data is still personal data once it is joined to a name.)
+        print("\nfirst 5 (redacted — full values are in the CSV):")
         for r in rows[:5]:
             print(f"  {r['BusinessName'][:40]:42} {r['City'][:16]:18} "
-                  f"{r['PhoneNumber']}  {r['owner_name']} ({r['owner_title'][:26]})")
+                  f"{_mask_phone(r['PhoneNumber'])}  {_mask_name(r['owner_name'])} "
+                  f"({r['owner_title'][:26]})")
     return rows
+
+
+def _mask_phone(p: str) -> str:
+    """'+16265550111' -> '+1626***0111' - enough to see it parsed, not to dial."""
+    d = re.sub(r"\D", "", p or "")
+    return f"+1{d[-10:-7]}***{d[-4:]}" if len(d) >= 10 else "(none)"
+
+
+def _mask_name(n: str) -> str:
+    """'Dana Davis' -> 'Dana D.' — enough to see the join attached a person."""
+    parts = (n or "").split()
+    if not parts:
+        return "(none)"
+    return parts[0] if len(parts) == 1 else f"{parts[0]} {parts[-1][0]}."
 
 
 def main():

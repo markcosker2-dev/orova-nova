@@ -24,7 +24,41 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 from cslb_ig_research_file import (  # noqa: E402
     build, parse_cslb_name, title_rank, classes_of, pick,
+    _mask_phone, _mask_name,
 )
+
+
+# ── the console preview must not leak PII ───────────────────────────────────
+# CodeQL py/clear-text-logging flagged the original preview on #152, correctly:
+# these are real people's names and direct business numbers, and stdout ends up
+# in CI logs, shell history and screenshots. Public-record data is still
+# personal data once it is joined to a name. The unredacted values belong only
+# in the output CSV, which the operator asked for and can protect.
+
+@pytest.mark.parametrize("raw,expected", [
+    ("+16265550111", "+1626***0111"),
+    ("+19495550122", "+1949***0122"),
+    ("", "(none)"),
+    ("12345", "(none)"),
+])
+def test_mask_phone_shows_it_parsed_but_cannot_be_dialled(raw, expected):
+    assert _mask_phone(raw) == expected
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("Dana Davis", "Dana D."),
+    ("Kenneth Mc Curdy", "Kenneth C."),
+    ("Singlename", "Singlename"),
+    ("", "(none)"),
+])
+def test_mask_name_shows_a_person_was_attached_but_not_who(raw, expected):
+    assert _mask_name(raw) == expected
+
+
+def test_masked_phone_never_contains_the_full_number():
+    full = "+16265550111"
+    assert "5550111" not in _mask_phone(full)
+    assert "6265550111" not in _mask_phone(full)
 
 
 # ── names: CSLB is fixed-width LAST/FIRST/MIDDLE ────────────────────────────
