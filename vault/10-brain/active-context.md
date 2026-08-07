@@ -194,18 +194,48 @@ graph LR
 
 ## 🛠️ Owner actions — only Mark can do these
 
+> [!danger] ❌ RETRACTED — the "delete the OAuth vars" Drive fix was WRONG
+> This file previously recommended: *"delete `GOOGLE_REFRESH_TOKEN` /
+> `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` from Render so
+> `_get_drive_service` falls through to the service account — service accounts
+> never expire."* **Do not do this.** It would have replaced a backup that dies
+> weekly with one that never works at all.
+>
+> **Service accounts have no Drive storage quota and cannot own files.** The
+> upload fails `403 storageQuotaExceeded` outside a Workspace shared drive.
+> `worker.py:1310` already recorded this independently — *"the old
+> drive_backup.upload_database was service-account-only and can't upload to
+> consumer Drive"*. The same credential works for **Sheets** only because the
+> spreadsheet is owned by a real user and merely shared with the service
+> account; nothing is created in storage the service account must own.
+>
+> The real root cause of the weekly death: the OAuth consent screen is
+> **External + Testing**, and Google expires refresh tokens from Testing-status
+> apps after **exactly 7 days**, by design. Three re-issues, three 7-day deaths.
+
 > [!todo] In priority order
-> 1. **Re-auth Google Drive.** Production is at **0 leads** because restore fails
->    `invalid_grant` and the Sheets fallback restored 0/4. **Better fix:** delete
->    `GOOGLE_REFRESH_TOKEN`/`CLIENT_ID`/`CLIENT_SECRET` from Render so
->    `_get_drive_service` falls through to the **service account**
->    (`GOOGLE_CREDENTIALS_JSON`) — service accounts never expire. Otherwise the
->    OAuth token dies every 7 days (Testing-mode publishing status).
+> 1. ~~Re-auth Google Drive~~ — **no longer an owner action.** Sheets is now the
+>    primary durability tier (service-account credential, no expiry, proven in
+>    production 2026-08-02: `Sheets fallback: 1/1 leads synced`). Drive is
+>    optional. If you ever want Drive back, publish the OAuth consent screen to
+>    *In production* — don't re-issue the token again.
 > 2. **Set `CAL_COM_EVENT_SLUG`.** Free, ~10 min. **All three booking-link vars are
 >    unset**, so a hot reply on *any* channel has no link to send. Blocks every meeting.
-> 3. **`orova.co` → Business/Creator + public.**
+> 3. ~~`orova.co` → Business/Creator + public~~ — **DONE.** Verified live
+>    2026-08-02: `account_type: BUSINESS`, 11 posts, 201 followers.
 > 4. **One WA consumer-protection lawyer hour** on the ADAD/§227(b) question.
 > 5. **Keep `CALLS_AUTOPILOT=0`** until 4 comes back.
+> 6. **Check `TARGET_NICHE` in Render.** It overrides the whole hunt rotation
+>    (`worker.py`), and `main.py:1646` records it as stale-generic since
+>    2026-07-15 — before ADR-0012's re-rank.
+
+> [!warning] Known open defects (found by a real production hunt, 2026-08-02)
+> - **`Error saving lead: database is locked`** — 5 leads found, **1 saved**.
+>   SQLite lock contention between worker lanes silently destroys ~80% of every
+>   hunt. Not yet fixed.
+> - **`no such table: events`** — ADR-0007's canonical event log does not exist
+>   in production. Every event write fails non-fatally, so the pipeline has no
+>   history. Not yet fixed.
 
 ---
 
