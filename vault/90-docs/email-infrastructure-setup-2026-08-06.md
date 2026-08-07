@@ -1,13 +1,36 @@
 ---
 name: email-infrastructure-setup-2026-08-06
-description: Free custom-domain email for orova.io — Cloudflare inbound routing, Brevo outbound relay, Gmail send-as, and the reply-thread lock that keeps the agent safe from prompt injection
+description: PARKED 2026-08-07 — orova.io is NOT in Mark's Cloudflare account, so there is no domain to build on. The recipe below is correct and kept for whenever a domain exists.
 type: doc
 created: 2026-08-06
-status: active
-tags: [email, dns, cloudflare, brevo, gmail, security, handoff]
+status: archived
+tags: [email, dns, cloudflare, brevo, gmail, security, handoff, parked]
 ---
 
 # Free custom-domain email — setup sheet
+
+> [!caution] PARKED 2026-08-07 — owner instruction, do not resume unprompted
+> **`orova.io` is NOT in Mark's Cloudflare account.** He checked the dashboard
+> and it is not listed. Being on Cloudflare *nameservers* (`gabe`/`meg`) never
+> proved ownership — millions of domains are, and inferring ownership from DNS
+> is the same mistake that produced the wrong `orova.co` call the day before.
+>
+> RDAP: registered **2025-09-28** via **Cloudflare Registrar**, expires
+> **2026-09-28**, `client transfer prohibited`. Cloudflare Registrar sells only
+> to its own account holders, so it is plausibly under a second login of Mark's
+> — but that is unconfirmed, and it cannot simply be bought.
+>
+> **Nothing below was executed.** No DNS record was created, no Brevo account
+> exists, no domain was purchased, no Gmail setting was changed.
+>
+> Parking this costs nothing. The email channel was already measured at **~1%
+> viable** end-to-end ([[email-channel-viability-2026-08-06]]) and cold sending
+> stays blocked on `BUSINESS_POSTAL_ADDRESS` regardless. This infrastructure
+> only ever unlocked *reply and booking correspondence* — which is worth
+> nothing until a conversation exists, and there have been none.
+>
+> The recipe below is correct and was verified as far as it could be without a
+> domain. Resume it only when Mark says there is a domain to build on.
 
 > [!danger] Two corrections that change the plan
 > **`orova.co` is NOT ours.** Authoritative DNS (Cloudflare + Google) puts it on
