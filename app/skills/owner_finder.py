@@ -234,33 +234,58 @@ async def _wa_registry_lookup(business: str) -> dict:
     if not target or len(target.split()) < 2:
         return dict(_EMPTY)
     try:
-        # Prefix search on the FULL normalized name, then exact-match on the
-        # normalized form client-side. The prefix tolerates a legal suffix the
-        # licence carries and the query doesn't ("ACME ROOFING" -> "ACME
-        # ROOFING LLC"); the client-side equality check is what actually
-        # decides acceptance, so a longer name like "ACME ROOFING AND SIDING"
-        # is still rejected.
+        # Prefix on the first TWO normalized tokens, then exact-match on the
+        # normalized form client-side. The client-side equality check is what
+        # actually decides acceptance, so a longer name like "ACME ROOFING AND
+        # SIDING" is still rejected — a looser search window does not loosen
+        # what is accepted.
         #
-        # Live-verified 2026-07-25 that the prefix must be the whole name, not
-        # just its first token: 'TOP' matches 398 licences and 'BLACK' 368, so
-        # with a per-request window the true match fell outside it and real
-        # businesses ("TOP MODERN CONSTRUCTION") missed. Full-name prefixes
-        # returned exactly one row each.
-        prefix = target.replace("'", "''")
-        params = {
-            "$where": f"upper(businessname) like '{prefix}%'",
-            "$select": "businessname,primaryprincipalname,contractorlicensestatus",
-            "$limit": "50",
-        }
-        async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
-            resp = await client.get(_WA_LNI_DATASET, params=params,
-                                    headers={"Accept": "application/json"})
-        if resp.status_code != 200:
-            logger.debug(f"[OWNER_FINDER] WA L&I status {resp.status_code} for {business}")
-            return dict(_EMPTY)
-        rows = resp.json() or []
+        # NOT the full normalized name. Normalization strips punctuation and
+        # legal-form tokens, but the prefix is matched against the RAW
+        # `businessname`, so any stripped character in the MIDDLE of the name
+        # made it unmatchable. Measured live 2026-08-06 against real ACTIVE WA
+        # licences whose own names contain '&', '.' or ',': the lookup resolved
+        # only 2 of 14 — it could not find owners for names in its own
+        # registry. "168 KITCHEN & BATH CORP" normalizes to "168 KITCHEN BATH",
+        # which is not a prefix of the stored name.
+        #
+        # NOT one token either: live 2026-07-25 'TOP' matched 398 licences and
+        # 'BLACK' 368, so with a per-request window the true match fell outside
+        # it. Two tokens is selective enough.
+        prefix = " ".join(target.split()[:2]).replace("'", "''")
+        select = "businessname,primaryprincipalname,contractorlicensestatus"
+
+        async def _fetch(where: str, limit: str) -> list:
+            async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
+                resp = await client.get(
+                    _WA_LNI_DATASET,
+                    params={"$where": where, "$select": select, "$limit": limit},
+                    headers={"Accept": "application/json"})
+            if resp.status_code != 200:
+                logger.debug(f"[OWNER_FINDER] WA L&I status {resp.status_code} "
+                             f"for {business}")
+                return []
+            return resp.json() or []
+
+        rows = await _fetch(f"upper(businessname) like '{prefix}%'", "50")
         exact = [r for r in rows
                  if _normalize_business(r.get("businessname", "")) == target]
+
+        # Fallback for punctuation INSIDE the first two tokens, where even a
+        # two-token prefix cannot match: "E&K SOLUTIONS LLC" normalizes to
+        # "E K SOLUTIONS", and "E K" is not a prefix of "E&K SOLUTIONS LLC".
+        # Retry as a CONTAINS on the longest token — the most selective single
+        # word available, and immune to punctuation anywhere. Costs a second
+        # request only when the first found nothing.
+        if not exact:
+            tokens = sorted((t for t in target.split() if len(t) >= 5),
+                            key=len, reverse=True)
+            if tokens:
+                needle = tokens[0].replace("'", "''")
+                rows = await _fetch(
+                    f"upper(businessname) like '%{needle}%'", "400")
+                exact = [r for r in rows
+                         if _normalize_business(r.get("businessname", "")) == target]
         if not exact:
             return dict(_EMPTY)
         # An active licence is the better record when duplicates exist.
