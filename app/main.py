@@ -614,7 +614,7 @@ async def issue_dashboard_token(request: Request, authorized: bool = Depends(req
 async def api_health_check(authorized: bool = Depends(require_dashboard_api_key)):
     """Health probe for Mission Control dashboard — flattens structure for the frontend."""
     from app.core.ai_client import _BREAKER
-    from app.core.hardening import memory_monitor, health_checks, tracer
+    from app.core.hardening import memory_monitor, health_checks, tracer, check_env_contract
 
     now = datetime.utcnow()
     window_24h = now - timedelta(hours=24)
@@ -650,6 +650,16 @@ async def api_health_check(authorized: bool = Depends(require_dashboard_api_key)
         "queue_depth": q_depth,
         "memory": memory_status,
         "learning_stats": learning_stats,
+        # `hardening_health` was computed above and then dropped on the floor,
+        # and `check_env_contract()` — which knows exactly which capabilities are
+        # switched off for want of an env var — was only ever written to the boot
+        # log. So the system could not TELL you it was broken: "meeting booking
+        # link: unset" is the single config gap standing between a prospect
+        # saying yes and a calendar event, and nothing surfaced it at runtime.
+        # A health endpoint that computes a diagnosis and withholds it is worse
+        # than one that never ran the check, because it reads as healthy.
+        "hardening": hardening_health,
+        "capabilities": check_env_contract(),
     }
 
 @app.get("/api/hardening/metrics")
