@@ -1545,6 +1545,53 @@ async def chat_with_agent(request: Request, authorized: bool = Depends(require_d
         logger.error(f"Error in chat endpoint: {e}")
         return {"status": "error", "response": "Chat system error — see server logs"}
 
+# ── CSV header mapping (module level so it is testable without a DB) ────────
+CSV_HEADER_ALIASES = {
+    "business": ("business", "company", "company_name", "name", "business_name"),
+    "owner": ("owner", "owner_name", "contact", "contact_name", "first_last"),
+    "email": ("email", "email_address", "owner_email", "contact_email"),
+    "phone": ("phone", "phone_number", "tel", "telephone", "mobile"),
+    "website": ("website", "url", "site", "web", "domain"),
+    # Licence registries name the trade "Classification(s)" — that IS the
+    # vertical, and on CA it is better data than the WA registry offers
+    # (WA has no category field at all).
+    "vertical": ("vertical", "niche", "industry", "category",
+                 "classification", "classifications"),
+    # Drives owner_finder's registry routing; save_lead upper-cases it on
+    # write. CSLB supplies it directly, so guessing it later is strictly worse.
+    "state": ("state", "state_code", "province"),
+}
+
+
+def _norm_csv_header(h: str) -> str:
+    """Strip every non-alphanumeric so header shapes converge.
+
+    Applied to BOTH the incoming header and the alias. The previous version
+    only swapped spaces and dashes for underscores, which silently failed on
+    exactly the shape licence registries emit: a real CSLB export headed
+    `BusinessName` normalised to "businessname" and never matched the alias
+    "business_name", so the entire import aborted with "No business/company
+    column found". `PhoneNumber` and `Classification(s)` failed the same way —
+    and phone is the ONLY channel a licence-registry lead can be reached on,
+    since those files carry no email by statute (B&P Code §27).
+    """
+    import re as _re_local
+    return _re_local.sub(r"[^a-z0-9]", "", (h or "").lower())
+
+
+def map_csv_headers(fieldnames) -> dict:
+    """{canonical_field: actual_header} for the headers we recognise."""
+    lowered = {_norm_csv_header(h): h for h in (fieldnames or [])}
+    header_map = {}
+    for field, names in CSV_HEADER_ALIASES.items():
+        for n in names:
+            key = _norm_csv_header(n)
+            if key in lowered:
+                header_map[field] = lowered[key]
+                break
+    return header_map
+
+
 @app.post("/api/leads/import-csv")
 async def import_leads_csv(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
     """Import prospect lists from a CSV body (SDR Stage 1: any source → pipeline).
@@ -1557,6 +1604,7 @@ async def import_leads_csv(request: Request, authorized: bool = Depends(require_
     """
     import csv as _csv
     import io as _io
+    import re as _re
     from app.skills.lead_gen_v3 import _is_valid_business_email, _is_plausible_name
     from app.skills.lead_validator import score_lead_icp
 
@@ -1564,27 +1612,13 @@ async def import_leads_csv(request: Request, authorized: bool = Depends(require_
     if not raw.strip():
         return {"status": "error", "error": "Empty body — POST raw CSV text."}
 
-    # Flexible header mapping: first alias found wins.
-    aliases = {
-        "business": ("business", "company", "company_name", "name", "business_name"),
-        "owner": ("owner", "owner_name", "contact", "contact_name", "first_last"),
-        "email": ("email", "email_address", "owner_email", "contact_email"),
-        "phone": ("phone", "phone_number", "tel", "telephone", "mobile"),
-        "website": ("website", "url", "site", "web", "domain"),
-        "vertical": ("vertical", "niche", "industry", "category"),
-    }
     reader = _csv.DictReader(_io.StringIO(raw))
     if not reader.fieldnames:
         return {"status": "error", "error": "CSV has no header row."}
-    header_map = {}
-    # Normalize: lowercase + spaces/dashes → underscores, so "Contact Name",
-    # "contact-name" and "contact_name" all match the same alias.
-    lowered = {h.lower().strip().replace(" ", "_").replace("-", "_"): h for h in reader.fieldnames}
-    for field, names in aliases.items():
-        for n in names:
-            if n in lowered:
-                header_map[field] = lowered[n]
-                break
+    # Flexible header mapping — see map_csv_headers above. Lives at module
+    # level so the alias table can be tested against a real registry export
+    # without booting a database.
+    header_map = map_csv_headers(reader.fieldnames)
 
     if "business" not in header_map:
         return {"status": "error", "error": f"No business/company column found in header: {reader.fieldnames}"}
@@ -1624,6 +1658,7 @@ async def import_leads_csv(request: Request, authorized: bool = Depends(require_
             "phone": get("phone"),
             "website": get("website"),
             "vertical": get("vertical") or "CSV Import",
+            "state": get("state"),
             "source": "csv_import",
             "status": "New",
             "icebreaker": "Pending review...",
