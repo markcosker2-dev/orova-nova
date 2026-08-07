@@ -111,6 +111,71 @@ phone. That is more on-ICP records than a year of SerpAPI quota could produce.
 > from website scraping** — and website scraping is seam 2 anyway, so *one crawl
 > solves both the email gap and the California gap*.
 
+> [!failure] ❌ CORRECTION 3 (2026-08-05) — **the CSLB personnel file is not free**
+> The table above lists CA CSLB as *"no API — free CSV/XLS download incl. a
+> personnel file"*. The personnel file is real; **it is not free.**
+>
+> CSLB sells fixed-block text files by mail order (CD/DVD or email) at
+> **$235.00 each, non-refundable** — confirmed from CSLB's own order form and
+> record layout, 2026-08-05:
+>
+> | File | Contains | Owner names? |
+> |---|---|---|
+> | **Business Principal File** (rec len 2610) | `LIC-NUMBER`, `NAME-TYPE` (P=Principal), `LAST-NAME`, `FIRST-NAME`, `MIDDLE-NAME`, `SFX-NAME`, `EMPL-TITL-CODE` | ✅ **yes** |
+> | License Master File (rec len 700) | address, phone, status | ❌ *"DOES NOT provide license personnel information"* |
+>
+> The Business Principal File carries **no address**; the License Master File
+> carries **no personnel**. CSLB states both explicitly.
+>
+> **The California path is therefore a JOIN, not a subscription:**
+> the *free* Public Data Portal export (business + address + phone at 100%
+> fill) ⟕ the **$235** Business Principal File, on `LIC-NUMBER`.
+>
+> Caveats before anyone spends: full files are cut in **January and July
+> only** (order in August → you receive the July file), the format is
+> fixed-width text requiring a parser, and there is no API — it is a paper
+> form and a cheque. **$235 is a budget decision for the owner, not a code
+> decision.** Nothing has been spent.
+
+> [!success] ✅ CORRECTION 4 (2026-08-05) — **the size proxy is solved for Oregon**
+> The Consequences section below says *"No employee count, so the 6-10-person
+> ICP cannot be filtered directly... Needs a proxy... and that proxy is
+> unvalidated."*
+>
+> OR CCB ships one: **`exempt_text`**, defined by the publisher as *"Whether
+> this license holder is required to carry Workmans Compensation Insurance"* —
+> i.e. whether the licensee **has employees**. `Nonexempt` is the ICP side.
+> Measured live in the Portland metro: 9,867 RGC rows with owner + phone, of
+> which **3,943 are Nonexempt**.
+>
+> It is a **SIZE** signal and explicitly **not an affordability** one, per the
+> 2026-08-05 correction that `BusinessType` is a tax filing status and says
+> nothing about revenue or headcount. WA L&I has no equivalent field.
+
+> [!info] SEAM 3 SHIPPED (2026-08-05) — OR CCB is wired
+> Sequencing step 3 below is done ([PR #134](https://github.com/markcosker2-dev/orova-nova/pull/134)),
+> on top of a jurisdiction dispatch table
+> ([PR #133](https://github.com/markcosker2-dev/orova-nova/pull/133)) that
+> replaced deciding the registry by substring-matching a search query.
+>
+> Two findings that contradict the natural reading of this ADR:
+>
+> 1. **`license_type='RGC'` is a licence CLASS, not a trade category.** Over
+>    1,200 real Portland-metro RGC rows, the narrow name filter accepts 80.7%
+>    (noise) against the strict filter's 35.7%. RGC happily covers `SHAMBURG
+>    HEATING`, `SEWER RENEWAL SPECIALISTS`, `AQUA TECH BACKFLOW`. **Oregon uses
+>    the STRICT filter, exactly as WA does** — the narrow one is correct only
+>    where a source publishes a genuine trade category (Yelp).
+> 2. **The dataset is not Oregon-only.** It is *"contractors who can legally
+>    work in Oregon"* — **14.5% (8,090/55,931) are based in another state**,
+>    4,582 of them in Washington.
+>
+> Also: a **full sweep of the federated Socrata catalog across every US portal**
+> (181 datasets carrying both an owner-like and a phone-like column) found
+> **no third West-Coast contractor registry**. WA L&I and OR CCB are the
+> complete set in this class; both are now wired. See
+> [[session-2026-08-05-registry-by-state-and-or-ccb]].
+
 ## Decision
 
 **Adopt state contractor licence registries as the primary source for
