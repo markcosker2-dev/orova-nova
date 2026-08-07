@@ -34,6 +34,36 @@ async def trigger_retell_call(phone: str, context: Dict[str, str]) -> Dict[str, 
         logger.warning("[Retell] Blocked call — number is on the National DNC Registry.")
         return {"success": False, "skipped": True, "error": "Number on National DNC Registry — call blocked."}
 
+    # ── §227(b) ARTIFICIAL-VOICE CONSENT GATE — the chokepoint, not the lane ──
+    # The DNC checks above are §227(c) (opt-out). They say NOTHING about whether
+    # an ARTIFICIAL VOICE may lawfully call this number, which is a separate
+    # statute with separate damages ($500/call, trebled to $1,500 if wilful).
+    #
+    # This gate lived only in `run_phone_first_lane` (worker.py). Four other
+    # paths reach this function without it — `_execute_approved_call` (the Fast
+    # Lane that fires on Mark's own "Approved" click), `run_cold_lead_escalation`
+    # (Lane 4), `outreach_orchestrator.execute_call`, and `planner`, which
+    # exposes `trigger_retell_call` to the LLM as a callable TOOL. Gating at
+    # each call site is how that hole opened, and an LLM-invokable path cannot
+    # be gated by convention at all.
+    #
+    # So the gate goes HERE, where every path converges — the same pattern
+    # CLAUDE.md's single-source-of-truth rule applies to lead storage. Callers
+    # may still check first for a better log line; `ai_call_allowed` is a
+    # read-only cache/prefix check (no paid lookup, no spend), so calling it
+    # twice on the phone-first path is free and harmless.
+    try:
+        from app.core.call_consent import ai_call_allowed
+        allowed, why = await ai_call_allowed(phone)
+    except Exception as e:
+        # Fail CLOSED. A gate that opens when it errors is not a gate, and the
+        # downside here is a four-figure statutory penalty per call.
+        logger.error(f"[Retell] Consent gate errored for {phone} ({e}) — blocking call (fail-closed).")
+        return {"success": False, "skipped": True, "error": f"TCPA consent gate error — call blocked (fail-closed): {e}"}
+    if not allowed:
+        logger.warning(f"[Retell] Blocked call — §227(b) consent gate: {why}")
+        return {"success": False, "skipped": True, "error": f"AI-voice consent gate: {why}"}
+
     url = "https://api.retellai.com/v2/create-phone-call"
     owner_name = context.get("owner_name") or ""
     payload = {
