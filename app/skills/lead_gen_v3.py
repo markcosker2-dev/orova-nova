@@ -1381,6 +1381,189 @@ async def _source_wa_lni_licences(count: int, cities: tuple = _WA_METRO_CITIES) 
 register_licence_registry("WA", _source_wa_lni_licences)
 
 
+# ── OREGON CCB — the second licence registry (ADR-0014 seam 3) ──────────────
+# https://data.oregon.gov/resource/g77e-6bhs.json  ("CCB Active Licenses")
+# Free, keyless Socrata, same class as WA L&I. Measured live 2026-08-05:
+#
+#   55,931 rows total · phone_number 100% fill · rmi_name 97.3% fill
+#
+# Field mapping vs WA (the publisher's own column descriptions, not inferred):
+#   full_name    "Full, legal name of the license holder which must match the
+#                 business filing at the Oregon Secretary of State"  -> business
+#   rmi_name     "The name of the Responsible Managing Individual (RMI)" -> owner
+#   phone_number "Work phone number of the license holder"           -> phone
+#   exempt_text  "Whether this license holder is required to carry Workmans
+#                 Compensation Insurance"                            -> see below
+#
+# THREE things this source must get right, each verified against real rows:
+#
+# 1. OUT-OF-STATE ROWS. The dataset is "contractors who can legally work in
+#    Oregon", not "Oregon contractors". 8,090 of 55,931 (14.5%) sit in another
+#    state — 4,582 in WA alone. Without `state='OR'` an Oregon hunt returns
+#    Washington and Nevada businesses. Hence the explicit filter.
+#
+# 2. THE ENDORSEMENT IS A LICENCE CLASS, NOT A TRADE CATEGORY. It is tempting
+#    to trust `license_type='RGC'` (Residential General Contractor) the way the
+#    Yelp source trusts a Yelp category, and use the narrow name filter. That is
+#    wrong. Measured over 1,200 real RGC rows in the Portland metro:
+#
+#      off_icp_trade_in_name (narrow) accepts 80.7%  <- fires on nearly
+#                                                       everything = noise
+#      icp_business_name_reason (strict) accepts 35.7%
+#
+#    The 45-point gap is real off-ICP work that RGC happily covers: SHAMBURG
+#    HEATING, SEWER RENEWAL SPECIALISTS, KRAFT SCREENS & WINDOW WASHING, AQUA
+#    TECH BACKFLOW, PROPERTY MANAGEMENT NORTH WEST. So OR uses the STRICT
+#    filter, exactly like WA — the narrow one is only correct where a source
+#    publishes a real trade category.
+#
+# 3. PLACEHOLDER RMI VALUES. 116 rows carry a sentinel instead of a person
+#    ('RD - NO RMI RQRD', "RMI NOT RQ'D", 'NO RMI ON FILE'). These parse to
+#    plausible-looking names ('Rd Rqrd', 'No Rmi') and would put a fabricated
+#    person into a call script. Filtered below.
+_OR_CCB_DATASET = "https://data.oregon.gov/resource/g77e-6bhs.json"
+_OR_CCB_ENV_FLAG = "OR_CCB_DISCOVERY_ENABLED"
+
+# Portland metro. `county_name` is 100% filled and spelled consistently, so OR
+# needs no equivalent of WA's uppercase city list.
+_OR_METRO_COUNTIES = ("Multnomah", "Washington", "Clackamas")
+
+# Residential General Contractor. Deliberately excludes RSC (Residential
+# Specialty — the trades), RLC (Limited, a volume-capped licence) and both
+# Commercial levels: a commercial GC's customer is a developer or a business,
+# and Meta ads cannot reach those the way they reach a homeowner.
+_OR_CCB_LICENSE_TYPE = "RGC"
+
+# A standalone "RMI" token never appears in a real person's name — verified
+# across all 50,000 non-null rmi_name values, where it matched the 116 sentinel
+# rows and nothing else (CARMI, TORMIS, MCDIARMID etc. are single tokens).
+_OR_RMI_PLACEHOLDER_RE = re.compile(r"(?i)\bRMI\b")
+
+
+async def _source_or_ccb_licences(count: int,
+                                  counties: tuple = _OR_METRO_COUNTIES,
+                                  require_employees: bool = True) -> list:
+    """Discover Oregon remodelers from the CCB licence registry. Free, no key.
+
+    Emits the same lead shape as the WA source — business, legally-named
+    principal and a dialable phone, with NO url/website (licence data carries
+    neither; domain resolution is ADR-0014 seam 2).
+
+    `require_employees` filters to `exempt_text='Nonexempt'`, i.e. licence
+    holders REQUIRED to carry workers' comp — which in Oregon means they have
+    employees. ADR-0014 recorded "no employee count, so the 6-10-person ICP
+    cannot be filtered directly... needs a proxy, and that proxy is
+    unvalidated". This is that proxy, and unlike a guess from bond size it
+    comes from the publisher's own definition of the column. It is a SIZE
+    signal only — deliberately not an affordability one, per the 2026-08-05
+    correction that BusinessType is a tax status and says nothing about
+    revenue. Measured live in the Portland metro: 9,867 RGC rows with owner +
+    phone, of which 3,943 are Nonexempt.
+
+    Kill switch: OR_CCB_DISCOVERY_ENABLED=0.
+    """
+    if os.getenv(_OR_CCB_ENV_FLAG, "1") != "1":
+        logger.info("[OR_CCB] discovery disabled by env flag")
+        return []
+    from app.skills.owner_finder import _person_from_principal, _is_plausible_name
+
+    county_list = ",".join("'%s'" % c.replace("'", "''") for c in counties)
+    where = (
+        f"license_type='{_OR_CCB_LICENSE_TYPE}'"
+        " AND state='OR'"                      # see note 1 — 14.5% are not
+        f" AND county_name in({county_list})"
+        " AND rmi_name IS NOT NULL"
+        " AND phone_number IS NOT NULL"
+    )
+    if require_employees:
+        where += " AND exempt_text='Nonexempt'"
+    # Over-fetch: only ~36% survive the ICP name filter (measured, note 2), so
+    # asking for `count` rows would reliably under-deliver.
+    fetch = min(max(count * 6, 200), 1000)
+    leads: list = []
+    seen_phones: set = set()
+    try:
+        client = await _get_http_client()
+        resp = await client.get(_OR_CCB_DATASET, params={
+            "$where": where,
+            "$select": ("full_name,rmi_name,phone_number,address,city,state,"
+                        "zip_code,county_name,license_number,orig_regis_date,"
+                        "endorsement_text,exempt_text"),
+            "$limit": str(fetch),
+            # Newest licences first — same rationale as WA: a recently-licensed
+            # contractor is likelier to still be building a client base, and it
+            # makes repeated runs return a stable, non-arbitrary slice.
+            "$order": "orig_regis_date DESC",
+        }, headers={"Accept": "application/json"})
+        if resp.status_code != 200:
+            logger.warning(f"[OR_CCB] status {resp.status_code} — no leads this run")
+            return []
+        rows = resp.json() or []
+    except Exception as e:
+        logger.error(f"[OR_CCB] fetch failed: {e}")
+        return []
+
+    skipped_icp = 0
+    skipped_placeholder = 0
+    for row in rows:
+        if len(leads) >= count:
+            break
+        business = (row.get("full_name") or "").strip()
+        if icp_business_name_reason(business):
+            skipped_icp += 1
+            continue
+        raw_rmi = (row.get("rmi_name") or "").strip()
+        if _OR_RMI_PLACEHOLDER_RE.search(raw_rmi):
+            skipped_placeholder += 1
+            continue          # 'RD - NO RMI RQRD' is not a person — see note 3
+        phone = _normalize_phone_to_e164(row.get("phone_number") or "")
+        if not phone or phone in seen_phones:
+            continue          # no dialable number, or a shared/duplicate line
+        owner = _person_from_principal(raw_rmi)
+        if not owner or not _is_plausible_name(owner):
+            continue          # never store a principal we can't parse cleanly
+        seen_phones.add(phone)
+        addr = " ".join(p for p in (
+            (row.get("address") or "").strip(),
+            (row.get("city") or "").strip(),
+            (row.get("state") or "OR").strip(),
+            (row.get("zip_code") or "").strip(),
+        ) if p)
+        leads.append({
+            "business": business,
+            "owner_name": owner,
+            # The RMI is the licence's legally responsible individual — the
+            # decision maker, and the OR analogue of WA's licence principal.
+            "owner_title": "Responsible Managing Individual",
+            "owner_source": "or_ccb",
+            "owner_confidence": 90,
+            "phone": phone,
+            "phone_source": "or_ccb",
+            # A state licence register is an authoritative published business
+            # line, which is exactly what TCPA permits calling.
+            "phone_verified": True,
+            "address": addr,
+            "state": "OR",
+            "url": "",
+            "website": "",
+            "email": "",
+            "source": "or_ccb_licences",
+            "notes": (f"OR CCB licence {row.get('license_number') or '?'}"
+                      f" · {row.get('endorsement_text') or '?'}"
+                      f" · {row.get('exempt_text') or '?'}"
+                      f" · {row.get('county_name') or '?'} County"
+                      f" · registered {(row.get('orig_regis_date') or '')[:10]}"),
+        })
+
+    logger.info(f"[OR_CCB] {len(leads)} in-ICP leads from {len(rows)} licence rows "
+                f"({skipped_icp} failed the ICP name filter, "
+                f"{skipped_placeholder} had a placeholder RMI)")
+    return leads
+
+
+register_licence_registry("OR", _source_or_ccb_licences)
+
+
 # ── Yelp Fusion as a WEST-COAST discovery source (2026-07-31) ───────────────
 # ADR-0014 listed Yelp as a dead end ("free tier ambiguous, needs approval").
 # That was wrong, and the consequence was worse than the error: the ADR then
