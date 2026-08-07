@@ -202,6 +202,21 @@ def _person_from_principal(raw: str) -> str:
         if not given:
             return ""
         first = given[0]
+        # The SURNAME half carries suffixes too. WA L&I writes them on either
+        # side of the comma — 'SMITH JR, JOHN' as readily as 'SMITH, JOHN JR'
+        # — but only the given half above was ever filtered, so 'SMITH JR,
+        # JOHN' yielded 'John Smith jr': a garbled surname that passes
+        # _is_plausible_name and gets SPOKEN on a Retell call. Same defect the
+        # no-comma branch already guards against, on the other half of the name.
+        # Strip TRAILING suffixes only, so a real surname is never consumed.
+        s_parts = surname.split()
+        while len(s_parts) > 1 and s_parts[-1].strip(".").upper() in _NAME_SUFFIXES:
+            s_parts.pop()
+        # A surname that is ONLY a suffix ('JR, JOHN') is not a person we can
+        # name. Return nothing rather than invent 'John Jr'.
+        if len(s_parts) == 1 and s_parts[0].strip(".").upper() in _NAME_SUFFIXES:
+            return ""
+        surname = " ".join(s_parts)
     first, surname = first.strip(), surname.strip()
     if not first or not surname:
         return ""

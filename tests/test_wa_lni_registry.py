@@ -152,6 +152,19 @@ def test_punctuation_only_business_name_does_not_build_a_wildcard_query():
     ("MICHAEL BUEHS", "Michael Buehs"),          # already first-last
     ("", ""),
     ("SINGLENAME", ""),                           # cannot make a person of it
+    # Suffix on the SURNAME side of the comma. Only the given-name half used
+    # to be filtered, so these produced 'John Smith jr' / 'Patrick Obrien iii'
+    # — garbled surnames that pass _is_plausible_name and reach a call script.
+    ("SMITH JR, JOHN", "John Smith"),
+    ("OBRIEN III, PATRICK", "Patrick Obrien"),
+    ("ZEISE JR, DONALD JOSEPH", "Donald Zeise"),
+    ("SMITH SR., JANE", "Jane Smith"),           # suffix carrying a full stop
+    # Suffix on BOTH sides must still resolve to the bare name.
+    ("SMITH JR, JOHN JR", "John Smith"),
+    # A surname that is ONLY a suffix is not a person — never invent 'John Jr'.
+    ("JR, JOHN", ""),
+    # A real multi-token surname must survive: only TRAILING suffixes go.
+    ("JUAREZ JUAREZ JR, ALVARO", "Alvaro Juarez juarez"),
 ])
 def test_person_from_principal(raw, expected):
     assert owner_finder._person_from_principal(raw) == expected
