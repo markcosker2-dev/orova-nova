@@ -1702,7 +1702,13 @@ async def action_hunt_leads(request: Request, authorized: bool = Depends(require
     """Kick a lead hunt. Optional JSON body/query params `niche` and
     `location` override the TARGET_NICHE env rotation — the env value on
     Render has been stale-generic since 2026-07-15 and only Mark can edit
-    it, so an explicit niche here is the unblocked path to on-ICP hunts."""
+    it, so an explicit niche here is the unblocked path to on-ICP hunts.
+
+    `state` sets the JURISDICTION (e.g. "WA", "OR") and is what selects the
+    licence registry. It is separate from `location` on purpose: `location` is
+    a search term, `state` is a legal jurisdiction, and conflating the two is
+    how discovery ended up deciding which registry to query by substring-
+    matching a search string."""
     from app.worker import run_lead_hunt_slow_lane, start_worker_scheduler, stop_worker_scheduler
     import asyncio as _asyncio
     try:
@@ -1711,15 +1717,17 @@ async def action_hunt_leads(request: Request, authorized: bool = Depends(require
         payload = {}
     niche = (payload.get("niche") or request.query_params.get("niche") or "").strip() or None
     location = (payload.get("location") or request.query_params.get("location") or "").strip() or None
+    state = (payload.get("state") or request.query_params.get("state") or "").strip().upper() or None
     task = _asyncio.create_task(
-        run_lead_hunt_slow_lane(client_id=0, niche=niche, location=location)
+        run_lead_hunt_slow_lane(client_id=0, niche=niche, location=location, state=state)
     )
     task.add_done_callback(
         lambda t: logger.error(f"[HUNT] Background task failed: {t.exception()!r}")
         if not t.cancelled() and t.exception() else None
     )
     return {"status": "ok", "message": "Lead hunt job initiated",
-            "niche": niche or "(TARGET_NICHE rotation)", "location": location or "(default)"}
+            "niche": niche or "(TARGET_NICHE rotation)", "location": location or "(default)",
+            "state": state or "(TARGET_STATE env / inferred)"}
 
 @app.post("/api/actions/reenrich-leads")
 async def action_reenrich_leads(request: Request, authorized: bool = Depends(require_dashboard_api_key)):

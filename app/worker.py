@@ -321,8 +321,17 @@ async def _execute_approved_call(sheet, row, idx, client_id=0):
 # LANE 2: SLOW LANE — Lead hunting
 # Runs every 60 minutes
 # ═══════════════════════════════════════════════════════
-async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
-    """🕵️ Hunt for new leads via multi-tier search."""
+async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None, state=None):
+    """🕵️ Hunt for new leads via multi-tier search.
+
+    `state` is the JURISDICTION (a two-letter code) and decides which licence
+    registry the discovery layer queries. It is deliberately separate from
+    `niche`/`location`, which are free-text SEARCH terms: the hunt lane knows
+    perfectly well which state it is targeting, and making discovery re-derive
+    that by substring-matching the search string is what left California
+    falling through to the legacy scrapers. Falls back to TARGET_STATE, then to
+    query inference, so an unset env keeps today's behaviour exactly.
+    """
     global daily_hunt_counter
     _reset_daily_counters()
     loop = asyncio.get_running_loop()
@@ -353,10 +362,15 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None):
     else:
         query = f"{niche} {location if location else ''}".strip()
 
-    logger.info(f"🕵️ [SLOW LANE] [Client {client_id}] Hunting for leads: {query}")
+    # Jurisdiction, explicitly. Caller > TARGET_STATE env > let discovery infer.
+    hunt_state = (state or os.getenv("TARGET_STATE") or "").strip().upper()
+
+    logger.info(f"🕵️ [SLOW LANE] [Client {client_id}] Hunting for leads: {query}"
+                f"{f' [state={hunt_state}]' if hunt_state else ''}")
 
     try:
-        result = await find_leads(count=LEADS_TO_FIND_PER_RUN, query=query)
+        result = await find_leads(count=LEADS_TO_FIND_PER_RUN, query=query,
+                                  state=hunt_state)
 
         # result is a dict with 'leads' key (list) and 'text' key (string)
         leads = []

@@ -61,7 +61,7 @@ def test_hunt_endpoint_passes_niche_and_location():
     assert body["niche"] == "exotic car dealer"
     assert body["location"] == "Los Angeles CA"
     mock_hunt.assert_called_once_with(client_id=0, niche="exotic car dealer",
-                                      location="Los Angeles CA")
+                                      location="Los Angeles CA", state=None)
 
 
 def test_hunt_endpoint_defaults_to_rotation():
@@ -70,4 +70,29 @@ def test_hunt_endpoint_defaults_to_rotation():
         resp = client.post("/api/actions/hunt-leads", headers=AUTH)
     assert resp.status_code == 200
     assert resp.json()["niche"] == "(TARGET_NICHE rotation)"
-    mock_hunt.assert_called_once_with(client_id=0, niche=None, location=None)
+    mock_hunt.assert_called_once_with(client_id=0, niche=None, location=None,
+                                      state=None)
+
+
+# ── hunt endpoint: jurisdiction is a separate, explicit parameter ───────────
+# `location` is a SEARCH term; `state` is a legal jurisdiction that selects the
+# licence registry. Conflating them is what let discovery decide which registry
+# to query by substring-matching a search string.
+
+def test_hunt_endpoint_passes_explicit_state():
+    with _make_test_client() as client, \
+         patch("app.worker.run_lead_hunt_slow_lane", new_callable=AsyncMock) as mock_hunt:
+        resp = client.post("/api/actions/hunt-leads",
+                           json={"niche": "remodelers", "state": "or"},
+                           headers=AUTH)
+    assert resp.status_code == 200
+    assert resp.json()["state"] == "OR"
+    mock_hunt.assert_called_once_with(client_id=0, niche="remodelers",
+                                      location=None, state="OR")
+
+
+def test_hunt_endpoint_state_absent_reports_the_fallback():
+    with _make_test_client() as client, \
+         patch("app.worker.run_lead_hunt_slow_lane", new_callable=AsyncMock):
+        resp = client.post("/api/actions/hunt-leads", headers=AUTH)
+    assert resp.json()["state"] == "(TARGET_STATE env / inferred)"

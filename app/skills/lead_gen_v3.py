@@ -1157,6 +1157,30 @@ async def _source_serpapi_maps(query: str, count: int,
 # Deliberately NOT filtered on: employee count (absent from the dataset) and
 # licence age / bond amount as a size proxy. ADR-0014 flags that proxy as
 # unvalidated, so it stays out until there is evidence for it.
+# ── Jurisdiction → licence registry (ADR-0014) ──────────────────────────────
+# Jurisdiction is FIRST-CLASS DATA: adding a state is a row in this table, not
+# a new branch in find_leads_v3. Each value is an async callable taking (count)
+# and returning the licence-lead shape find_leads_v3's emit block consumes.
+#
+# Registered here == "this state has a free, keyless registry that supplies the
+# decision maker directly". A state that is absent is not a bug, it is a fact
+# about that state's open data (California's CSLB has no API at all), and
+# find_leads_v3 says so out loud rather than quietly falling through to a
+# scraper — which is exactly how "California falls through to a scraper that
+# produces uncallable leads" survived undiagnosed for weeks.
+LICENCE_REGISTRIES: dict = {}
+
+
+def register_licence_registry(state: str, source) -> None:
+    """Bind a state code to its licence-registry discovery source."""
+    LICENCE_REGISTRIES[state.strip().upper()] = source
+
+
+def licence_registry_for(state: str):
+    """The discovery source for `state`, or None when that state has none."""
+    return LICENCE_REGISTRIES.get((state or "").strip().upper())
+
+
 _WA_LNI_ENV_FLAG = "WA_LNI_DISCOVERY_ENABLED"
 
 # Seattle metro. Uppercase because the dataset stores city inconsistently
@@ -1350,6 +1374,11 @@ async def _source_wa_lni_licences(count: int, cities: tuple = _WA_METRO_CITIES) 
     logger.info(f"[WA_LNI] {len(leads)} in-ICP leads from {len(rows)} licence rows "
                 f"({skipped_icp} failed the ICP name filter)")
     return leads
+
+
+# Registered at import time — see LICENCE_REGISTRIES above. This line, not an
+# `if state == "WA"` branch in find_leads_v3, is what makes WA a registry state.
+register_licence_registry("WA", _source_wa_lni_licences)
 
 
 # ── Yelp Fusion as a WEST-COAST discovery source (2026-07-31) ───────────────
@@ -1623,13 +1652,25 @@ def _infer_yelp_location(query: str) -> str:
 
 
 # West Coast ICP state names as they appear in the free-text hunt query
-# (e.g. "exotic car dealer california") — the only jurisdiction signal
-# available at this call site today. Best-effort only; owner_finder routes
-# to OpenCorporates when no state match is found.
+# (e.g. "exotic car dealer california").
+#
+# ⚠️ This is a LAST-RESORT fallback, not the jurisdiction source. Callers should
+# pass `state=` to find_leads_v3 explicitly. Deciding which legal registry to
+# query by substring-matching a *search string* is wrong in three ways, all of
+# them observed in production:
+#   1. It only knows three words, so every other state silently resolves to "".
+#   2. A niche that happens to omit the geography ("custom home builder") gets
+#      no jurisdiction at all, even when the hunt lane knew it perfectly well.
+#   3. A false positive is possible in principle ("California Closets" is a
+#      national franchise, not a Californian one).
+# The failure is silent and expensive: state="" skips every licence registry
+# and drops through to the legacy scrapers, which the code below documents as
+# producing leads that can never be called.
 _QUERY_STATE_HINTS = {"california": "CA", "washington": "WA", "oregon": "OR"}
 
 
 def _infer_state_from_query(query: str) -> str:
+    """Best-effort jurisdiction from a free-text query. Prefer an explicit state."""
     q = (query or "").lower()
     for name, code in _QUERY_STATE_HINTS.items():
         if name in q:
@@ -1674,15 +1715,29 @@ def _state_from_address(address: str) -> str:
 # MAIN ENTRY POINT
 # ═══════════════════════════════════════════════════════════════════════════════
 
-async def find_leads_v3(count: int = 5, query: str = "business leads") -> dict:
+async def find_leads_v3(count: int = 5, query: str = "business leads",
+                        state: str = "") -> dict:
     """
     Main entry point with 4-strategy enrichment chain.
     Returns clean output: owner_name, email, phone only.
+
+    `state` is the JURISDICTION — a two-letter code deciding which licence
+    registry runs. Pass it explicitly; it is a property of the hunt, not of the
+    words in `query`. When omitted it falls back to substring-matching the
+    query, which is what this parameter exists to stop being the only option
+    (see _infer_state_from_query for why that is a bad source of truth).
     """
     count = int(count)
     query = (query or "business leads").strip()
-    state = _infer_state_from_query(query)
-    logger.info(f"[LEAD GEN V3] Searching for {count} leads: '{query}'")
+    explicit_state = (state or "").strip().upper()
+    if explicit_state:
+        state = explicit_state
+        state_source = "explicit"
+    else:
+        state = _infer_state_from_query(query)
+        state_source = "inferred-from-query" if state else "unknown"
+    logger.info(f"[LEAD GEN V3] Searching for {count} leads: '{query}' "
+                f"(state={state or '—'} via {state_source})")
     
     all_leads = []
     # Licence-registry leads travel a separate path: they carry owner + phone
@@ -1691,15 +1746,31 @@ async def find_leads_v3(count: int = 5, query: str = "business leads") -> dict:
     # inside the web flow.
     licence_leads = []
 
-    # PRIMARY for WA: the L&I licence registry (ADR-0014). Free, no key, no
+    # PRIMARY: this jurisdiction's licence registry (ADR-0014). Free, no key, no
     # quota, and it supplies the decision maker directly — which is why the ADR
     # demotes search to enrichment. Runs first so a spent SerpAPI quota (the
     # current state: 250/250) no longer means zero discovery.
-    if state == "WA":
+    #
+    # Which registry runs is now a table lookup on the jurisdiction, so adding a
+    # state is data (register_licence_registry) rather than another branch here.
+    registry_source = licence_registry_for(state)
+    if registry_source is not None:
         try:
-            licence_leads = await _source_wa_lni_licences(count)
+            licence_leads = await registry_source(count)
         except Exception as e:
-            logger.warning(f"[V3] WA L&I discovery failed: {e}")
+            logger.warning(f"[V3] {state} licence registry discovery failed: {e}")
+    elif state:
+        # Say it out loud. This is the California case: the #1 ICP geography has
+        # no free registry API, so the hunt drops to search + scrapers and the
+        # leads may not be callable. Previously silent, which is how "California
+        # falls through to a scraper" survived undiagnosed.
+        logger.info(f"[V3] no licence registry for state={state} — "
+                    f"falling back to search discovery "
+                    f"(registered: {sorted(LICENCE_REGISTRIES) or 'none'})")
+    else:
+        logger.warning(f"[V3] NO JURISDICTION resolved for query {query!r} — "
+                       f"every licence registry is skipped and discovery falls to "
+                       f"search. Pass state= explicitly to fix this.")
 
     # YELP — the whole West Coast, not just WA. ADR-0014 sequenced discovery by
     # which state had a free registry API, which put California (the #1 ICP
@@ -1820,14 +1891,17 @@ async def find_leads_v3(count: int = 5, query: str = "business leads") -> dict:
             "url": "",
             "score": 0,             # recomputed server-side by the storage gate
             "status": "New",
-            "owner_source": lead.get("owner_source", "wa_lni"),
+            # Provenance comes from the emitting registry, never a hardcoded
+            # default — a WA-shaped fallback here would mislabel every OR/CA
+            # lead's source and state the moment a second registry registered.
+            "owner_source": lead.get("owner_source", ""),
             "owner_confidence": lead.get("owner_confidence", 0),
             "email_source": "",
             "email_status": "",
-            "phone_source": lead.get("phone_source", "wa_lni"),
+            "phone_source": lead.get("phone_source", ""),
             "phone_verified": bool(lead.get("phone_verified", False)),
             "ad_signals": "",       # needs a domain, so it cannot run yet
-            "state": lead.get("state", "WA"),
+            "state": lead.get("state", "") or state,
             "notes": lead.get("notes", ""),
         })
 
