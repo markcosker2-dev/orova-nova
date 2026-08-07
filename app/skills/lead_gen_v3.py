@@ -1361,6 +1361,7 @@ async def _source_wa_lni_licences(count: int, cities: tuple = _WA_METRO_CITIES) 
             # line, which is exactly what TCPA permits calling.
             "phone_verified": True,
             "address": addr,
+            "city": (row.get("city") or "").strip(),   # see the OR source below
             "state": "WA",
             "url": "",
             "website": "",
@@ -1543,6 +1544,12 @@ async def _source_or_ccb_licences(count: int,
             # line, which is exactly what TCPA permits calling.
             "phone_verified": True,
             "address": addr,
+            # City kept as its own field, not only inside the joined address:
+            # ADR-0014 seam 2 needs it to confirm a candidate website really
+            # belongs to THIS business, and re-deriving it by slicing `address`
+            # produced the token "CITY" from "OREGON CITY" during the
+            # 2026-08-05 probe — which then matched a Pennsylvania homepage.
+            "city": (row.get("city") or "").strip(),
             "state": "OR",
             "url": "",
             "website": "",
@@ -1894,6 +1901,49 @@ def _state_from_address(address: str) -> str:
     return ""
 
 
+async def _resolve_licence_websites(leads: list) -> None:
+    """Fill in `website`/`url` for licence leads, in place. Never raises.
+
+    Measured 10% success over real OR CCB leads — most small contractors have
+    no site, and acceptance requires the licence phone printed on the page
+    (website_resolver). A miss leaves the lead exactly as it was: still
+    callable, just not yet enrichable.
+    """
+    if not leads:
+        return
+    try:
+        from app.skills.website_resolver import resolve_website
+    except Exception as e:                       # pragma: no cover - import guard
+        logger.debug(f"[V3] website resolver unavailable: {e}")
+        return
+
+    from app.core.hardening import concurrency_limit
+    semaphore = asyncio.Semaphore(concurrency_limit("lead_enrich"))
+
+    async def _one(lead):
+        async with semaphore:
+            try:
+                hit = await resolve_website(
+                    lead.get("business", ""), phone=lead.get("phone", ""),
+                    city=lead.get("city", ""), state=lead.get("state", ""))
+            except Exception as e:
+                logger.debug(f"[V3] website resolution failed for "
+                             f"{lead.get('business')!r}: {e}")
+                return
+            if hit.get("website"):
+                lead["website"] = hit["website"]
+                # `url` is what enrich_lead_lite gates on, so it must be set
+                # too — setting only `website` leaves the lead unenrichable.
+                lead["url"] = hit["website"]
+                lead["website_source"] = hit.get("source", "")
+                lead["website_confidence"] = hit.get("confidence", 0.0)
+
+    await asyncio.gather(*[_one(l) for l in leads], return_exceptions=True)
+    found = sum(1 for l in leads if l.get("website"))
+    logger.info(f"[V3] website resolution: {found}/{len(leads)} licence leads "
+                f"now have a verified domain")
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # MAIN ENTRY POINT
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -2059,6 +2109,15 @@ async def find_leads_v3(count: int = 5, query: str = "business leads",
     # Sort by completeness (leads with all 3 fields first)
     enriched_leads.sort(key=lambda l: sum(1 for f in [l.get("owner_name"), l.get("email"), l.get("phone")] if f), reverse=True)
     
+    # ADR-0014 seam 2: resolve a website for the licence leads about to be
+    # emitted. Registry rows carry no domain, and enrich_lead_lite returns
+    # immediately on a lead with no url (light_enrich.py) — so without this
+    # step a registry lead can never reach ad-signal detection (the ADR-0012
+    # "already paying for leads" qualifier), email discovery, or a social
+    # handle. Only the leads actually being kept are resolved, so the cost is
+    # bounded by `count`, not by the size of the fetched registry page.
+    await _resolve_licence_websites(licence_leads[:count])
+
     # Licence leads need no enrichment — owner and phone already come from a
     # legal record — so they are emitted directly and take precedence. A lead
     # Retell can dial today beats a URL-only row that may never be callable.
@@ -2070,8 +2129,12 @@ async def find_leads_v3(count: int = 5, query: str = "business leads",
             "owner_title": lead.get("owner_title", ""),
             "email": "",            # licence data carries none; never guessed
             "phone": lead.get("phone", ""),
-            "website": "",          # ADR-0014 seam 2 resolves domains, not this
-            "url": "",
+            # Filled by _resolve_licence_websites above when — and only when —
+            # the licence phone was found printed on the candidate page.
+            # Empty is the common, correct outcome (~90%): most small
+            # contractors have no site, and a guess would be fabricated data.
+            "website": lead.get("website", ""),
+            "url": lead.get("url", ""),
             "score": 0,             # recomputed server-side by the storage gate
             "status": "New",
             # Provenance comes from the emitting registry, never a hardcoded
