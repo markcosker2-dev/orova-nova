@@ -39,6 +39,18 @@ def _scratch_table():
     _write("CREATE TABLE IF NOT EXISTS pool_probe (id INTEGER PRIMARY KEY, v TEXT)")
     yield
     _write("DELETE FROM pool_probe")
+    # Also drop the LEAD rows these tests insert. `init_db()` above opens the
+    # real on-disk database, so without this the fixtures below persist between
+    # runs and `test_real_duplicate_emails_are_still_deduped` fails on every run
+    # after the first: its "first" save collides with the row left by the
+    # previous run and returns -1, which reads as "the dedup index is broken"
+    # when it actually means "the test already ran once".
+    #
+    # CI checks out clean every time, so it stayed green while the suite was
+    # red for anyone running it twice locally — the worst kind of test debt,
+    # because it trains you to ignore a real failure signal.
+    _write("DELETE FROM leads WHERE business LIKE 'Registry Builders%'"
+           "   OR business LIKE 'Dupe Check%'")
 
 
 # ── the containment guarantee ───────────────────────────────────────────────
