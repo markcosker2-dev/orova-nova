@@ -288,34 +288,30 @@ def build(master_path, personnel_path, counties, limit, out_path, per_city_cap):
     print(f"[master]    skipped: off-ICP {skipped_icp:,} · no principal {no_owner:,} · bad phone {no_phone:,}")
     print(f"[out]       {len(rows):,} rows -> {out_path}")
     if rows:
-        # The preview exists to confirm the JOIN worked — that a principal was
-        # attached and a phone parsed — not to display the data. So it is
-        # REDACTED: these are real people's names and direct business numbers,
-        # and stdout ends up in CI logs, shell history and screenshots. The
-        # unredacted values are in the output CSV, which is the file the
-        # operator actually asked for and can protect.
-        # (Flagged by CodeQL py/clear-text-logging on #152. Correct catch —
-        # public-record data is still personal data once it is joined to a name.)
-        print("\nfirst 5 (redacted — full values are in the CSV):")
-        for r in rows[:5]:
-            print(f"  {r['BusinessName'][:40]:42} {r['City'][:16]:18} "
-                  f"{_mask_phone(r['PhoneNumber'])}  {_mask_name(r['owner_name'])} "
-                  f"({r['owner_title'][:26]})")
+        # NO PERSON DATA ON STDOUT — not even masked.
+        #
+        # CodeQL py/clear-text-logging (high) flagged the original preview on
+        # #152, correctly: it printed a real contractor's name and direct
+        # business number, and stdout ends up in CI logs, shell history and
+        # screenshots. Public-record data is still personal data once joined to
+        # a name.
+        #
+        # Masking the values did NOT clear the alert — CodeQL cannot prove a
+        # helper sanitises, so it still sees a source-to-sink flow. Suppressing
+        # a high-severity alert by comment to keep a convenience print would be
+        # the wrong trade, so the flow is removed instead.
+        #
+        # This costs nothing real: the preview exists to confirm the JOIN
+        # attached a principal and parsed a phone, which the counters below say
+        # exactly. To eyeball actual names, open the CSV — that is the
+        # deliverable, and the one place this data belongs.
+        with_owner = sum(1 for r in rows if r["owner_name"])
+        with_phone = sum(1 for r in rows if r["PhoneNumber"])
+        sole = sum(1 for r in rows if "sole owner" in (r["owner_title"] or "").lower())
+        print(f"[join]      {with_owner:,}/{len(rows):,} rows carry a principal · "
+              f"{with_phone:,} a phone · {sole:,} are Sole Owner")
+        print(f"[next]      inspect names/phones in the CSV, not here: {out_path}")
     return rows
-
-
-def _mask_phone(p: str) -> str:
-    """'+16265550111' -> '+1626***0111' - enough to see it parsed, not to dial."""
-    d = re.sub(r"\D", "", p or "")
-    return f"+1{d[-10:-7]}***{d[-4:]}" if len(d) >= 10 else "(none)"
-
-
-def _mask_name(n: str) -> str:
-    """'Dana Davis' -> 'Dana D.' — enough to see the join attached a person."""
-    parts = (n or "").split()
-    if not parts:
-        return "(none)"
-    return parts[0] if len(parts) == 1 else f"{parts[0]} {parts[-1][0]}."
 
 
 def main():

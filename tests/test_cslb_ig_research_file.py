@@ -24,41 +24,37 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 from cslb_ig_research_file import (  # noqa: E402
     build, parse_cslb_name, title_rank, classes_of, pick,
-    _mask_phone, _mask_name,
 )
 
 
 # ── the console preview must not leak PII ───────────────────────────────────
-# CodeQL py/clear-text-logging flagged the original preview on #152, correctly:
-# these are real people's names and direct business numbers, and stdout ends up
-# in CI logs, shell history and screenshots. Public-record data is still
-# personal data once it is joined to a name. The unredacted values belong only
-# in the output CSV, which the operator asked for and can protect.
+# CodeQL py/clear-text-logging (high) flagged the original preview on #152.
+# Masking did not clear it — CodeQL cannot prove a helper sanitises — so the
+# dataflow was removed entirely rather than suppressed. These tests pin that
+# no person data can reach stdout.
 
-@pytest.mark.parametrize("raw,expected", [
-    ("+16265550111", "+1626***0111"),
-    ("+19495550122", "+1949***0122"),
-    ("", "(none)"),
-    ("12345", "(none)"),
-])
-def test_mask_phone_shows_it_parsed_but_cannot_be_dialled(raw, expected):
-    assert _mask_phone(raw) == expected
-
-
-@pytest.mark.parametrize("raw,expected", [
-    ("Dana Davis", "Dana D."),
-    ("Kenneth Mc Curdy", "Kenneth C."),
-    ("Singlename", "Singlename"),
-    ("", "(none)"),
-])
-def test_mask_name_shows_a_person_was_attached_but_not_who(raw, expected):
-    assert _mask_name(raw) == expected
+def test_preview_prints_no_person_data(files, capsys):
+    master, personnel, out = files
+    rows = build(master, personnel, "LOS ANGELES", 50, out, per_city_cap=0)
+    printed = capsys.readouterr().out
+    assert rows, "precondition: the join produced rows to leak"
+    for r in rows:
+        assert r["owner_name"] not in printed, "an owner name reached stdout"
+        assert r["owner_first"] not in printed, "an owner first name reached stdout"
+        assert r["PhoneNumber"] not in printed, "a phone number reached stdout"
+        digits = r["PhoneNumber"].lstrip("+")
+        assert digits not in printed
+        assert digits[-7:] not in printed, "the subscriber digits reached stdout"
 
 
-def test_masked_phone_never_contains_the_full_number():
-    full = "+16265550111"
-    assert "5550111" not in _mask_phone(full)
-    assert "6265550111" not in _mask_phone(full)
+def test_preview_still_confirms_the_join_worked(files, capsys):
+    """Removing the data must not remove the verification value."""
+    master, personnel, out = files
+    build(master, personnel, "LOS ANGELES", 50, out, per_city_cap=0)
+    printed = capsys.readouterr().out
+    assert "[join]" in printed
+    assert "carry a principal" in printed
+    assert "Sole Owner" in printed
 
 
 # ── names: CSLB is fixed-width LAST/FIRST/MIDDLE ────────────────────────────
