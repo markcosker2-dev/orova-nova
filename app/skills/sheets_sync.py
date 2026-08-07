@@ -161,6 +161,32 @@ def _int_or_none(value) -> Optional[int]:
         return None
 
 
+async def count_lead_rows(workbook_name: Optional[str] = None) -> Optional[int]:
+    """How many DATA rows the Leads tab actually holds (header excluded).
+
+    Exists so a sync can VERIFY itself. `sync_lead_to_sheets` returning ok
+    means the API accepted a call, not that a row is readable afterwards — and
+    on 2026-08-07 production logged `Sheets: 5/5 leads synced` while the very
+    next boot restored 4 rows, 3 of them test fixtures. Nothing noticed,
+    because nothing ever looked.
+
+    Returns None (not 0) when the count cannot be taken, so a failed *check* is
+    never mistaken for an empty *sheet* — that distinction is the whole point:
+    one is "we don't know", the other is "your backup is gone".
+    """
+    try:
+        worksheet = await _get_worksheet("Leads", workbook_name)
+        vals = await asyncio.wait_for(
+            asyncio.to_thread(worksheet.col_values, 2),   # column 2 = Business
+            timeout=SHEETS_READ_TIMEOUT_S,
+        )
+        non_empty = [v for v in (vals or []) if str(v).strip()]
+        return max(0, len(non_empty) - 1)                 # drop the header
+    except Exception as exc:
+        logger.warning(f"[SheetsSync] could not count Leads rows: {exc}")
+        return None
+
+
 async def restore_leads_from_sheets() -> List[Dict[str, Any]]:
     try:
         worksheet = await _get_worksheet("Leads")

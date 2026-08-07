@@ -77,6 +77,44 @@ async def persist_leads_durably(recent_count: int = 25, source: str = "?") -> di
                 logger.warning(f"[DURABILITY:{source}] sheet sync of one lead failed: {row_err}")
         logger.info(f"[DURABILITY:{source}] 📋 Sheets: "
                     f"{result['sheets_synced']}/{len(rows)} leads synced")
+
+        # ── VERIFY THE WRITE LANDED ─────────────────────────────────────────
+        # "N/N synced" only means N API calls returned ok. It does NOT mean N
+        # rows are readable afterwards, and that gap hid a total backup failure
+        # for weeks: on 2026-08-07 production logged "Sheets: 5/5 leads synced"
+        # and the very next boot restored 4 rows — 3 of them 'Acme' test
+        # fixtures. 15 leads became 1, twice in one day, and no log line ever
+        # said anything was wrong.
+        #
+        # So the durable tier now reads itself back and compares against what
+        # the database actually holds. A backup that cannot be read is not a
+        # backup, and the only thing worse than not having one is believing you
+        # do. This costs one extra API call per run.
+        try:
+            from app.skills.sheets_sync import count_lead_rows
+            sheet_rows = await count_lead_rows()
+            result["sheet_rows"] = sheet_rows
+            db_row = await DatabaseManager.fetchone(
+                "SELECT COUNT(*) AS c FROM leads WHERE COALESCE(status,'') != 'Invalid'")
+            db_total = (db_row or {}).get("c") or 0
+            result["db_total"] = db_total
+            if sheet_rows is None:
+                logger.warning(f"[DURABILITY:{source}] ⚠️ could not verify the Sheets "
+                               f"backup — treat durability as UNKNOWN this run.")
+            elif sheet_rows < db_total:
+                result["verified"] = False
+                logger.error(
+                    f"[DURABILITY:{source}] 🚨 BACKUP INCOMPLETE — the database holds "
+                    f"{db_total} leads but the Leads sheet has only {sheet_rows} rows. "
+                    f"Everything above {sheet_rows} is lost on the next restart. "
+                    f"Sheets is the durable tier; Drive is optional and currently dead.")
+            else:
+                result["verified"] = True
+                logger.info(f"[DURABILITY:{source}] ✅ verified: sheet holds {sheet_rows} "
+                            f"rows for {db_total} leads")
+        except Exception as verify_err:
+            logger.warning(f"[DURABILITY:{source}] backup verification failed "
+                           f"({verify_err}) — durability UNKNOWN this run.")
     except Exception as e:
         logger.error(f"[DURABILITY:{source}] ⚠️ Sheets sync failed (non-fatal, but this "
                      f"is the durable tier — lead data is now at risk): {e}")
