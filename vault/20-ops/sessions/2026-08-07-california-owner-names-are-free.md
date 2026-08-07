@@ -165,6 +165,37 @@ California lead callable at all. Free personnel data does not save a $235
 upgrade; it is the difference between 114,780 unusable rows and 114,780
 callable ones.
 
+## CALICO is CLOSED — not expensive, ineligible
+
+`CA_SOS_API_KEY` has sat unset since ADR-0003 with the reason recorded as
+*"free-tier cost unconfirmed (pricing page requires sign-in)"*. ADR-0014 repeats
+it, `owner_finder._ca_registry_lookup` is gated on it, and `hardening.py:435`
+still lists **"CA owner registry (CALICO)"** as a configurable capability.
+
+Checked the portal directly (rendered in a browser — it is an Azure API
+Management SPA, so a plain fetch returns only the shell). There is exactly one
+product, **CBC API Production — "California Business Entity Search APIs"**, and
+its API description reads:
+
+> *"CBC APIs - Prod - v1 — This API provides business entity details and is
+> **available to government agencies only at this time**."*
+
+`calico.sos.ca.gov` does not exist (404); `calicodev.sos.ca.gov` is the only
+portal.
+
+**So the question was never the price. OROVA is not eligible, at any price.**
+
+Consequences:
+- `CA_SOS_API_KEY` will never be obtainable. It should stop being described as
+  pending, and `_ca_registry_lookup` is dead code for OROVA.
+- The "CA owner registry (CALICO)" capability in `hardening.py` is a phantom —
+  it will always report disabled, so it is noise in the report that #151 now
+  surfaces on `/api/health`.
+- **This costs nothing.** CSLB's free personnel file already solves the exact
+  problem CALICO was being held open for — 197,696 named California principals.
+  The waterfall was waiting on a door that was never going to open, while the
+  answer sat in a free CSV on a different state agency's portal.
+
 ## Follow-ups
 
 - [ ] Prove the join end to end: Master ⟕ Personnel on `LIC-NO` → business +
