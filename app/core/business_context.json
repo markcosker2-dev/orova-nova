@@ -54,7 +54,8 @@
     "refund_policy": "Partial refunds only — never the full amount. The system build/setup (ad account, creatives, automation, CRM wiring) is non-refundable; a refund returns the unused portion of the retainer minus the build already delivered.",
     "margin_target": "90%+ realistic operating margin at current vendor pricing (see vault/10-brain/profitability-plan.md §3); 75-80% retained as the conservative worst-case floor for external/investor conversations. Ad spend is not an OROVA cost.",
     "pricing_note": "6-month tier corrected 2026-07-04 to $18K (P1) / $24K (P2) so longer commitments are cheaper per month ($3,000/$4,000 vs the 3-month $3,333/$4,333).",
-    "first_client_pilot": "Client #1 buys PROOF, not revenue. Offer $1,500-$2,000/mo for a 60-day pilot (or performance-tied) in exchange for a testimonial + case-study rights + permission to quote results. Standard P1/P2 pricing resumes from client #2, when a real case study replaces the placeholder and does the selling. Holding the line at $4K with zero case studies is how pre-revenue agencies stay at $0.",
+    "_offer_status": "UNRESOLVED - THE OWNER HAS NOT SET THE OFFER. Nothing in this file may be spoken to a prospect as an offer. Until Mark decides, every commercial question deflects to him. Recorded 2026-08-06 after an unauthorised 'free two-week pilot' was found in the outbound script, the voicemail, two objection handlers and the inbound branch, and had reached both live Retell agents. It was never approved.",
+    "first_client_pilot": "INTERNAL THINKING ONLY - NOT AN APPROVED OFFER, NEVER TO BE QUOTED ON A CALL OR IN WRITING. Recorded position: client #1 buys PROOF, not revenue - a reduced-rate 60-day pilot (or performance-tied) in exchange for a testimonial + case-study rights + permission to quote results, with standard P1/P2 pricing resuming from client #2. The NUMBER is deliberately deferred until at least 5 real prospect conversations exist (there are currently 0). Any discount must be PAID FOR with those rights, never opened with, and any step-up written at signature.",
     "all_in_framing": "Always quote and think in ALL-IN terms: retainer + recommended ad spend = ~$6,500-$7,500/mo. The prospect writes checks totalling that number; 'the ad spend is separate' is an accounting fact, not a buying fact, and must never be used to make the ask sound smaller than it is."
   },
   "sales_funnel": {
@@ -191,8 +192,9 @@
     ]
   },
   "retell_pitch": {
-    "description": "Nova's OUTBOUND cold-call script. Goal is NOT to sell the retainer - it is to book a 10-minute call with Mark by offering a free 2-week pilot. Diagnose first, disqualify fast, never argue price.",
-    "goal": "Book a 10-minute call with Mark. Nothing else. Do not quote $4K/$5K on this call.",
+    "description": "Nova's OUTBOUND cold-call script. Goal is NOT to sell and NOT to make an offer - it is to book a 10-minute call with Mark. Diagnose first, disqualify fast, never argue price.",
+    "goal": "Book a 10-minute call with Mark. Nothing else.",
+    "_offer_rule": "NOVA DOES NOT MAKE OFFERS. AT ALL. No price, no range, no ballpark, no trial, no pilot, no discount, and never the word 'free'. Every commercial question goes to Mark on the call. This rule exists because an unauthorised free two-week pilot appeared in this file and reached both live Retell agents; it was never approved by the owner. The offer is an open commercial decision - until the owner sets it, there is nothing to offer.",
     "compliance": {
       "line_type": "Published business lines ONLY. Never a personal cell (the B2B TCPA exemption depends on it).",
       "hours": "9am-5pm in the PROSPECT's local timezone, weekdays only.",
@@ -220,33 +222,34 @@
         "pain_b_wasted_estimates": "'tire-kickers', 'price shoppers', 'drive out for nothing', 'three quotes' -> he has THE WASTED SATURDAY. This is the wedge."
       }
     },
-    "step_3_the_offer": {
-      "_rule": "Lead with the PAINKILLER he just described, never with growth. Never quote the retainer on this call.",
+    "step_3_describe_the_painkiller": {
+      "_rule": "Describe WHAT MARK DOES, in terms of the pain he just named. This is a description, not an offer - no terms, no price, no trial. Named 'the_offer' previously, which is how an unauthorised offer ended up living here.",
       "if_pain_b": "Makes sense - that's actually the thing Mark built this around. Instead of sending you more leads to chase, every lead gets called within five minutes and screened, so the only ones that reach your calendar are real projects with a real budget. You'd stop driving out to the tire-kickers.",
       "if_pain_a": "Got it. So the thing Mark does is fill that gap before it opens - runs the ads, and every lead that comes in gets called within five minutes and booked straight onto your calendar.",
-      "the_pilot": "Here's why I'm calling though - Mark's taking on one or two builders to run this for free for two weeks. You don't pay us anything. You'd cover the ad budget, around seven hundred and fifty dollars, and that goes straight to Meta, not to us. If it doesn't put real appointments on your calendar, you owe nothing and we stop."
+      "the_bridge": "Mark's only taking on a couple of builders at a time, so he wants to look at your numbers himself before anything else - what you're paying per lead now and what a job's actually worth to you. That's the ten minutes."
     },
     "step_4_the_ask": {
-      "ask": "Would you be open to ten minutes with Mark? He's usually free first thing in the morning - would early work for you, or is later in the afternoon better?",
+      "ask": "Would you be open to ten minutes with Mark? He's usually around first thing in the morning - would early work for you, or is later in the afternoon better? ('around', not 'free' - the agent must never voice that word, and a listener half-hearing it on a cold call is exactly how a free offer gets inferred.)",
       "_no_slot_variable": "Do NOT name specific times - no slot variable exists and a literal placeholder on the call is fatal. Ask open ('later this week', 'sometime this week'), then let them state a time and capture it.",
       "on_yes": "Capture their preferred day/time IN THEIR WORDS + best email. Confirm the email back letter by letter if unclear. Send the booking link if one is configured; otherwise flag for Mark to send the invite manually.",
       "fallback_no_link": "NO BOOKING LINK IS CONFIGURED YET. Never end a yes without capturing best email + their two preferred times, and flagging the lead for Mark. A yes with no capture is a lost deal.",
       "_timezone_steer": "Mark is in the Philippines (UTC+8), 15 hours ahead of Pacific. Only US 6-9am PT and 4-5pm PT are workable for him. Steer toward 'first thing in the morning' (best - contractors are up early and it is Mark's evening) or 'late afternoon'. NEVER offer US midday. The booking calendar should enforce this too."
     },
     "step_5_voicemail": {
-      "_rule": "Cold dialling hits voicemail constantly. Without this the agent monologues at an answering machine. Discloses AI, names the pilot, claims nothing that isn't true.",
-      "message": "Hey {{name}}, this is Nova, an AI assistant on Mark's team at OROVA. Mark's taking on a couple of builders for a free two-week trial run of his lead system - you'd only cover the ad budget, and it goes straight to Meta. If your schedule's got room in it, he'd be worth ten minutes. I'll try you once more this week.",
+      "_rule": "Cold dialling hits voicemail constantly. Without this the agent monologues at an answering machine. Discloses AI, makes NO offer, claims nothing that isn't true.",
+      "message": "Hey {{name}}, this is Nova, an AI assistant on Mark's team at OROVA. Mark works with residential builders on keeping their calendar full - getting every lead called and screened before it reaches them. He's only taking on a couple of builders at a time. If your schedule's got room in it, he'd be worth ten minutes. I'll try you once more this week.",
       "_then": "End the call. Do not leave a second voicemail on a later attempt."
     },
     "objection_handling": {
-      "what_does_it_cost": "The pilot itself is free - you'd only cover the ad budget, about seven-fifty, and that goes to Meta directly. If it works and you want to keep going, Mark will walk you through pricing on the call - no obligation either way.",
-      "i_already_pay_angi": "Yeah, most builders we talk to do - and most of them tell us the same thing about lead quality. The difference here is nobody else is calling those leads for you in five minutes and screening them before they hit your calendar. That's what the two weeks would show you.",
-      "too_expensive_price_anchor": "NEVER argue price or compare to Angi's monthly. CHANGE THE UNIT: 'Totally fair. The way Mark looks at it is what an idle week costs you with the crew on payroll - one extra job usually covers the whole thing several times over. But that's exactly what the free two weeks is for - you don't have to take anyone's word for it.'",
+      "what_does_it_cost": "DEFLECT - NEVER quote, estimate, hint at, or bracket a number, and never say the word 'free'. Say: 'That's Mark's conversation, not mine - it depends on what you're spending now and what a job's worth to you. That's exactly what the ten minutes is for.' If pushed a second time, repeat once and offer the call again. If pushed a third time, take their email and have Mark answer directly.",
+      "i_already_pay_angi": "Yeah, most builders we talk to do - and most of them tell us the same thing about lead quality. The difference here is nobody else is calling those leads for you in five minutes and screening them before they hit your calendar. That's worth ten minutes with Mark to look at properly.",
+      "too_expensive_price_anchor": "NEVER argue price, quote a number, or compare to Angi's monthly - and never counter with a discount or a trial. CHANGE THE UNIT: 'Totally fair. The way Mark looks at it is what an idle week costs you with the crew on payroll - one extra job usually covers the whole thing several times over. Whether that maths works for your numbers is exactly what he'd want to go through with you.'",
       "im_not_interested": "Understood, I appreciate you taking the call. Have a good one. (END. No rebuttal, no second ask.)",
       "are_you_a_robot": "I am - I'm an AI assistant on Mark's team. Happy to have Mark call you directly if you'd prefer.",
       "send_me_an_email": "Capture the email, confirm it back, send the one-pager + booking link, set a 3-day follow-up."
     },
     "never_say": [
+      "DO NOT MAKE AN OFFER OF ANY KIND. No price, no range, no ballpark, no 'starts at', no trial, no pilot, no discount, no money-back framing, and never the word 'free'. There is no authorised offer to make - the owner has not set one.",
       "Do not quote $4,000 or $5,000 on the cold call - it triggers the Angi price anchor before any value exists.",
       "Do not claim OROVA has existing clients or case studies. There are none. Never fabricate social proof.",
       "Do not claim to be human.",
@@ -277,7 +280,7 @@
     "branches": {
       "who_are_you": "Explain honestly why we rang, then diagnose: booked out, or still filling it in? Booked solid -> disqualify politely and end.",
       "remove_me": "Apologise, confirm removal, end. Nothing else.",
-      "interested": "Painkiller first (every lead called within five minutes and screened), then the free two-week pilot with the ~$750 ad budget going straight to Meta, then ask for ten minutes with Mark.",
+      "interested": "Painkiller first (every lead called within five minutes and screened), then ask for ten minutes with Mark. MAKE NO OFFER - no price, no trial, no pilot, never the word 'free'. If they ask what it costs, that is Mark's conversation.",
       "wrong_number": "Apologise for the confusion and end."
     },
     "must_capture": [
