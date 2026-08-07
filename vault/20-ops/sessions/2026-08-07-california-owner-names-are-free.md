@@ -60,9 +60,31 @@ Sample rows (`LIC-NO, Name-TP, Name, EMP-Titl-CDE`):
 8, Principal, NILSEN MARK  ALAN,        Officer | Responsible Managing Officer
 ```
 
-Note the name layout is `LAST FIRST MIDDLE`, space-padded — the same shape WA
-L&I uses, so `_person_from_principal` already handles it (including the suffix
-fix from #146).
+> [!danger] `_person_from_principal` does NOT handle this format — corrected
+> An earlier draft of this note said CSLB's layout is *"the same shape WA L&I
+> uses, so `_person_from_principal` already handles it."* **That is wrong.**
+>
+> WA L&I is **comma-delimited** (`POWER, GREGORY MARK JR`). CSLB is
+> **space-padded fixed-width with no comma** (`DAVIS␣␣DANA␣␣MICHAEL`). The
+> helper branches on that comma: the comma path reads surname-first correctly,
+> but the no-comma path assumes *given-first* (the OR CCB convention) and takes
+> `parts[0]` as the first name and `parts[-1]` as the surname. Measured:
+>
+> ```
+> _person_from_principal("DAVIS   DANA   MICHAEL")  ->  'Davis Michael'
+> _person_from_principal("POWER, GREGORY MARK JR")  ->  'Gregory Power'
+> ```
+>
+> `'Davis Michael'` is a reversed, invented person. Feeding CSLB rows to that
+> helper would open a DM with **"Hi Davis"** to a man called Dana.
+>
+> `scripts/cslb_ig_research_file.py` therefore carries its own
+> `parse_cslb_name`, which splits on a run of 2+ spaces — verified 100% clean on
+> a 4,000-row sample, and multi-word surnames (`MC CURDY`) survive because their
+> internal gap is a single space.
+>
+> Raised by Kilo review on #152. It was right, and the wrong claim contradicted
+> the very script shipped in the same PR.
 
 ## How to fetch it (it is not a plain URL)
 
@@ -105,18 +127,43 @@ found the free route.
 > The Public Data Portal export is a *different product* that carries the same
 > field, free. Both facts are true; only the conclusion was wrong.
 
-## A second finding: the $235 may have been unnecessary anyway
+## A second finding, and the correction that reverses it
 
-The live outbound Retell prompt already contains a **NO-NAME path**, written
-specifically for this case:
+The live outbound Retell prompt **does** contain a NO-NAME path, written for
+exactly this case:
 
 > *"CRITICAL: {{name}} IS OFTEN NOT A REAL NAME. Many lead sources (California
 > licence records especially) carry no owner name at all… use the NO-NAME path."*
 
-So even the free **Master file alone** — business, address, phone — was already
-callable, via the twenty-seven-second opener. The owner name upgrades the
-opener; it was never the thing gating the channel. Worth remembering the next
-time a spend gets justified by a capability the system already has.
+Read directly from the deployed LLM config (`llm_56da0e89…c51256f` v19) via the
+Retell API, **not** from this repo. Kilo review on #152 searched the codebase,
+found nothing, and concluded the path did not exist. Its search was correct —
+**the text is live-only and has never been synced back into
+`business_context.json`.** That is the repo↔live drift already recorded in
+[[2026-08-07-retell-tool-hallucination-and-the-reverse-landmine]], showing up
+again in a second reviewer's blind spot. Anyone auditing OROVA's call behaviour
+from the repo alone is reading a stale script.
+
+> [!danger] But my conclusion from it was WRONG
+> I wrote that the free Master file alone was *"already callable"* and that the
+> owner name merely *"upgrades the opener"*. **It does not.**
+>
+> `lead_validator.py:651` — `callable_via_gatekeeper = has_name and has_phone`
+>
+> A lead with no owner name is **not `callable`, not `outreach_ready`**, and
+> never reaches the dialer at all. `test_lead_storage_gate.py:203` pins this
+> deliberately: *"Perfect email + phone but no name is NOT ready — can't bypass
+> the gatekeeper."* And `outbound_dialer.py:48` renders `{{name}}` as the literal
+> word `"there"` when the name is absent.
+>
+> So the NO-NAME path is a *safety net for a lead that slipped through*, not a
+> licence to hunt nameless leads on purpose.
+
+**This makes the CSLB finding more valuable, not less.** The owner names are not
+a nicety that improves an opener — they are the gate condition that makes a
+California lead callable at all. Free personnel data does not save a $235
+upgrade; it is the difference between 114,780 unusable rows and 114,780
+callable ones.
 
 ## Follow-ups
 
