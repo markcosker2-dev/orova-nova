@@ -45,7 +45,18 @@ def test_sheets_syncs_when_drive_token_is_dead():
          patch("app.skills.sheets_sync.sync_lead_to_sheets", new_callable=AsyncMock,
                return_value={"ok": True}) as m_sync:
         out = asyncio.run(persist_leads_durably(recent_count=5, source="test"))
-    assert out == {"drive": False, "sheets_synced": 2, "sheets_total": 2}
+    # Assert the fields this test is ABOUT, not exact dict equality. The result
+    # gained `sheet_rows`/`db_total`/`verified` when the durable tier started
+    # verifying itself (2026-08-07), and an exact-equality assertion fails on
+    # any contract growth regardless of whether the behaviour under test still
+    # holds — which says nothing useful about Drive being dead.
+    assert out["drive"] is False
+    assert out["sheets_synced"] == 2
+    assert out["sheets_total"] == 2
+    # `count_lead_rows` is unmocked here, so verification cannot run. It must
+    # report UNKNOWN (None), never a false "0 rows" that would read as data loss.
+    assert out.get("sheet_rows") is None
+    assert out.get("verified") is not False
     assert m_sync.await_count == 2
 
 

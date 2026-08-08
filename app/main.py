@@ -240,7 +240,29 @@ async def lifespan(app: FastAPI):
                     except Exception as row_err:
                         logger.error(f"⚠️ Skipping unrestorable Sheets lead "
                                      f"{str(lead.get('business', '?'))[:40]!r}: {row_err}")
-                logger.info(f"♻️ Restored {restored}/{len(leads)} leads from Google Sheets (leads only — learning data starts fresh)")
+                # Report the restore at a level that matches what it MEANS.
+                # This line used to be flat INFO, so "Restored 1/4 leads" —
+                # which on 2026-08-07 meant a 15-lead database had come back as
+                # one row, twice in a day — read exactly like a healthy boot.
+                # A recovery that thin is the loudest signal this system can
+                # emit, and it was whispering.
+                lost = len(leads) - restored
+                msg = (f"♻️ Restored {restored}/{len(leads)} leads from Google Sheets "
+                       f"(leads only — learning data starts fresh)")
+                if restored == 0:
+                    logger.error(f"🚨 RESTORE RECOVERED NOTHING. {msg}. The Leads sheet "
+                                 f"had {len(leads)} candidate rows and none survived the "
+                                 f"storage gate. Lead inventory is now empty.")
+                elif restored < 5:
+                    logger.warning(
+                        f"🚨 BACKUP IS THIN — {msg}. Only {restored} lead(s) came back"
+                        + (f"; {lost} sheet row(s) were rejected by the storage gate "
+                           f"(usually test fixtures polluting the backup)" if lost else "")
+                        + ". If production held more than this before the restart, the "
+                          "durable tier is not capturing writes — check the "
+                          "[DURABILITY] verification line on the next hunt.")
+                else:
+                    logger.info(msg)
             else:
                 logger.warning("⚠️ No restoration source available. Starting with an empty database.")
 
