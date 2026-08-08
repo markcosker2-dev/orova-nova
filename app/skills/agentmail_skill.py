@@ -137,6 +137,37 @@ def _validate_email(email: str) -> bool:
     return bool(_EMAIL_RE.match(email.strip())) if email else False
 
 
+# Commercial language Nova is not authorised to use. `commercial_terms` is
+# UNRESOLVED — the owner has set no offer — so ANY of this in outbound copy is
+# a promise he would have to honour or retract.
+#
+# Deliberately narrow. It must not fire on ordinary sales prose ("free up your
+# Saturdays", "at no obligation"), because a filter that cries wolf gets
+# disabled, and a disabled filter protects nothing. So it matches money figures
+# and explicit no-cost OFFERS, not the words in isolation.
+_PRICE_PATTERNS = (
+    (r"\$\s?\d", "a dollar figure"),
+    (r"\b\d+\s?k\s*(?:/|per\s|a\s)?\s*(?:mo|month)", "a monthly figure (e.g. '4k/mo')"),
+    (r"\b(?:usd|dollars?)\b\s*\d|\d\s*(?:usd|dollars?)\b", "an amount in dollars"),
+    (r"\b(?:starts?|starting|pricing starts)\s+at\b", "a price anchor ('starts at')"),
+    (r"\bper\s+month\b.*\b\d|\b\d.*\bper\s+month\b", "a monthly rate"),
+    (r"\bfree\s+(?:trial|pilot|month|week|two\s+weeks|audit|for\s+two)", "a free-offer term"),
+    (r"\b(?:no|zero)\s+(?:cost|charge)\b", "a no-cost offer"),
+    (r"\byou\s+(?:don'?t|do\s+not|won'?t)\s+pay\b", "a no-payment promise"),
+    (r"\b(?:discount|money[-\s]?back|refund)\b", "a discount/refund term"),
+    (r"\bretainer\b", "a retainer reference"),
+)
+
+
+def _contains_price(subject: str, body: str) -> str:
+    """Return a description of the offending term, or '' if the copy is clean."""
+    haystack = f"{subject or ''}\n{body or ''}".lower()
+    for pattern, label in _PRICE_PATTERNS:
+        if re.search(pattern, haystack):
+            return label
+    return ""
+
+
 async def _verify_email_deliverable(email: str) -> dict:
     """
     Verify an email is deliverable by checking MX records and basic hygiene.
@@ -242,7 +273,9 @@ async def send_outreach(
     lead_id: int = 0,
     strategy: str = "pas",
     niche: str = "",
-    client_id: int = 0
+    client_id: int = 0,
+    *,
+    _approval_checked: bool = False,
 ) -> dict:
     """
     Sends an outreach email via AgentMail API.
@@ -310,6 +343,59 @@ async def send_outreach(
     if not verify_result["valid"]:
         logger.warning(f"[AgentMail] Email verification failed for {to}: {verify_result['reason']}")
         return {"status": "error", "error": f"Email not deliverable: {verify_result['reason']}"}
+
+    # Ordered LAST on purpose. Every check above fails closed and is free;
+    # this one pages a human. Asking Mark to approve a send that opt-out,
+    # CAN-SPAM, the ICP gate or MX verification would have rejected anyway
+    # trains him to approve without reading, which is how an approval gate
+    # quietly becomes a rubber stamp.
+    # ── APPROVAL GATE — the chokepoint, not the call site ────────────────────
+    # Of the five paths that reach this function, exactly ONE gated:
+    #
+    #   worker.py:515   day-0 cold email                     GATED
+    #   worker.py:952   cold-escalation re-engagement email  ungated
+    #   email_sequence_skill.py:359  drip touches 2,3,4      ungated
+    #   outreach_orchestrator.py:502                          ungated
+    #   planner.py:245  exposed to the LLM as a TOOL          ungated
+    #
+    # So "every cold send needs Mark's approval" was true of the first email
+    # only. The drip enrols unconditionally — including for leads whose day-0
+    # email Mark explicitly did NOT approve (observed live 2026-08-07: an
+    # "awaiting approval" log line immediately followed by an enrolment) — and
+    # then sends its follow-ups with no gate at all.
+    #
+    # Only BUSINESS_POSTAL_ADDRESS being unset is currently stopping that. The
+    # moment it is set to enable approved email, three of every four touches
+    # start going out unsupervised. This is the same shape as the §227(b) hole
+    # in outbound_dialer.py, in a second subsystem: a gate applied per-call-site
+    # while other paths reach the same sink. And as there, the LLM tool path
+    # cannot be gated by convention — there is no call site to edit.
+    #
+    # `_approval_checked` is keyword-only, underscore-prefixed, and absent from
+    # the LLM tool schema in definitions.py (which exposes only to/subject/body),
+    # so the model cannot set it. It defaults to False so a NEW caller is gated
+    # unless it explicitly opts out — the safe default is the one you get by
+    # forgetting.
+    #
+    # Placed after the cheap fail-closed checks on purpose: never ask Mark to
+    # approve a send that opt-out or CAN-SPAM would have blocked anyway.
+    if not _approval_checked:
+        try:
+            from app.core.approval_gate import gate_allows
+            allowed = await gate_allows(
+                "email",
+                {"lead_id": lead_id, "to": to, "subject": subject},
+                reason=f"Email to {to} — subject: {subject}",
+            )
+        except Exception as gate_err:
+            logger.error(f"[AgentMail] Approval gate errored for {to} ({gate_err}) "
+                         f"— blocking send (fail-closed).")
+            return {"status": "error", "skipped": True,
+                    "error": f"Approval gate error — send blocked (fail-closed): {gate_err}"}
+        if not allowed:
+            logger.info(f"[AgentMail] Send to {to} awaiting Mark's approval — skipped this cycle.")
+            return {"status": "error", "skipped": True,
+                    "error": "Awaiting approval — send skipped this cycle."}
 
     return await _send_via_agentmail(to, subject, body, skip_proofread, recipient_context, lead_id, strategy, niche, client_id)
 
@@ -379,6 +465,28 @@ async def _send_via_agentmail(to: str, subject: str, body: str, skip_proofread: 
     # address once configured). Applied AFTER the proofreader so boilerplate is
     # never QA'd against the 75-word copy budget.
     final_body = _apply_compliance_footer(final_body)
+
+    # ── NO PRICE MAY LEAVE THIS FUNCTION — fail closed ───────────────────────
+    # The owner mandate is that Nova states no price, because no offer has been
+    # set. The two live Retell voice prompts enforce this line-by-line with
+    # scripted deflections. Email had no equivalent: the ONLY gate on outbound
+    # copy was `email_proofreader`, which was handed the real retainer figures
+    # in its brand context AND authorised to rewrite the body on a REWRITE
+    # verdict. An LLM holding the real numbers and told to improve the copy is
+    # not a control against quoting them — it is the likeliest source of one.
+    #
+    # Prices are now stripped from that prompt, but a rubric instruction is
+    # guidance, not enforcement. This is the enforcement: the final text, after
+    # proofreading and after the footer, is checked for a quotable figure and
+    # the send is blocked rather than corrected. Same fail-closed posture as
+    # opt-out, CAN-SPAM and the ICP gate directly above.
+    _priced = _contains_price(final_subject, final_body)
+    if _priced:
+        logger.error(f"[AgentMail] Blocked send to {to} — outbound copy contains a "
+                     f"commercial term Nova is not authorised to state: {_priced}. "
+                     f"commercial_terms is UNRESOLVED; the owner has set no offer.")
+        return {"status": "error", "skipped": True,
+                "error": f"Blocked — unauthorised price/offer language in outbound copy: {_priced}"}
 
     try:
         # Send using AgentMail client synchronous call wrapped inside run_in_executor

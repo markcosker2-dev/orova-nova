@@ -198,8 +198,42 @@ def _sanitise_history(history: list, n: int = 6) -> list:
             return tail[i:]
     return []
 
+def _strip_internal_kwargs(args: dict) -> dict:
+    """Drop any underscore-prefixed key an LLM supplied.
+
+    Tool args arrive as raw model output and are dispatched with `fn(**args)`
+    below, with no allowlist against the declared JSON schema. `semantic_firewall`
+    enforces `additional_properties=False` for a few tools, but only a few — it
+    has no entry for `send_outreach`, and `ai_client._extract_tool_calls_from_text`
+    regex-parses tool calls out of free text with no validation at all.
+
+    So "the model can't set that parameter because it isn't in the schema" was
+    not true at the layer that dispatches. A model emitting
+    `{"_approval_checked": true}` — hallucinated, echoed back from a code comment
+    that entered context, or injected via browsed content — would have bound it
+    straight through `**args` and skipped Mark's approval.
+
+    Underscore-prefixed parameters are internal by convention throughout this
+    codebase, so nothing a model legitimately calls needs one. Stripping the
+    whole class is stronger than patching one schema entry: it protects tools
+    nobody has thought to audit yet, including ones added later.
+
+    Found by the compliance review. The test that was supposed to back the
+    original claim only asserted the declared schema omitted the key — it
+    encoded the assumption instead of verifying the behaviour.
+    """
+    if not isinstance(args, dict):
+        return args
+    dropped = [k for k in args if isinstance(k, str) and k.startswith("_")]
+    if dropped:
+        logger.warning(f"[PLANNER] Dropped model-supplied internal kwargs {dropped} "
+                       f"— these are never callable from a tool invocation.")
+    return {k: v for k, v in args.items() if not (isinstance(k, str) and k.startswith("_"))}
+
+
 async def _call_tool(fn, args: dict):
     if fn is None: raise ValueError("Tool function is None")
+    args = _strip_internal_kwargs(args)
     if inspect.iscoroutinefunction(fn): return await fn(**args)
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, lambda: fn(**args))

@@ -499,7 +499,15 @@ async def send_throttled_email(
     # Send
     try:
         from app.skills.agentmail_skill import send_outreach
-        result = send_outreach(to=to, subject=subject, body=body)
+        # `await` was missing. send_outreach is `async def`, so this only built a
+        # coroutine and threw it away — the opt-out check, the CAN-SPAM postal
+        # check, the ICP gate, the MX check and the approval gate ALL never ran,
+        # while the function returned {"status": "ok"} and reported success.
+        # Unreachable today (run_lead_pipeline has no callers), which is why the
+        # incident-driven audit missed it — but it reads as a finished pipeline,
+        # so wiring it up later would have bypassed every gate while claiming to
+        # have passed them. Found by the compliance review, not by the tests.
+        result = await send_outreach(to=to, subject=subject, body=body)
         _last_email_time = time.time()
         _daily_email_count[client_id] += 1
 

@@ -521,6 +521,12 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None, state=
                                         strategy=composed["framework"],
                                         niche=niche,
                                         client_id=client_id,
+                                        # Already gated three lines up. Without this the
+                                        # chokepoint gate would request approval a SECOND
+                                        # time and, because approvals are single-use, the
+                                        # one Mark just granted would already be spent —
+                                        # so an approved email would never send.
+                                        _approval_checked=True,
                                     )
                                     if outreach_result.get("status") == "success":
                                         logger.info(f"   -> ✅ Outreach email sent to {lead_email} (lead {lead_id})")
@@ -530,15 +536,25 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None, state=
                             except Exception as email_err:
                                 logger.warning(f"   -> ⚠️ Outreach email error for {lead_email}: {email_err}")
 
-                        # Enroll in cold_intro_drip for automated follow-ups
-                        try:
-                            drip_result = await start_drip_campaign(lead_id, sequence_type="cold_intro_drip")
-                            if drip_result.get("status") == "success":
-                                logger.info(f"   -> 📧 Enrolled lead {lead_id} in cold_intro_drip sequence")
-                            else:
-                                logger.warning(f"   -> ⚠️ Drip enrollment failed for lead {lead_id}: {drip_result.get('error','unknown')}")
-                        except Exception as drip_err:
-                            logger.warning(f"   -> ⚠️ Drip enrollment error for lead {lead_id}: {drip_err}")
+                            # Enroll in cold_intro_drip for automated follow-ups.
+                            #
+                            # MOVED INSIDE the `if lead_email and email_status !=
+                            # "guessed"` branch. It used to sit outside it and ran
+                            # unconditionally, so leads with NO email address at all —
+                            # which is most licence-registry rows — were enrolled in an
+                            # email sequence that could never send to them, and leads
+                            # with a pattern-GUESSED address were enrolled despite #124
+                            # establishing that a guessed address must never be emailed.
+                            #
+                            # A follow-up sequence presupposes something to follow up ON.
+                            try:
+                                drip_result = await start_drip_campaign(lead_id, sequence_type="cold_intro_drip")
+                                if drip_result.get("status") == "success":
+                                    logger.info(f"   -> 📧 Enrolled lead {lead_id} in cold_intro_drip sequence")
+                                else:
+                                    logger.warning(f"   -> ⚠️ Drip enrollment failed for lead {lead_id}: {drip_result.get('error','unknown')}")
+                            except Exception as drip_err:
+                                logger.warning(f"   -> ⚠️ Drip enrollment error for lead {lead_id}: {drip_err}")
                     # ────────────────────────────────────────────────────────
 
             # Update metrics
