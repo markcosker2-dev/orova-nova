@@ -58,8 +58,12 @@ async def proofread_email(
         brand_context = f"""
 BRAND CONTEXT (use to verify brand consistency):
 - Company: {_co.get('name', 'OROVA')} — {_co.get('description', 'Marketing agency')}
-- Services: {', '.join(s.get('name','') for s in _services)} (${', '.join(str(s.get('price_monthly_usd','')) for s in _services)} USD/mo)
-- Target: {_icp.get('region', 'West Coast US')} — {_icp.get('description', 'Businesses that can afford $4K-$5K/mo')}
+- Services: {', '.join(s.get('name','') for s in _services)}
+- Target: {_icp.get('region', 'West Coast US')}
+- NEVER state or imply a price. No dollar figure, no range, no "starts at", no
+  retainer, no trial, no discount, and never the word "free". The owner has not
+  set an offer; there is nothing to quote. If the draft contains one, REMOVE it
+  and deflect the question to Mark — do not "improve" the wording of a number.
 - Primary Verticals: {', '.join(_icp.get('primary_verticals', []))}
 - Value Prop: {_vp.get('primary', '')}
 - Email Tone: {_rules.get('tone', 'Casual and friendly')}

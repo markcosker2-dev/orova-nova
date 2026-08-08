@@ -137,6 +137,37 @@ def _validate_email(email: str) -> bool:
     return bool(_EMAIL_RE.match(email.strip())) if email else False
 
 
+# Commercial language Nova is not authorised to use. `commercial_terms` is
+# UNRESOLVED — the owner has set no offer — so ANY of this in outbound copy is
+# a promise he would have to honour or retract.
+#
+# Deliberately narrow. It must not fire on ordinary sales prose ("free up your
+# Saturdays", "at no obligation"), because a filter that cries wolf gets
+# disabled, and a disabled filter protects nothing. So it matches money figures
+# and explicit no-cost OFFERS, not the words in isolation.
+_PRICE_PATTERNS = (
+    (r"\$\s?\d", "a dollar figure"),
+    (r"\b\d+\s?k\s*(?:/|per\s|a\s)?\s*(?:mo|month)", "a monthly figure (e.g. '4k/mo')"),
+    (r"\b(?:usd|dollars?)\b\s*\d|\d\s*(?:usd|dollars?)\b", "an amount in dollars"),
+    (r"\b(?:starts?|starting|pricing starts)\s+at\b", "a price anchor ('starts at')"),
+    (r"\bper\s+month\b.*\b\d|\b\d.*\bper\s+month\b", "a monthly rate"),
+    (r"\bfree\s+(?:trial|pilot|month|week|two\s+weeks|audit|for\s+two)", "a free-offer term"),
+    (r"\b(?:no|zero)\s+(?:cost|charge)\b", "a no-cost offer"),
+    (r"\byou\s+(?:don'?t|do\s+not|won'?t)\s+pay\b", "a no-payment promise"),
+    (r"\b(?:discount|money[-\s]?back|refund)\b", "a discount/refund term"),
+    (r"\bretainer\b", "a retainer reference"),
+)
+
+
+def _contains_price(subject: str, body: str) -> str:
+    """Return a description of the offending term, or '' if the copy is clean."""
+    haystack = f"{subject or ''}\n{body or ''}".lower()
+    for pattern, label in _PRICE_PATTERNS:
+        if re.search(pattern, haystack):
+            return label
+    return ""
+
+
 async def _verify_email_deliverable(email: str) -> dict:
     """
     Verify an email is deliverable by checking MX records and basic hygiene.
@@ -434,6 +465,28 @@ async def _send_via_agentmail(to: str, subject: str, body: str, skip_proofread: 
     # address once configured). Applied AFTER the proofreader so boilerplate is
     # never QA'd against the 75-word copy budget.
     final_body = _apply_compliance_footer(final_body)
+
+    # ── NO PRICE MAY LEAVE THIS FUNCTION — fail closed ───────────────────────
+    # The owner mandate is that Nova states no price, because no offer has been
+    # set. The two live Retell voice prompts enforce this line-by-line with
+    # scripted deflections. Email had no equivalent: the ONLY gate on outbound
+    # copy was `email_proofreader`, which was handed the real retainer figures
+    # in its brand context AND authorised to rewrite the body on a REWRITE
+    # verdict. An LLM holding the real numbers and told to improve the copy is
+    # not a control against quoting them — it is the likeliest source of one.
+    #
+    # Prices are now stripped from that prompt, but a rubric instruction is
+    # guidance, not enforcement. This is the enforcement: the final text, after
+    # proofreading and after the footer, is checked for a quotable figure and
+    # the send is blocked rather than corrected. Same fail-closed posture as
+    # opt-out, CAN-SPAM and the ICP gate directly above.
+    _priced = _contains_price(final_subject, final_body)
+    if _priced:
+        logger.error(f"[AgentMail] Blocked send to {to} — outbound copy contains a "
+                     f"commercial term Nova is not authorised to state: {_priced}. "
+                     f"commercial_terms is UNRESOLVED; the owner has set no offer.")
+        return {"status": "error", "skipped": True,
+                "error": f"Blocked — unauthorised price/offer language in outbound copy: {_priced}"}
 
     try:
         # Send using AgentMail client synchronous call wrapped inside run_in_executor
