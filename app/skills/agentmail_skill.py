@@ -242,7 +242,9 @@ async def send_outreach(
     lead_id: int = 0,
     strategy: str = "pas",
     niche: str = "",
-    client_id: int = 0
+    client_id: int = 0,
+    *,
+    _approval_checked: bool = False,
 ) -> dict:
     """
     Sends an outreach email via AgentMail API.
@@ -310,6 +312,59 @@ async def send_outreach(
     if not verify_result["valid"]:
         logger.warning(f"[AgentMail] Email verification failed for {to}: {verify_result['reason']}")
         return {"status": "error", "error": f"Email not deliverable: {verify_result['reason']}"}
+
+    # Ordered LAST on purpose. Every check above fails closed and is free;
+    # this one pages a human. Asking Mark to approve a send that opt-out,
+    # CAN-SPAM, the ICP gate or MX verification would have rejected anyway
+    # trains him to approve without reading, which is how an approval gate
+    # quietly becomes a rubber stamp.
+    # ── APPROVAL GATE — the chokepoint, not the call site ────────────────────
+    # Of the five paths that reach this function, exactly ONE gated:
+    #
+    #   worker.py:515   day-0 cold email                     GATED
+    #   worker.py:952   cold-escalation re-engagement email  ungated
+    #   email_sequence_skill.py:359  drip touches 2,3,4      ungated
+    #   outreach_orchestrator.py:502                          ungated
+    #   planner.py:245  exposed to the LLM as a TOOL          ungated
+    #
+    # So "every cold send needs Mark's approval" was true of the first email
+    # only. The drip enrols unconditionally — including for leads whose day-0
+    # email Mark explicitly did NOT approve (observed live 2026-08-07: an
+    # "awaiting approval" log line immediately followed by an enrolment) — and
+    # then sends its follow-ups with no gate at all.
+    #
+    # Only BUSINESS_POSTAL_ADDRESS being unset is currently stopping that. The
+    # moment it is set to enable approved email, three of every four touches
+    # start going out unsupervised. This is the same shape as the §227(b) hole
+    # in outbound_dialer.py, in a second subsystem: a gate applied per-call-site
+    # while other paths reach the same sink. And as there, the LLM tool path
+    # cannot be gated by convention — there is no call site to edit.
+    #
+    # `_approval_checked` is keyword-only, underscore-prefixed, and absent from
+    # the LLM tool schema in definitions.py (which exposes only to/subject/body),
+    # so the model cannot set it. It defaults to False so a NEW caller is gated
+    # unless it explicitly opts out — the safe default is the one you get by
+    # forgetting.
+    #
+    # Placed after the cheap fail-closed checks on purpose: never ask Mark to
+    # approve a send that opt-out or CAN-SPAM would have blocked anyway.
+    if not _approval_checked:
+        try:
+            from app.core.approval_gate import gate_allows
+            allowed = await gate_allows(
+                "email",
+                {"lead_id": lead_id, "to": to, "subject": subject},
+                reason=f"Email to {to} — subject: {subject}",
+            )
+        except Exception as gate_err:
+            logger.error(f"[AgentMail] Approval gate errored for {to} ({gate_err}) "
+                         f"— blocking send (fail-closed).")
+            return {"status": "error", "skipped": True,
+                    "error": f"Approval gate error — send blocked (fail-closed): {gate_err}"}
+        if not allowed:
+            logger.info(f"[AgentMail] Send to {to} awaiting Mark's approval — skipped this cycle.")
+            return {"status": "error", "skipped": True,
+                    "error": "Awaiting approval — send skipped this cycle."}
 
     return await _send_via_agentmail(to, subject, body, skip_proofread, recipient_context, lead_id, strategy, niche, client_id)
 
