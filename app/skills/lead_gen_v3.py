@@ -1355,7 +1355,10 @@ async def _source_wa_lni_licences(count: int, cities: tuple = _WA_METRO_CITIES) 
             "$where": where,
             "$select": ("businessname,primaryprincipalname,phonenumber,address1,"
                         "city,state,zip,contractorlicensenumber,"
-                        "licenseeffectivedate,businesstypecodedesc"),
+                        "licenseeffectivedate,businesstypecodedesc,"
+                        # ubi joins the free principals dataset (see below);
+                        # specialtycode1desc is the trade, i.e. the niche.
+                        "ubi,specialtycode1desc"),
             "$limit": str(fetch),
             # OLDEST licences first (inverted 2026-08-09). Longevity is the
             # cheapest free proxy for "has survived, has a book of business,
@@ -1408,6 +1411,9 @@ async def _source_wa_lni_licences(count: int, cities: tuple = _WA_METRO_CITIES) 
             "address": addr,
             "city": (row.get("city") or "").strip(),   # see the OR source below
             "state": "WA",
+            # The trade, straight from the licence — this is the niche.
+            "vertical": (row.get("specialtycode1desc") or "").strip().title(),
+            "_ubi": (row.get("ubi") or "").strip(),
             "url": "",
             "website": "",
             "email": "",
@@ -1417,9 +1423,68 @@ async def _source_wa_lni_licences(count: int, cities: tuple = _WA_METRO_CITIES) 
                       f" · effective {(row.get('licenseeffectivedate') or '')[:10]}"),
         })
 
+    await _attach_wa_principal_counts(leads)
+
     logger.info(f"[WA_LNI] {len(leads)} in-ICP leads from {len(rows)} licence rows "
                 f"({skipped_icp} failed the ICP name filter)")
     return leads
+
+
+_WA_LNI_PRINCIPALS_DATASET = "https://data.wa.gov/resource/4xk5-x9j6.json"
+
+
+async def _attach_wa_principal_counts(leads: list) -> None:
+    """Fill `principal_count` for WA leads. Free, keyless, one request total.
+
+    Why it matters: business_context.json lists "No payroll (solo operator) -
+    no urgency" as a kill signal, and ADR-0012 qualifies on whether ONE extra
+    closed deal covers the retainer. A one-person outfit fails both. WA L&I
+    publishes every named principal per UBI, so "is this a sole operator?" is
+    answerable for nothing — measured 2026-08-09, 58.9% of contractors have
+    exactly one principal, so it genuinely discriminates.
+
+    Batched deliberately: one `ubi in (...)` query for the whole set rather
+    than a call per lead, because the hunt runs on a free tier and the polite
+    thing to do with a public dataset is ask once.
+
+    Fail-open: a lookup failure leaves principal_count at 0, which every
+    consumer renders as UNKNOWN rather than as "sole owner". Guessing here
+    would put a kill signal on a lead that never earned it.
+    """
+    ubis = {l.get("_ubi") for l in leads if l.get("_ubi")}
+    if not ubis:
+        return
+    try:
+        quoted = ",".join(f"'{u}'" for u in sorted(ubis))
+        client = await _get_http_client()
+        resp = await client.get(_WA_LNI_PRINCIPALS_DATASET, params={
+            "$where": f"ubi in({quoted})",
+            "$select": "ubi,principalname",
+            "$limit": "1000",
+        }, headers={"Accept": "application/json"})
+        if resp.status_code != 200:
+            logger.warning(f"[WA_LNI] principals lookup status {resp.status_code} "
+                           f"— sole-owner status stays unknown")
+            return
+        counts: dict = {}
+        for r in resp.json() or []:
+            u = (r.get("ubi") or "").strip()
+            if u:
+                counts[u] = counts.get(u, 0) + 1
+        solo = 0
+        for l in leads:
+            n = counts.get(l.get("_ubi") or "", 0)
+            l["principal_count"] = n
+            if n == 1:
+                solo += 1
+        logger.info(f"[WA_LNI] principals resolved for {len(counts)}/{len(ubis)} "
+                    f"businesses · {solo} are sole operators")
+    except Exception as e:
+        logger.warning(f"[WA_LNI] principals lookup failed ({e}) — "
+                       f"sole-owner status stays unknown")
+    finally:
+        for l in leads:
+            l.pop("_ubi", None)   # internal join key, never persisted
 
 
 # Registered at import time — see LICENCE_REGISTRIES above. This line, not an

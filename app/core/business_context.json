@@ -217,9 +217,10 @@
         "(if he mentions Angi/HomeAdvisor/Thumbtack/leads) How's the quality been on those?"
       ],
       "listen_for": {
-        "pain_a_the_gap": "'things slow down', 'need to line up the next one', mentions crew/payroll -> he has THE GAP. Urgency is high.",
-        "pain_b_wasted_estimates": "'tire-kickers', 'price shoppers', 'drive out for nothing', 'three quotes' -> he has THE WASTED SATURDAY. This is the wedge."
-      }
+        "pain_a_the_gap": "'things slow down', 'need to line up the next one' -> he has THE GAP. IF has_crew: the deadline is PAYROLL — guys on the books with nothing lined up. Urgency is high and external. IF solo: there is no payroll, so do NOT reach for it — the deadline is HIS OWN income and calendar. A thin month is money out of his pocket, and he is also the estimator, the marketer and the project manager, so his time is the scarcest thing he owns. Urgency is just as real, only personal instead of institutional.",
+        "pain_b_wasted_estimates": "'tire-kickers', 'price shoppers', 'drive out for nothing', 'three quotes' -> he has THE WASTED SATURDAY. This is the wedge. IF solo: lean HARDER here — a wasted estimate costs him a working day he cannot delegate, not just a salesman's afternoon. Usually his sharpest pain."
+      },
+      "_crew_branch": "{{crew_status}} says whether he is a SOLE OPERATOR ('solo'), has staff ('has_crew'), or is unknown. It comes from the named principals on his state licence. Pick the matching pain below. If 'unknown', ask \"is it just you, or do you have guys working with you?\" and branch on the answer — never assume, roughly half of contractors are one-man operations."
     },
     "step_3_describe_the_painkiller": {
       "_rule": "Describe WHAT MARK DOES, in terms of the pain he just named. This is a description, not an offer - no terms, no price, no trial. Named 'the_offer' previously, which is how an unauthorised offer ended up living here.",
@@ -257,13 +258,14 @@
     ],
     "_HOW_TO_DEPLOY": "This script is the SOURCE OF TRUTH. outbound_dialer.py calls Retell with RETELL_AGENT_ID; the agent's prompt lives in Retell's dashboard, so the two can drift. DEPLOYED to Retell agent 'Nova' (agent_54910fe...fbd028 -> llm_56da0e89...c51256f v19) on 2026-07-24, replacing a stale prompt that pitched 'you're talking to our AI' as a reveal and quoted $4K on the cold call. Re-paste whenever this changes.",
     "_AVAILABLE_VARIABLES": {
-      "_warning": "ONLY these six are passed by outbound_dialer.py. Any other {{variable}} renders LITERALLY on the call and destroys credibility. There is NO time-slot variable.",
+      "_warning": "ONLY these seven are passed by outbound_dialer.py. Any other {{variable}} renders LITERALLY on the call and destroys credibility. There is NO time-slot variable.",
       "{{name}}": "decision maker's FIRST name (the gatekeeper-bypass variable)",
       "{{full_name}}": "decision maker's full name",
       "{{business_name}}": "the company",
       "{{owner_title}}": "their title, defaults to 'owner'",
       "{{niche}}": "their vertical",
-      "{{icebreaker}}": "personalised opener line, may be empty"
+      "{{icebreaker}}": "personalised opener line, may be empty",
+      "{{crew_status}}": "'solo' | 'has_crew' | 'unknown' — from the named principals on the state licence. Selects which pain to open on in step 2. Never guess on 'unknown'."
     }
   },
   "retell_inbound": {

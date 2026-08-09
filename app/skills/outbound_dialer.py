@@ -6,6 +6,18 @@ from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
 
+def _crew_status(principal_count) -> str:
+    """'solo' | 'has_crew' | 'unknown' — which pain the script should open on.
+
+    Delegates to lead_validator.crew_status, the single source of truth. The
+    Leads sheet renders the SAME function, so what the owner reads in the sheet
+    is exactly what Retell receives. Two copies of this rule would eventually
+    disagree, and a sheet that is confidently wrong is worse than a blank one.
+    """
+    from app.skills.lead_validator import crew_status
+    return crew_status(principal_count)
+
+
 async def trigger_retell_call(phone: str, context: Dict[str, str]) -> Dict[str, Any]:
     """
     Trigger a Retell AI cold call. Gracefully skips if no API key is configured.
@@ -79,6 +91,17 @@ async def trigger_retell_call(phone: str, context: Dict[str, str]) -> Dict[str, 
             "full_name": owner_name,
             "owner_title": context.get("owner_title") or "owner",
             "niche": context.get("niche") or "your industry",
+            # Sole operator or has a crew (2026-08-09). The pain hook differs
+            # completely: a contractor with staff feels payroll every Friday,
+            # a one-man operation feels his OWN calendar. Asking "do you have
+            # guys working with you" burns the one question the script gets,
+            # and we already know the answer for free from the licence
+            # registry's named principals.
+            #
+            # "unknown" is a first-class value, not a fallback to either side:
+            # 58.9% of WA contractors are single-principal, so guessing wrong
+            # is a coin flip that opens the call on the wrong pain.
+            "crew_status": _crew_status(context.get("principal_count")),
         },
         # lead_id round-trips through Retell's post-call webhook so outcomes
         # land on the right lead in the DB.

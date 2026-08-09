@@ -1031,6 +1031,10 @@ async def run_cold_lead_escalation(client_id=0):
                 "icebreaker": (lead.get("icebreaker") or "").replace("Pending review...", "")
                     or "we emailed about qualifying leads automatically and wanted to reach out directly",
                 "call_type": "cold_escalation",
+                # Selects which pain step 2 opens on — payroll pressure for a
+                # firm with staff, his own calendar for a one-man operation.
+                # Free, from the named principals on the state licence.
+                "principal_count": lead.get("principal_count", 0),
                 "lead_id": lead_id,
                 "client_id": client_id,
             }

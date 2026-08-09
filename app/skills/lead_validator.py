@@ -783,6 +783,41 @@ _GENERIC_EMAIL_PREFIXES = (
 )
 
 
+CREW_SOLO = "solo"
+CREW_HAS_CREW = "has_crew"
+CREW_UNKNOWN = "unknown"
+
+
+def crew_status(lead_or_count) -> str:
+    """CANONICAL: is this a one-man operation, a firm with staff, or unknown?
+
+    Single source of truth (CLAUDE.md SSoT rule). The Retell call script opens
+    on a different pain for each — payroll pressure for a firm with staff, his
+    own calendar for a sole operator — and the Leads sheet shows the owner what
+    the script will do. Those two MUST agree: a sheet that says "has crew"
+    while the dialer sends "solo" is worse than no column at all, because it
+    is trusted.
+
+    Derived from the named principals on the state licence, which is free.
+    Accepts either a lead dict or a raw count.
+
+    UNKNOWN is a real answer, never a lean either way: measured 2026-08-09,
+    58.9% of WA contractors are single-principal, so any default is a coin
+    flip that opens the call on the wrong pain. The script asks when unknown.
+    """
+    if isinstance(lead_or_count, dict):
+        raw = lead_or_count.get("principal_count")
+    else:
+        raw = lead_or_count
+    try:
+        n = int(raw or 0)
+    except (TypeError, ValueError):
+        return CREW_UNKNOWN
+    if n <= 0:
+        return CREW_UNKNOWN
+    return CREW_SOLO if n == 1 else CREW_HAS_CREW
+
+
 def score_lead_icp(lead: dict) -> dict:
     """Deterministic 0-100 ICP-fit score from fields the pipeline collects.
 

@@ -50,6 +50,12 @@ CANONICAL_SCHEMA_SQL = """
         evidence_json TEXT DEFAULT '',
         ad_signals TEXT DEFAULT '',
         state TEXT DEFAULT '',
+        -- Named principals on the licence (WA L&I 4xk5-x9j6, free). 1 means a
+        -- sole operator, which business_context.json lists as a kill signal:
+        -- "No payroll (solo operator) - no urgency". Measured 2026-08-09,
+        -- 58.9% of WA contractors have exactly one, so this genuinely
+        -- discriminates. 0 = not looked up, NOT "zero principals".
+        principal_count INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
