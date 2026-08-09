@@ -205,8 +205,8 @@ class _LeadRepo:
                 # Insert — same transaction, no race window
                 vertical = lead.get("vertical") or default_vertical or ""
                 cursor = conn.execute(
-                    """INSERT INTO leads (business, owner, url, website, email, phone, vertical, status, notes, icebreaker, score, client_id, email_status, owner_title, linkedin_url, owner_source, email_source, phone_source, phone_verified, owner_confidence, evidence_json, ad_signals, state, updated_at)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, CURRENT_TIMESTAMP)""",
+                    """INSERT INTO leads (business, owner, url, website, email, phone, vertical, status, notes, icebreaker, score, client_id, email_status, owner_title, linkedin_url, owner_source, email_source, phone_source, phone_verified, owner_confidence, evidence_json, ad_signals, state, principal_count, updated_at)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, CURRENT_TIMESTAMP)""",
                     (lead.get("business",""), lead.get("owner",""), lead.get("url",""),
                      lead.get("website",""), email, lead.get("phone",""),
                      vertical, lead.get("status","New"), lead.get("notes",""),
@@ -222,7 +222,10 @@ class _LeadRepo:
                      # Sheets) supplies "ca" / " CA " freely. Normalizing on write
                      # keeps the stored fact canonical instead of relying on every
                      # reader to re-normalize.
-                     str(lead.get("state") or "").strip().upper())
+                     str(lead.get("state") or "").strip().upper(),
+                     # 0 means "not looked up", never "zero principals" — the
+                     # sheet renders it as unknown rather than as sole-owner.
+                     int(lead.get("principal_count") or 0))
                 )
                 lead_id = cursor.lastrowid
                 conn.commit()

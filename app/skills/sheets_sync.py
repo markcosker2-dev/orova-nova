@@ -28,6 +28,46 @@ async def _get_sheets_lock_async() -> asyncio.Lock:
         _sheets_lock = asyncio.Lock()
     return _sheets_lock
 
+def _principals_cell(lead: dict) -> str:
+    """Named principals on the licence, or '' when we never looked.
+
+    0 is stored for "not looked up", so it must never render as a number —
+    showing 0 principals would read as a fact we do not have.
+    """
+    try:
+        n = int(lead.get("principal_count") or 0)
+    except (TypeError, ValueError):
+        return ""
+    return str(n) if n > 0 else ""
+
+
+def _sole_owner_cell(lead: dict) -> str:
+    """'Yes' / 'No' / '' — is this a one-person outfit?
+
+    business_context.json lists "No payroll (solo operator) - no urgency" as a
+    kill signal, so this is the column that decides whether a lead is worth a
+    call. Unknown stays blank rather than guessing: 58.9% of WA contractors are
+    single-principal, so a default of either value would be badly wrong at
+    scale.
+    """
+    try:
+        n = int(lead.get("principal_count") or 0)
+    except (TypeError, ValueError):
+        return ""
+    if n <= 0:
+        return ""
+    return "Yes" if n == 1 else "No"
+
+
+def _col_letter(n: int) -> str:
+    """1 -> 'A', 12 -> 'L', 16 -> 'P', 27 -> 'AA'."""
+    out = ""
+    while n > 0:
+        n, rem = divmod(n - 1, 26)
+        out = chr(65 + rem) + out
+    return out or "A"
+
+
 async def _append_with_backoff(worksheet, row, retries=4):
     """Appends a row to a worksheet with exponential backoff for Google API 429 errors.
 
@@ -68,10 +108,15 @@ async def _update_with_backoff(worksheet, target_row, row, retries=4):
     """Updates a row with exponential backoff for Google API 429 errors."""
     for attempt in range(retries):
         try:
+            # Range width computed from the row, not hardcoded to ':L'. The
+            # literal L pinned the sheet at 12 columns, so adding any column
+            # would have written the new fields outside the updated range and
+            # silently dropped them.
+            _rng = f"A{target_row}:{_col_letter(len(row))}{target_row}"
             try:
-                await asyncio.to_thread(worksheet.update, values=[row], range_name=f"A{target_row}:L{target_row}")
+                await asyncio.to_thread(worksheet.update, values=[row], range_name=_rng)
             except TypeError:
-                await asyncio.to_thread(worksheet.update, f"A{target_row}:L{target_row}", [row])
+                await asyncio.to_thread(worksheet.update, _rng, [row])
             return {"ok": True, "updated": True, "row": target_row}
         except gspread.exceptions.APIError as e:
             if e.response.status_code == 429 and attempt < retries - 1:
@@ -98,7 +143,16 @@ SHEET_NAME = os.getenv("GOOGLE_SHEETS_WORKBOOK", "OROVA CRM")
 # looks like. Setting this makes the target deterministic.
 SHEET_ID = (os.getenv("CRM_SHEET_ID") or "").strip()
 WORKSHEET_HEADERS = {
-    "Leads": ["ID", "Business", "Owner", "Email", "Phone", "Website", "URL", "Status", "Score", "Source", "Date", "Notes"],
+    # Columns added 2026-08-09 at the owner's request: Niche, State, Principals
+    # and SoleOwner. State is not cosmetic — its absence caused a real bug: the
+    # storage gate dedups licence-registry leads on business+state, the sheet
+    # did not round-trip state, so a restored lead came back with state='' and
+    # then failed to match the same business found by a hunt (state='WA').
+    # ACCRETE CONSTRUCTION LLC was stored twice that way. Carrying State fixes
+    # the round trip at the source.
+    "Leads": ["ID", "Business", "Owner", "Email", "Phone", "Website", "URL", "Status",
+              "Score", "Source", "Date", "Notes", "Niche", "State", "Principals",
+              "SoleOwner"],
     "Metrics": ["ClientID", "LeadsFound", "EmailsSent", "CallsMade", "Replies", "Meetings", "LastUpdated"],
     "CallLog": ["CallID", "LeadID", "Business", "Phone", "Outcome", "Duration", "Date"],
     "Meetings": ["MeetingID", "LeadID", "Business", "DateTime", "CalLink", "Status"]
@@ -286,6 +340,16 @@ async def restore_leads_from_sheets() -> List[Dict[str, Any]]:
                     "source": _s(row.get("Source")),
                     "date": _s(row.get("Date")),
                     "client_id": _int_or_none(row.get("ClientID")) or 0,
+                    # Round-trip the rest of the record (2026-08-09). `website`
+                    # was silently dropped on every restore despite having had a
+                    # column all along, and `state` was never carried at all —
+                    # which broke the business+state dedup key and stored
+                    # ACCRETE CONSTRUCTION LLC twice. A backup that loses fields
+                    # is only half a backup.
+                    "website": _s(row.get("Website")),
+                    "vertical": _s(row.get("Niche")),
+                    "state": _s(row.get("State")).strip().upper(),
+                    "principal_count": _int_or_none(row.get("Principals")) or 0,
                 })
             except Exception as row_exc:
                 logger.warning(f"[SheetsSync] Skipping malformed lead row: {row_exc}")
@@ -310,6 +374,10 @@ async def sync_lead_to_sheets(lead: Dict[str, Any], workbook_name: Optional[str]
             lead.get("source") or "Nova Engine",
             lead.get("date") or datetime.now().strftime("%Y-%m-%d"),
             lead.get("notes") or "",
+            lead.get("vertical") or "",
+            str(lead.get("state") or "").strip().upper(),
+            _principals_cell(lead),
+            _sole_owner_cell(lead),
         ]
 
         # Match on STABLE identity — never the SQLite id. The auto-increment
