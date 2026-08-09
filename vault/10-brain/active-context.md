@@ -49,8 +49,11 @@ tags: [brain, active, session-start]
 > *Does ONE extra closed deal per month more than cover the ~$6.5–7.5K all-in cost?*
 >
 > 1. **Custom home builders / high-end remodelers — LEAD.** One $100K+ job grosses $20–50K → pays 4–7 months of retainer.
-> 2. **Med spas / aesthetics.** 1–2 extra patients/mo covers it; most-proven Meta vertical.
-> 3. **Luxury RE top producers only.**
+> 2. **Luxury RE top producers only.**
+>
+> **Med spas removed 2026-08-09 — [[0015-med-spas-are-not-and-never-were-the-icp|ADR-0015]].**
+> Owner: *"our ICP was never med spas."* ADR-0012 ranked them #2 from vertical
+> economics, which was never the deciding input. Do not re-derive them.
 >
 > **Opportunistic:** exotic/luxury auto. Economics work, but a $200K buyer rarely starts on a Meta lead form.
 
@@ -185,7 +188,8 @@ graph LR
 > [!danger] It is not code. It has not been code for weeks.
 > 1. **`orova.co` → Business/Creator + public**, 3 posts. *(2 min + 20 min)*
 > 2. **Send 5 Instagram DMs** from [[instagram-outreach-plan-2026-07-30]]. *(10 min)*
-> 3. Bring back what they said. **≥8/20 positive = the ICP is real; ≤3 = switch to med spas.**
+> 3. Bring back what they said. **≥8/20 positive = the ICP is real; ≤3 = stop and
+>    bring the transcripts to Mark** (ADR-0015 — never switch vertical autonomously).
 >
 > On 2026-07-24 the instruction was written down: *"No further positioning or
 > targeting work before those 20 calls."* Since then: 20+ PRs, zero conversations.

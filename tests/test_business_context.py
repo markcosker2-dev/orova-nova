@@ -87,10 +87,16 @@ def test_hunt_rotation_leads_with_homes_and_drops_auto():
     tripped the opportunistic exemption for every row it returned). ADR-0012
     keeps exotic auto *reachable* — via an explicit TARGET_NICHE override — but
     Nova no longer spends discovery budget seeking it.
+
+    CHANGED AGAIN 2026-08-09 (ADR-0015, owner statement "our ICP was never med
+    spas"): med spas leave the rotation for the identical reason automotive did.
+    At 3 of 12 entries they were ~25% of every hunt — a quarter of discovery
+    spent on a vertical we do not sell to, while the real pipeline held 5
+    contractors.
     """
     from app.worker import DEFAULT_HUNT_NICHES
     joined = " | ".join(DEFAULT_HUNT_NICHES).lower()
-    for expected in ("custom home builder", "med spa", "luxury real estate agent"):
+    for expected in ("custom home builder", "luxury real estate agent"):
         assert expected in joined, f"missing rotation niche: {expected}"
 
     def _count(keys):
@@ -98,6 +104,8 @@ def test_hunt_rotation_leads_with_homes_and_drops_auto():
 
     homes = _count(("home", "remodel", "kitchen", "bathroom"))
     auto = _count(("car ", "car'", "auto", "detailing", "car dealer", "vehicle"))
+    medspa = _count(("med spa", "medical spa", "medspa", "cosmetic surgery", "aesthetic"))
     assert homes >= len(DEFAULT_HUNT_NICHES) / 2, (
         f"homes/remodel must LEAD the rotation, got {homes}/{len(DEFAULT_HUNT_NICHES)}")
     assert auto == 0, f"automotive is out of the rotation entirely, got auto={auto}"
+    assert medspa == 0, f"ADR-0015: med spas are out of the rotation, got {medspa}"

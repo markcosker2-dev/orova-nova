@@ -67,8 +67,14 @@ West Coast (CA, OR, WA, NV, AZ), ranked:
 | # | Vertical | Gross/deal | Deals needed | Why |
 |---|---|---|---|---|
 | **1** | **Custom home builders / high-end remodelers** — LEAD | $20–50K on a $100K+ job | ~0.2 | One extra job pays 4–7 months of retainer. Owner-operated, already buys marketing, proven Meta lead-gen. |
-| **2** | Med spas / aesthetics / high-ticket elective medical | $3–15K per patient | 1–2 | The most-proven Meta lead-gen vertical; the doctor/owner decides alone. |
-| **3** | Luxury real estate — **top producers only** | commission | ~1 | Score for production volume first; $4K/mo is a big bite of a solo agent's P&L. |
+| **2** | Luxury real estate — **top producers only** | commission | ~1 | Score for production volume first; $4K/mo is a big bite of a solo agent's P&L. |
+
+> [!warning] Med spas were removed from the ICP on 2026-08-09
+> [[0015-med-spas-are-not-and-never-were-the-icp|ADR-0015]] supersedes the
+> ADR-0012 ranking. Owner: *"our ICP was never med spas."* The vertical
+> economics genuinely do work — that is precisely why this row kept
+> regenerating itself. Economics were never the deciding input; owner intent
+> was, and it was never supplied. **Do not re-add this row.**
 
 **Opportunistic only:** exotic/luxury automotive — the unit economics work
 (~$10–25K gross/car) but a $200K buyer rarely starts on a Meta lead form. Work

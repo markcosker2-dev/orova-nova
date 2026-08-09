@@ -14,6 +14,13 @@ of the business). Supersedes the 2026-07-13 "ICP stays MIXED" call in
 [[active-context]] — the mix is now **ranked**, not flat, and exotic auto is
 demoted to opportunistic.
 
+> [!warning] The ICP ranking below is SUPERSEDED (2026-08-09)
+> [[0015-med-spas-are-not-and-never-were-the-icp|ADR-0015]] removes med spas
+> from the ICP entirely — owner: *"our ICP was never med spas."* Everything
+> else here still stands: the all-in framing, the qualifying test, the
+> disqualifiers and the pricing reasoning are unchanged and still in force.
+> Read the med spa passages below as **history**, not as instruction.
+
 ## Context — what the pressure test surfaced
 
 1. **The real ask is the all-in number.** Retainer $4-5K + recommended ad spend

@@ -51,9 +51,15 @@ def test_hunt_rotation_contains_no_automotive_niche():
 def test_hunt_rotation_is_still_populated_and_on_icp():
     """Subtraction must not empty the rotation — that would silently stop the
     hunt rather than redirect it."""
-    assert len(DEFAULT_HUNT_NICHES) >= 10
+    assert len(DEFAULT_HUNT_NICHES) >= 8
     assert any("home" in n or "remodel" in n for n in DEFAULT_HUNT_NICHES)
-    assert any("med spa" in n or "medical spa" in n for n in DEFAULT_HUNT_NICHES)
+    # Med spas left the rotation on 2026-08-09 (ADR-0015 — "our ICP was never
+    # med spas"), so the guard inverts: this file's whole point is that
+    # subtraction must REDIRECT the hunt, never empty it. The length floor
+    # above is what protects that; the vertical assertions below say which
+    # verticals are legitimately gone.
+    assert not any("med spa" in n or "medical spa" in n or "cosmetic surgery" in n
+                   for n in DEFAULT_HUNT_NICHES)
 
 
 # ── 2. The exemption must read the business, not the query ──────────────────

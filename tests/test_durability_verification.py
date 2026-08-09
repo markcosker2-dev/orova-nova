@@ -19,33 +19,39 @@ So `persist_leads_durably` now reads the sheet back and compares it against
 what the database actually holds, and says so loudly when they disagree.
 """
 import asyncio
+import sqlite3
 from unittest.mock import AsyncMock, patch
-
-import pytest
 
 from app.core import durability
 
 
-@pytest.fixture
-def db_with(monkeypatch):
-    """Fake DB holding `n` leads, and a sync that always claims success."""
-    def _make(n_leads):
-        rows = [{"id": i, "business": f"Biz {i}", "url": f"https://b{i}.com"}
-                for i in range(1, n_leads + 1)]
+def _real_row(**cols):
+    """A genuine sqlite3.Row — the shape DatabaseManager actually returns.
 
-        async def _query(sql, params=None, fetchall=False):
-            return rows
+    This is not pedantry. These tests used to mock fetchone with a plain dict,
+    and `sqlite3.Row` has no `.get()`. So the verification block raised
+    AttributeError on every single production run from the day it shipped
+    (#153) while all of these tests passed. A fixture that is easier to
+    satisfy than production is not a test, it is a decoy — so build the real
+    type here and let the mock be as awkward as the real thing.
+    """
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    keys = list(cols)
+    sql = "SELECT " + ", ".join(f"? AS {k}" for k in keys)
+    return conn.execute(sql, tuple(cols[k] for k in keys)).fetchone()
 
-        async def _fetchone(sql, params=None):
-            return {"c": n_leads}
 
-        monkeypatch.setattr(durability.__dict__.get("DatabaseManager", object), "x", None, raising=False)
-        return rows, _query, _fetchone
-    return _make
+def _run(sheet_rows, n_leads, n_distinct=None):
+    """Run persist_leads_durably with a sheet that reports `sheet_rows`.
 
-
-def _run(sheet_rows, n_leads):
-    """Run persist_leads_durably with a sheet that reports `sheet_rows`."""
+    `n_distinct` is how many DISTINCT businesses those `n_leads` rows cover
+    (defaults to all-unique). The sheet upserts by URL/business name, so it is
+    a deduplicated projection of the leads table — the two counts legitimately
+    differ and only `n_distinct` is the number a complete backup must reach.
+    """
+    if n_distinct is None:
+        n_distinct = n_leads
     rows = [{"id": i, "business": f"Biz {i}", "url": f"https://b{i}.com"}
             for i in range(1, n_leads + 1)]
 
@@ -56,7 +62,7 @@ def _run(sheet_rows, n_leads):
 
         @staticmethod
         async def fetchone(sql, params=None):
-            return {"c": n_leads}
+            return _real_row(total=n_leads, distinct_ids=n_distinct)
 
     with patch("app.core.database.DatabaseManager", _DB), \
          patch("app.skills.sheets_sync.sync_lead_to_sheets",
@@ -128,6 +134,44 @@ def test_verification_never_breaks_the_sync_itself():
                AsyncMock(return_value={"ok": False, "error": "x"})):
         res = asyncio.run(durability.persist_leads_durably(recent_count=25, source="test"))
     assert res["sheets_synced"] == 1, "the write was lost because the check failed"
+
+
+def test_the_check_survives_a_real_sqlite_row():
+    """The regression that made #153's instrument useless in production.
+
+    `DatabaseManager.fetchone` hands back a sqlite3.Row, not a dict. The old
+    code called `.get("c")` on it, raised AttributeError, and logged
+    "durability UNKNOWN this run" on every hunt — so the one number that would
+    have settled weeks of speculation was never actually read. Assert the
+    reading is TAKEN, not merely that nothing crashed.
+    """
+    res = _run(sheet_rows=10, n_leads=10)
+    assert res.get("db_total") == 10, "the verification never read the database"
+    assert res.get("verified") is True
+
+
+def test_duplicate_lead_rows_are_not_reported_as_a_lost_backup():
+    """The exact 2026-08-09 production shape: 24 lead rows, 13 businesses.
+
+    save_lead only dedups on email or website domain, and licence-registry
+    leads (WA L&I / OR CCB / CSLB) have neither — so the same contractor is
+    re-inserted every hunt. The sheet upserts by business name and correctly
+    collapses them. Comparing 13 against 24 would report a catastrophe that
+    is not happening, and a monitor nobody believes is worse than no monitor.
+    """
+    res = _run(sheet_rows=13, n_leads=24, n_distinct=13)
+    assert res["verified"] is True, "duplicate DB rows must not read as data loss"
+    assert res["db_total"] == 24 and res["db_distinct"] == 13
+
+
+def test_a_real_loss_is_still_caught_underneath_the_duplicates():
+    """Dedup-awareness must not become blindness.
+
+    13 distinct businesses, sheet holds 9 — four businesses really are absent
+    and will not survive the next restart. This must still be loud.
+    """
+    res = _run(sheet_rows=9, n_leads=24, n_distinct=13)
+    assert res["verified"] is False
 
 
 def test_drive_being_dead_still_does_not_gate_sheets():
