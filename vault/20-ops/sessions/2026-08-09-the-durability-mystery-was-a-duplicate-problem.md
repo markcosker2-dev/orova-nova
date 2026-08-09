@@ -9,6 +9,28 @@ tags: [durability, data-quality, production, dedup]
 
 # The durability mystery was a duplicate problem
 
+> [!danger] CORRECTED LATER THE SAME DAY — this note's conclusion was wrong
+> This note concluded that the backup was fine and the leads table was merely
+> inflating with duplicates. **That was incomplete, and the missing half was the
+> important one.** The deploy at 11:21 proved it: the boot restore found only
+> **4 sheet rows** (3 of them `Acme` fixtures), and all five real WA contractors
+> were destroyed. They had never been in the sheet at all.
+>
+> Duplicate collapse was real and does explain part of the count gap — 24 rows
+> for 13 distinct businesses is verified. It does **not** explain a contractor
+> reported as `Sheets: 4/4 leads synced` at 08:59 being absent from the sheet at
+> 11:21. The write genuinely does not persist.
+>
+> Root cause found at 12:0x: `sheets_sync` identified the workbook **by title**
+> (`client.open("OROVA CRM")`), never by ID, and silently **created** a
+> duplicate on any failure. See
+> [[2026-08-09-the-scorer-measures-the-search-query]] for the sibling lesson —
+> and note the pattern repeating: *a confident mechanism that explains most of
+> the evidence is still wrong if it cannot explain all of it.*
+>
+> Keep reading below for the duplicate-collapse analysis, which stands on its
+> own. Do not treat its closing "nothing was lost" framing as true.
+
 ## What we went looking for
 
 [[handoff-2026-08-09]] §4a named this the highest-value unknown in the system.

@@ -68,6 +68,19 @@ async def _update_with_backoff(worksheet, target_row, row, retries=4):
             raise
 
 SHEET_NAME = os.getenv("GOOGLE_SHEETS_WORKBOOK", "OROVA CRM")
+
+# Pin the workbook by ID (2026-08-09). Until today the ONLY way this module
+# identified the CRM was `client.open("OROVA CRM")` — a lookup by TITLE, which
+# asks Drive for a file with that name and takes the first hit. Google allows
+# duplicate titles, so if the service account can see two, which one it gets is
+# non-deterministic and can change between restarts. `CRM_SHEET_ID` was already
+# declared in .env for exactly this and was empty and referenced by NO code.
+#
+# The symptom that led here: the owner's sheet showed 1 row while production
+# read 4 and, in the same process, reported "5/5 leads synced" and then counted
+# 4 again. Three irreconcilable numbers is what reading an ambiguous title
+# looks like. Setting this makes the target deterministic.
+SHEET_ID = (os.getenv("CRM_SHEET_ID") or "").strip()
 WORKSHEET_HEADERS = {
     "Leads": ["ID", "Business", "Owner", "Email", "Phone", "Website", "URL", "Status", "Score", "Source", "Date", "Notes"],
     "Metrics": ["ClientID", "LeadsFound", "EmailsSent", "CallsMade", "Replies", "Meetings", "LastUpdated"],
@@ -115,15 +128,44 @@ async def _open_workbook(workbook_name: Optional[str] = None) -> Optional[gsprea
         return None
 
     def _sync():
-        try:
-            return client.open(cache_key)
-        except Exception:
-            return client.create(cache_key)
+        # By ID when pinned — unambiguous, and immune to duplicate titles.
+        if SHEET_ID and not workbook_name:
+            return client.open_by_key(SHEET_ID)
+        # Title lookup: kept for back-compat, but NEVER creates. The old code
+        # was `except Exception: return client.create(cache_key)`, which minted
+        # a NEW spreadsheet with the same title on any transient failure —
+        # owned by the service account and therefore invisible in the owner's
+        # Drive. Every blip added another candidate for the next title lookup
+        # to resolve to, so the ambiguity ratcheted instead of healing, and
+        # writes could land somewhere nobody was looking while reporting
+        # success. A backup you cannot find is not a backup.
+        return client.open(cache_key)
 
-    workbook = await asyncio.to_thread(_sync)
-    if workbook is None:
-        logger.error(f"[SheetsSync] Could not open or create workbook '{cache_key}'")
+    try:
+        workbook = await asyncio.to_thread(_sync)
+    except Exception as exc:
+        logger.error(
+            f"[SheetsSync] Could not open the CRM workbook "
+            f"({'id=' + SHEET_ID if SHEET_ID and not workbook_name else 'title=' + repr(cache_key)}): "
+            f"{exc}. NOT creating a replacement — a silently-created duplicate is "
+            f"how lead backups went missing. Set CRM_SHEET_ID and share the sheet "
+            f"with the service account as Editor.")
         return None
+    if workbook is None:
+        logger.error(f"[SheetsSync] Could not open workbook '{cache_key}'")
+        return None
+
+    # Say WHICH document we are actually using, so "the write is lying" is a
+    # checkable claim instead of an inference. Owner can compare this id with
+    # the one in their browser URL.
+    if not SHEET_ID:
+        logger.warning(
+            f"[SheetsSync] CRM_SHEET_ID is unset — resolved title {cache_key!r} to "
+            f"spreadsheet id={getattr(workbook, 'id', '?')}. Pin CRM_SHEET_ID to "
+            f"remove the ambiguity.")
+    else:
+        logger.info(f"[SheetsSync] workbook id={getattr(workbook, 'id', '?')} "
+                    f"title={getattr(workbook, 'title', '?')!r}")
 
     for title, headers in WORKSHEET_HEADERS.items():
         try:
