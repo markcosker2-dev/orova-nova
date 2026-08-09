@@ -167,6 +167,41 @@ class _LeadRepo:
                         logger.info(f"[DEDUP] Skipping duplicate lead: {domain}")
                         conn.rollback()   # release the read txn before pooling
                         return -1
+                # ── Last-resort identity: business name + state ────────────
+                # Only when BOTH stronger keys are absent. Licence-registry
+                # rows (WA L&I / OR CCB / CA CSLB — the primary source since
+                # ADR-0014) carry no email, no url and no website, so until
+                # 2026-08-09 they had NO dedup key whatsoever and every hunt
+                # re-inserted the same contractors. Live evidence that day:
+                # 24 lead rows holding 13 distinct businesses, with
+                # FOREVER QUALITY CONSTRUCT LLC stored four times.
+                #
+                # That inflation is also what made durability look broken for
+                # weeks. The Leads sheet upserts by business name, so it held
+                # the 13 while the table showed 24, and every comparison of
+                # the two read as catastrophic backup loss. Fixing the count
+                # at the source is the real repair; the verifier in
+                # durability.py only stopped mis-reporting the symptom.
+                #
+                # Gated on both keys being empty on purpose: two genuinely
+                # different firms can share a name, and when either has a
+                # domain or an email the checks above already separated them
+                # correctly. Merging on name alone there would destroy real
+                # leads, which is a far worse failure than storing a duplicate.
+                business_key = (lead.get("business") or "").strip().lower()
+                state_key = str(lead.get("state") or "").strip().upper()
+                if business_key and not email and not domain:
+                    row = conn.execute(
+                        "SELECT id FROM leads WHERE lower(trim(business)) = ? "
+                        "AND upper(trim(COALESCE(state,''))) = ? AND client_id = ? "
+                        "AND COALESCE(email,'') = '' AND COALESCE(website,'') = '' LIMIT 1",
+                        (business_key, state_key, cid)
+                    ).fetchone()
+                    if row:
+                        logger.info(f"[DEDUP] Skipping duplicate lead: "
+                                    f"{business_key!r} ({state_key or 'no state'})")
+                        conn.rollback()   # release the read txn before pooling
+                        return -1
                 # Insert — same transaction, no race window
                 vertical = lead.get("vertical") or default_vertical or ""
                 cursor = conn.execute(
