@@ -49,13 +49,19 @@ def test_the_write_range_is_not_pinned_to_twelve_columns():
     assert not seen["range"].endswith("L5") or expected_col == "L"
 
 
-def test_unknown_principal_count_is_blank_not_a_guess():
+def test_unknown_principal_count_is_never_a_guess():
     """0 means "never looked up", and 58.9% of WA contractors are genuinely
-    single-principal — so defaulting either way would be wrong at scale."""
+    single-principal — so defaulting either way would be wrong at scale.
+
+    The Principals cell stays blank (a count we do not have), but SoleOwner now
+    spells out "Unknown" rather than leaving a blank to interpret: it is the
+    column the owner reads to predict what the call will do, and blank reads as
+    missing data instead of "the script will ask".
+    """
     assert ss._principals_cell({}) == ""
     assert ss._principals_cell({"principal_count": 0}) == ""
-    assert ss._sole_owner_cell({}) == ""
-    assert ss._sole_owner_cell({"principal_count": 0}) == ""
+    assert ss._sole_owner_cell({}) == "Unknown"
+    assert ss._sole_owner_cell({"principal_count": 0}) == "Unknown"
 
 
 def test_sole_owner_is_derived_from_principals():
@@ -68,7 +74,7 @@ def test_a_junk_principal_value_never_raises():
     """Sheets returns strings, ints and blanks interchangeably."""
     for bad in ("", "n/a", None, [], {}):
         assert ss._principals_cell({"principal_count": bad}) == ""
-        assert ss._sole_owner_cell({"principal_count": bad}) == ""
+        assert ss._sole_owner_cell({"principal_count": bad}) == "Unknown"
 
 
 def test_the_row_carries_niche_state_and_sole_owner():

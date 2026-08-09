@@ -41,22 +41,24 @@ def _principals_cell(lead: dict) -> str:
     return str(n) if n > 0 else ""
 
 
-def _sole_owner_cell(lead: dict) -> str:
-    """'Yes' / 'No' / '' — is this a one-person outfit?
+_SOLE_OWNER_LABELS = {"solo": "Yes", "has_crew": "No", "unknown": "Unknown"}
 
-    business_context.json lists "No payroll (solo operator) - no urgency" as a
-    kill signal, so this is the column that decides whether a lead is worth a
-    call. Unknown stays blank rather than guessing: 58.9% of WA contractors are
-    single-principal, so a default of either value would be badly wrong at
-    scale.
+
+def _sole_owner_cell(lead: dict) -> str:
+    """'Yes' / 'No' / 'Unknown' — is this a one-person outfit?
+
+    Rendered from lead_validator.crew_status, the SAME function the dialer uses
+    to pick which pain the Retell script opens on. That shared derivation is
+    the point: this column is how the owner predicts what the call will do, so
+    a sheet saying "No" while the dialer sends "solo" would be worse than no
+    column — it would be trusted.
+
+    "Unknown" is spelled out rather than left blank. A blank cell reads as
+    missing data; the distinction that matters here is that we genuinely do not
+    know, and the script will ask on the call instead of assuming.
     """
-    try:
-        n = int(lead.get("principal_count") or 0)
-    except (TypeError, ValueError):
-        return ""
-    if n <= 0:
-        return ""
-    return "Yes" if n == 1 else "No"
+    from app.skills.lead_validator import crew_status
+    return _SOLE_OWNER_LABELS.get(crew_status(lead), "Unknown")
 
 
 def _col_letter(n: int) -> str:

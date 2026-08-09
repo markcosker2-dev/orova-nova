@@ -9,19 +9,13 @@ logger = logging.getLogger(__name__)
 def _crew_status(principal_count) -> str:
     """'solo' | 'has_crew' | 'unknown' — which pain the script should open on.
 
-    Derived from the named principals on the state licence (free). Never
-    guesses: an unknown count returns "unknown" so the prompt asks rather than
-    assumes. Opening on payroll pressure to a one-man operation, or on his
-    personal calendar to a firm with eight staff, wastes the only question the
-    call gets.
+    Delegates to lead_validator.crew_status, the single source of truth. The
+    Leads sheet renders the SAME function, so what the owner reads in the sheet
+    is exactly what Retell receives. Two copies of this rule would eventually
+    disagree, and a sheet that is confidently wrong is worse than a blank one.
     """
-    try:
-        n = int(principal_count or 0)
-    except (TypeError, ValueError):
-        return "unknown"
-    if n <= 0:
-        return "unknown"
-    return "solo" if n == 1 else "has_crew"
+    from app.skills.lead_validator import crew_status
+    return crew_status(principal_count)
 
 
 async def trigger_retell_call(phone: str, context: Dict[str, str]) -> Dict[str, Any]:
