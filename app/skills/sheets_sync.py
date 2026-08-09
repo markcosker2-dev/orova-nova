@@ -332,6 +332,7 @@ async def sync_lead_to_sheets(lead: Dict[str, Any], workbook_name: Optional[str]
             except Exception as exc:
                 logger.warning(f"[SheetsSync] Find by URL failed: {exc}")
 
+        biz_vals = None
         if not target_row and lead.get("business"):
             try:
                 biz_vals = await asyncio.to_thread(worksheet.col_values, 2)
@@ -351,7 +352,39 @@ async def sync_lead_to_sheets(lead: Dict[str, Any], workbook_name: Optional[str]
             if target_row:
                 return await _update_with_backoff(worksheet, target_row, row)
 
-            return await _append_with_backoff(worksheet, row)
+            # ── Write to an EXPLICIT row, never append_row (fixed 2026-08-09).
+            # This is the bug that destroyed lead backups for weeks. The
+            # instrument added earlier today caught it on its first run —
+            # five appends, five different businesses, one second apart:
+            #
+            #   append -> updatedRange='Leads!A2:L2' business='HEARTWOOD BUILDERS INC'
+            #   append -> updatedRange='Leads!A2:L2' business='PEAK BUILDERS INC'
+            #   append -> updatedRange='Leads!A2:L2' business='LEWCO CONTRACTING'
+            #   append -> updatedRange='Leads!A2:L2' business='ELLCO CONSTRUCTION INC'
+            #   append -> updatedRange='Leads!A2:L2' business='ACCRETE CONSTRUCTION LLC'
+            #
+            # EVERY append targeted the same cells and overwrote its
+            # predecessor, so the tab held exactly one row no matter how many
+            # leads "synced". `Sheets: 5/5 leads synced` was true and useless at
+            # the same time: five API calls really did succeed, into one row.
+            #
+            # append_row relies on Google's table-range detection from A1, which
+            # was resolving to just the header and so kept returning row 2. We
+            # do not need that guesswork — column 2 was already fetched above to
+            # match on business name, and its length IS the last used row. Write
+            # there +1 explicitly. Deterministic, and it reuses the update path
+            # that has always worked (it is how matched rows are refreshed).
+            if biz_vals is None:
+                try:
+                    biz_vals = await asyncio.to_thread(worksheet.col_values, 2)
+                except Exception as exc:
+                    logger.warning(f"[SheetsSync] could not size the Leads tab ({exc}) "
+                                   f"— falling back to append_row")
+                    return await _append_with_backoff(worksheet, row)
+            next_row = max(len(biz_vals), 1) + 1   # never row 1 (the header)
+            logger.info(f"[SheetsSync] appending at computed row {next_row} "
+                        f"business={row[1]!r}")
+            return await _update_with_backoff(worksheet, next_row, row)
     except Exception as exc:
         logger.error(f"[SheetsSync] sync_lead_to_sheets failed: {exc}")
         return {"ok": False, "error": str(exc)}
