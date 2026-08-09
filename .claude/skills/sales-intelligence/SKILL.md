@@ -1,14 +1,16 @@
 ---
 name: sales-intelligence
-description: OROVA's sales craft layer for outbound to custom home builders, high-end remodelers and med spas (ADR-0012) — cold calls, objection handling, follow-up cadence, and message QA. Phone is the live channel; cold email is deferred (ADR-0014 / 2026-07-30). Use when writing, reviewing, or improving any outreach (Retell call script, post-call follow-up, break-up note), when handling an objection or reply, or when tuning business_context.json / the Retell prompt. Triggers: "cold call", "call script", "outreach", "follow-up", "objection", "book a meeting", "sales script", "personalize", "QA this message".
+description: OROVA's sales craft layer for outbound to custom home builders and high-end remodelers (ADR-0012, ICP narrowed by ADR-0015) — cold calls, objection handling, follow-up cadence, and message QA. Phone is the live channel; cold email is deferred (ADR-0014 / 2026-07-30). Use when writing, reviewing, or improving any outreach (Retell call script, post-call follow-up, break-up note), when handling an objection or reply, or when tuning business_context.json / the Retell prompt. Triggers: "cold call", "call script", "outreach", "follow-up", "objection", "book a meeting", "sales script", "personalize", "QA this message".
 ---
 
 # OROVA Sales Intelligence
 
-> ⚠️ **ICP MOVED — body rewrite pending (2026-07-30).** ADR-0012 re-ranked the ICP
-> to **custom home builders / high-end remodelers** (lead), then med spas, then
-> luxury RE, and **disqualifies general auto repair and franchised dealers on
-> sight**. PRs #119 and #120 now enforce that in code. The channel also moved:
+> ⚠️ **ICP MOVED — body rewrite pending (2026-07-30, narrowed 2026-08-09).**
+> ADR-0012 re-ranked the ICP to **custom home builders / high-end remodelers**
+> (lead), then luxury RE, and **disqualifies general auto repair and franchised
+> dealers on sight**. **ADR-0015 removed med spas entirely** — owner: *"our ICP
+> was never med spas."* Any med spa guidance still in the body below is dead
+> and must not be applied. PRs #119 and #120 now enforce that in code. The channel also moved:
 > **phone (Retell) is live; cold email is deferred** (ADR-0014 — 0 of 8 providers
 > permit cold outreach).
 >

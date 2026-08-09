@@ -110,7 +110,16 @@ DEFAULT_HUNT_NICHES = [
     # objection dies on the call. Owner-operated, already buys marketing.
     # NOTE: the hunt picks with random.choice() — UNIFORMLY. So the number of
     # entries per vertical IS the weighting. Composition below is deliberate:
-    # ~58% homes/remodel, ~25% med spa, ~17% luxury RE.
+    # ~78% homes/remodel, ~22% luxury RE.
+    #
+    # Med spas removed from the rotation 2026-08-09 (ADR-0015 supersedes the
+    # ADR-0012 ranking) on the owner's direct statement: "our ICP was never med
+    # spas." They were 3 of 12 entries, so a QUARTER of every hunt's discovery
+    # budget was being spent on a vertical we do not sell to — while the actual
+    # pipeline stood at 5 contractors. This is the automotive removal above,
+    # repeated for the same reason and with the same remedy: the cheapest
+    # control is not to search for it. Still reachable via TARGET_NICHE if that
+    # decision is ever revisited.
     #
     # Automotive removed from the rotation 2026-08-02 on owner report ("why is
     # nova in telegram always sending me automotive leads?"). It was 2 of 14
@@ -133,12 +142,7 @@ DEFAULT_HUNT_NICHES = [
     'custom home builder los angeles',
     'luxury home builder san diego',
     'whole home remodel contractor california',
-    # SECOND (~20%) — med spa / aesthetics: the most-proven Meta lead-gen
-    # economics (1-2 extra patients/mo covers the retainer); the owner decides.
-    'luxury med spa california',
-    'medical spa california',
-    'cosmetic surgery practice california',
-    # THIRD (~15%) — luxury real estate top producers & premium design.
+    # SECOND (~22%) — luxury real estate top producers & premium design.
     'luxury real estate agent california',
     'luxury interior designer california',
 ]

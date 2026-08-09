@@ -117,7 +117,6 @@
     "qualifying_test": "Does ONE extra closed deal per month more than cover the ~$6,500-7,500 all-in monthly cost? If no, disqualify — the price objection cannot be closed and the lead is a waste of outreach.",
     "primary_verticals": [
       "Custom home builders / high-end remodelers (LEAD vertical — a $100K+ job grosses $20-50K, so a single extra job pays 4-7 months of retainer; owner-operated, already buys marketing, proven Meta lead-gen)",
-      "Med spas / aesthetics / high-ticket elective medical (1-2 extra patients/mo covers the retainer; the most-proven Meta lead-gen vertical, owner/doctor decides alone)",
       "Luxury real estate agents (individual top producers ONLY — score for production volume first; $4K/mo is a large bite of a solo agent's P&L)"
     ],
     "secondary_verticals": [
@@ -346,7 +345,7 @@
       "Cannot recall a specific wasted estimate",
       "No payroll (solo operator) - no urgency"
     ],
-    "validation_bar": "Of 20 calls: >=8 hitting (not booked solid) + (currently paying for leads) + (names a specific wasted estimate in the last 2 weeks) = problem is REAL. <=3 = wrong vertical, switch the lead vertical to med spas. The only real validation: >=2 agree to a PAID pilot."
+    "validation_bar": "Of 20 calls: >=8 hitting (not booked solid) + (currently paying for leads) + (names a specific wasted estimate in the last 2 weeks) = problem is REAL. <=3 = the pitch or the vertical is wrong: STOP and escalate to Mark with the transcripts. Never switch the lead vertical autonomously — the ICP is an owner decision, not an agent one (ADR-0015). The only real validation: >=2 agree to a PAID pilot."
   },
   "competition": {
     "current_behavior": "Referrals + past clients + yard signs (50-80% of his work), Angi/HomeAdvisor/Thumbtack (~$300-800/mo), architect/designer referral partners, Houzz, Google Local Services Ads, Nextdoor, his own Instagram - and most often: nothing, he waits.",
