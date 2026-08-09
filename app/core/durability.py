@@ -94,24 +94,58 @@ async def persist_leads_durably(recent_count: int = 25, source: str = "?") -> di
             from app.skills.sheets_sync import count_lead_rows
             sheet_rows = await count_lead_rows()
             result["sheet_rows"] = sheet_rows
+
+            # Compare LIKE WITH LIKE (fixed 2026-08-09, first run of this check
+            # in production). Two defects were hiding here, and the first one
+            # meant this block had never executed even once:
+            #
+            # 1. `(db_row or {}).get("c")` — fetchone returns a sqlite3.Row
+            #    (the pool sets row_factory=sqlite3.Row) and Row has no .get().
+            #    Every run logged "backup verification failed ('sqlite3.Row'
+            #    object has no attribute 'get') — durability UNKNOWN", so #153
+            #    shipped an instrument that could never take a reading. The
+            #    unit tests passed because they mocked fetchone with a dict,
+            #    a shape production never produces.
+            #
+            # 2. Raw row counts are not comparable. sync_lead_to_sheets UPSERTS,
+            #    matching on URL and falling back to business name, so the sheet
+            #    is a DEDUPLICATED projection. The leads table is not: save_lead
+            #    only dedups on email or website domain, and licence-registry
+            #    rows (WA L&I / OR CCB / CA CSLB — now the main source) carry
+            #    neither, so the same contractor is re-inserted on every hunt.
+            #    Live proof, 2026-08-09: 24 lead rows, 13 distinct businesses.
+            #    Comparing 13 sheet rows against 24 DB rows would have screamed
+            #    BACKUP INCOMPLETE while nothing whatsoever was missing — and a
+            #    monitor that cries wolf gets ignored exactly when it is right.
+            #
+            # So the question the check must answer is "does every distinct
+            # business have a row?", not "do the two totals match?".
             db_row = await DatabaseManager.fetchone(
-                "SELECT COUNT(*) AS c FROM leads WHERE COALESCE(status,'') != 'Invalid'")
-            db_total = (db_row or {}).get("c") or 0
+                "SELECT COUNT(*) AS total, "
+                "COUNT(DISTINCT COALESCE(NULLIF(TRIM(url),''), LOWER(TRIM(business)))) AS distinct_ids "
+                "FROM leads WHERE COALESCE(status,'') != 'Invalid'")
+            db_row = dict(db_row) if db_row else {}
+            db_total = db_row.get("total") or 0
+            db_distinct = db_row.get("distinct_ids") or 0
             result["db_total"] = db_total
+            result["db_distinct"] = db_distinct
+
             if sheet_rows is None:
                 logger.warning(f"[DURABILITY:{source}] ⚠️ could not verify the Sheets "
                                f"backup — treat durability as UNKNOWN this run.")
-            elif sheet_rows < db_total:
+            elif sheet_rows < db_distinct:
                 result["verified"] = False
                 logger.error(
                     f"[DURABILITY:{source}] 🚨 BACKUP INCOMPLETE — the database holds "
-                    f"{db_total} leads but the Leads sheet has only {sheet_rows} rows. "
-                    f"Everything above {sheet_rows} is lost on the next restart. "
-                    f"Sheets is the durable tier; Drive is optional and currently dead.")
+                    f"{db_distinct} distinct businesses ({db_total} rows) but the Leads "
+                    f"sheet has only {sheet_rows} rows. {db_distinct - sheet_rows} "
+                    f"business(es) are lost on the next restart. Sheets is the durable "
+                    f"tier; Drive is optional and currently dead.")
             else:
                 result["verified"] = True
                 logger.info(f"[DURABILITY:{source}] ✅ verified: sheet holds {sheet_rows} "
-                            f"rows for {db_total} leads")
+                            f"rows covering {db_distinct} distinct businesses "
+                            f"({db_total} lead rows)")
         except Exception as verify_err:
             logger.warning(f"[DURABILITY:{source}] backup verification failed "
                            f"({verify_err}) — durability UNKNOWN this run.")

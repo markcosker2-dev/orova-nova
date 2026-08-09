@@ -170,7 +170,14 @@ async def get_best_send_timing() -> int:
         row = await DatabaseManager.fetchone(
             "SELECT strategy_value FROM learned_strategies WHERE strategy_type = 'send_timing' AND active = 1 ORDER BY wilson_score DESC, win_rate DESC LIMIT 1"
         )
-        if row and row.get("strategy_value"):
+        # dict() first: DatabaseManager.fetchone returns a sqlite3.Row (the
+        # pool sets row_factory=sqlite3.Row), and Row has no .get() — the
+        # AttributeError was being swallowed by the except below, so this
+        # function silently returned the 9am default and the learned
+        # send-timing was never once applied. Same bug shape as
+        # durability.py:99 (found together, production 2026-08-09).
+        row = dict(row) if row else {}
+        if row.get("strategy_value"):
             hour = int(row["strategy_value"])
             if 0 <= hour <= 23:
                 return hour
