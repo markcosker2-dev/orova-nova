@@ -36,8 +36,24 @@ async def _append_with_backoff(worksheet, row, retries=4):
     restore (2026-07-21). RAW stores exactly the strings we send."""
     for attempt in range(retries):
         try:
-            await asyncio.to_thread(worksheet.append_row, row, value_input_option="RAW")
-            return {"ok": True, "updated": False}
+            # Capture the API response instead of discarding it (2026-08-09).
+            # Sheets returns updates.updatedRange — the exact cells written,
+            # tab name included. Production repeatedly logged "4/4 leads
+            # synced" against the CONFIRMED-correct spreadsheet (id pinned and
+            # matching the owner's URL) while the Leads tab stayed at 1 row.
+            # An append that raises nothing and appears nowhere is only
+            # explicable by knowing where the API says it put the data, and
+            # this call was throwing that away.
+            resp = await asyncio.to_thread(
+                worksheet.append_row, row, value_input_option="RAW")
+            updated_range = ""
+            try:
+                updated_range = ((resp or {}).get("updates") or {}).get("updatedRange", "")
+            except Exception:
+                updated_range = f"<unparseable: {type(resp).__name__}>"
+            logger.info(f"[SheetsSync] append -> updatedRange={updated_range!r} "
+                        f"business={row[1]!r}")
+            return {"ok": True, "updated": False, "updated_range": updated_range}
         except gspread.exceptions.APIError as e:
             if e.response.status_code == 429 and attempt < retries - 1:
                 wait = (2 ** attempt) + random.uniform(0, 1)

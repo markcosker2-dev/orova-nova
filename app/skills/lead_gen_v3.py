@@ -5,6 +5,7 @@ import re
 import json
 import socket
 import httpx
+from datetime import datetime, timedelta
 from urllib.parse import quote
 from typing import Optional
 from duckduckgo_search import DDGS
@@ -1293,6 +1294,38 @@ async def _source_wa_lni_licences(count: int, cities: tuple = _WA_METRO_CITIES) 
     )
 
     city_list = ",".join(f"'{c}'" for c in cities)
+    # ── Licence-age floor (2026-08-09) ──────────────────────────────────────
+    # ADR-0012 qualifies on AFFORDABILITY: does ONE extra closed deal per month
+    # more than cover the all-in cost? A contractor licensed last week has no
+    # revenue history, no crew and no book of business, so the answer is no —
+    # and business_context.json lists "No payroll (solo operator) - no urgency"
+    # as an outright kill signal.
+    #
+    # This source used to ORDER BY licenseeffectivedate DESC on the reasoning
+    # that "a recently-licensed contractor is more likely to still be building
+    # a client base". That optimises for who NEEDS leads, which is the opposite
+    # of who can PAY for them. Measured on the live registry 2026-08-09: the
+    # three verifiable leads it had produced were all licensed 3-4 days earlier,
+    # all single-principal, all carrying the $1M minimum insurance — precisely
+    # the segment the playbook says to disqualify.
+    #
+    # Supply is not the constraint: 11,105 active GENERAL/RESIDENTIAL
+    # contractors in the target cities were licensed 3+ years ago, against an
+    # outreach rate of 5-10 a day.
+    # A BAND, not a floor. Applying only a floor and sorting oldest-first was
+    # measured against the live registry and overshot into the opposite failure:
+    # it returned W G CLARK (1963, 11 principals), ABSHER (1966, $2M cover) and
+    # TURNER CONSTRUCTION COMPANY (1977, $5M) — national commercial GCs with
+    # marketing departments, as far outside the ICP as the day-old solos were.
+    #
+    # The ICP sits between: established enough to have revenue and a crew,
+    # small enough that the owner still answers the phone and buys his own
+    # marketing. 8,768 contractors qualify in the target cities, against an
+    # outreach rate of 5-10 a day, so the band costs nothing in supply.
+    _min_years = float(os.getenv("WA_LNI_MIN_LICENCE_YEARS", "3") or 3)
+    _max_years = float(os.getenv("WA_LNI_MAX_LICENCE_YEARS", "25") or 25)
+    _cutoff = (datetime.now() - timedelta(days=int(365.25 * _min_years))).strftime("%Y-%m-%d")
+    _ceiling = (datetime.now() - timedelta(days=int(365.25 * _max_years))).strftime("%Y-%m-%d")
     where = (
         "contractorlicensestatus='ACTIVE'"
         " AND contractorlicensetypecodedesc='CONSTRUCTION CONTRACTOR'"
@@ -1300,6 +1333,15 @@ async def _source_wa_lni_licences(count: int, cities: tuple = _WA_METRO_CITIES) 
         f" AND upper(city) in({city_list})"
         " AND primaryprincipalname IS NOT NULL"
         " AND phonenumber IS NOT NULL"
+        f" AND licenseeffectivedate < '{_cutoff}'"
+        f" AND licenseeffectivedate > '{_ceiling}'"
+        # Sole proprietors, stated by the registry itself. business_context.json
+        # lists "No payroll (solo operator) - no urgency" as a kill signal, and
+        # this is the one place it can be read for free with no extra API call.
+        # It is NOT sufficient on its own — the three leads verified on
+        # 2026-08-09 were all LLCs with a single principal — but it removes the
+        # 9,325 self-declared individuals at zero cost.
+        " AND businesstypecodedesc != 'Individual'"
     )
     # Over-fetch: only ~28% of rows survive the ICP name filter, so asking for
     # `count` rows would reliably under-deliver. 6x plus headroom, capped at the
@@ -1315,10 +1357,13 @@ async def _source_wa_lni_licences(count: int, cities: tuple = _WA_METRO_CITIES) 
                         "city,state,zip,contractorlicensenumber,"
                         "licenseeffectivedate,businesstypecodedesc"),
             "$limit": str(fetch),
-            # Newest licences first: a recently-licensed contractor is more
-            # likely to still be building a client base, and it makes repeated
-            # runs return a stable, non-arbitrary slice.
-            "$order": "licenseeffectivedate DESC",
+            # OLDEST licences first (inverted 2026-08-09). Longevity is the
+            # cheapest free proxy for "has survived, has a book of business,
+            # can plausibly afford the retainer" — a contractor still active
+            # after a decade is a different prospect from one licensed last
+            # week. Still deterministic, so repeated runs return a stable
+            # slice, which was the other property the old ordering provided.
+            "$order": "licenseeffectivedate ASC",
         }, headers={"Accept": "application/json"})
         if resp.status_code != 200:
             logger.warning(f"[WA_LNI] status {resp.status_code} — no leads this run")
