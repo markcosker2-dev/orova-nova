@@ -5,6 +5,12 @@ from typing import Dict, List, Any
 
 logger = logging.getLogger(__name__)
 
+# Sources that publish an AUTHORITATIVE trade — state licence registries
+# (ADR-0014). Their `vertical` is the licensed specialty; every other source
+# supplies the search query it was found with, which is not a fact about the
+# business. Matched against owner_source + source.
+_REGISTRY_SOURCE_TAGS = ("wa_lni", "or_ccb", "ca_cslb", "licence", "license")
+
 
 class _LeadRepo:
     """Mixin: lead-related database operations."""
@@ -117,6 +123,57 @@ class _LeadRepo:
         return await loop.run_in_executor(None, lambda: cls._is_duplicate_lead(email, domain, client_id))
 
     @classmethod
+    def _backfill_registry_fields(cls, conn, lead_id: int, lead: dict) -> None:
+        """Improve an existing row from a re-discovery. Never downgrades it.
+
+        Two fields, both cases where the incoming value is strictly better:
+
+        * `principal_count` — only when the stored one is 0, i.e. unknown. This
+          is what drives sole-owner status and therefore which pain the call
+          script opens on, so a row stuck at 0 makes Retell ask a question we
+          already know the answer to.
+        * `vertical` — only from a licence registry (`owner_source` like
+          `wa_lni`), which publishes the actual licensed trade. A registry
+          trade beats whatever is stored, because the stored value is usually
+          the search query the lead was found with.
+
+        Fail-open: a backfill error must never turn a harmless duplicate into
+        a lost lead, so it is swallowed and logged.
+        """
+        try:
+            sets, params = [], []
+            try:
+                incoming_principals = int(lead.get("principal_count") or 0)
+            except (TypeError, ValueError):
+                incoming_principals = 0
+            if incoming_principals > 0:
+                sets.append("principal_count = CASE WHEN COALESCE(principal_count,0) = 0 "
+                            "THEN ? ELSE principal_count END")
+                params.append(incoming_principals)
+
+            incoming_vertical = (lead.get("vertical") or "").strip()
+            # Authoritative sources only: a state licence registry publishes the
+            # actual licensed trade. Everything else supplies the search query,
+            # which is what put "custom home builder california" in the Niche
+            # column in the first place.
+            origin = f"{lead.get('owner_source') or ''} {lead.get('source') or ''}".lower()
+            from_registry = any(tag in origin for tag in _REGISTRY_SOURCE_TAGS)
+            if incoming_vertical and from_registry:
+                sets.append("vertical = ?")
+                params.append(incoming_vertical)
+
+            if not sets:
+                return
+            params.append(lead_id)
+            conn.execute(f"UPDATE leads SET {', '.join(sets)}, "
+                         f"updated_at = CURRENT_TIMESTAMP WHERE id = ?", params)
+            logger.info(f"[DEDUP-BACKFILL] lead {lead_id}: refreshed "
+                        f"{len(sets)} field(s) from re-discovery")
+        except Exception as e:
+            logger.warning(f"[DEDUP-BACKFILL] lead {lead_id} not refreshed ({e}) — "
+                           f"non-fatal, the existing row is unchanged")
+
+    @classmethod
     def save_lead(cls, lead: dict, default_vertical: str = None, client_id: int = 0) -> int:
         """Save a lead with automatic deduplication and the storage gate.
         Returns lead_id, -1 if duplicate, or -2 if the gate rejected the row.
@@ -198,9 +255,23 @@ class _LeadRepo:
                         (business_key, state_key, cid)
                     ).fetchone()
                     if row:
-                        logger.info(f"[DEDUP] Skipping duplicate lead: "
+                        # Dedup means "same business", NOT "discard what we
+                        # just learned" (2026-08-09). Leads restored from the
+                        # sheet came back missing principal_count and carrying
+                        # a `vertical` that was the old search query; the hunt
+                        # then re-found them with the real licensed trade and
+                        # a principal count, and threw both away because the
+                        # business already existed. Those rows could never heal.
+                        #
+                        # Backfill only where the new value is strictly better:
+                        # a principal count we did not have, and a trade from an
+                        # authoritative licence registry (which beats a query
+                        # string by construction). Never overwrite a good value
+                        # with a worse one.
+                        cls._backfill_registry_fields(conn, row["id"], lead)
+                        logger.info(f"[DEDUP] Existing lead refreshed, not duplicated: "
                                     f"{business_key!r} ({state_key or 'no state'})")
-                        conn.rollback()   # release the read txn before pooling
+                        conn.commit()
                         return -1
                 # Insert — same transaction, no race window
                 vertical = lead.get("vertical") or default_vertical or ""
