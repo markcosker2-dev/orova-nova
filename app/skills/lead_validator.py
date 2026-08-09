@@ -707,22 +707,33 @@ def validate_contact(email: str = None, phone: str = None, country: str = "US") 
 # score_lead_icp() scores only on fields enrichment actually collects, so the
 # score discriminates and Mark's "email the best 10" is a real ranking.
 
-# Luxury/premium signals in the business name or vertical (OROVA's lead
-# vertical is luxury automotive; the ICP stays mixed per owner 2026-07-13).
+# Luxury/premium signals in the BUSINESS NAME (see the haystack note in
+# score_lead_icp). The lead vertical is custom home builders / high-end
+# remodelers — ADR-0012, narrowed by ADR-0015. Rewritten 2026-08-09; the old
+# list was the original luxury-automotive vocabulary plus accretions.
 _ICP_LUXURY_KEYWORDS = (
-    "exotic", "luxury", "supercar", "ferrari", "lamborghini", "porsche",
-    "bentley", "rolls", "mclaren", "aston", "maserati", "high end", "high-end",
-    "premium", "prestige", "elite", "custom home", "estate",
+    "luxury", "high end", "high-end", "premium", "prestige", "elite",
+    "custom home", "estate", "bespoke", "architectural",
 )
 _ICP_VERTICAL_KEYWORDS = (
-    # automotive services (the lead vertical)
-    "dealer", "dealership", "rental", "detail", "ceramic", "ppf",
-    "paint protection", "wrap", "tint", "performance", "tuning", "restoration",
-    "motorsport", "collision",
-    # rest of the mixed ICP
-    "builder", "remodel", "renovation", "real estate", "realty", "interior design",
-    "landscape", "med spa", "medspa",
+    # Custom home building / high-end remodeling — THE lead vertical.
+    # "construction" and "contractor" were MISSING entirely until 2026-08-09,
+    # even though licence registries (WA L&I / OR CCB / CSLB) have been the
+    # primary source since ADR-0014 and name their rows exactly that way:
+    # HAWK CONSTRUCTION, GOLAN CONSTRUCTION LLC, FOREVER QUALITY CONSTRUCT LLC.
+    "builder", "build", "construction", "construct", "contractor", "contracting",
+    "remodel", "renovation", "renovate", "restoration",
+    "kitchen", "bath", "cabinet", "carpentry", "millwork", "ceramic", "tile",
+    "design build", "design-build",
+    # Secondary — luxury real estate top producers + premium design.
+    "real estate", "realty", "interior design", "landscape",
 )
+# Removed 2026-08-09: the automotive vocabulary ADR-0012 demoted (dealer,
+# dealership, rental, detail, ppf, paint protection, wrap, tint, performance,
+# tuning, motorsport, collision) and med spa/medspa (ADR-0015). "restoration"
+# and "ceramic" are KEPT despite their automotive origin — home and
+# water-damage restoration, and ceramic tile, are real remodeling work, so
+# dropping them would cost genuine remodelers points.
 _GENERIC_EMAIL_PREFIXES = (
     "info@", "contact@", "support@", "hello@", "hi@", "admin@", "office@", "sales@",
     "leads@", "service@", "services@", "team@", "enquiries@", "inquiries@", "help@",
@@ -741,8 +752,8 @@ def score_lead_icp(lead: dict) -> dict:
       +25 direct/personal email  (+10 if only a generic inbox)
       +10 phone (E.164)
       +10 website
-      +20 luxury/premium keyword in name or vertical (can-afford-$4k signal)
-      +10 ICP vertical keyword match
+      +20 luxury/premium keyword in the BUSINESS NAME (can-afford-$4k signal)
+      +10 ICP vertical keyword in the BUSINESS NAME
     Thresholds: >=70 HOT (email first, everything verified), 45-69 WARM,
     25-44 COLD, <25 SKIP (not worth Mark's time).
     """
@@ -758,7 +769,22 @@ def score_lead_icp(lead: dict) -> dict:
     _host = urlparse(_url).netloc.lower().split(":")[0]
     _is_yelp = _host == "yelp.com" or _host.endswith(".yelp.com")
     website = (lead.get("website") or ("" if _is_yelp else _url)).strip()
-    haystack = f"{lead.get('business') or ''} {lead.get('vertical') or ''} {lead.get('niche') or ''}".lower()
+    # BUSINESS NAME ONLY (2026-08-09). This used to be
+    #     f"{business} {vertical} {niche}"
+    # and `worker.py` sets lead["vertical"] to the SEARCH QUERY STRING. So the
+    # two ICP components scored the query rather than the business: every lead
+    # returned by 'luxury home remodeling washington' collected +20 luxury and
+    # +10 vertical, making 30 of 100 points a constant per hunt run.
+    #
+    # Measured on the 13 live leads that day: nytimes.com and amazon.com scored
+    # 65 WARM — identical to every real WA contractor — and customink.com, a
+    # t-shirt company, scored 100 HOT, the highest-ranked lead in the pipeline.
+    # Real-vs-junk separation was NEGATIVE (-1.2); on name alone it is +8.8.
+    #
+    # This is the "scorer inversion" flagged in the 2026-08-02 comment above,
+    # generalized: that note framed it as an automotive-exemption problem, but
+    # any query term leaks into every lead the query returns.
+    haystack = (lead.get("business") or "").lower()
 
     score = 0
     breakdown = {}

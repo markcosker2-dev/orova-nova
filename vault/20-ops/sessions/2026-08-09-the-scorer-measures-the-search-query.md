@@ -9,12 +9,19 @@ tags: [scorer, icp, proposal, needs-owner-approval]
 
 # The scorer measures the search query, not the business
 
-> [!warning] Nothing here has shipped
-> `lead_validator.py:127` records a standing owner rule — **do not rush the
-> scorer** — and CLAUDE.md makes `score_lead_icp` the canonical owner of scores
-> (server-side recompute), so any change re-ranks the live pipeline. Every
-> change below was applied to a scratch copy, **measured, and reverted.** The
-> working tree is clean. This needs Mark's yes.
+> [!success] Option D SHIPPED — Mark approved 2026-08-09 ("do what's best")
+> Written first as a proposal, measured on a scratch copy, then implemented
+> once approved. That order is what `lead_validator.py:127`'s **do not rush the
+> scorer** rule asks for: the rule forbids unmeasured unilateral changes, not
+> changes as such.
+>
+> **Verified against the live leads after shipping — the prediction held
+> exactly:** real avg 45.0, junk avg 36.2, **gap +8.8**. All five real
+> contractors now sit at the top of the pipeline at WARM; nytimes.com,
+> amazon.com, cambridge.org and definitions.net dropped to COLD;
+> vocabulary.com and custom-cursor.com to SKIP. 1204 tests pass.
+>
+> Not yet merged to `main` — branch `claude/orova-nova-handoff-09a8fa`.
 
 ## The task, and why it was the wrong target
 
@@ -168,14 +175,25 @@ business is HOT regardless of whether it is a prospect. Fixing that means
 moving weights or thresholds, which is a larger judgment call than this
 proposal, and squarely inside the do-not-rush rule. Flagged, not touched.
 
-## What I need from Mark
+## What shipped, and what did not
 
-1. **Ship option D, B, or neither?** Recommend **D** — B alone provably changes
-   nothing, so shipping it would be pure motion.
-2. D re-ranks 13 live leads (5 WARM, 6 COLD, 2 SKIP). No lead is deleted; the
-   hygiene sweep and the off-ICP gate are untouched.
-3. The 8 junk domains in the pipeline are a **separate** bug — the off-ICP gate
-   let `amazon.com` and `nytimes.com` through on ingest. Worth its own pass.
+**Shipped (option D):** both keyword lists rewritten, the query string removed
+from the haystack, the two stale comments corrected, and four test exemplars
+moved off automotive onto the real lead vertical. Two new regression tests pin
+the defect directly — one asserts a search query can no longer inflate a junk
+lead's score, one asserts licence-registry names (`HAWK CONSTRUCTION`,
+`GOLAN CONSTRUCTION LLC`) match on their own name rather than via the query.
+
+**Deliberately not shipped:** the 70/30 weighting described above. Moving
+weights or the HOT threshold is the kind of change the do-not-rush rule is
+really aimed at, and unlike the haystack defect there is no measurement that
+settles it — it needs a view on what the score is *for*. Left for Mark.
+
+**Still open, and probably worth more than this was:** the 8 junk domains
+should never have entered the leads table. The off-ICP gate passed
+`amazon.com`, `nytimes.com`, `cambridge.org` and `customink.com` on ingest.
+Better scoring ranks them correctly; it does not stop them arriving, and they
+are consuming enrichment budget in the reenrich lane.
 
 ## Linked
 

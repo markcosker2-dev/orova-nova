@@ -67,10 +67,15 @@ def test_gate_rejects_email_as_business_name():
 # ── real leads pass, with unverifiable fields emptied, never faked ───────────
 
 def test_gate_passes_real_lead_and_recomputes_score():
+    # Exemplar moved off automotive 2026-08-09 (ADR-0012 demoted it, ADR-0015
+    # narrowed the ICP). What this test checks — a fabricated payload score is
+    # discarded and recomputed server-side — is unchanged; the lead is now one
+    # we would actually sell to, so the expected 100 stays meaningful.
     lead = {
-        "business": "Prestige Exotic Rentals", "owner": "Maria Santos",
-        "email": "maria@prestigeexotics.com", "phone": "+1 404 733 4400",
-        "website": "https://prestigeexotics.com", "vertical": "luxury car rental",
+        "business": "Prestige Custom Home Builders", "owner": "Maria Santos",
+        "email": "maria@prestigecustomhomes.com", "phone": "+1 404 733 4400",
+        "website": "https://prestigecustomhomes.com",
+        "vertical": "luxury home remodeling california",
         "score": 999,  # fabricated payload score must not survive
     }
     result = validate_lead_for_storage(lead)
@@ -270,8 +275,11 @@ def hygiene_db(tmp_path, monkeypatch):
                        "+1-555-123-4567", "https://acme.example.com/contact", "", "new", 85))
     conn.execute(ins, ("", "Member Circles", "access@high.org", "14047334400", "", "", "New", 50))
     # 3: a real lead with one junk field (555 phone) — cleaned, not quarantined
-    conn.execute(ins, ("Prestige Exotic Rentals", "Maria Santos", "maria@prestigeexotics.com",
-                       "555-123-4567", "https://prestigeexotics.com", "luxury car rental", "New", 50))
+    # (on-ICP exemplar since 2026-08-09 — ADR-0012/0015; scores the same 90)
+    conn.execute(ins, ("Prestige Custom Home Builders", "Maria Santos",
+                       "maria@prestigecustomhomes.com", "555-123-4567",
+                       "https://prestigecustomhomes.com",
+                       "luxury home remodeling california", "New", 50))
     # 4: a fully clean, already-contacted lead — untouched (score preserved)
     conn.execute(ins, ("Legacy Motors", "Ann Kim", "ann@legacymotors.com",
                        "+14047334400", "https://legacymotors.com", "dealer", "Email Sent", 60))
