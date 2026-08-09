@@ -470,7 +470,16 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None, state=
                     _is_yelp = _host == "yelp.com" or _host.endswith(".yelp.com")  # dot-anchored: 'notyelp.com' must not match
                     lead["source"] = lead.get("source_type", "Yelp Direct" if _is_yelp else "Web Search")
                     lead["date"] = datetime.now().strftime("%Y-%m-%d")
-                    lead["vertical"] = niche
+                    # Only fall back to the search query — never overwrite a
+                    # vertical the SOURCE actually knows (2026-08-09). Licence
+                    # registries publish the real trade (specialtycode1desc:
+                    # "General", "Roofing", "Masonry"); the niche is just the
+                    # string we searched with. Clobbering the former with the
+                    # latter is what put "custom home builder california" in
+                    # the Niche column, and it is the same query-string-as-data
+                    # confusion that made the ICP scorer rank nytimes.com level
+                    # with a real contractor.
+                    lead["vertical"] = lead.get("vertical") or niche
 
                     lead_id = await DatabaseManager.asave_lead(lead, default_vertical=niche, client_id=client_id)
 

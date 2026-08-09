@@ -827,6 +827,10 @@ async def get_leads(limit: int = 100, include_invalid: bool = False,
             COALESCE(evidence_json, '') as evidence_json,
             COALESCE(ad_signals, '') as ad_signals,
             COALESCE(state, '') as state,
+            -- Named principals on the licence. Without this the dashboard and
+            -- /api/leads cannot show sole-owner status, which is the field
+            -- that decides which pain the call script opens on.
+            COALESCE(principal_count, 0) as principal_count,
             client_id, created_at
         FROM leads
         {where}
