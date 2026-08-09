@@ -49,6 +49,42 @@ _PLACEHOLDER_EMAIL_LOCALS = {"test", "example", "sample", "demo", "placeholder",
 # Fixture/sample markers that mean the whole row is fake, not a real prospect.
 _FIXTURE_BUSINESS_RE = re.compile(r"\b(acme|example|lorem|ipsum|fake|placeholder)\b", re.IGNORECASE)
 
+# A business NAME that is nothing but a domain (live 2026-08-09). The hunt's
+# SerpAPI results include high-authority sites that merely rank for a query,
+# and when no business name can be scraped the domain lands in `business`:
+# production held amazon.com, nytimes.com, cambridge.org, definitions.net,
+# vocabulary.com, custom-cursor.com, customink.com and luxe.tv — 8 of only 13
+# distinct businesses in the entire pipeline.
+#
+# The off-ICP DOMAIN classes did not catch them and should not be stretched to:
+# that list is deliberately narrow ("only classes that can NEVER be a
+# home-remodeling prospect"), and widening it to major retail/news/reference
+# sites is unbounded whack-a-mole. This rule is the general one and belongs
+# with its siblings above instead — phone-as-name and email-as-name are the
+# same defect, a scraper putting a non-name in the name field.
+#
+# Anchored and whitespace-free on purpose: "J.P. Morgan Construction" and
+# "Smith & Co." contain dots but are never matched, because a real name has
+# spaces or no TLD. Verified against the live rows: catches 8 of 8 junk, 0 of
+# the 5 real contractors.
+#
+# The cost, stated plainly: a genuine contractor whose name we failed to scrape
+# and stored as "summitremodel.com" is rejected too. That is accepted because
+# such a row cannot be personalised anyway ("Hi, I saw amazon.com...") and
+# because the hygiene sweep QUARANTINES (status='Invalid' + a note) rather than
+# deletes, so the call is reversible.
+_BARE_DOMAIN_NAME_RE = re.compile(
+    r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9-]+)*\.[a-z]{2,}$", re.IGNORECASE)
+
+
+def business_name_is_bare_domain(business: str) -> bool:
+    """True when the business name is just a domain, e.g. 'amazon.com'."""
+    candidate = re.sub(r"^[a-z][a-z0-9+.-]*://", "", (business or "").strip(),
+                       flags=re.IGNORECASE).rstrip("/").strip()
+    if not candidate or any(c.isspace() for c in candidate):
+        return False
+    return bool(_BARE_DOMAIN_NAME_RE.match(candidate))
+
 # ── Off-ICP domain classes (live 2026-07-26) ────────────────────────────────
 # Production held 47 rows that passed every existing check: an Argentine
 # GOVERNMENT MUSEUM (museo@adolfoalsina.gov.ar), an Argentine news site, and a
@@ -474,6 +510,9 @@ def validate_lead_for_storage(lead: dict) -> dict:
         return {"ok": False, "lead": cleaned, "reasons": [f"business name is a phone number: {business!r}"]}
     if "@" in business and _EMAIL_LIKE_RE.search(business):
         return {"ok": False, "lead": cleaned, "reasons": [f"business name is an email address: {business!r}"]}
+    if business_name_is_bare_domain(business):
+        return {"ok": False, "lead": cleaned,
+                "reasons": [f"business name is a bare domain, not a business: {business!r}"]}
     if _FIXTURE_BUSINESS_RE.search(business):
         return {"ok": False, "lead": cleaned, "reasons": [f"fixture/sample business name: {business!r}"]}
     # Off-ICP by domain class — a government museum, a foreign site or a trade
