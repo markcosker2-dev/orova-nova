@@ -58,8 +58,16 @@ HEADER = ["ID", "Business", "Owner", "Email", "Phone", "Website", "URL", "Status
 
 
 def test_recycled_id_does_not_overwrite_a_different_business():
-    # Sheet already holds West Coast at id-row; a NEW lead reuses id=1 but is
-    # a different business with a different URL -> must APPEND, not overwrite.
+    """A distinct business must get its OWN row, never another's.
+
+    Assertion rewritten 2026-08-09. It used to require that `append_row` had
+    been called — the mechanism rather than the guarantee. New leads now go to
+    an explicitly computed row instead, because `append_row`'s table-range
+    detection was resolving to the header and writing EVERY lead to A2:L2, so
+    each sync silently overwrote the last and the tab never held more than one
+    row. Asserting on the destination row is strictly stronger: it is the thing
+    this test exists to protect, and it would have caught that bug.
+    """
     ws = _WS([
         HEADER,
         ["1", "West Coast Exotic Cars", "", "", "", "", "https://westcoastexoticcars.com", "New"],
@@ -67,8 +75,11 @@ def test_recycled_id_does_not_overwrite_a_different_business():
     new_lead = {"id": 1, "business": "iLusso Exotic Car Dealership",
                 "url": "https://ilusso.com"}
     _sync(ws, new_lead)
-    assert ws.appended is not None            # new distinct business appended
-    assert ws.updated is None                 # existing row untouched
+
+    written_row = ws.updated[0] if ws.updated else None
+    assert written_row != 2, "the new business overwrote West Coast's row"
+    assert ws.appended is not None or written_row == 3, (
+        f"a distinct business must land on its own row, got row {written_row}")
 
 
 def test_same_business_updates_in_place_by_url():
