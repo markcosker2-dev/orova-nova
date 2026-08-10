@@ -1376,9 +1376,15 @@ async def _source_wa_lni_licences(count: int, cities: tuple = _WA_METRO_CITIES) 
         logger.error(f"[WA_LNI] fetch failed: {e}")
         return []
 
+    # Collect a POOL, not just `count`. _rank_wa_candidates then drops the
+    # institutional tier and puts sole operators first, which it can only do if
+    # there is something to choose between — stopping at `count` would rank a
+    # list against itself and change nothing. Capped so the two enrichment
+    # lookups stay one batched request each.
+    pool_target = min(max(count * 5, 25), 120)
     skipped_icp = 0
     for row in rows:
-        if len(leads) >= count:
+        if len(leads) >= pool_target:
             break
         business = (row.get("businessname") or "").strip()
         if icp_business_name_reason(business):
@@ -1424,6 +1430,8 @@ async def _source_wa_lni_licences(count: int, cities: tuple = _WA_METRO_CITIES) 
         })
 
     await _attach_wa_principal_counts(leads)
+    await _attach_wa_insurance(leads)
+    leads = _rank_wa_candidates(leads, count)
 
     logger.info(f"[WA_LNI] {len(leads)} in-ICP leads from {len(rows)} licence rows "
                 f"({skipped_icp} failed the ICP name filter)")
@@ -1482,6 +1490,125 @@ async def _attach_wa_principal_counts(leads: list) -> None:
     except Exception as e:
         logger.warning(f"[WA_LNI] principals lookup failed ({e}) — "
                        f"sole-owner status stays unknown")
+
+def _rank_wa_candidates(leads: list, count: int) -> list:
+    """Order candidates the way the owner actually wants to work them.
+
+    Owner instruction 2026-08-09: "mainly sole owners that can afford our price
+    ... if you run out of sole owners add in none sole owners but they
+    shouldn't be a super high end business that already has an in-house team."
+
+    Three rules, in order:
+
+    1. DROP the institutional. A contractor with a large partner group has a
+       marketing function already and will not take a cold call from a
+       one-person agency. This is the failure that showed up live when the
+       licence-age sort was first inverted: it surfaced W G CLARK (1963, 11
+       principals) and TURNER CONSTRUCTION ($5M cover) — real companies, and
+       exactly nobody's prospect here. The age ceiling removes most of them;
+       this removes the rest.
+    2. PREFER sole operators, per the instruction. Measured 2026-08-09, 42% of
+       contractors carrying above-minimum insurance are sole operators, so
+       "solo" and "can afford it" are not in tension.
+    3. Within each group, rank by AFFORDABILITY (GL cover), because ADR-0012
+       qualifies on whether one extra closed deal covers the retainer.
+
+    Ordering only — nothing is discarded except the institutional tier, so a
+    thin solo pool naturally falls through to everyone else rather than
+    returning an empty hunt.
+    """
+    max_principals = int(os.getenv("WA_LNI_MAX_PRINCIPALS", "8") or 8)
+
+    def _institutional(l: dict) -> bool:
+        try:
+            n = int(l.get("principal_count") or 0)
+        except (TypeError, ValueError):
+            n = 0
+        return n > max_principals
+
+    kept = [l for l in leads if not _institutional(l)]
+    dropped = len(leads) - len(kept)
+
+    def _sort_key(l: dict):
+        try:
+            n = int(l.get("principal_count") or 0)
+        except (TypeError, ValueError):
+            n = 0
+        try:
+            amt = float(l.get("insurance_amt") or 0)
+        except (TypeError, ValueError):
+            amt = 0.0
+        is_solo = 0 if n == 1 else 1        # solo first
+        return (is_solo, -amt, n)
+
+    kept.sort(key=_sort_key)
+    solo = sum(1 for l in kept[:count] if (l.get("principal_count") or 0) == 1)
+    logger.info(f"[WA_LNI] ranked {len(kept)} candidates "
+                f"({dropped} dropped as institutional, >{max_principals} principals) "
+                f"— returning {min(count, len(kept))}, {solo} sole operators")
+    return kept[:count]
+
+
+_WA_LNI_INSURANCE_DATASET = "https://data.wa.gov/resource/ciwg-agsx.json"
+
+
+async def _attach_wa_insurance(leads: list) -> None:
+    """Fill `insurance_amt` for WA leads. Free, keyless, one request total.
+
+    This is the AFFORDABILITY signal, and it is a different question from the
+    principal count. ADR-0012 qualifies on whether ONE extra closed deal covers
+    the ~$6.5-7.5K/mo all-in cost, which is a question about JOB SIZE, not head
+    count — and general liability cover scales with the jobs a contractor
+    actually takes.
+
+    Measured on the live registry 2026-08-09: 88.4% carry exactly $1,000,000
+    (the market standard) and only 7.9% carry more. So it is a LOW-RECALL,
+    HIGH-PRECISION signal — it will not rank most leads, but the ones it flags
+    are demonstrably operating at a larger scale.
+
+    It is also what shows the "solo operator" kill signal to be too coarse: of
+    300 contractors carrying above the minimum, 126 (42%) are sole operators.
+    They can afford the retainer; their urgency is simply personal rather than
+    payroll-driven. Head count and job size must be scored separately.
+
+    Fail-open: a failure leaves insurance_amt at 0, which the scorer treats as
+    UNKNOWN rather than as "carries nothing".
+    """
+    ubis = {l.get("_ubi") for l in leads if l.get("_ubi")}
+    if not ubis:
+        return
+    try:
+        quoted = ",".join(f"'{u}'" for u in sorted(ubis))
+        client = await _get_http_client()
+        resp = await client.get(_WA_LNI_INSURANCE_DATASET, params={
+            "$where": f"ubi in({quoted}) AND licensestatus='A'",
+            "$select": "ubi,insuranceamt",
+            "$limit": "500",
+        }, headers={"Accept": "application/json"})
+        if resp.status_code != 200:
+            logger.warning(f"[WA_LNI] insurance lookup status {resp.status_code} "
+                           f"— affordability stays unknown")
+            return
+        best: dict = {}
+        for r in resp.json() or []:
+            u = (r.get("ubi") or "").strip()
+            try:
+                amt = float(r.get("insuranceamt") or 0)
+            except (TypeError, ValueError):
+                continue
+            if u and amt > best.get(u, 0):
+                best[u] = amt
+        above = 0
+        for l in leads:
+            amt = best.get(l.get("_ubi") or "", 0.0)
+            l["insurance_amt"] = amt
+            if amt > 1_000_000:
+                above += 1
+        logger.info(f"[WA_LNI] insurance resolved for {len(best)}/{len(ubis)} "
+                    f"businesses · {above} carry above the $1M minimum")
+    except Exception as e:
+        logger.warning(f"[WA_LNI] insurance lookup failed ({e}) — "
+                       f"affordability stays unknown")
     finally:
         for l in leads:
             l.pop("_ubi", None)   # internal join key, never persisted
