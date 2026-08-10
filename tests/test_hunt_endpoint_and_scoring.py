@@ -24,7 +24,7 @@ def _base():
 
 def test_score_credits_site_in_url_column():
     with_url = score_lead_icp({**_base(), "url": "https://vividmotors.com"})["breakdown"]
-    assert with_url["website"] == 10
+    assert with_url["website"] == 5
 
 
 def test_score_yelp_url_earns_nothing():
@@ -35,15 +35,15 @@ def test_score_yelp_url_earns_nothing():
 def test_score_website_column_still_wins_over_url():
     both = score_lead_icp({**_base(), "website": "https://vividmotors.com",
                            "url": "https://www.yelp.com/biz/vivid-motors"})["breakdown"]
-    assert both["website"] == 10
+    assert both["website"] == 5
 
 
 def test_score_yelp_check_is_host_anchored():
     # 'notyelp.com' is NOT Yelp — must earn the credit (CodeQL: substring
     # matching at arbitrary positions is not sanitization)
-    assert score_lead_icp({**_base(), "url": "https://notyelp.com"})["breakdown"]["website"] == 10
+    assert score_lead_icp({**_base(), "url": "https://notyelp.com"})["breakdown"]["website"] == 5
     # yelp.com in the PATH of a real site is not a directory link either
-    assert score_lead_icp({**_base(), "url": "https://vivid.com/about-yelp.com"})["breakdown"]["website"] == 10
+    assert score_lead_icp({**_base(), "url": "https://vivid.com/about-yelp.com"})["breakdown"]["website"] == 5
     # any true yelp subdomain IS Yelp
     assert score_lead_icp({**_base(), "url": "https://m.yelp.com/biz/x"})["breakdown"]["website"] == 0
 

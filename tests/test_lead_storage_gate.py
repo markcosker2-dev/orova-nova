@@ -125,8 +125,13 @@ def test_gate_passes_real_lead_and_recomputes_score():
     assert result["ok"] is True
     cleaned = result["lead"]
     assert cleaned["phone"] == "+14047334400"  # normalized E.164
-    # owner(25) + direct email(25) + phone(10) + website(10) + luxury(20) + vertical(10)
-    assert cleaned["score"] == 100
+    # Reweighted 2026-08-09: owner(20) + direct email(15) + phone(15) +
+    # website(5) + luxury(10) + vertical(10) + affordability(10, unknown) +
+    # urgency(6, unknown) = 91. Email was down-weighted and phone up, because
+    # cold email is closed by provider policy while a published business line
+    # is the live channel. What this test guards is unchanged: the fabricated
+    # payload score of 999 must not survive.
+    assert cleaned["score"] == 91
     assert cleaned["score"] != 999
 
 
@@ -345,9 +350,11 @@ def test_sweep_quarantines_prod_junk_and_cleans_partial_rows(hygiene_db):
     # Row 3: junk phone emptied (NOT replaced with anything), score recomputed
     assert rows[3]["status"] == "New"
     assert rows[3]["phone"] == ""
-    # owner(25) + direct email(25) + website-via-url(10) + luxury(20) +
-    # vertical(10); the junk phone earns nothing
-    assert rows[3]["score"] == 90
+    # Reweighted 2026-08-09 (see the gate test above): owner(20) + direct
+    # email(15) + website-via-url(5) + luxury(10) + vertical(10) +
+    # affordability(10, unknown) + urgency(6, unknown) = 76; the junk phone
+    # still earns nothing, which is what this line exists to prove.
+    assert rows[3]["score"] == 76
     # Row 4: contacted + already clean — completely untouched
     assert rows[4]["score"] == 60 and rows[4]["status"] == "Email Sent"
 
