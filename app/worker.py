@@ -312,6 +312,20 @@ async def _execute_approved_call(sheet, row, idx, client_id=0):
             await DatabaseManager.aupdate_metrics({"calls_made": metrics.get("calls_made", 0) + 1}, client_id=client_id)
         except Exception:
             pass
+
+        # Per-lead call counter — the Leads sheet's "Called" column reads this.
+        # Incremented ONLY here, after Retell accepted the call, so a lead the
+        # consent or DNC gate blocked still reads as never-called. A blocked
+        # lead has not been worked and must not look like it has.
+        try:
+            _lid = (context or {}).get("lead_id")
+            if _lid:
+                await DatabaseManager.query(
+                    "UPDATE leads SET call_count = COALESCE(call_count,0) + 1, "
+                    "updated_at = CURRENT_TIMESTAMP WHERE id = ?", (_lid,))
+        except Exception as _cc_err:
+            logger.warning(f"[CALL] call_count not incremented for lead "
+                           f"{(context or {}).get('lead_id')}: {_cc_err}")
     else:
         error = result.get("error", "Unknown error")
         logger.error(f"❌ [CALL] Failed: {error}")

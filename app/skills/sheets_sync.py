@@ -41,6 +41,42 @@ def _principals_cell(lead: dict) -> str:
     return str(n) if n > 0 else ""
 
 
+# A lead that has reached any of these has had outreach sent. Kept as one
+# tuple so the sheet's EmailSent column and the cold-lead query cannot drift
+# apart about what "contacted" means.
+_CONTACTED_STATUSES = ("email sent", "contacted", "replied", "responded",
+                       "meeting booked", "booked", "won", "lost")
+
+
+def _email_sent_cell(lead: dict) -> str:
+    """'Yes' / 'No' — has outreach actually gone out to this lead?
+
+    Derived from the stored status, never from the sheet. This column is a
+    READ-OUT: editing it in Sheets does nothing, because the database is the
+    canonical owner of pipeline state (CLAUDE.md SSoT) and a projection that
+    could write back arbitrary state would stop being a projection.
+    """
+    status = str(lead.get("status") or "").strip().lower()
+    if status in _CONTACTED_STATUSES:
+        return "Yes"
+    if str(lead.get("email_status") or "").strip().lower() in ("sent", "delivered"):
+        return "Yes"
+    return "No"
+
+
+def _called_cell(lead: dict) -> str:
+    """'Yes' / 'No' — has a call actually been placed?
+
+    Counts real placed calls, so a lead the consent or DNC gate BLOCKED reads
+    as No. That distinction matters: a blocked lead has not been worked and
+    must not look like it has.
+    """
+    try:
+        return "Yes" if int(lead.get("call_count") or 0) > 0 else "No"
+    except (TypeError, ValueError):
+        return "No"
+
+
 _SOLE_OWNER_LABELS = {"solo": "Yes", "has_crew": "No", "unknown": "Unknown"}
 
 
@@ -152,9 +188,14 @@ WORKSHEET_HEADERS = {
     # then failed to match the same business found by a hunt (state='WA').
     # ACCRETE CONSTRUCTION LLC was stored twice that way. Carrying State fixes
     # the round trip at the source.
+    # EmailSent / Called added 2026-08-09 so the owner can see at a glance who
+    # has actually been worked, without cross-referencing the CallLog tab.
+    # Both are DERIVED from the database on every sync — they are a read-out,
+    # not an input. Editing them in the sheet does nothing; only the Email
+    # column is read back (see pull_manual_edits_from_sheets).
     "Leads": ["ID", "Business", "Owner", "Email", "Phone", "Website", "URL", "Status",
               "Score", "Source", "Date", "Notes", "Niche", "State", "Principals",
-              "SoleOwner"],
+              "SoleOwner", "EmailSent", "Called"],
     "Metrics": ["ClientID", "LeadsFound", "EmailsSent", "CallsMade", "Replies", "Meetings", "LastUpdated"],
     "CallLog": ["CallID", "LeadID", "Business", "Phone", "Outcome", "Duration", "Date"],
     "Meetings": ["MeetingID", "LeadID", "Business", "DateTime", "CalLink", "Status"]
@@ -360,6 +401,80 @@ async def restore_leads_from_sheets() -> List[Dict[str, Any]]:
         logger.warning(f"[SheetsSync] Could not restore leads from sheets: {exc}")
         return []
 
+async def pull_manual_edits_from_sheets(workbook_name: Optional[str] = None) -> Dict[str, Any]:
+    """Read owner-entered EMAILS back out of the Leads tab into the database.
+
+    Why this exists (2026-08-09): the sheet was WRITE-ONLY. `restore_leads_from_sheets`
+    is called in exactly one place — the "database appears empty" branch at
+    startup — so once the DB holds any lead, nothing ever reads the sheet again.
+    The owner planned to fill in emails by hand and expected Nova to use them;
+    without this they would have sat in the sheet forever while every outreach
+    lane saw a blank field.
+
+    Deliberately NARROW. It pulls one field, `email`, and only into a lead that
+    does not already have one. The database is the canonical owner of prospect
+    data (CLAUDE.md SSoT) and the sheet is its projection — a projection that
+    can overwrite arbitrary columns of its source is no longer a projection,
+    and a stray edit or a mis-sorted column would silently corrupt the pipeline.
+
+    Every address still passes the same validator as any other ingest path, so
+    a typo or a role address is rejected here exactly as it would be anywhere
+    else. Emails are never invented — that is the owner's own rule and the
+    documented failure mode of pattern-guessing.
+
+    Returns {"checked", "updated", "rejected", "skipped"}.
+    """
+    from app.core.database import DatabaseManager
+    from app.skills.lead_gen_v3 import _is_valid_business_email
+
+    out = {"checked": 0, "updated": 0, "rejected": 0, "skipped": 0}
+    try:
+        worksheet = await _get_worksheet("Leads", workbook_name)
+        records = await asyncio.wait_for(
+            asyncio.to_thread(worksheet.get_all_records), timeout=SHEETS_READ_TIMEOUT_S)
+    except Exception as exc:
+        logger.warning(f"[SheetsSync] could not read manual edits ({exc})")
+        return out
+
+    for row in records or []:
+        business = str(row.get("Business") or "").strip()
+        email = str(row.get("Email") or "").strip().lower()
+        if not business or not email:
+            continue
+        out["checked"] += 1
+        if not _is_valid_business_email(email):
+            logger.info(f"[SHEET-PULL] rejected {email!r} for {business!r} "
+                        f"— failed the same validator every other ingest path uses")
+            out["rejected"] += 1
+            continue
+        try:
+            state = str(row.get("State") or "").strip().upper()
+            existing = await DatabaseManager.fetchone(
+                "SELECT id, COALESCE(email,'') AS email FROM leads "
+                "WHERE lower(trim(business)) = ? "
+                "AND (? = '' OR upper(trim(COALESCE(state,''))) = ?) LIMIT 1",
+                (business.lower(), state, state))
+            existing = dict(existing) if existing else None
+            if not existing:
+                out["skipped"] += 1
+                continue
+            if (existing.get("email") or "").strip():
+                out["skipped"] += 1          # never overwrite an address we hold
+                continue
+            await DatabaseManager.query(
+                "UPDATE leads SET email = ?, email_source = 'owner_manual', "
+                "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (email, existing["id"]))
+            out["updated"] += 1
+            logger.info(f"[SHEET-PULL] {business}: email set from the sheet")
+        except Exception as exc:
+            logger.warning(f"[SHEET-PULL] {business!r} not updated ({exc})")
+
+    logger.info(f"[SHEET-PULL] checked={out['checked']} updated={out['updated']} "
+                f"rejected={out['rejected']} skipped={out['skipped']}")
+    return out
+
+
 async def sync_lead_to_sheets(lead: Dict[str, Any], workbook_name: Optional[str] = None) -> Dict[str, Any]:
     try:
         worksheet = await _get_worksheet("Leads", workbook_name)
@@ -380,6 +495,8 @@ async def sync_lead_to_sheets(lead: Dict[str, Any], workbook_name: Optional[str]
             str(lead.get("state") or "").strip().upper(),
             _principals_cell(lead),
             _sole_owner_cell(lead),
+            _email_sent_cell(lead),
+            _called_cell(lead),
         ]
 
         # Match on STABLE identity — never the SQLite id. The auto-increment
