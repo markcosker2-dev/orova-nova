@@ -10,7 +10,7 @@ tags: [brain, active, session-start]
 # 🧭 Active Context
 
 > [!abstract] Read this first
-> Session-start file (CLAUDE.md rule). Last full refresh **2026-07-31**.
+> Session-start file (CLAUDE.md rule). Last full refresh **2026-08-10**.
 > Verify against production before trusting anything here — if a doc and the
 > running system disagree, **the system wins**, and you fix the doc.
 
@@ -20,14 +20,44 @@ tags: [brain, active, session-start]
 
 | | |
 |---|---|
-| **Build live** | `0c9ddfac6e6c` · `db: ok` · `memory: ok` |
-| **Leads in production** | **0** ⚠️ |
-| **Tests** | 750 passing |
-| **Open PRs** | [#124](https://github.com/markcosker2-dev/orova-nova/pull/124) — never email a guessed address |
+| **Build live** | `c967dc8ef56c` · `db: ok` · `memory: ok` |
+| **Leads in production** | **10** — all WA/OR contractors, named owner + verified phone |
+| **Tests** | **1302 passing** · knowledge gate clean |
+| **Open PRs** | 0 · **3 unmerged commits** on `feat/sheet-niche-state-sole-owner` |
 | **Conversations ever** | **0** |
+
+> [!success] Durability is FIXED (2026-08-09) — the big one
+> Every Sheets append was writing to `Leads!A2:L2` and overwriting the previous
+> lead, so the tab never held more than one row and every restore recovered
+> exactly one lead. Weeks of "leads keep vanishing" was this.
+> `✅ verified: sheet holds N rows covering N distinct businesses` now prints on
+> every hunt. **Deploys are no longer data-loss events.**
+> Full story: [[2026-08-09-the-write-was-overwriting-row-two]]
 
 > [!danger] The number that matters
 > **0 calls. 0 meetings. 0 prospect conversations, ever.**
+>
+> Unchanged through 2026-08-09, a day that fixed seven real defects. Every one
+> of them removed a reason this number *couldn't* move; none of them moved it.
+> The next thing is a phone call, not a commit.
+
+> [!tip] ICP qualification — settled with measurements 2026-08-09
+> The WA licence registry answers "can they afford us" for free. Two signals,
+> and they are **different questions**:
+>
+> - **principal count** (`4xk5-x9j6`) → *urgency*. Payroll is an external
+>   deadline. 58.9% of contractors have exactly one principal.
+> - **insurance cover** (`ciwg-agsx`) → *affordability*. Cover scales with job
+>   size. 88.4% carry exactly $1M; only 7.9% carry more.
+>
+> **Solo is a discount, not a disqualification.** Of contractors carrying above
+> the minimum, **42% are sole operators** — they can pay; their urgency is
+> personal rather than payroll-driven. `business_context.json`'s flat
+> "No payroll (solo operator) - no urgency" kill signal conflates the two, and
+> the Retell script now branches instead of disqualifying.
+>
+> Institutional firms (>8 principals) are excluded — they have in-house
+> marketing and will not take a cold call.
 > Discovery is solved. ~29,000 West Coast contractors are reachable for free.
 > **Nothing in the codebase is the constraint any more.**
 
