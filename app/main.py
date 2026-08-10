@@ -1641,6 +1641,26 @@ def map_csv_headers(fieldnames) -> dict:
     return header_map
 
 
+@app.post("/api/leads/pull-sheet-edits")
+async def pull_sheet_edits(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
+    """Read owner-entered EMAILS out of the Leads tab into the database.
+
+    The sheet was write-only: restore_leads_from_sheets runs in exactly one
+    place, the "database appears empty" branch at startup, so once the DB holds
+    any lead nothing ever reads the sheet again. Emails typed in by hand would
+    have sat there forever while every outreach lane saw a blank field.
+
+    Narrow on purpose — `email` only, and only into a lead that has none. The
+    database is the canonical owner of prospect data and the sheet is its
+    projection; a projection able to overwrite arbitrary columns of its source
+    is not a projection. Addresses pass the same validator as any other ingest
+    path, so a typo or role address is rejected here exactly as elsewhere.
+    """
+    from app.skills.sheets_sync import pull_manual_edits_from_sheets
+    result = await pull_manual_edits_from_sheets()
+    return {"status": "ok", **result}
+
+
 @app.post("/api/leads/import-csv")
 async def import_leads_csv(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
     """Import prospect lists from a CSV body (SDR Stage 1: any source → pipeline).
