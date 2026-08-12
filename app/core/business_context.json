@@ -141,7 +141,7 @@
     "early_adopter_qualifiers": {
       "_note": "ALL FOUR must be true. These decide fit far more than the vertical does.",
       "backlog_under_8_weeks": "THE qualifier. Booked solid = zero pain = disqualify, no matter how ideal they look.",
-      "w2_crew_on_payroll": "Fixed cost is the urgency engine. A solo operator can coast; a man with 6 employees cannot.",
+      "w2_crew_on_payroll": "Payroll is the LOUDEST urgency signal, not the only one: a man with 6 employees feels an external deadline every Friday. But absence of payroll is NOT absence of urgency — a sole operator's deadline is his own calendar and income, and he is also the estimator and the project manager, so his time is the scarcest thing he owns. Measured 2026-08-09: 126 of 300 contractors carrying above the $1M cover minimum (42%) are sole operators, so they can afford us. Score crew as an urgency AMPLIFIER, never as a gate.",
       "owner_runs_own_estimates": "So the wasted time is HIS, not an employee's.",
       "already_paying_for_leads_and_unhappy": "Angi/HomeAdvisor/Thumbtack/LSA. Proves the wallet already opens for this job-to-be-done."
     },
@@ -242,8 +242,9 @@
     },
     "objection_handling": {
       "what_does_it_cost": "DEFLECT - NEVER quote, estimate, hint at, or bracket a number, and never say the word 'free'. Say: 'That's Mark's conversation, not mine - it depends on what you're spending now and what a job's worth to you. That's exactly what the ten minutes is for.' If pushed a second time, repeat once and offer the call again. If pushed a third time, take their email and have Mark answer directly.",
+      "what_would_you_actually_do": "He is testing for vagueness, so be concrete and then stop. Say: 'Fair question. Facebook and Instagram ads pointed at homeowners in your service area - not contractors, not the whole state. The ads use your actual work, your jobs and your before-and-afters, because that is what makes someone think of their own kitchen. Then every enquiry gets called within five minutes and screened before it ever reaches you, so what lands on your calendar is a real project. Mark runs all of it - you would not be logging into anything.' THEN STOP and go back to the ask. DO NOT go further into campaign structure, audiences, budgets, pixels or creative testing - he is buying kitchen leads, not media buying, and detail past this point sounds like a pitch. If he asks HOW MANY leads or what they will cost: 'Honestly, anyone who gives you a number on a first call is guessing. That is what Mark wants to look at your actual numbers for.' NEVER promise a lead volume or a cost per lead - we have no data. Do not claim other builders' results; there are none.",
       "i_already_pay_angi": "Yeah, most builders we talk to do - and most of them tell us the same thing about lead quality. The difference here is nobody else is calling those leads for you in five minutes and screening them before they hit your calendar. That's worth ten minutes with Mark to look at properly.",
-      "too_expensive_price_anchor": "NEVER argue price, quote a number, or compare to Angi's monthly - and never counter with a discount or a trial. CHANGE THE UNIT: 'Totally fair. The way Mark looks at it is what an idle week costs you with the crew on payroll - one extra job usually covers the whole thing several times over. Whether that maths works for your numbers is exactly what he'd want to go through with you.'",
+      "too_expensive_price_anchor": "NEVER argue price, quote a number, or compare to Angi's monthly - and never counter with a discount or a trial. CHANGE THE UNIT, and match the unit to {{crew_status}} - saying 'crew' or 'payroll' to a sole operator tells him you were not listening. IF has_crew: 'Totally fair. The way Mark looks at it is what an idle week costs you with the crew on payroll - one extra job usually covers the whole thing several times over.' IF solo: 'Totally fair. The way Mark looks at it is what one wasted Saturday costs you - you're the estimator and the guy on the roof, so the day you don't get back is the expensive part.' IF unknown: stay on the wasted-estimate unit, which is true either way. Then close the same way: 'Whether that maths works for your numbers is exactly what he'd want to go through with you.'",
       "im_not_interested": "Understood, I appreciate you taking the call. Have a good one. (END. No rebuttal, no second ask.)",
       "are_you_a_robot": "I am - I'm an AI assistant on Mark's team. Happy to have Mark call you directly if you'd prefer.",
       "send_me_an_email": "Capture the email, confirm it back, send the one-pager + booking link, set a 3-day follow-up."
@@ -344,14 +345,13 @@
     "kill_signals": [
       "'We're booked into next spring' - no pain, end politely",
       "All work is referral and he is happy",
-      "Cannot recall a specific wasted estimate",
-      "No payroll (solo operator) - no urgency"
+      "Cannot recall a specific wasted estimate"
     ],
     "validation_bar": "Of 20 calls: >=8 hitting (not booked solid) + (currently paying for leads) + (names a specific wasted estimate in the last 2 weeks) = problem is REAL. <=3 = the pitch or the vertical is wrong: STOP and escalate to Mark with the transcripts. Never switch the lead vertical autonomously — the ICP is an owner decision, not an agent one (ADR-0015). The only real validation: >=2 agree to a PAID pilot."
   },
   "competition": {
     "current_behavior": "Referrals + past clients + yard signs (50-80% of his work), Angi/HomeAdvisor/Thumbtack (~$300-800/mo), architect/designer referral partners, Houzz, Google Local Services Ads, Nextdoor, his own Instagram - and most often: nothing, he waits.",
-    "real_enemy_1_inertia": "Doing nothing and waiting. Awareness MAX, switching cost ZERO, satisfaction 'acceptable'. Costs $0, needs no decision, has worked for 15 years. This is what we lose to most often - 'let me think about it' means 'I'll wait and see if referrals cover it'. ONLY a deadline he already feels beats it: crew on payroll + backlog under 8 weeks.",
+    "real_enemy_1_inertia": "Doing nothing and waiting. Awareness MAX, switching cost ZERO, satisfaction 'acceptable'. Costs $0, needs no decision, has worked for 15 years. This is what we lose to most often - 'let me think about it' means 'I'll wait and see if referrals cover it'. ONLY a deadline he already feels beats it - and payroll is just the loudest kind. IF has_crew: guys on the books + backlog under 8 weeks. IF solo: a thin month is money straight out of his own pocket, and a wasted day is one he cannot delegate. Both are real deadlines; only one is institutional. Do not mistake 'no payroll' for 'no deadline'.",
     "real_enemy_2_price_anchor": "He pays Angi ~$400/mo; our all-in ask is ~$6,500. That is 16x. He does not compare us to an agency - he compares us to the number he already pays for what he thinks we sell. NEVER argue the price down. CHANGE THE UNIT: from cost-per-lead to cost-per-idle-week-of-payroll, or cost-per-wasted-Saturday. If the conversation stays on 'leads', Angi's price wins.",
     "direct": [
       "Remodeler-only marketing agencies (whole brand is contractors, 30+ case studies) - they beat us on the one thing we lack: PROOF",

@@ -19,6 +19,11 @@ retell_pitch` — keep this in sync with them.
 4. **One qualifying question.** Move the conversation to them:
    > "Are you happy with how many serious buyers you're actually talking to right
    > now, or is a lot of it tire-kickers?"
+   >
+   > Then **follow the answer** — don't jump to the ask. One question surfaces a
+   > complaint; a complaint is not urgency. See `discovery.md` for the
+   > surface → cost → stakes escalation, the sole-owner vs has-crew branch, and
+   > when to qualify out.
 5. **The ask — interest first, then the slot.** On a *cold* call an interest CTA
    books more than jumping straight to a specific time (Gong data). Confirm
    interest, *then* pin the slot:
