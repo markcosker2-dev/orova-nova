@@ -71,6 +71,7 @@ docs/
 # Version-control the Sales Intelligence skill pack (permanent HermesClaw layer);
 # keep the rest of .claude/ (caches, worktrees, local settings) ignored.
 !.claude/skills/
+!.claude/agents/
 .opencode/
 .playwright-mcp/
 .sisyphus/
