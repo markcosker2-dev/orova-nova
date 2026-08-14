@@ -256,8 +256,18 @@ class _LeadRepo:
                         (email.strip(), cid)
                     ).fetchone()
                     if row:
-                        logger.info(f"[DEDUP] Skipping duplicate lead: {email}")
-                        conn.rollback()   # release the read txn before pooling
+                        # Heal on EVERY branch, not just the last one
+                        # (2026-08-14). Only business+state backfilled, so a
+                        # lead matched by email was frozen at whatever it held
+                        # when first seen — and the hunt GUESSES an email for
+                        # some registry leads, which is enough to route them
+                        # here. Live that day: of five re-discovered leads the
+                        # only two that failed to heal were exactly the two
+                        # whose notes read "| Email guess", both scored 78 in
+                        # flight and both still stored with no signals at all.
+                        cls._backfill_registry_fields(conn, row["id"], lead)
+                        logger.info(f"[DEDUP] Existing lead refreshed, not duplicated: {email}")
+                        conn.commit()
                         return -1
                 if domain:
                     row = conn.execute(
@@ -265,8 +275,9 @@ class _LeadRepo:
                         (f"%{domain.lower()}%", cid)
                     ).fetchone()
                     if row:
-                        logger.info(f"[DEDUP] Skipping duplicate lead: {domain}")
-                        conn.rollback()   # release the read txn before pooling
+                        cls._backfill_registry_fields(conn, row["id"], lead)
+                        logger.info(f"[DEDUP] Existing lead refreshed, not duplicated: {domain}")
+                        conn.commit()
                         return -1
                 # ── Last-resort identity: business name + state ────────────
                 # Only when BOTH stronger keys are absent. Licence-registry

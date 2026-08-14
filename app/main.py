@@ -865,6 +865,12 @@ async def get_leads(limit: int = 100, include_invalid: bool = False,
             -- /api/leads cannot show sole-owner status, which is the field
             -- that decides which pain the call script opens on.
             COALESCE(principal_count, 0) as principal_count,
+            -- General liability cover — the AFFORDABILITY half of the ICP and
+            -- the largest single scoring component. Omitting it here meant a
+            -- $2M contractor and a $1M one were indistinguishable in the
+            -- dashboard, and the only way to tell them apart was to reverse
+            -- the arithmetic out of the score. 0 = never looked up.
+            COALESCE(insurance_amt, 0) as insurance_amt,
             client_id, created_at
         FROM leads
         {where}
