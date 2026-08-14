@@ -56,6 +56,13 @@ CANONICAL_SCHEMA_SQL = """
         -- 58.9% of WA contractors have exactly one, so this genuinely
         -- discriminates. 0 = not looked up, NOT "zero principals".
         principal_count INTEGER DEFAULT 0,
+        -- General liability cover from the WA L&I insurance dataset, in dollars.
+        -- The AFFORDABILITY half of the ICP (principals are the urgency half),
+        -- and worth up to 20 points — the largest single component of the score.
+        -- It was fetched, scored on, and then thrown away at INSERT, so no
+        -- stored lead could show it and no recompute could reproduce its own
+        -- stored score. 0 = never looked up, NOT "carries nothing".
+        insurance_amt REAL DEFAULT 0,
         -- Calls actually placed to this lead. The Leads sheet renders it as a
         -- Called Yes/No so the owner can see at a glance who has been worked
         -- without cross-referencing the CallLog tab. 0 = never called.
