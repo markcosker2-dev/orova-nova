@@ -12,6 +12,20 @@ logger = logging.getLogger(__name__)
 _REGISTRY_SOURCE_TAGS = ("wa_lni", "or_ccb", "ca_cslb", "licence", "license")
 
 
+def _as_amount(value) -> float:
+    """Dollars as a number, or 0.0 for anything unparseable.
+
+    0 is the "never looked up" sentinel, which `_affordability_points` scores
+    as neutral rather than as "carries nothing" — absence of a lookup is not
+    evidence of a small operation.
+    """
+    try:
+        amount = float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    return amount if amount > 0 else 0.0
+
+
 class _LeadRepo:
     """Mixin: lead-related database operations."""
 
@@ -162,11 +176,41 @@ class _LeadRepo:
                 sets.append("vertical = ?")
                 params.append(incoming_vertical)
 
+            # General liability cover — the AFFORDABILITY half of the ICP, and
+            # the largest single component of the score. Same rule as the
+            # principal count: fill a gap, never overwrite a known figure with
+            # an unknown one. `_attach_wa_insurance` fails open to 0, so an
+            # unconditional write would let one failed lookup erase a real $2M.
+            incoming_cover = _as_amount(lead.get("insurance_amt"))
+            if incoming_cover > 0:
+                sets.append("insurance_amt = CASE WHEN COALESCE(insurance_amt,0) = 0 "
+                            "THEN ? ELSE insurance_amt END")
+                params.append(incoming_cover)
+
             if not sets:
                 return
             params.append(lead_id)
             conn.execute(f"UPDATE leads SET {', '.join(sets)}, "
                          f"updated_at = CURRENT_TIMESTAMP WHERE id = ?", params)
+
+            # Re-score from the HEALED row, not the incoming one. Both feed the
+            # score: principals drive urgency, cover drives affordability. A
+            # backfill that repairs the inputs and leaves the score stale is
+            # half a repair — the score is what the Leads sheet ranks by and
+            # what get_uncontacted_callable_leads sorts the day's call budget
+            # by (ORDER BY COALESCE(score,0) DESC), so the repair would never
+            # reach the thing that decides who gets phoned.
+            healed = conn.execute("SELECT * FROM leads WHERE id = ?",
+                                  (lead_id,)).fetchone()
+            if healed is not None:
+                from app.skills.lead_validator import score_lead_icp
+                fresh = score_lead_icp(dict(healed))["score"]
+                conn.execute("UPDATE leads SET score = ? WHERE id = ?",
+                             (fresh, lead_id))
+                logger.info(f"[DEDUP-BACKFILL] lead {lead_id}: refreshed "
+                            f"{len(sets)} field(s) from re-discovery, "
+                            f"score -> {fresh}")
+                return
             logger.info(f"[DEDUP-BACKFILL] lead {lead_id}: refreshed "
                         f"{len(sets)} field(s) from re-discovery")
         except Exception as e:
@@ -296,8 +340,8 @@ class _LeadRepo:
                 # Insert — same transaction, no race window
                 vertical = lead.get("vertical") or default_vertical or ""
                 cursor = conn.execute(
-                    """INSERT INTO leads (business, owner, url, website, email, phone, vertical, status, notes, icebreaker, score, client_id, email_status, owner_title, linkedin_url, owner_source, email_source, phone_source, phone_verified, owner_confidence, evidence_json, ad_signals, state, principal_count, updated_at)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, CURRENT_TIMESTAMP)""",
+                    """INSERT INTO leads (business, owner, url, website, email, phone, vertical, status, notes, icebreaker, score, client_id, email_status, owner_title, linkedin_url, owner_source, email_source, phone_source, phone_verified, owner_confidence, evidence_json, ad_signals, state, principal_count, insurance_amt, updated_at)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, CURRENT_TIMESTAMP)""",
                     (lead.get("business",""), lead.get("owner",""), lead.get("url",""),
                      lead.get("website",""), email, lead.get("phone",""),
                      vertical, lead.get("status","New"), lead.get("notes",""),
@@ -316,7 +360,10 @@ class _LeadRepo:
                      str(lead.get("state") or "").strip().upper(),
                      # 0 means "not looked up", never "zero principals" — the
                      # sheet renders it as unknown rather than as sole-owner.
-                     int(lead.get("principal_count") or 0))
+                     int(lead.get("principal_count") or 0),
+                     # Same convention: 0 is "never looked up", which the
+                     # scorer treats as neutral rather than as no cover.
+                     _as_amount(lead.get("insurance_amt")))
                 )
                 lead_id = cursor.lastrowid
                 conn.commit()
