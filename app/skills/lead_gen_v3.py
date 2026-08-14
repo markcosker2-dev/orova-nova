@@ -1270,6 +1270,45 @@ def off_icp_trade_in_name(business_name: str) -> str:
     return ""
 
 
+# Cursor into the WA L&I register. Advanced one page per hunt so successive
+# runs reach new contractors instead of re-reading page one.
+_WA_LNI_OFFSET_KEY = "wa_lni_hunt_offset"
+
+# Socrata refuses offset+limit beyond this on most datasets; wrap well before.
+_WA_LNI_MAX_OFFSET = 50_000
+
+
+async def _next_wa_offset(page: int) -> int:
+    """Return this run's offset and advance the cursor by one page.
+
+    Fail-open to 0: an unreadable cursor must degrade to "hunt page one", never
+    to "no hunt". A repeated page costs nothing — dedup absorbs it and the
+    backfill turns the re-read into a repair.
+    """
+    from app.core.database import DatabaseManager
+    try:
+        current = int(await DatabaseManager.get_state(_WA_LNI_OFFSET_KEY, 0) or 0)
+    except Exception:
+        current = 0
+    if current < 0 or current > _WA_LNI_MAX_OFFSET:
+        current = 0
+    try:
+        await DatabaseManager.set_state(_WA_LNI_OFFSET_KEY, current + page)
+    except Exception as e:
+        logger.warning(f"[WA_LNI] could not advance the register cursor ({e}) — "
+                       f"the next hunt will re-read this page")
+    return current
+
+
+async def _reset_wa_offset() -> None:
+    """Rewind to the start of the register once it has been walked out."""
+    from app.core.database import DatabaseManager
+    try:
+        await DatabaseManager.set_state(_WA_LNI_OFFSET_KEY, 0)
+    except Exception:
+        pass
+
+
 async def _source_wa_lni_licences(count: int, cities: tuple = _WA_METRO_CITIES) -> list:
     """Discover WA remodelers from the L&I licence registry. Free, no key, no quota.
 
@@ -1347,12 +1386,28 @@ async def _source_wa_lni_licences(count: int, cities: tuple = _WA_METRO_CITIES) 
     # `count` rows would reliably under-deliver. 6x plus headroom, capped at the
     # Socrata page limit.
     fetch = min(max(count * 6, 200), 1000)
+
+    # ── Walk the register, don't re-read page one (2026-08-14) ──────────────
+    # The WHERE clause is fixed and the ORDER is deterministic, and there was
+    # no $offset — so every hunt fetched THE SAME first `fetch` rows, forever.
+    # Live proof: five consecutive hunts returned the same five businesses and
+    # added zero leads, while 8,768 contractors passed the same filter and were
+    # unreachable. The one-off 10 -> 14 growth came from changing the filter,
+    # not from hunting again.
+    #
+    # A cursor in DB state advances a page per run and wraps when the register
+    # is exhausted. It resets on deploy (state is not restored from Sheets —
+    # "leads only"), which just means re-walking from the start; dedup absorbs
+    # that harmlessly, and the backfill turns a re-read into a repair.
+    offset = await _next_wa_offset(fetch)
+
     leads: list = []
     seen_phones: set = set()
     try:
         client = await _get_http_client()
         resp = await client.get(_WA_LNI_DATASET, params={
             "$where": where,
+            "$offset": str(offset),
             "$select": ("businessname,primaryprincipalname,phonenumber,address1,"
                         "city,state,zip,contractorlicensenumber,"
                         "licenseeffectivedate,businesstypecodedesc,"
@@ -1375,6 +1430,14 @@ async def _source_wa_lni_licences(count: int, cities: tuple = _WA_METRO_CITIES) 
     except Exception as e:
         logger.error(f"[WA_LNI] fetch failed: {e}")
         return []
+
+    # A short page means the register has been walked out under this filter.
+    # Rewind so the next hunt starts again from the oldest licences rather than
+    # paging off the end into permanent silence.
+    if len(rows) < fetch:
+        await _reset_wa_offset()
+        logger.info(f"[WA_LNI] register walked out at offset {offset} "
+                    f"({len(rows)} rows) — cursor rewound to the start")
 
     # Collect a POOL, not just `count`. _rank_wa_candidates then drops the
     # institutional tier and puts sole operators first, which it can only do if
