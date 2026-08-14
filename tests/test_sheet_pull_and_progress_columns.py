@@ -92,12 +92,25 @@ class _FakeDB:
         self.rows = rows
         self.updates = []
 
-    async def fetchone(self, sql, params=None):
-        biz = params[0]
+    async def fetchall(self, sql, params=None):
+        """Mirrors the real query: business + optional state + client_id.
+
+        The fake used to answer `fetchone` and match on business alone, which
+        made it easier to satisfy than production — the shape that let the
+        row-2 overwrite hide for weeks. It now honours every filter the real
+        SELECT applies, so a missing one fails here instead of in the sheet.
+        """
+        biz, state, _state2, client_id = params
+        out = []
         for r in self.rows:
-            if r["business"].lower() == biz:
-                return dict(r)
-        return None
+            if r["business"].lower() != biz:
+                continue
+            if state and str(r.get("state") or "").upper() != state:
+                continue
+            if int(r.get("client_id") or 0) != int(client_id):
+                continue
+            out.append(dict(r))
+        return out
 
     async def query(self, sql, params=None, **k):
         self.updates.append(params)
@@ -122,7 +135,8 @@ def _pull(records, db_rows):
 def test_an_owner_typed_email_reaches_the_database():
     res, db = _pull(
         [{"Business": "ACCRETE CONSTRUCTION LLC", "Email": "michael@accrete.com", "State": "WA"}],
-        [{"id": 7, "business": "ACCRETE CONSTRUCTION LLC", "email": ""}])
+        [{"id": 7, "business": "ACCRETE CONSTRUCTION LLC", "email": "",
+           "state": "WA", "client_id": 0}])
     assert res["updated"] == 1, res
     assert db.updates and db.updates[0][0] == "michael@accrete.com"
     assert db.updates[0][1] == 7
@@ -132,7 +146,8 @@ def test_an_existing_address_is_never_overwritten():
     """The DB is canonical. A stale sheet cell must not clobber a real address."""
     res, db = _pull(
         [{"Business": "ACCRETE CONSTRUCTION LLC", "Email": "typo@accrete.com", "State": "WA"}],
-        [{"id": 7, "business": "ACCRETE CONSTRUCTION LLC", "email": "real@accrete.com"}])
+        [{"id": 7, "business": "ACCRETE CONSTRUCTION LLC", "email": "real@accrete.com",
+           "state": "WA", "client_id": 0}])
     assert res["updated"] == 0
     assert res["skipped"] == 1
     assert db.updates == []
@@ -141,7 +156,8 @@ def test_an_existing_address_is_never_overwritten():
 def test_a_bad_address_is_rejected_by_the_same_validator_as_every_ingest():
     res, _ = _pull(
         [{"Business": "ACCRETE CONSTRUCTION LLC", "Email": "not-an-email", "State": "WA"}],
-        [{"id": 7, "business": "ACCRETE CONSTRUCTION LLC", "email": ""}])
+        [{"id": 7, "business": "ACCRETE CONSTRUCTION LLC", "email": "",
+           "state": "WA", "client_id": 0}])
     assert res["updated"] == 0
     assert res["rejected"] == 1
 
@@ -155,9 +171,45 @@ def test_a_business_not_in_the_database_is_skipped_not_created():
     assert db.updates == []
 
 
+def test_a_blank_state_cell_with_two_matching_firms_is_skipped_not_guessed():
+    """A bare name can hit two genuinely different firms.
+
+    `save_lead` refuses to merge on a name alone for exactly this reason.
+    Writing the owner's address onto an arbitrary one of them is worse than
+    skipping, because it looks like it worked — he would never re-check it.
+    """
+    res, db = _pull(
+        [{"Business": "SUMMIT BUILDERS", "Email": "owner@summit.com", "State": ""}],
+        [{"id": 1, "business": "SUMMIT BUILDERS", "email": "", "state": "WA", "client_id": 0},
+         {"id": 2, "business": "SUMMIT BUILDERS", "email": "", "state": "OR", "client_id": 0}])
+    assert res["updated"] == 0
+    assert res["skipped"] == 1
+    assert db.updates == [], "an ambiguous match must never be guessed"
+
+
+def test_a_blank_state_cell_still_works_when_only_one_firm_matches():
+    """The guard must not block the ordinary case."""
+    res, db = _pull(
+        [{"Business": "SUMMIT BUILDERS", "Email": "owner@summit.com", "State": ""}],
+        [{"id": 1, "business": "SUMMIT BUILDERS", "email": "", "state": "WA", "client_id": 0}])
+    assert res["updated"] == 1
+    assert db.updates[0][1] == 1
+
+
+def test_another_clients_lead_is_never_touched():
+    """Every other lead query scopes by client_id; this one must too."""
+    res, db = _pull(
+        [{"Business": "ACCRETE CONSTRUCTION LLC", "Email": "michael@accrete.com", "State": "WA"}],
+        [{"id": 9, "business": "ACCRETE CONSTRUCTION LLC", "email": "",
+          "state": "WA", "client_id": 3}])
+    assert res["updated"] == 0
+    assert db.updates == [], "a sheet must not write across client boundaries"
+
+
 def test_blank_email_cells_are_ignored_entirely():
     res, db = _pull(
         [{"Business": "ACCRETE CONSTRUCTION LLC", "Email": "", "State": "WA"}],
-        [{"id": 7, "business": "ACCRETE CONSTRUCTION LLC", "email": ""}])
+        [{"id": 7, "business": "ACCRETE CONSTRUCTION LLC", "email": "",
+           "state": "WA", "client_id": 0}])
     assert res["checked"] == 0 and res["updated"] == 0
     assert db.updates == []

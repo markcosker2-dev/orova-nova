@@ -939,12 +939,19 @@ def score_lead_icp(lead: dict) -> dict:
 
     score = sum(breakdown.values())
 
+    # Phone-first, because that is the channel that exists (2026-08-12). These
+    # read "email today" / "email this week" until now, on a pipeline where cold
+    # email is closed by provider policy (ADR-0014, 0 of 9 permit it) and the
+    # Retell call is the live channel. The score is rendered in the sheet and
+    # the dashboard, so the recommendation is operator-facing instruction —
+    # pointing it at a dead channel is the same class of error as the
+    # kill_signal that told the call to disqualify sole operators.
     if score >= 70:
-        recommendation = "🔥 HOT — direct owner contact, on-ICP: email today"
+        recommendation = "🔥 HOT — direct owner contact, on-ICP: call today"
     elif score >= 45:
-        recommendation = "⭐ WARM — contactable, partial fit: email this week"
+        recommendation = "⭐ WARM — contactable, partial fit: call this week"
     elif score >= 25:
-        recommendation = "📧 COLD — thin contact data: enrich further before outreach"
+        recommendation = "📞 COLD — thin contact data: enrich before calling"
     else:
         recommendation = "⏭️ SKIP — not worth outreach time"
 
