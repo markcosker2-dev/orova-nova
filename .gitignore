@@ -72,6 +72,13 @@ docs/
 # keep the rest of .claude/ (caches, worktrees, local settings) ignored.
 !.claude/skills/
 !.claude/agents/
+# The `watch` skill's runtime is third-party MIT Python (bradautomates/claude-video)
+# with no role in Nova. Vendoring it into a PUBLIC repo published someone else's
+# transcription tool and raised 7 false-positive CodeQL alerts: load_api_key()
+# returns (backend, api_key), so CodeQL taints the tuple and flags every print of
+# the backend NAME ("groq"/"openai"). The key itself is never logged. Kept on disk
+# so the skill still runs locally; kept out of git so the scanner stays honest.
+.claude/skills/watch/scripts/
 .opencode/
 .playwright-mcp/
 .sisyphus/
