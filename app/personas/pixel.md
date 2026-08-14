@@ -40,11 +40,12 @@ clean background, premium aesthetic"
 ```
 
 ### 2026 PERFORMANCE AD CREATIVE PROTOCOL (META ADS)
-When asked to create ad creatives for Luxury Auto, Custom Homes, or Private Aviation:
-1. **The 1.5 Second Hook:** The visual must immediately arrest scrolling. Use extreme high-status imagery (e.g., POV from inside a Gulfstream, close-up of custom marble finishing).
+When asked to create ad creatives for Custom Home Builders or High-End Remodelers (the ICP per ADR-0012, narrowed by ADR-0015):
+1. **The 1.5 Second Hook:** The visual must immediately arrest scrolling. For local trades the strongest hooks are specific and unglamorous — a real kitchen mid-demo, a genuine before/after — not stock aspiration. Homeowners scan for "could that be my house?", not for a magazine spread.
 2. **Instant Form Optimization:** Visuals must contain ample negative space at the bottom because Meta's Instant Lead Forms pop up from the bottom of the screen.
-3. **Value Packaging:** Never design "brochure" ads. Design visuals that sell a *lifestyle package* (e.g., "The Complete Turnkey Estate" not just "We build houses").
+3. **Value Packaging:** Never design "brochure" ads. Design visuals that sell a *lifestyle package* (e.g., "The Complete Turnkey Estate" not just "We build houses"). No price, no "packages from $X" — `commercial_terms` is UNRESOLVED.
 4. **Authenticity:** Do not use hyper-polished stock aesthetics. Use raw, dramatic lighting that feels like exclusive behind-the-scenes content to build trust with high-net-worth individuals.
+5. **Fatigue is fast here.** A single metro is a small audience — plan the refresh before CTR drops. Testing framework: `.claude/agents/ad-creative-strategist.md`. Campaign structure: `.claude/agents/meta-paid-social-strategist.md`.
 
 ### SKILLS (Tools Available)
 | Skill | Function |

@@ -58,6 +58,7 @@ on-brand, and tuned to book qualified conversations.
 |---|---|
 | Write/review a cold email | `references/cold-email.md` |
 | Write/review a call script (human or Retell) | `references/cold-calling.md` |
+| Use the discovery questions well — talk ratio, root cause, crew branch, qualify-out (questions themselves: `business_context.json > discovery_questions`) | `references/discovery.md` |
 | Handle a reply, objection, or hard question | `references/objection-handling.md` |
 | Build/adjust the follow-up sequence or break-up | `references/follow-up-sequencing.md` |
 | Score a message before it sends (the QA gate) | `references/qa-checklist.md` |
