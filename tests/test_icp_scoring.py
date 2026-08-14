@@ -31,7 +31,7 @@ def test_perfect_icp_lead_is_hot():
     r = score_lead_icp(lead)
     assert r["score"] >= 70, r
     assert "HOT" in r["recommendation"]
-    assert r["breakdown"]["luxury_signal"] == 20, "'custom home' is a can-afford signal"
+    assert r["breakdown"]["luxury_signal"] == 10, "'custom home' is a can-afford signal"
     assert r["breakdown"]["vertical_match"] == 10, "'builders' is the lead vertical"
 
 

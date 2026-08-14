@@ -788,6 +788,55 @@ CREW_HAS_CREW = "has_crew"
 CREW_UNKNOWN = "unknown"
 
 
+def _affordability_points(lead: dict) -> int:
+    """CAN THEY PAY? — 20 max, from general liability cover.
+
+    ADR-0012 qualifies on whether ONE extra closed deal per month covers the
+    ~$6.5-7.5K all-in cost. That is a question about JOB SIZE, and GL cover
+    scales with the jobs a contractor actually takes on.
+
+    Measured on the live WA registry 2026-08-09: 88.4% carry exactly $1,000,000
+    and only 7.9% carry more. So above-minimum is rare and meaningful, while
+    the $1M crowd is simply "normal" rather than good or bad. Unknown scores
+    the same as standard, because absence of a lookup is not evidence of a
+    small operation — penalising it would rank leads by how much enrichment we
+    happened to run.
+    """
+    try:
+        amt = float(lead.get("insurance_amt") or 0)
+    except (TypeError, ValueError):
+        return 10
+    if amt >= 2_000_000:
+        return 20          # top ~7% — demonstrably large jobs
+    if amt > 1_000_000:
+        return 15
+    if amt >= 1_000_000:
+        return 10          # the market standard: neutral
+    if amt > 0:
+        return 5           # below the norm — smaller work
+    return 10              # never looked up == neutral, not a penalty
+
+
+def _urgency_points(lead: dict) -> int:
+    """WILL THEY FEEL A DEADLINE? — 10 max, from named principals.
+
+    business_context.json: the only thing that beats inertia is "a deadline he
+    already feels: crew on payroll + backlog under 8 weeks". Staff create that
+    deadline; a sole operator's is real but personal, and softer to sell into.
+
+    This is deliberately SEPARATE from affordability, and worth less. Treating
+    solo as disqualifying (as the raw kill signal does) would discard 42% of
+    the contractors carrying above-minimum insurance — people who can clearly
+    pay. Solo is a discount, not a disqualification.
+    """
+    status = crew_status(lead)
+    if status == CREW_HAS_CREW:
+        return 10
+    if status == CREW_SOLO:
+        return 3
+    return 6               # unknown sits between, never at either extreme
+
+
 def crew_status(lead_or_count) -> str:
     """CANONICAL: is this a one-man operation, a firm with staff, or unknown?
 
@@ -864,29 +913,45 @@ def score_lead_icp(lead: dict) -> dict:
     breakdown = {}
 
     has_owner = len(name.split()) >= 2
-    breakdown["owner_name"] = 25 if has_owner else 0
+    breakdown["owner_name"] = 20 if has_owner else 0
 
+    # Email down-weighted, phone up-weighted (2026-08-09). Email was worth 25
+    # and phone 10, which is backwards for this pipeline: cold email is closed
+    # by provider policy (0 of 9 permit it) while a published business line is
+    # the LIVE channel. Licence registries also never publish an email, so the
+    # old weighting made the pipeline's own primary source look permanently
+    # second-rate.
+    #
+    # The generic-prefix penalty is also softened. It is calibrated for
+    # enterprise B2B, where info@ reaches a support queue. For a contractor with
+    # a truck, info@ IS the owner's inbox — there is no gatekeeper to get past.
     if email:
-        if email.startswith(_GENERIC_EMAIL_PREFIXES):
-            breakdown["email"] = 10
-        else:
-            breakdown["email"] = 25
+        breakdown["email"] = 10 if email.startswith(_GENERIC_EMAIL_PREFIXES) else 15
     else:
         breakdown["email"] = 0
 
-    breakdown["phone"] = 10 if phone.startswith("+") and len(phone) >= 11 else 0
-    breakdown["website"] = 10 if website.startswith("http") else 0
-    breakdown["luxury_signal"] = 20 if any(k in haystack for k in _ICP_LUXURY_KEYWORDS) else 0
+    breakdown["phone"] = 15 if phone.startswith("+") and len(phone) >= 11 else 0
+    breakdown["website"] = 5 if website.startswith("http") else 0
+    breakdown["luxury_signal"] = 10 if any(k in haystack for k in _ICP_LUXURY_KEYWORDS) else 0
     breakdown["vertical_match"] = 10 if any(k in haystack for k in _ICP_VERTICAL_KEYWORDS) else 0
+    breakdown["affordability"] = _affordability_points(lead)
+    breakdown["urgency"] = _urgency_points(lead)
 
     score = sum(breakdown.values())
 
+    # Phone-first, because that is the channel that exists (2026-08-12). These
+    # read "email today" / "email this week" until now, on a pipeline where cold
+    # email is closed by provider policy (ADR-0014, 0 of 9 permit it) and the
+    # Retell call is the live channel. The score is rendered in the sheet and
+    # the dashboard, so the recommendation is operator-facing instruction —
+    # pointing it at a dead channel is the same class of error as the
+    # kill_signal that told the call to disqualify sole operators.
     if score >= 70:
-        recommendation = "🔥 HOT — direct owner contact, on-ICP: email today"
+        recommendation = "🔥 HOT — direct owner contact, on-ICP: call today"
     elif score >= 45:
-        recommendation = "⭐ WARM — contactable, partial fit: email this week"
+        recommendation = "⭐ WARM — contactable, partial fit: call this week"
     elif score >= 25:
-        recommendation = "📧 COLD — thin contact data: enrich further before outreach"
+        recommendation = "📞 COLD — thin contact data: enrich before calling"
     else:
         recommendation = "⏭️ SKIP — not worth outreach time"
 

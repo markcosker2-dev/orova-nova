@@ -56,6 +56,10 @@ CANONICAL_SCHEMA_SQL = """
         -- 58.9% of WA contractors have exactly one, so this genuinely
         -- discriminates. 0 = not looked up, NOT "zero principals".
         principal_count INTEGER DEFAULT 0,
+        -- Calls actually placed to this lead. The Leads sheet renders it as a
+        -- Called Yes/No so the owner can see at a glance who has been worked
+        -- without cross-referencing the CallLog tab. 0 = never called.
+        call_count INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
