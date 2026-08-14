@@ -69,6 +69,40 @@ def _get_background_loop():
         return None
 
 
+# Strong references to fire-and-forget tasks.
+#
+# asyncio keeps only a WEAK reference to a running task, so a task whose only
+# other reference is a local in a request handler becomes collectable the
+# moment that handler returns. The interpreter is free to destroy it mid-flight
+# and the work simply never happens. This is documented behaviour, and it cost
+# a silent no-op: POST /api/actions/hunt-leads returned "Lead hunt job
+# initiated" and produced ZERO log lines — not even a failure, because a task
+# torn down this way surfaces as CANCELLED and the error callback skipped
+# cancelled tasks.
+#
+# Hold the reference until the task finishes, then drop it.
+_BACKGROUND_TASKS: set = set()
+
+
+def _keep(task, label: str):
+    """Anchor a fire-and-forget task and make its ending audible."""
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
+
+    def _report(t):
+        if t.cancelled():
+            # Never silent again. A cancelled background task is the exact
+            # failure that looked like success here.
+            logger.error(f"[{label}] Background task was CANCELLED before completing")
+            return
+        exc = t.exception()
+        if exc:
+            logger.error(f"[{label}] Background task failed: {exc!r}")
+
+    task.add_done_callback(_report)
+    return task
+
+
 def _schedule_background(coro):
     """Schedule a fire-and-forget coroutine on the background loop.
 
@@ -1780,13 +1814,11 @@ async def action_hunt_leads(request: Request, authorized: bool = Depends(require
     niche = (payload.get("niche") or request.query_params.get("niche") or "").strip() or None
     location = (payload.get("location") or request.query_params.get("location") or "").strip() or None
     state = (payload.get("state") or request.query_params.get("state") or "").strip().upper() or None
-    task = _asyncio.create_task(
+    logger.info(f"[HUNT] job accepted — niche={niche!r} location={location!r} "
+                f"state={state!r}; handing off to the slow lane")
+    _keep(_asyncio.create_task(
         run_lead_hunt_slow_lane(client_id=0, niche=niche, location=location, state=state)
-    )
-    task.add_done_callback(
-        lambda t: logger.error(f"[HUNT] Background task failed: {t.exception()!r}")
-        if not t.cancelled() and t.exception() else None
-    )
+    ), "HUNT")
     return {"status": "ok", "message": "Lead hunt job initiated",
             "niche": niche or "(TARGET_NICHE rotation)", "location": location or "(default)",
             "state": state or "(TARGET_STATE env / inferred)"}
@@ -1822,11 +1854,10 @@ async def action_reenrich_leads(request: Request, authorized: bool = Depends(req
         return {"status": "ok", "mode": "sync", **result}
 
     import asyncio as _asyncio
-    task = _asyncio.create_task(reenrich_stored_leads(limit=limit))
-    task.add_done_callback(
-        lambda t: logger.error(f"[WATERFALL] Background reenrich failed: {t.exception()!r}")
-        if not t.cancelled() and t.exception() else None
-    )
+    # Same defect as hunt-leads: an unanchored task is collectable the instant
+    # this handler returns.
+    logger.info(f"[WATERFALL] reenrich accepted — limit={limit}")
+    _keep(_asyncio.create_task(reenrich_stored_leads(limit=limit)), "WATERFALL")
     return {"status": "ok", "mode": "background", "message": f"Reenrich queued for up to {limit} leads",
             "check": "GET /api/leads and [WATERFALL] log lines for results"}
 
