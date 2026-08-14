@@ -126,8 +126,20 @@ lives.
 4. **`DASHBOARD_API_KEY` rotation** — still `nova_2026`.
 5. **Drive OAuth** — still `invalid_grant`, still the optional tier.
 6. **Zero conversations, ever.** Eight PRs today. None of them is a phone call.
-   `LEWCO CONTRACTING` · Patrick Lewis · **+1 253 677 8727** · sole operator ·
-   $2M cover · 25 years. 6–9am Manila = 3–6pm WA.
+   The top-ranked lead is a 25-year sole operator carrying $2M of cover —
+   **top of the Leads sheet by score**, owner and direct line in the row.
+   Best window: 6–9am Manila = 3–6pm WA.
+
+> [!warning] Lead contact details do not belong in this file
+> This note originally carried the prospect's full name and mobile number.
+> The repository is **public**, so that republished an individual's contact
+> details to anyone browsing GitHub — which a state licence register listing a
+> business line does not do.
+>
+> Live lead fields belong in the auth-gated channel: the Leads sheet and
+> `scripts/vault_pull.py`. Reference a lead by **rank or business** here and
+> read the contact from the sheet. Same rule applies to test fixtures — see
+> the redaction in `fix/redact-prospect-pii`.
 
 ## Linked
 
