@@ -401,7 +401,8 @@ async def restore_leads_from_sheets() -> List[Dict[str, Any]]:
         logger.warning(f"[SheetsSync] Could not restore leads from sheets: {exc}")
         return []
 
-async def pull_manual_edits_from_sheets(workbook_name: Optional[str] = None) -> Dict[str, Any]:
+async def pull_manual_edits_from_sheets(workbook_name: Optional[str] = None,
+                                        client_id: int = 0) -> Dict[str, Any]:
     """Read owner-entered EMAILS back out of the Leads tab into the database.
 
     Why this exists (2026-08-09): the sheet was WRITE-ONLY. `restore_leads_from_sheets`
@@ -449,15 +450,28 @@ async def pull_manual_edits_from_sheets(workbook_name: Optional[str] = None) -> 
             continue
         try:
             state = str(row.get("State") or "").strip().upper()
-            existing = await DatabaseManager.fetchone(
+            existing = await DatabaseManager.fetchall(
                 "SELECT id, COALESCE(email,'') AS email FROM leads "
                 "WHERE lower(trim(business)) = ? "
-                "AND (? = '' OR upper(trim(COALESCE(state,''))) = ?) LIMIT 1",
-                (business.lower(), state, state))
-            existing = dict(existing) if existing else None
+                "AND (? = '' OR upper(trim(COALESCE(state,''))) = ?) "
+                "AND client_id = ? LIMIT 2",
+                (business.lower(), state, state, client_id))
+            existing = [dict(r) for r in (existing or [])]
             if not existing:
                 out["skipped"] += 1
                 continue
+            # A blank State cell matches ANY state, so a bare name can hit two
+            # genuinely different firms. save_lead refuses to merge on a name
+            # alone for exactly this reason; writing the owner's address onto
+            # an arbitrary one of them would be worse, because it looks like it
+            # worked. Skip and say so — he can disambiguate by filling in State.
+            if len(existing) > 1:
+                logger.warning(f"[SHEET-PULL] {business!r} is ambiguous "
+                               f"({len(existing)} leads match, State cell blank) "
+                               f"— skipped, fill in State to disambiguate")
+                out["skipped"] += 1
+                continue
+            existing = existing[0]
             if (existing.get("email") or "").strip():
                 out["skipped"] += 1          # never overwrite an address we hold
                 continue

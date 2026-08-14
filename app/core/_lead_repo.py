@@ -247,11 +247,31 @@ class _LeadRepo:
                 # leads, which is a far worse failure than storing a duplicate.
                 business_key = (lead.get("business") or "").strip().lower()
                 state_key = str(lead.get("state") or "").strip().upper()
+                # The guard above is on the INCOMING lead, and that is the one
+                # that matters: it is what stops two different firms merging.
+                # This SELECT deliberately does NOT also require the STORED row
+                # to be email-less and website-less (2026-08-12).
+                #
+                # It used to, and that broke the moment the sheet became
+                # two-way. The owner types an address into the Leads tab,
+                # `pull_manual_edits_from_sheets` writes it to the row, and the
+                # next hunt re-finds the same business from WA L&I — which
+                # publishes no email and no website, so neither stronger branch
+                # above fires. With the stored-side predicates in place this
+                # SELECT then missed its own row and save_lead INSERTed a
+                # second one. `idx_leads_email_client` is PARTIAL
+                # (`WHERE trim(email) != ''`) so it did not catch it either.
+                #
+                # It compounded: the duplicate had no email, so it became the
+                # match target next round while the enriched original drifted.
+                # The Leads sheet upserts by business name, so the tab kept
+                # showing one row while the table grew — the same inflation
+                # described above, re-entering through the enrichment we added
+                # to fix it.
                 if business_key and not email and not domain:
                     row = conn.execute(
                         "SELECT id FROM leads WHERE lower(trim(business)) = ? "
-                        "AND upper(trim(COALESCE(state,''))) = ? AND client_id = ? "
-                        "AND COALESCE(email,'') = '' AND COALESCE(website,'') = '' LIMIT 1",
+                        "AND upper(trim(COALESCE(state,''))) = ? AND client_id = ? LIMIT 1",
                         (business_key, state_key, cid)
                     ).fetchone()
                     if row:
