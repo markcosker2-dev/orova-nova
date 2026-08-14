@@ -47,11 +47,11 @@ from app.skills import lead_gen_v3 as v3
 
 REGISTRY_LEAD = {
     "business": "LEWCO CONTRACTING",
-    "owner_name": "Patrick Lewis",
+    "owner_name": "Dana Whitfield",
     "owner_title": "Licence Principal",
     "owner_source": "wa_lni",
     "owner_confidence": 90,
-    "phone": "+12536778727",
+    "phone": "+12065551234",
     "phone_source": "wa_lni",
     "phone_verified": True,
     "state": "WA",
@@ -127,8 +127,8 @@ def test_provenance_still_survives(only_the_registry):
     """The fields that already worked must keep working."""
     lead = _hunt()["leads"][0]
     assert lead["business"] == "LEWCO CONTRACTING"
-    assert lead["owner_name"] == "Patrick Lewis"
-    assert lead["phone"] == "+12536778727"
+    assert lead["owner_name"] == "Dana Whitfield"
+    assert lead["phone"] == "+12065551234"
     assert lead["owner_source"] == "wa_lni"
     assert lead["state"] == "WA"
     assert lead["email"] == "", "licence data carries no email and must never guess one"
