@@ -2386,6 +2386,30 @@ async def find_leads_v3(count: int = 5, query: str = "business leads",
             "ad_signals": "",       # needs a domain, so it cannot run yet
             "state": lead.get("state", "") or state,
             "notes": lead.get("notes", ""),
+            # ── The ICP signals. Omitted until 2026-08-14, which made every
+            # registry lead score a flat 61 in production. ────────────────
+            # This dict is a WHITELIST, so a field the registry resolves and
+            # is not named here is silently discarded — and these three were
+            # the ones the hunt had just finished RANKING on:
+            #
+            #   [WA_LNI] principals resolved for 25/25 · 6 are sole operators
+            #   [WA_LNI] insurance resolved for 25/25 · 1 above the $1M minimum
+            #   [WA_LNI] ranked 25 candidates — returning 5, 5 sole operators
+            #
+            # Five sole operators, selected on cover, handed to a projection
+            # that dropped both signals it had just sorted by.
+            #
+            # principal_count drives crew_status, so losing it made the sheet's
+            # SoleOwner column read Unknown for everyone and left the Retell
+            # script asking a question the licence registry had already
+            # answered. insurance_amt is the affordability half and worth up to
+            # 20 points, so its absence scored every lead the neutral 10.
+            # vertical is the licensed trade; empty, it lets worker.py fall
+            # back to the SEARCH QUERY — the query-string-as-data confusion
+            # #162 was supposed to have ended.
+            "principal_count": int(lead.get("principal_count") or 0),
+            "insurance_amt": float(lead.get("insurance_amt") or 0),
+            "vertical": lead.get("vertical", ""),
         })
 
     # Take top N, minus the slots the licence leads already filled
