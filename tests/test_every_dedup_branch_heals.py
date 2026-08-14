@@ -13,8 +13,8 @@ are exactly the two whose notes read `| Email guess`:
     SCHULTE CONSTRUCTION LLC   email=''                              healed
     R G N CONSTRUCTION LLC     email=''                              healed
     LEWCO CONTRACTING          (registry sent none)                  healed
-    FATBOY CONSTRUCTION INC    email='michael@fatboyconstruction.com' FROZEN
-    J L REMODELING INC         email='jeffery@jlremodeling.com'       FROZEN
+    FATBOY CONSTRUCTION INC    email='ray@example-construction.com' FROZEN
+    J L REMODELING INC         email='jesse@example-remodeling.com'       FROZEN
 
 Both were scored 78 in flight — the registry knew their principal count and
 their cover — and both remain stored at 81 with no signals at all, because the
@@ -50,8 +50,8 @@ def db(monkeypatch):
 BASE = {
     "business": "FATBOY CONSTRUCTION INC",
     "state": "WA",
-    "owner": "Michael Boyle",
-    "owner_name": "Michael Boyle",
+    "owner": "Ray Alderton",
+    "owner_name": "Ray Alderton",
     "phone": "+12065550101",
     "owner_source": "wa_lni",
     "source": "wa_lni",
@@ -67,12 +67,12 @@ def _row(conn, lead_id):
 
 def test_a_lead_matched_by_email_still_heals(db):
     """The live case: a guessed address routed the lead to the branch with no repair."""
-    thin = dict(BASE, email="michael@fatboyconstruction.com",
+    thin = dict(BASE, email="ray@example-construction.com",
                 principal_count=0, insurance_amt=0)
     lead_id = DatabaseManager.save_lead(thin)
     assert lead_id > 0
 
-    rich = dict(BASE, email="michael@fatboyconstruction.com",
+    rich = dict(BASE, email="ray@example-construction.com",
                 principal_count=1, insurance_amt=2_000_000)
     assert DatabaseManager.save_lead(rich) == -1, "still a duplicate"
 
@@ -83,7 +83,7 @@ def test_a_lead_matched_by_email_still_heals(db):
 
 def test_a_lead_matched_by_domain_still_heals(db):
     thin = dict(BASE, business="J L REMODELING INC", email="",
-                url="https://jlremodeling.com", website="https://jlremodeling.com",
+                url="https://example-remodeling.com", website="https://example-remodeling.com",
                 principal_count=0, insurance_amt=0)
     lead_id = DatabaseManager.save_lead(thin)
     assert lead_id > 0
@@ -97,12 +97,12 @@ def test_a_lead_matched_by_domain_still_heals(db):
 
 
 def test_the_score_is_refreshed_on_the_email_branch_too(db):
-    thin = dict(BASE, email="michael@fatboyconstruction.com",
+    thin = dict(BASE, email="ray@example-construction.com",
                 principal_count=0, insurance_amt=0)
     lead_id = DatabaseManager.save_lead(thin)
     before = _row(db, lead_id)["score"]
 
-    DatabaseManager.save_lead(dict(BASE, email="michael@fatboyconstruction.com",
+    DatabaseManager.save_lead(dict(BASE, email="ray@example-construction.com",
                                    principal_count=1, insurance_amt=2_000_000))
     assert _row(db, lead_id)["score"] > before, (
         "the score is what the sheet ranks by and what the call budget sorts on"
@@ -111,11 +111,11 @@ def test_the_score_is_refreshed_on_the_email_branch_too(db):
 
 def test_no_branch_downgrades_a_known_value(db):
     """Fail-open leaves 0. That must never erase a figure we already hold."""
-    rich = dict(BASE, email="michael@fatboyconstruction.com",
+    rich = dict(BASE, email="ray@example-construction.com",
                 principal_count=1, insurance_amt=2_000_000)
     lead_id = DatabaseManager.save_lead(rich)
 
-    DatabaseManager.save_lead(dict(BASE, email="michael@fatboyconstruction.com",
+    DatabaseManager.save_lead(dict(BASE, email="ray@example-construction.com",
                                    principal_count=0, insurance_amt=0))
 
     healed = _row(db, lead_id)
@@ -125,12 +125,12 @@ def test_no_branch_downgrades_a_known_value(db):
 
 def test_a_registry_trade_still_wins_on_the_email_branch(db):
     """The stored vertical is usually the search query; the registry beats it."""
-    thin = dict(BASE, email="michael@fatboyconstruction.com", vertical="custom home builder",
+    thin = dict(BASE, email="ray@example-construction.com", vertical="custom home builder",
                 owner_source="", source="serp")
     lead_id = DatabaseManager.save_lead(thin)
     assert _row(db, lead_id)["vertical"] == "custom home builder"
 
-    DatabaseManager.save_lead(dict(BASE, email="michael@fatboyconstruction.com",
+    DatabaseManager.save_lead(dict(BASE, email="ray@example-construction.com",
                                    vertical="General", owner_source="wa_lni",
                                    source="wa_lni", principal_count=1))
     assert _row(db, lead_id)["vertical"] == "General"
