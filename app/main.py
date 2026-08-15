@@ -83,6 +83,11 @@ def _get_background_loop():
 # Hold the reference until the task finishes, then drop it.
 _BACKGROUND_TASKS: set = set()
 
+# True while a bulk sheet resync is in flight. Single-process by design —
+# Render runs one uvicorn worker, and a cross-process lock would be a bigger
+# claim than the deployment actually supports.
+_RESYNC_RUNNING: bool = False
+
 
 def _keep(task, label: str):
     """Anchor a fire-and-forget task and make its ending audible."""
@@ -1849,6 +1854,21 @@ async def action_resync_sheet(request: Request, authorized: bool = Depends(requi
     would exceed Render's proxy timeout well before it finished."""
     from app.core.durability import persist_leads_durably
     import asyncio as _asyncio
+
+    # One at a time. #175 paced this loop to stay under Google's 60 reads/min,
+    # and that budget is for the WHOLE user, not per call — so two overlapping
+    # resyncs (a double-click, a client retry on a slow 200) run two paced
+    # loops at once and put the quota straight back over the line the pacing
+    # exists to hold. The failure would look exactly like the one #175 fixed,
+    # which is the worst kind: a regression wearing the costume of a bug you
+    # already solved.
+    global _RESYNC_RUNNING
+    if _RESYNC_RUNNING:
+        raise HTTPException(
+            status_code=409,
+            detail="A sheet resync is already running. Wait for the "
+                   "[DURABILITY:resync] completion line before starting another.")
+
     try:
         payload = await request.json()
     except Exception:
@@ -1859,10 +1879,18 @@ async def action_resync_sheet(request: Request, authorized: bool = Depends(requi
         limit = 500
     limit = max(1, min(limit, 5000))
 
+    async def _run_resync():
+        global _RESYNC_RUNNING
+        try:
+            return await persist_leads_durably(recent_count=limit, source="resync")
+        finally:
+            # Cleared in `finally`, not in a done-callback, so a crash or a
+            # cancellation cannot wedge the endpoint permanently closed.
+            _RESYNC_RUNNING = False
+
+    _RESYNC_RUNNING = True
     logger.info(f"[RESYNC] rewriting up to {limit} leads into the Leads tab")
-    _keep(_asyncio.create_task(
-        persist_leads_durably(recent_count=limit, source="resync")
-    ), "RESYNC")
+    _keep(_asyncio.create_task(_run_resync()), "RESYNC")
     return {"status": "ok", "message": "Sheet resync started",
             "limit": limit,
             "check": "[DURABILITY:resync] log lines, then GET /api/leads"}

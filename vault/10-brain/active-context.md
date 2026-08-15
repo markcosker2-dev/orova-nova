@@ -14,16 +14,44 @@ tags: [brain, active, session-start]
 > Verify against production before trusting anything here — if a doc and the
 > running system disagree, **the system wins**, and you fix the doc.
 
+> [!warning] Corrected 2026-08-15 — two "open" defects were fixed weeks ago
+> This file had drifted two weeks against `main`. Flagged by an external
+> read-only audit and **re-verified here against the code and the live
+> instance** before being written down:
+>
+> - **`database is locked`** — fixed. `_db_base.py:257-258` and `:269-270` set
+>   `PRAGMA journal_mode=WAL` and `busy_timeout=5000` on every pooled
+>   connection.
+> - **`no such table: events`** — fixed. `event_log.py:26` creates it on boot.
+>   (Note the SSoT table in CLAUDE.md still calls the event log aspirational
+>   for pipeline state; the TABLE exists, but Sheets still drives the
+>   approval→call state machine. Both things are true.)
+> - **Tests: 1368 passing**, up from the 750 recorded here. Knowledge gate
+>   clean.
+> - **`CALLS_AUTOPILOT=0` still enforced.** The WA TCPA / RCW 80.36.400
+>   question below is still unresolved and calling is still gated.
+>
+> **Not carried over from the audit:** it also reported "6/13 capabilities
+> configured" from a *local* boot with no `.env`. That measures the auditor's
+> laptop, not Render — an app booted without env vars reports missing
+> capabilities by construction. Production behaviour contradicts at least one
+> item on that list: the boot log shows `✅ Telegram webhook registered` and
+> the hunt lane logs `suppressing duplicate Telegram report`. **The real
+> production capability report only prints at boot and had rotated out of the
+> 100-line buffer**, so it is genuinely unverified either way — which is why
+> it is not recorded here as fact. `CAL_COM_EVENT_SLUG` being unset IS
+> confirmed independently: `get_booking_link()` returns `""`.
+
 ---
 
 ## 🚦 Status at a glance
 
 | | |
 |---|---|
-| **Build live** | `0c9ddfac6e6c` · `db: ok` · `memory: ok` |
-| **Leads in production** | **0** ⚠️ |
-| **Tests** | 750 passing |
-| **Open PRs** | [#124](https://github.com/markcosker2-dev/orova-nova/pull/124) — never email a guessed address |
+| **Build live** | `967d8b0` · `db: ok` · `memory: ok` (2026-08-15) |
+| **Leads in production** | **39** · 31 sole operators · 30 with verified cover |
+| **Tests** | 1368 passing |
+| **Open PRs** | [#155](https://github.com/markcosker2-dev/orova-nova/pull/155) — cold-start handoff for 2026-08-09 |
 | **Conversations ever** | **0** |
 
 > [!danger] The number that matters
