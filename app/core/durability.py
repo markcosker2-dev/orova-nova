@@ -43,9 +43,35 @@ reason Sheets is the durable tier and Drive is the bonus.
 Verified in production 2026-08-02: `[DURABILITY:hunt] Sheets fallback: 1/1
 leads synced` while Drive was returning invalid_grant.
 """
+import asyncio
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Seconds between per-lead Sheets syncs.
+#
+# `sync_lead_to_sheets` costs a READ (find the row) plus a WRITE, and Google's
+# default Sheets quota is 60 read requests per minute per user. A hunt syncs 5
+# leads and never noticed. The full resync added in #174 syncs every lead, and
+# at 40 leads it burst straight through the read quota:
+#
+#   [SheetsSync] APIError: [429]: Quota exceeded for quota metric 'Read requests'
+#   [DURABILITY:resync] 📋 Sheets: 33/40 leads synced
+#   [DURABILITY:resync] ⚠️ could not verify the Sheets backup
+#
+# Two consecutive passes each stalled around 33-34 of 40, so the operation
+# could never finish and the rows it dropped were the ones still missing the
+# new column — the exact rows it existed to repair.
+#
+# The write path already retries 429s with exponential backoff
+# (`_append_with_backoff`), but backoff cannot help a burst that is over quota
+# from the first second, and the READ side has no backoff at all. Pacing does.
+# ~1.1s keeps a run under ~55 reads/minute with headroom for the verify call.
+SHEETS_SYNC_PACING_S = 1.1
+
+# Below this, pacing is pure latency for no benefit — a hunt's handful of leads
+# was never near the quota.
+SHEETS_PACING_THRESHOLD = 10
 
 
 async def persist_leads_durably(recent_count: int = 25, source: str = "?") -> dict:
@@ -68,7 +94,15 @@ async def persist_leads_durably(recent_count: int = 25, source: str = "?") -> di
             "ORDER BY id DESC LIMIT ?", (recent_count,), fetchall=True)
         rows = rows or []
         result["sheets_total"] = len(rows)
-        for row in rows:
+        # Pace only a bulk run. A hunt's five leads pay nothing.
+        pace = SHEETS_SYNC_PACING_S if len(rows) >= SHEETS_PACING_THRESHOLD else 0
+        if pace:
+            logger.info(f"[DURABILITY:{source}] pacing {len(rows)} leads at "
+                        f"{pace}s to stay inside the Sheets read quota "
+                        f"(~{int(len(rows) * pace)}s)")
+        for i, row in enumerate(rows):
+            if pace and i:
+                await asyncio.sleep(pace)
             try:
                 res = await sync_lead_to_sheets(dict(row))
                 if res.get("ok"):
