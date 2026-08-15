@@ -1,6 +1,6 @@
 ---
 name: 2026-08-14-the-icp-layer-was-decorative
-description: The ICP scoring shipped in #165 never received data — a whitelist dropped the three signals the hunt had just ranked on. Seven PRs, and the ephemeral disk is the constraint nobody had named.
+description: The ICP scoring shipped in #165 never received data — a whitelist dropped the three signals the hunt had just ranked on. Nine PRs, and the ephemeral disk is the constraint nobody had named.
 type: session
 created: 2026-08-14
 status: active
@@ -61,6 +61,9 @@ All five sole operators. All five stored as unknown.
 | #167 | Fire-and-forget tasks were unanchored — `hunt-leads` was a silent no-op |
 | #168 | The licence projection above |
 | #169 | Heal on every dedup branch; expose cover in `/api/leads` |
+| #171 | The hunt re-read page one forever — no `$offset`, so five hunts added zero leads |
+| #172 | Redact prospect PII from test fixtures on a public repo |
+| #173 | `Insurance` sheet column — cover survives a deploy |
 
 After #168 the hunt worked end to end for the first time: **LEWCO 76 → 83,
 SOLO, trade `General`** — arithmetic being affordability 10→20 ($2M) plus
@@ -89,10 +92,16 @@ invisible, because the row count reconciles perfectly.
 
 Five deploys today each silently reset the affordability signal.
 
-**Decision needed:** add an `Insurance` column to the Leads tab (cheap, follows
-the #161 pattern), or accept that cover re-heals on the next hunt and never
-persists. Until then affordability is real for exactly as long as the container
-lives.
+**Resolved same day (#173).** `Insurance` is now a Leads column, carried on
+sync and read back on restore, so cover survives a deploy like `principal_count`
+already did. The restore mapping was also extracted to `_lead_from_sheet_row`
+and given tests — it had been inline and untested, which is precisely how
+`insurance_amt` came to be missing from it, the same way `website` and `state`
+went missing before it.
+
+The generalisation is the part worth keeping: **the Leads sheet is the schema
+of what survives.** Adding a scoring input without adding its column ships a
+signal that works until the next deploy and then silently stops.
 
 ## Lessons
 
@@ -122,10 +131,9 @@ lives.
    says yes has nowhere to go. ~5 minutes, owner-only.
 2. **Paste `retell_pitch` into Retell.** Nothing reads it from the repo — the
    sole-operator fixes are inert until pasted.
-3. **The `Insurance` sheet column** — see above.
-4. **`DASHBOARD_API_KEY` rotation** — still `nova_2026`.
-5. **Drive OAuth** — still `invalid_grant`, still the optional tier.
-6. **Zero conversations, ever.** Eight PRs today. None of them is a phone call.
+3. **`DASHBOARD_API_KEY` rotation** — still `nova_2026`.
+4. **Drive OAuth** — still `invalid_grant`, still the optional tier.
+5. **Zero conversations, ever.** Nine PRs merged today. None of them is a phone call.
    The top-ranked lead is a 25-year sole operator carrying $2M of cover —
    **top of the Leads sheet by score**, owner and direct line in the row.
    Best window: 6–9am Manila = 3–6pm WA.
@@ -138,8 +146,7 @@ lives.
 >
 > Live lead fields belong in the auth-gated channel: the Leads sheet and
 > `scripts/vault_pull.py`. Reference a lead by **rank or business** here and
-> read the contact from the sheet. Same rule applies to test fixtures — see
-> the redaction in `fix/redact-prospect-pii`.
+> read the contact from the sheet. Same rule applies to test fixtures — see #172.
 
 ## Linked
 
