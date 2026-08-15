@@ -77,6 +77,76 @@ def _called_cell(lead: dict) -> str:
         return "No"
 
 
+def _as_cover(value) -> float:
+    """Dollars from a cell or a registry field, 0.0 when unknown.
+
+    Tolerates what actually arrives: Socrata sends `"2000000.0000"`, gspread
+    sends an int, and a human who formats the column sends `"$2,000,000"`.
+    """
+    if value is None:
+        return 0.0
+    try:
+        cleaned = str(value).replace("$", "").replace(",", "").strip()
+        amount = float(cleaned or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    return amount if amount > 0 else 0.0
+
+
+def _insurance_cell(lead: dict) -> str:
+    """General liability cover, or '' when we never looked it up.
+
+    Rendered blank rather than "0" for the same reason `Principals` is: 0 means
+    NOT LOOKED UP, and a zero in a money column reads as "carries no cover" —
+    a fact we do not have and one that would disqualify a payer.
+
+    This column is why the field survives a deploy. Render's free tier has an
+    ephemeral disk, boot restores from this tab, and a field with no column
+    here is destroyed every time while the row count still reconciles.
+    """
+    amount = _as_cover(lead.get("insurance_amt"))
+    return str(int(amount)) if amount > 0 else ""
+
+
+def _lead_from_sheet_row(row: dict) -> dict:
+    """One Leads row -> one lead dict for the boot restore.
+
+    Extracted 2026-08-14 so the mapping is testable. It was inline in the
+    restore loop and had no test, which is how `insurance_amt` came to be
+    missing from it — the same way `website` and `state` went missing before
+    (2026-08-09). A backup that loses fields is only half a backup, and the
+    row count reconciles either way, so nothing announces the loss.
+
+    get_all_records() returns INTS for numeric-looking cells (Sheets parses
+    "+1404..." as a number), so text fields must be str()-coerced or a
+    downstream .strip() crashes the boot restore — live 2026-07-21, exit-3 on
+    every fresh deploy.
+    """
+    def _s(v):
+        return "" if v is None else str(v)
+
+    return {
+        "id": _int_or_none(row.get("ID")),
+        "business": _s(row.get("Business")),
+        "owner": _s(row.get("Owner")),
+        "email": _s(row.get("Email")),
+        "phone": _s(row.get("Phone")),
+        "url": _s(row.get("URL")),
+        "status": _s(row.get("Status")) or "New",
+        "score": _int_or_none(row.get("Score")),
+        "source": _s(row.get("Source")),
+        "date": _s(row.get("Date")),
+        "client_id": _int_or_none(row.get("ClientID")) or 0,
+        "website": _s(row.get("Website")),
+        "vertical": _s(row.get("Niche")),
+        "state": _s(row.get("State")).strip().upper(),
+        "principal_count": _int_or_none(row.get("Principals")) or 0,
+        # The affordability half of the ICP. Without this line every deploy
+        # silently reset it to unknown — five times on 2026-08-14 alone.
+        "insurance_amt": _as_cover(row.get("Insurance")),
+    }
+
+
 _SOLE_OWNER_LABELS = {"solo": "Yes", "has_crew": "No", "unknown": "Unknown"}
 
 
@@ -195,7 +265,7 @@ WORKSHEET_HEADERS = {
     # column is read back (see pull_manual_edits_from_sheets).
     "Leads": ["ID", "Business", "Owner", "Email", "Phone", "Website", "URL", "Status",
               "Score", "Source", "Date", "Notes", "Niche", "State", "Principals",
-              "SoleOwner", "EmailSent", "Called"],
+              "Insurance", "SoleOwner", "EmailSent", "Called"],
     "Metrics": ["ClientID", "LeadsFound", "EmailsSent", "CallsMade", "Replies", "Meetings", "LastUpdated"],
     "CallLog": ["CallID", "LeadID", "Business", "Phone", "Outcome", "Duration", "Date"],
     "Meetings": ["MeetingID", "LeadID", "Business", "DateTime", "CalLink", "Status"]
@@ -365,35 +435,7 @@ async def restore_leads_from_sheets() -> List[Dict[str, Any]]:
             # this is the LAST line of defense after a deploy wipes Render's
             # ephemeral disk, so a wholesale [] here means total lead loss.
             try:
-                # get_all_records() returns INTS for numeric-looking cells
-                # (Sheets parses "+1404..." as a number) — text fields must
-                # be str()-coerced or downstream .strip() crashes the boot
-                # restore (live 2026-07-21: exit-3 on every fresh deploy).
-                def _s(v):
-                    return "" if v is None else str(v)
-                leads.append({
-                    "id": _int_or_none(row.get("ID")),
-                    "business": _s(row.get("Business")),
-                    "owner": _s(row.get("Owner")),
-                    "email": _s(row.get("Email")),
-                    "phone": _s(row.get("Phone")),
-                    "url": _s(row.get("URL")),
-                    "status": _s(row.get("Status")) or "New",
-                    "score": _int_or_none(row.get("Score")),
-                    "source": _s(row.get("Source")),
-                    "date": _s(row.get("Date")),
-                    "client_id": _int_or_none(row.get("ClientID")) or 0,
-                    # Round-trip the rest of the record (2026-08-09). `website`
-                    # was silently dropped on every restore despite having had a
-                    # column all along, and `state` was never carried at all —
-                    # which broke the business+state dedup key and stored
-                    # ACCRETE CONSTRUCTION LLC twice. A backup that loses fields
-                    # is only half a backup.
-                    "website": _s(row.get("Website")),
-                    "vertical": _s(row.get("Niche")),
-                    "state": _s(row.get("State")).strip().upper(),
-                    "principal_count": _int_or_none(row.get("Principals")) or 0,
-                })
+                leads.append(_lead_from_sheet_row(row))
             except Exception as row_exc:
                 logger.warning(f"[SheetsSync] Skipping malformed lead row: {row_exc}")
         return leads
@@ -508,6 +550,7 @@ async def sync_lead_to_sheets(lead: Dict[str, Any], workbook_name: Optional[str]
             lead.get("vertical") or "",
             str(lead.get("state") or "").strip().upper(),
             _principals_cell(lead),
+            _insurance_cell(lead),
             _sole_owner_cell(lead),
             _email_sent_cell(lead),
             _called_cell(lead),
