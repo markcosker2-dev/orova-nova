@@ -1829,6 +1829,45 @@ async def action_hunt_leads(request: Request, authorized: bool = Depends(require
             "niche": niche or "(TARGET_NICHE rotation)", "location": location or "(default)",
             "state": state or "(TARGET_STATE env / inferred)"}
 
+@app.post("/api/actions/resync-sheet")
+async def action_resync_sheet(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
+    """Rewrite EVERY stored lead into the Leads tab. Body/query `limit`.
+
+    The hunt only ever syncs the handful of leads it just touched
+    (`persist_leads_durably(recent_count=count)`), which is right for a hunt
+    and wrong after a SCHEMA change. When #173 added the Insurance column, the
+    30 rows already in the sheet kept the old 18-column layout — so the next
+    deploy restored them without cover, and only the 10 rows a later hunt
+    happened to re-touch carried the new field. Cover went 30 -> 10 across one
+    deploy while the row count reconciled at 40/40.
+
+    That is the same class of silent field loss the column was added to stop,
+    so the column alone was half a fix. This is the other half: the operation
+    that makes an existing sheet match a changed schema.
+
+    Runs in the BACKGROUND — a full rewrite is one Sheets call per lead and
+    would exceed Render's proxy timeout well before it finished."""
+    from app.core.durability import persist_leads_durably
+    import asyncio as _asyncio
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    try:
+        limit = int(payload.get("limit") or request.query_params.get("limit") or 500)
+    except Exception:
+        limit = 500
+    limit = max(1, min(limit, 5000))
+
+    logger.info(f"[RESYNC] rewriting up to {limit} leads into the Leads tab")
+    _keep(_asyncio.create_task(
+        persist_leads_durably(recent_count=limit, source="resync")
+    ), "RESYNC")
+    return {"status": "ok", "message": "Sheet resync started",
+            "limit": limit,
+            "check": "[DURABILITY:resync] log lines, then GET /api/leads"}
+
+
 @app.post("/api/actions/reenrich-leads")
 async def action_reenrich_leads(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
     """Persistence lane: re-run the decision-maker waterfall on stored leads
