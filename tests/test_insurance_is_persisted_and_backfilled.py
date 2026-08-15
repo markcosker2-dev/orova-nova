@@ -51,9 +51,9 @@ def db(monkeypatch):
 REGISTRY_LEAD = {
     "business": "LEWCO CONTRACTING",
     "state": "WA",
-    "owner_name": "Patrick Lewis",
-    "owner": "Patrick Lewis",
-    "phone": "+12536778727",
+    "owner_name": "Dana Whitfield",
+    "owner": "Dana Whitfield",
+    "phone": "+12065551234",
     "vertical": "General Contractor",
     "owner_source": "wa_lni",
     "source": "wa_lni",

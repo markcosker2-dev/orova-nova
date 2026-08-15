@@ -56,8 +56,8 @@ def db(monkeypatch):
 REGISTRY_LEAD = {
     "business": "LEWCO CONTRACTING",
     "state": "WA",
-    "owner_name": "Patrick Lewis",
-    "phone": "+12536778727",
+    "owner_name": "Dana Whitfield",
+    "phone": "+12065551234",
     "vertical": "General Contractor",
     "owner_source": "wa_lni",
     "source": "wa_lni",
@@ -83,7 +83,7 @@ def test_a_hunt_after_an_owner_typed_email_does_not_duplicate(db):
     with DatabaseManager.connection() as conn:
         conn.execute(
             "UPDATE leads SET email = ?, email_source = 'owner_manual' WHERE id = ?",
-            ("patrick@lewcocontracting.com", lead_id))
+            ("dana@example-contracting.com", lead_id))
         conn.commit()
 
     # The next hunt re-finds the same business — registries still carry no email.
@@ -102,7 +102,7 @@ def test_the_owners_address_survives_the_re_discovery(db):
     lead_id = DatabaseManager.save_lead(dict(REGISTRY_LEAD))
     with DatabaseManager.connection() as conn:
         conn.execute("UPDATE leads SET email = ? WHERE id = ?",
-                     ("patrick@lewcocontracting.com", lead_id))
+                     ("dana@example-contracting.com", lead_id))
         conn.commit()
 
     DatabaseManager.save_lead(dict(REGISTRY_LEAD))
@@ -110,7 +110,7 @@ def test_the_owners_address_survives_the_re_discovery(db):
     with DatabaseManager.connection() as conn:
         email = conn.execute(
             "SELECT email FROM leads WHERE id = ?", (lead_id,)).fetchone()[0]
-    assert email == "patrick@lewcocontracting.com", (
+    assert email == "dana@example-contracting.com", (
         "the hand-typed address is the scarcest data in the pipeline"
     )
 
@@ -120,7 +120,7 @@ def test_a_website_only_row_is_also_still_deduped(db):
     lead_id = DatabaseManager.save_lead(dict(REGISTRY_LEAD))
     with DatabaseManager.connection() as conn:
         conn.execute("UPDATE leads SET website = ? WHERE id = ?",
-                     ("https://lewcocontracting.com", lead_id))
+                     ("https://example-contracting.com", lead_id))
         conn.commit()
 
     DatabaseManager.save_lead(dict(REGISTRY_LEAD))
@@ -139,7 +139,7 @@ def test_backfill_still_reaches_a_row_that_now_has_an_email(db):
     lead_id = DatabaseManager.save_lead(thin)
     with DatabaseManager.connection() as conn:
         conn.execute("UPDATE leads SET email = ? WHERE id = ?",
-                     ("patrick@lewcocontracting.com", lead_id))
+                     ("dana@example-contracting.com", lead_id))
         conn.commit()
 
     DatabaseManager.save_lead(dict(REGISTRY_LEAD, principal_count=1))
