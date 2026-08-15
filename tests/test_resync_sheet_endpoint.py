@@ -79,3 +79,47 @@ def test_the_task_is_anchored(client, spy):
     src = inspect.getsource(m.action_resync_sheet)
     assert "_keep(" in src, "a background resync must hold a strong reference"
     assert "RESYNC" in src, "and label itself so a cancellation is attributable"
+
+
+# ── re-entrancy ─────────────────────────────────────────────────────────────
+# Raised by an external review of #173-#175: the pacing added in #175 keeps a
+# resync under Google's 60 reads/min, but that budget belongs to the WHOLE
+# user, not to one call. Two overlapping resyncs run two paced loops at once
+# and put the quota back over the line the pacing exists to hold — a
+# regression wearing the costume of the bug it already fixed.
+
+@pytest.fixture(autouse=True)
+def _reset_resync_flag():
+    m._RESYNC_RUNNING = False
+    yield
+    m._RESYNC_RUNNING = False
+
+
+def test_a_second_resync_while_one_runs_is_rejected(client, spy):
+    m._RESYNC_RUNNING = True
+    r = client.post("/api/actions/resync-sheet")
+    assert r.status_code == 409, "a concurrent resync must not silently double the read rate"
+    assert "already running" in r.json()["detail"].lower()
+
+
+def test_the_first_resync_is_still_accepted(client, spy):
+    assert client.post("/api/actions/resync-sheet").status_code == 200
+
+
+def test_the_flag_clears_so_a_later_resync_can_run(client):
+    """Cleared in `finally` — a crash must not wedge the endpoint shut."""
+    async def _boom(recent_count=25, source="?"):
+        raise RuntimeError("sheets exploded")
+
+    with patch("app.core.durability.persist_leads_durably", _boom):
+        assert client.post("/api/actions/resync-sheet").status_code == 200
+    # the background task has run and failed by now
+    assert m._RESYNC_RUNNING is False, (
+        "a failed resync must release the lock, not hold it forever"
+    )
+
+
+def test_two_calls_in_sequence_both_succeed(client, spy):
+    """The guard rejects OVERLAP, not repetition."""
+    assert client.post("/api/actions/resync-sheet").status_code == 200
+    assert client.post("/api/actions/resync-sheet").status_code == 200
