@@ -76,7 +76,9 @@ async def aget_events(prospect_id: int | None = None, event_type: str | None = N
             clauses.append("event_type = ?"); params.append(event_type)
         where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
         rows = await DatabaseManager.query(
-            f"SELECT * FROM events {where} ORDER BY id DESC LIMIT ?",
+            # noqa-safe: `where` is built only from literal "col = ?" clauses
+            # above; every value is bound in `params`. Nothing here is caller text.
+            f"SELECT * FROM events {where} ORDER BY id DESC LIMIT ?",  # noqa: S608
             (*params, int(limit)), fetchall=True,
         )
         return [dict(r) for r in (rows or [])]

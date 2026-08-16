@@ -37,6 +37,33 @@ jobs:
         run: |
           python scripts/check_secrets.py
 
+      # Narrow security gate, added when the repo went private on 2026-08-15
+      # and CodeQL stopped running (free for public repos, needs GitHub
+      # Advanced Security on private ones).
+      #
+      # Deliberately NOT a general SAST sweep. The full bandit ruleset reports
+      # 112 findings here and every single one is a false positive — 86 are
+      # `try-except-pass`, which is this codebase's deliberate fail-open style,
+      # and the SQL ones are all correctly parameterised. CodeQL scored 7
+      # findings, also all false positives. A gate that has never once been
+      # right is a gate people learn to click past.
+      #
+      # So this checks only the shapes that are almost never legitimate:
+      # exec, eval, pickle.loads, yaml.load, shell=True, os.system, and SQL
+      # built by string concatenation. All clean today; the five real SQL
+      # sites carry a `# noqa: S608` with the reason it is safe.
+      #
+      # The case it exists for: third-party code vendored into the repo. On
+      # 2026-08-14 ~100KB of someone else's Python was committed here, and the
+      # only reason it was read line-by-line first is that a human happened to
+      # ask. This reads the next one automatically.
+      - name: Security lint (exec / eval / deserialisation / shell / SQL)
+        run: |
+          pip install ruff
+          ruff check --no-cache \
+            --select S102,S301,S307,S506,S602,S603,S605,S608 \
+            app/ scripts/ tests/ .claude/
+
       - name: Run unit tests
         run: |
           python -m pytest tests/ --maxfail=3 -q

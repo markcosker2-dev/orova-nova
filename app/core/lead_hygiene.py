@@ -79,7 +79,8 @@ async def quarantine_invalid_leads() -> dict:
             sets.append("updated_at = CURRENT_TIMESTAMP")
             params.append(lead_id)
             await DatabaseManager.query(
-                f"UPDATE leads SET {', '.join(sets)} WHERE id = ?", tuple(params))
+                # noqa-safe: `sets` are literal "col = ?" fragments; values bound.
+                f"UPDATE leads SET {', '.join(sets)} WHERE id = ?", tuple(params))  # noqa: S608
             if field_changes:
                 summary["cleaned"] += 1
                 logger.info(f"[HYGIENE] cleaned lead {lead_id} "
