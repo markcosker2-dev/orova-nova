@@ -105,13 +105,15 @@ class Router:
             # Fetch lead details first so we can update Sheets
             placeholders = ",".join("?" for _ in lead_ids)
             leads = await DatabaseManager.fetchall(
-                f"SELECT business FROM leads WHERE id IN ({placeholders})",
+                # noqa-safe: `placeholders` is "?,?,?" generated from a count.
+                f"SELECT business FROM leads WHERE id IN ({placeholders})",  # noqa: S608
                 tuple(lead_ids)
             )
             
             # Update status in DB
             await DatabaseManager.query(
-                f"UPDATE leads SET status = 'Archived', updated_at = CURRENT_TIMESTAMP WHERE id IN ({placeholders})",
+                # noqa-safe: `placeholders` is "?,?,?" generated from a count.
+                f"UPDATE leads SET status = 'Archived', updated_at = CURRENT_TIMESTAMP WHERE id IN ({placeholders})",  # noqa: S608
                 tuple(lead_ids)
             )
             

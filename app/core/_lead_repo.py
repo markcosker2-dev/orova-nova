@@ -190,7 +190,10 @@ class _LeadRepo:
             if not sets:
                 return
             params.append(lead_id)
-            conn.execute(f"UPDATE leads SET {', '.join(sets)}, "
+            # noqa-safe: every entry in `sets` is a literal fragment appended
+            # above ("vertical = ?", the two CASE expressions); the incoming
+            # values are bound in `params`. No caller text reaches the SQL.
+            conn.execute(f"UPDATE leads SET {', '.join(sets)}, "  # noqa: S608
                          f"updated_at = CURRENT_TIMESTAMP WHERE id = ?", params)
 
             # Re-score from the HEALED row, not the incoming one. Both feed the
