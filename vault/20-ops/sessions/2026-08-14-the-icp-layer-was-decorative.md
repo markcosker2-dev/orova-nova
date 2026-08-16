@@ -64,6 +64,10 @@ All five sole operators. All five stored as unknown.
 | #171 | The hunt re-read page one forever — no `$offset`, so five hunts added zero leads |
 | #172 | Redact prospect PII from test fixtures on a public repo |
 | #173 | `Insurance` sheet column — cover survives a deploy |
+| #174 | A new column does not backfill itself — `/api/actions/resync-sheet` |
+| #175 | The resync blew Google's 60 reads/min quota and stalled at 33/40; paced |
+| #176 | No re-entrancy guard on the resync; `active-context.md` two weeks stale |
+| #177 | Narrow ruff security gate, replacing the CodeQL that going private turned off |
 
 After #168 the hunt worked end to end for the first time: **LEWCO 76 → 83,
 SOLO, trade `General`** — arithmetic being affordability 10→20 ($2M) plus
@@ -102,6 +106,49 @@ went missing before it.
 The generalisation is the part worth keeping: **the Leads sheet is the schema
 of what survives.** Adding a scoring input without adding its column ships a
 signal that works until the next deploy and then silently stops.
+
+## 2026-08-15/16 — what followed
+
+**Durability proved, finally.** #173 alone did not do it: the hunt only syncs
+the leads it just touched, so 30 of 40 sheet rows kept the old layout and cover
+went 30 -> 10 across the next deploy. #174 added a full resync; it stalled at
+33/40 on Google's read quota; #175 paced it. Then, across a real restart:
+
+```
+08:50:06 ♻️ Restored 39/40 leads from Google Sheets
+leads 39 | cover 30 | sole 31   ·  LEWCO 83 · $2,000,000
+```
+
+Three PRs to make one column survive a restart, and each failure was invisible
+because the ROW COUNT reconciled every time.
+
+**The repo is now PRIVATE.** The PII cleaned in #172 was still reachable in
+pre-#172 commits *and* in the merged PR diffs, which a history rewrite does not
+touch. Owner picked private over `filter-repo`: it gates history, blobs and PR
+diffs in one reversible action, and with 0 forks / 1 star / no Pages the cost
+in reach was nil. Verified unauthenticated afterwards — PR #165/#166/#168/#172
+file views and old blobs all 404. **No GitHub Support ticket needed.**
+
+Two things it cost: Actions minutes are now capped at 2,000/month (this day
+alone ran ~300-400 billed minutes across 71 runs), and **CodeQL stopped** — free
+on public repos, GHAS-only on private. #177 replaced it with a narrow ruff gate
+rather than a general SAST sweep, because the full bandit ruleset reports 112
+findings here and every one is a false positive, exactly as CodeQL's 7 were.
+Two scanners, zero true positives. The gate checks only exec / eval /
+pickle.loads / yaml.load / shell=True / os.system / string-built SQL, and it
+found a fifth unflagged SQL site while being wired up.
+
+**The Retell prompt was deployed** (2026-08-16). The live prompt said
+*"VARIABLES — ONLY THESE SIX EXIST"* and never listed `{{crew_status}}` — which
+`outbound_dialer.py` had been sending on **every call since #161**. Every piece
+of sole-operator work, including this session's four machine-truth fixes, was
+arriving at a prompt with no instruction to use it. Now seven variables, with
+the crew branch in the pain step, the painkiller and the price objection.
+
+> [!warning] Retell has no rollback pin
+> The API UPDATES the LLM version IN PLACE rather than branching. v19 was
+> overwritten; the previous prompt text survives only in the session
+> transcript. Verify before sending — there is no version to revert to.
 
 ## Lessons
 

@@ -48,9 +48,9 @@ tags: [brain, active, session-start]
 
 | | |
 |---|---|
-| **Build live** | `967d8b0` · `db: ok` · `memory: ok` (2026-08-15) |
+| **Build live** | `05996a5` · `db: ok` · `memory: ok` (2026-08-16) |
 | **Leads in production** | **39** · 31 sole operators · 30 with verified cover |
-| **Tests** | 1368 passing |
+| **Tests** | 1368 passing · repo is now **PRIVATE** |
 | **Open PRs** | [#155](https://github.com/markcosker2-dev/orova-nova/pull/155) — cold-start handoff for 2026-08-09 |
 | **Conversations ever** | **0** |
 
@@ -58,6 +58,21 @@ tags: [brain, active, session-start]
 > **0 calls. 0 meetings. 0 prospect conversations, ever.**
 > Discovery is solved. ~29,000 West Coast contractors are reachable for free.
 > **Nothing in the codebase is the constraint any more.**
+
+> [!important] Three state changes on 2026-08-15/16 — read before acting
+> - **The repo is PRIVATE.** Prospect PII cleaned in #172 was still reachable
+>   in older commits and in merged PR diffs (a history rewrite does not touch
+>   PR diffs). Private gates all three at once and is reversible. Verified
+>   unauthenticated: old blobs and PR file views 404. No Support ticket needed.
+> - **CodeQL is gone** — free on public repos, GHAS-only on private. #177
+>   replaced it with a narrow ruff gate (exec / eval / pickle / yaml.load /
+>   shell / os.system / string-built SQL). Deliberately narrow: the full
+>   bandit ruleset reports 112 findings here and all 112 are false positives,
+>   as were CodeQL's 7. Also: Actions minutes are now capped at 2,000/month.
+> - **The Retell prompt was deployed** and now knows `{{crew_status}}`, which
+>   `outbound_dialer.py` had been sending on every call since #161 while the
+>   prompt said "ONLY THESE SIX EXIST". The Retell API updates a version IN
+>   PLACE — **there is no rollback pin.**
 
 ---
 
