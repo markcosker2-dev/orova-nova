@@ -1275,12 +1275,14 @@ async def retell_webhook(request: Request):
     if booked or temperature == "hot":
         try:
             from app.worker import send_telegram_report
+            from app.core import telegram_voice
             await send_telegram_report(
-                f"🔥 **{'APPOINTMENT BOOKED' if booked else 'HOT LEAD'}** (call)\n\n"
-                f"{custom.get('name', '')} — {custom.get('contact number', call.get('to_number', ''))}\n"
-                f"When: {custom.get('appointment date and time', 'n/a')}\n"
-                f"Summary: {summary[:300]}"
-                f"{calendar_note}"
+                telegram_voice.call_outcome(
+                    name=custom.get('name', '') or '',
+                    phone=custom.get('contact number', call.get('to_number', '')) or '',
+                    when=custom.get('appointment date and time', '') or '',
+                    summary=summary or '',
+                    booked=bool(booked)) + (calendar_note or '')
             )
         except Exception as e:
             logger.warning(f"[Retell] Telegram alert failed: {e}")

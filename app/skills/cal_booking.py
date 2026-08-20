@@ -131,12 +131,11 @@ async def _handle_booking_created(event_data: Dict, attendee: Dict) -> Dict[str,
     # Alert Mark on Telegram (best-effort; never crash the webhook).
     try:
         from app.worker import send_telegram_report
+        from app.core import telegram_voice
         await send_telegram_report(
-            f"📅 **Appointment Booked** (inbound)\n\n"
-            f"👤 {prospect_name} <{prospect_email}>\n"
-            f"🕐 {start_time}\n"
-            f"📝 {title}"
-            f"{calendar_note}"
+            telegram_voice.appointment_booked(
+                prospect_name or '', prospect_email or '',
+                start_time or '', title or '') + (calendar_note or '')
         )
     except Exception as e:
         logger.warning(f"[Cal.com] Telegram alert failed: {e}")

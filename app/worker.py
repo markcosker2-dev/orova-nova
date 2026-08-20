@@ -23,6 +23,7 @@ from app.skills.agentmail_skill import check_replies, send_outreach
 from app.core.database import DatabaseManager
 from app.skills.light_enrich import enrich_lead_lite
 from app.skills.lead_validator import score_lead_icp
+from app.core import telegram_voice as tv
 from app.skills.opportunity_scanner import scan_opportunity
 from app.skills.email_sequence_skill import start_drip_campaign
 
@@ -301,9 +302,7 @@ async def _execute_approved_call(sheet, row, idx, client_id=0):
         await loop.run_in_executor(None, lambda: sheet.update_cell(idx, COL_SHEET_CALL_ID, call_id))
 
         await send_telegram_report(
-            f"📞 **Call Initiated**\n\n"
-            f"I am now calling **{company}** ({contact}).\n"
-            f"Call ID: `{call_id}`"
+            tv.call_starting(company, contact)
         )
 
         # Update SQLite metrics
@@ -332,7 +331,7 @@ async def _execute_approved_call(sheet, row, idx, client_id=0):
         with _call_counter_lock:
             daily_call_counter -= 1  # Release slot on failure
         await loop.run_in_executor(None, lambda: sheet.update_cell(idx, COL_SHEET_STATUS, "Call Failed"))
-        await send_telegram_report(f"⚠️ **Call Failed**\n\nError calling **{company}**: {error}")
+        await send_telegram_report(tv.call_failed(company, str(error)))
 
 
 # ═══════════════════════════════════════════════════════
@@ -633,11 +632,21 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None, state=
                 logger.debug(f"   -> Hunt report debounce unavailable ({_dbe}); sending.")
 
             if _should_report:
-                await send_telegram_report(
-                    f"☀️ **Lead Hunt Complete**\n\n"
-                    f"Found **{count}** new leads for '{query}'.\n\n"
-                    f"{summary_text[:500]}"
-                )
+                # Name the best lead rather than just counting them — a bare
+                # count tells Mark nothing about whether the hunt was any good.
+                _ranked = sorted(
+                    [l for l in leads if isinstance(l, dict)],
+                    key=lambda l: float(l.get("score") or 0), reverse=True)
+                _top = _ranked[0] if _ranked else {}
+                _solo_n = sum(1 for l in _ranked
+                              if int(l.get("principal_count") or 0) == 1)
+                _msg = tv.hunt_complete(
+                    count, query,
+                    top_business=(_top.get("business") or ""),
+                    top_score=_top.get("score"),
+                    sole_operators=_solo_n)
+                if _msg:
+                    await send_telegram_report(_msg)
                 try:
                     await DatabaseManager.set_state(
                         HUNT_REPORT_STATE_KEY,
@@ -663,7 +672,7 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None, state=
 
     except Exception as e:
         logger.error(f"   !!! ERROR in Slow Lane: {e}")
-        await send_telegram_report(f"⚠️ **Lead Hunt Error**: {str(e)}")
+        await send_telegram_report(tv.hunt_failed(str(e)))
 
 
 # ═══════════════════════════════════════════════════════
@@ -808,14 +817,10 @@ async def run_reply_monitor(client_id=0):
                 else:
                     action_line = "Review and reply manually if it's worth pursuing."
 
-                emoji = {"HOT": "🔥", "WARM": "🌤️", "COLD": "❄️"}.get(intent, "📬")
-                report = (
-                    f"{emoji} **New Reply — {intent}** [Client {client_id}]\n\n"
-                    f"👤 **From:** {sender}\n"
-                    f"📧 **Subject:** {subject}\n"
-                    f"📝 **Snippet:** \"{snippet[:200]}...\"\n\n"
-                    f"{action_line}"
-                )
+                report = tv.new_reply(
+                    sender=sender or "", subject=subject or "",
+                    snippet=snippet or "", intent=intent,
+                    queued_booking=("booking-link" in action_line))
                 await send_telegram_report(report)
 
                 # Update reply metrics
@@ -877,8 +882,7 @@ async def process_pending_booking_replies():
         if item.get("attempts", 0) >= _MAX_BOOKING_ATTEMPTS:
             logger.warning(f"[BOOKING] Giving up on {message_id} after {item['attempts']} tries.")
             await send_telegram_report(
-                f"⚠️ Couldn't auto-send a booking link to {item.get('sender')} "
-                f"after {item.get('attempts')} tries — please reply manually."
+                tv.booking_link_failed(item.get('sender') or '', item.get('attempts') or 0)
             )
             continue
 
@@ -917,8 +921,8 @@ async def process_pending_booking_replies():
                     pass
             link_note = f"\n🔗 {booking_link}" if booking_link else "\n(No booking link configured — asked them for times.)"
             await send_telegram_report(
-                f"📅 **Booking link sent** to {item.get('name') or item.get('sender')}"
-                f"{(' — ' + item.get('business')) if item.get('business') else ''}.{link_note}"
+                tv.booking_link_sent(item.get('name') or item.get('sender') or '',
+                                     item.get('business') or '', booking_link or '')
             )
             # success → do not re-queue
         else:
@@ -1085,10 +1089,7 @@ async def run_cold_lead_escalation(client_id=0):
                     )
 
                     await send_telegram_report(
-                        f"📞 **Cold Lead Auto-Call** [Client {client_id}]\n\n"
-                        f"**{business}** ({contact}) — no reply for {COLD_LEAD_DAYS_THRESHOLD}+ days.\n"
-                        f"Phone: `{phone}`\n"
-                        f"Call ID: `{call_id}`"
+                        tv.cold_lead_call(business, contact, phone, COLD_LEAD_DAYS_THRESHOLD)
                     )
                 else:
                     error = result.get("error", "Unknown")
@@ -1114,10 +1115,9 @@ async def run_cold_lead_escalation(client_id=0):
         logger.info(f"📞 [ESCALATION] [Client {client_id}] Processed {escalated} cold leads, triggered {called} calls.")
 
         if called > 0:
-            await send_telegram_report(
-                f"📞 **Cold Lead Escalation Complete** [Client {client_id}]\n\n"
-                f"Triggered **{called}** auto-calls for leads that went cold after {COLD_LEAD_DAYS_THRESHOLD} days."
-            )
+            _msg = tv.cold_escalation_done(called, COLD_LEAD_DAYS_THRESHOLD)
+            if _msg:
+                await send_telegram_report(_msg)
 
     except Exception as e:
         logger.error(f"Cold Lead Escalation Error (Client {client_id}): {e}")
@@ -1308,10 +1308,7 @@ async def run_phone_first_lane(client_id=0):
                         (int(lead_id), int(client_id))
                     )
                     await send_telegram_report(
-                        f"📞 **First-Touch Call** [Client {client_id}]\n\n"
-                        f"**{business}** ({contact or 'no name'})\n"
-                        f"Phone: `{phone}`\n"
-                        f"Call ID: `{call_id}`"
+                        tv.first_touch_call(business, contact or '', phone)
                     )
                 else:
                     logger.warning(f"⚠️ [PHONE-FIRST] Call failed for {business}: "
