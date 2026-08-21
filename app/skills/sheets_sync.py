@@ -267,7 +267,11 @@ WORKSHEET_HEADERS = {
               "Score", "Source", "Date", "Notes", "Niche", "State", "Principals",
               "Insurance", "SoleOwner", "EmailSent", "Called"],
     "Metrics": ["ClientID", "LeadsFound", "EmailsSent", "CallsMade", "Replies", "Meetings", "LastUpdated"],
-    "CallLog": ["CallID", "LeadID", "Business", "Phone", "Outcome", "Duration", "Date"],
+    # Notes added 2026-08-21 with the hand-dial dispositions. Without a column
+    # the notes are dropped in silence — the row count still reconciles, and
+    # what is lost is the only part a human actually wrote.
+    "CallLog": ["CallID", "LeadID", "Business", "Phone", "Outcome", "Duration",
+                "Date", "Notes"],
     "Meetings": ["MeetingID", "LeadID", "Business", "DateTime", "CalLink", "Status"]
 }
 
@@ -681,6 +685,7 @@ async def log_call_to_sheets(call_data: Dict[str, Any], workbook_name: Optional[
             call_data.get("outcome") or "",
             call_data.get("duration") or "",
             call_data.get("date") or datetime.utcnow().isoformat(),
+            call_data.get("notes") or "",
         ]
         await asyncio.to_thread(worksheet.append_row, row)
         return {"ok": True}
