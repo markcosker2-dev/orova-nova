@@ -178,7 +178,7 @@ the crew branch in the pain step, the painkiller and the price objection.
    says yes has nowhere to go. ~5 minutes, owner-only.
 2. **Paste `retell_pitch` into Retell.** Nothing reads it from the repo — the
    sole-operator fixes are inert until pasted.
-3. **`DASHBOARD_API_KEY` rotation** — still `nova_2026`.
+3. **`DASHBOARD_API_KEY` rotation** — still `<redacted>`.
 4. **Drive OAuth** — still `invalid_grant`, still the optional tier.
 5. **Zero conversations, ever.** Nine PRs merged today. None of them is a phone call.
    The top-ranked lead is a 25-year sole operator carrying $2M of cover —

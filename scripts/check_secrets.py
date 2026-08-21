@@ -17,6 +17,19 @@ scanner is worse than none, so this flags only two things:
 It does NOT flag env reads (`os.getenv("API_KEY")`), placeholders, test
 fixtures, or documentation that names a variable without giving its value.
 
+The second incident (2026-08-21) is why rule 1 has no length floor and no
+quoting requirement. The replacement key leaked through the VAULT, not through
+code: seven tracked markdown files carried `DASHBOARD_API_KEY=<the value>`, one
+of them noting that it worked. Rule 2 could not see it — the value was
+unquoted, 9 characters, and single-character-class, so it failed the quoted-
+literal match, the 20-char minimum and the entropy test in turn. A burned
+literal is matched as a bare substring precisely so that the low-entropy case
+rule 2 must ignore is still caught once the value is known to be burned.
+
+The corollary rule 1 cannot enforce: do not DESCRIBE a live key either. The
+same handoff that withheld the literal explained how to derive it from the
+previous one, which leaks it just as well.
+
 Usage:  python scripts/check_secrets.py [--all]
         (default scans tracked files; exit 1 on any finding)
 """
@@ -33,6 +46,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # there is no legitimate reason for these to reappear in the tree.
 BURNED_LITERALS = {
     "nova_admin_2026",          # DASHBOARD_API_KEY, leaked + rotated 2026-08-05
+    "nova_2026",                # DASHBOARD_API_KEY, leaked + rotated 2026-08-21
 }
 
 # Known credential FORMATS. These are unambiguous — a string in one of these
