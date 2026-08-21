@@ -28,7 +28,7 @@ retell_pitch` — keep this in sync with them.
    books more than jumping straight to a specific time (Gong data). Confirm
    interest, *then* pin the slot:
    > "Does it make sense for me to share how this'd work for {company}?"
-   > → if yes: "Great — 10 minutes with Mark, Thursday or Friday?"
+   > → if yes: "Great — 15 minutes with Mark, Thursday or Friday?"
 
 ## Voicemail (≤15 seconds)
 

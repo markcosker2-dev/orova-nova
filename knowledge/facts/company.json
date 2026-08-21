@@ -29,5 +29,9 @@
     "_doc": "Enforced by the linter against OUTBOUND COPY fields only (email templates, subject lines) — not against rule-documentation that legitimately quotes these terms.",
     "spam_words": ["act now", "make money", "100% guaranteed", "risk-free", "limited time"],
     "forbidden_phrases": ["our clients see", "previous agency", "my last agency", "my old agency"]
+  },
+  "meeting": {
+    "_doc": "The single stated length of the first call. Prospect-facing copy must not contradict it (lint_meeting_duration), and the cal.com event behind CAL_COM_EVENT_SLUG must be set to match — nothing here can check that, because it lives in Mark's cal.com account.",
+    "duration_minutes": 15
   }
 }

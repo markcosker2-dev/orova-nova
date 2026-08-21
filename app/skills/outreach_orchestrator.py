@@ -103,7 +103,7 @@ HARD RULES:
 - Under 90 words. Sounds like a sharp human peer, not marketing.
 - Line 1 must be specific to THEM (their business/industry/research note) — never "I hope this finds you well" or "My name is".
 - No buzzwords (synergy, revolutionize, leverage, cutting-edge, streamline).
-- Exactly one CTA: a low-friction question about a 10-minute call.
+- Exactly one CTA: a low-friction question about a 15-minute call.
 - No placeholder brackets. No links. Sign off as "Nova @ OROVA".
 - Write at a 6th-grade reading level. Short sentences.
 
@@ -140,7 +140,7 @@ Subject: under 6 words, lowercase-casual, curiosity-driven, no clickbait."""
         f"{opener}\n\n"
         f"We run Meta ads for premium businesses like {business} — our AI makes the creatives, "
         f"generates the leads, and qualifies every one so you only talk to people ready to buy.\n\n"
-        f"Worth a 10-minute call to see if it fits?\n\n"
+        f"Worth a 15-minute call to see if it fits?\n\n"
         f"Nova @ OROVA"
     )
     return {"subject": subject, "body": body, "framework": framework}

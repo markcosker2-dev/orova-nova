@@ -9,7 +9,7 @@ and `> outreach` — this is the craft.
   "I came across your site" — name the car on their lot, the service, the city.
 - **Value (1 line):** one relevant sentence of the differentiator, in their terms.
   First touch → Package 1 framing; hold P2 unless they ask.
-- **Ask (1 line):** low-pressure, time-boxed. "Worth a 10-minute call?" Never
+- **Ask (1 line):** low-pressure, time-boxed. "Worth a 15-minute call?" Never
   "hop on a quick call to discuss synergies."
 
 ## Subjects (pick, don't stack)
@@ -33,7 +33,7 @@ and `> outreach` — this is the craft.
 > Hi {name} — saw the {specific_model} you've got listed at {company}. We run
 > Meta ads for West-Coast luxury dealers, and every lead gets called and
 > qualified within minutes, so you only talk to buyers actually ready to move.
-> Worth 10 minutes to see if it fits {company}?
+> Worth 15 minutes to see if it fits {company}?
 > Nova @ OROVA
 
 **Detailer / ceramic / PPF**
@@ -48,7 +48,7 @@ and `> outreach` — this is the craft.
 > Subject: Quick question about {company}
 > Hi {name} — is {company} booked out on weekends or still filling dates? We put
 > luxury rentals in front of the right renters and qualify every inquiry fast, so
-> your team only handles serious bookings. Worth a 10-min call?
+> your team only handles serious bookings. Worth a 15-min call?
 > Nova @ OROVA
 
 Swap `{specific_*}` for something you actually verified (enrichment gives you the
