@@ -5,6 +5,7 @@ This enables "Closer" sub-agent to trigger follow-up sequences.
 """
 
 import os
+import re
 import logging
 import json
 from typing import Dict, Any
@@ -260,22 +261,46 @@ CAL_COM_EVENT_SLUG = os.getenv("CAL_COM_EVENT_SLUG", "")
 GOOGLE_CALENDAR_BOOKING_LINK = os.getenv("GOOGLE_CALENDAR_BOOKING_LINK", "")
 
 
+_CAL_PREFIX_RE = re.compile(r"^\s*(?:https?://)?(?:www\.)?cal\.com/+",
+                            re.IGNORECASE)
+
+
+def _cal_slug(raw: str) -> str:
+    """Normalise CAL_COM_EVENT_SLUG to a bare 'user/event' slug.
+
+    The variable wants a slug, but what a human has in their clipboard is the
+    full booking URL — so pasting it produced
+    "https://cal.com/https://cal.com/user/event", which 404s.
+
+    That reached production on 2026-08-21 and nothing caught it: the variable
+    was set, the link was non-empty, and every check that existed passed while
+    the one prospect who clicked would have hit a dead page. A booking link is
+    the last hop before a booked meeting, so it is worth accepting both forms
+    rather than being right about which one was asked for.
+    """
+    s = (raw or "").strip()
+    if not s:
+        return ""
+    return _CAL_PREFIX_RE.sub("", s).strip("/")
+
+
 def get_booking_link(lead_name: str = "", business_name: str = "") -> str:
     """
     Generate a meeting booking link to include in outbound emails.
     Priority: Calendly > Cal.com > Google Calendar > fallback message.
-    
+
     Returns a URL or empty string if no booking service is configured.
     """
     if CALENDLY_LINK:
-        return CALENDLY_LINK
-    
-    if CAL_COM_EVENT_SLUG:
-        return f"https://cal.com/{CAL_COM_EVENT_SLUG}"
-    
+        return CALENDLY_LINK.strip()
+
+    slug = _cal_slug(CAL_COM_EVENT_SLUG)
+    if slug:
+        return f"https://cal.com/{slug}"
+
     if GOOGLE_CALENDAR_BOOKING_LINK:
-        return GOOGLE_CALENDAR_BOOKING_LINK
-    
+        return GOOGLE_CALENDAR_BOOKING_LINK.strip()
+
     return ""
 
 
