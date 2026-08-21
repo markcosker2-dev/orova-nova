@@ -48,10 +48,11 @@ tags: [brain, active, session-start]
 
 | | |
 |---|---|
-| **Build live** | `40465c5` · `db: ok` · `memory: ok` (2026-08-20) |
-| **Leads in production** | **46** · 38 sole operators · 37 with verified cover · 11 with an email |
-| **Tests** | 1417 passing · repo is **PUBLIC** ⚠️ see below |
-| **Open PRs** | [#155](https://github.com/markcosker2-dev/orova-nova/pull/155) — cold-start handoff for 2026-08-09 |
+| **Build live** | `12fdf488975b` · `db: ok` · `memory: ok` (verified 2026-08-21) |
+| **Leads in production** | **51** · 43 sole operators · 42 with verified cover · 51 with a phone · 13 with an email |
+| **Tests** | 1417 exist · **CI green on Linux** · a full local Windows run gives 1407 pass / 10 order-dependent failures (all pass in isolation) |
+| **Repo** | **PRIVATE** — restored 2026-08-21 |
+| **Open PRs** | #182 — vault redaction + burned-key blocklist |
 | **Conversations ever** | **0** |
 
 > [!danger] The number that matters
@@ -59,22 +60,39 @@ tags: [brain, active, session-start]
 > Discovery is solved. ~29,000 West Coast contractors are reachable for free.
 > **Nothing in the codebase is the constraint any more.**
 
-> [!important] Three state changes on 2026-08-15/16 — read before acting
-> - **The repo was set PRIVATE on 2026-08-15 and is PUBLIC again as of
->   2026-08-20** — nobody recorded why. Verified unauthenticated: the raw diff
->   of PR #165 serves a real contractor's mobile, name and domain over HTTP
->   200. **Resolve this before anything else** —
->   see [[handoff-2026-08-20]] §0. The rest of this bullet describes why
->   private was chosen and still applies if it is restored.
+> [!important] State changes — read before acting
+> - **Repo visibility: RESOLVED 2026-08-21.** Set back to PRIVATE, with Mark's
+>   answer on record ("don't remember why it flipped"). Re-verified
+>   unauthenticated twice: repo root, API, PR #165 file view and raw diff all
+>   404; the `raw.githubusercontent` copies took ~5 min to fall out of CDN cache
+>   (`max-age=300`) before also returning 404. **Check twice, not once.**
+> - **The flip back was 2026-08-15, not 2026-08-20** — about 2½ hours after it
+>   went private, dated from GitHub event ids (the `PublicEvent.created_at`
+>   field lies; it echoes the repo creation date). `2026-08-20` was when it was
+>   noticed. Full working in
+>   [[2026-08-21-a-redaction-that-leaves-the-recipe]].
+> - **`DASHBOARD_API_KEY` is BURNED and not yet rotated.** It was in plaintext
+>   in 7 tracked vault files on the public repo — the current tree, not just
+>   history — one of them noting that it worked. #182 redacts it, blocklists it,
+>   and removes the sentence that explained how to derive it. **None of that
+>   un-burns it: rotation in Render is still outstanding.**
 > - Prospect PII cleaned in #172 was still reachable
 >   in older commits and in merged PR diffs (a history rewrite does not touch
 >   PR diffs). Private gates all three at once and is reversible. Verified
 >   unauthenticated: old blobs and PR file views 404. No Support ticket needed.
-> - **CodeQL is gone** — free on public repos, GHAS-only on private. #177
->   replaced it with a narrow ruff gate (exec / eval / pickle / yaml.load /
->   shell / os.system / string-built SQL). Deliberately narrow: the full
->   bandit ruleset reports 112 findings here and all 112 are false positives,
->   as were CodeQL's 7. Also: Actions minutes are now capped at 2,000/month.
+> - **CodeQL: the ruff gate replaced it, but CodeQL itself is still running
+>   and now FAILS on every push to `main`.** #177 deleted the workflow file and
+>   that was not enough — this is GitHub **default setup**, a dynamic workflow
+>   at `dynamic/github-code-scanning/codeql` with no file in the repo. On a
+>   private repo without GHAS the analysis cannot complete, and the REST
+>   endpoint to disable it returns `403`. **Only Mark can clear it:** Settings →
+>   Code security → Code scanning → Default setup → Disable. Until then `main`
+>   carries a permanently red check, which is the exact failure mode
+>   `check_secrets.py` was written to avoid.
+>   The replacement gate is narrow on purpose (exec / eval / pickle /
+>   yaml.load / shell / os.system / string-built SQL): the full bandit ruleset
+>   reports 112 findings here and all 112 are false positives, as were CodeQL's
+>   7. Also: Actions minutes are capped at 2,000/month.
 > - **The Retell prompt was deployed** and now knows `{{crew_status}}`, which
 >   `outbound_dialer.py` had been sending on every call since #161 while the
 >   prompt said "ONLY THESE SIX EXIST". The Retell API updates a version IN
@@ -267,6 +285,13 @@ graph LR
 > apps after **exactly 7 days**, by design. Three re-issues, three 7-day deaths.
 
 > [!todo] In priority order
+> 0. **Rotate `DASHBOARD_API_KEY`** — it is burned (see the state callout
+>    above). Generate with
+>    `python -c "import secrets; print(secrets.token_urlsafe(36))"`, set it in
+>    Render **and** local `.env`. ~5 min.
+> 0b. **Clear CodeQL default setup** — Settings → Code security → Code scanning
+>    → Default setup → Disable. It cannot complete on a private repo without
+>    GHAS and currently fails on every push to `main`.
 > 1. ~~Re-auth Google Drive~~ — **no longer an owner action.** Sheets is now the
 >    primary durability tier (service-account credential, no expiry, proven in
 >    production 2026-08-02: `Sheets fallback: 1/1 leads synced`). Drive is
@@ -282,13 +307,17 @@ graph LR
 >    (`worker.py`), and `main.py:1646` records it as stale-generic since
 >    2026-07-15 — before ADR-0012's re-rank.
 
-> [!warning] Known open defects (found by a real production hunt, 2026-08-02)
-> - **`Error saving lead: database is locked`** — 5 leads found, **1 saved**.
->   SQLite lock contention between worker lanes silently destroys ~80% of every
->   hunt. Not yet fixed.
-> - **`no such table: events`** — ADR-0007's canonical event log does not exist
->   in production. Every event write fails non-fatally, so the pipeline has no
->   history. Not yet fixed.
+> [!success] Both 2026-08-02 defects are FIXED — corrected 2026-08-21
+> This block used to list `database is locked` and `no such table: events` as
+> open, while the callout at the top of this same file recorded both as fixed
+> on 2026-08-15. A file that contradicts itself gets believed at whichever end
+> the reader opens, so only one entry survives:
+>
+> - **`database is locked`** — fixed. `_db_base.py:257-258` / `:269-270` set
+>   `journal_mode=WAL` and `busy_timeout=5000` on every pooled connection.
+> - **`no such table: events`** — the TABLE exists (`event_log.py:26` creates it
+>   on boot). Sheets still drives the approval→call state machine, so the SSoT
+>   claim in CLAUDE.md remains aspirational. Both things are true.
 
 ---
 
