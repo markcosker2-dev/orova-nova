@@ -17,6 +17,11 @@ every check that existed.
     python scripts/nova.py calls           who to ring, in what order
     python scripts/nova.py leaks           secrets + what the internet can see
     python scripts/nova.py gates           the three CI gates, locally
+    python scripts/nova.py logs --errors     what production is actually saying
+    python scripts/nova.py deploy           watch a deploy land, verify data survived
+    python scripts/nova.py config           which capabilities are live IN PRODUCTION
+    python scripts/nova.py agents           lane status, or --run <lane>
+    python scripts/nova.py sheet            resync the Leads sheet
     python scripts/nova.py hunt --state WA --niche "kitchen remodel" --location Seattle
     python scripts/nova.py outcome 12 talked "backlog is 3 weeks"
 
@@ -44,6 +49,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 TIMEOUT = 60          # Render free tier cold-starts; short timeouts read as outages
+
+# Windows consoles default to cp1252 and production logs are full of em-dashes
+# and box characters. Without this the tool dies with UnicodeEncodeError while
+# printing the very error you ran it to see.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
 
 OK, ACT, BAD, HOLD, DIM = "OK", "ACTION", "BROKEN", "HELD", "--"
 
@@ -220,8 +234,31 @@ def cmd_status(_args) -> int:
     else:
         row("KEY", OK, "not a known-burned value")
 
+    # Production capability report. The vault records this as "genuinely
+    # unverified either way" because it only printed at boot and rotated out of
+    # the 100-line buffer — but /api/health carries it live. An earlier audit
+    # reported 6/13 from a LOCAL boot with no .env, which measured the
+    # auditor's laptop rather than Render. Ask production.
+    code, h = http("/api/health")
+    if code == 200 and isinstance(h, dict):
+        env_c = (h.get("hardening") or {}).get("env_contract") or {}
+        live, total = env_c.get("capabilities_live"), env_c.get("capabilities_total")
+        disabled = env_c.get("disabled_capabilities") or {}
+        if live is not None:
+            row("CONFIG", OK if live == total else DIM, f"{live}/{total} capabilities live")
+            for name in list(disabled)[:5]:
+                print(f"      off: {name}")
+        mem = h.get("memory") or {}
+        if mem.get("critical"):
+            row("MEMORY", BAD, f"{mem.get('memory_mb', 0):.0f}MB of {mem.get('limit_mb')}MB")
+            problems.append("memory critical")
+        if h.get("errors"):
+            row("ERRORS", ACT, f"{h['errors']} in the last 24h — nova.py logs --errors")
+
     # gates that stay closed on purpose — reported, never 'fixed'
     row("GATES", HOLD, "CALLS_AUTOPILOT=0 until the ADAD question is answered")
+    if "national DNC scrub" in str((h or {}) if isinstance(h, dict) else ""):
+        row("DNC", HOLD, "no DNC scrub configured — is_dnc_registered fails OPEN")
 
     header("BLOCKED ON YOU" if problems else "NOTHING BLOCKING")
     for i, p in enumerate(problems, 1):
@@ -473,6 +510,178 @@ def cmd_outcome(args) -> int:
         return 1
 
 
+# ── logs ────────────────────────────────────────────────────────────────────
+_ERR_RE = re.compile(r"AI-FAIL|ERROR|CRITICAL|Traceback|Exception|failed|"
+                     r"locked|no such table|invalid_grant|429|5\d\d ", re.IGNORECASE)
+
+
+def cmd_logs(args) -> int:
+    """What production is actually saying.
+
+    The buffer is only ~100 lines, so a success message from twenty minutes ago
+    is already gone. Twice in one session an absent log line was read as
+    "the join failed silently" when it had simply rotated past. Absence here is
+    not evidence.
+    """
+    code, res = http("/api/logs")
+    if code in (401, 403):
+        print("\n  No valid DASHBOARD_API_KEY on this machine.")
+        return 1
+    if code != 200:
+        print(f"\n  /api/logs returned {code}")
+        return 1
+    lines = res.get("logs", []) if isinstance(res, dict) else []
+    if isinstance(lines, str):
+        lines = lines.splitlines()
+    if args.grep:
+        lines = [x for x in lines if args.grep.lower() in str(x).lower()]
+    if args.errors:
+        lines = [x for x in lines if _ERR_RE.search(str(x))]
+    print(f"\n  LOGS  ({len(lines)} matching, buffer holds ~100 lines)")
+    print("  " + "=" * 66)
+    for line in lines[-args.n:]:
+        if isinstance(line, dict):
+            text = f"{line.get('ts', ''):>8}  {line.get('msg', line)}"
+        else:
+            text = str(line)
+        print("  " + text.rstrip()[:160])
+    if not lines:
+        print("  Nothing matched. The buffer is small — absence is not evidence.")
+    return 0
+
+
+# ── deploy ──────────────────────────────────────────────────────────────────
+def cmd_deploy(args) -> int:
+    """Watch a deploy land, then check the data survived it.
+
+    Render's disk is ephemeral: every deploy destroys the DB and restores from
+    the Leads sheet. A reconciling ROW COUNT proves nothing about fields — cover
+    went 30 -> 10 across one deploy while the count reconciled at 40/40 — so
+    this compares the fields too, and says which ones moved.
+    """
+    import time                                              # noqa: PLC0415
+    git("fetch", "origin", "--quiet")
+    want = git("rev-parse", "origin/main")[:12]
+    if not want:
+        print("\n  Cannot read origin/main.")
+        return 1
+
+    before = _snapshot()
+    print(f"\n  DEPLOY  waiting for {want}")
+    print(f"  before: {_fmt(before)}")
+
+    deadline = time.monotonic() + args.timeout
+    while time.monotonic() < deadline:
+        code, h = http("/health", auth=False, timeout=30)
+        build = h.get("build", "") if isinstance(h, dict) else ""
+        if build and want.startswith(build[:7]):
+            print(f"  live:   {build}")
+            after = _snapshot()
+            print(f"  after:  {_fmt(after)}")
+            return _compare(before, after)
+        time.sleep(args.interval)
+    print(f"  timed out after {args.timeout}s — still not on {want}")
+    return 1
+
+
+def _snapshot() -> dict:
+    code, leads = http("/api/leads")
+    if code != 200:
+        return {}
+    rows = leads.get("leads", leads) if isinstance(leads, dict) else leads
+    rows = rows if isinstance(rows, list) else []
+    return {
+        "leads": len(rows),
+        "cover": sum(1 for x in rows if (x.get("insurance_amt") or 0) > 0),
+        "solo": sum(1 for x in rows if (x.get("principal_count") or 0) == 1),
+        "phone": sum(1 for x in rows if x.get("phone")),
+        "email": sum(1 for x in rows if x.get("email")),
+    }
+
+
+def _fmt(s: dict) -> str:
+    return " · ".join(f"{k} {v}" for k, v in s.items()) if s else "(unreadable)"
+
+
+def _compare(before: dict, after: dict) -> int:
+    if not before or not after:
+        print("  Could not compare — one side unreadable.")
+        return 1
+    lost = {k: (before[k], after[k]) for k in before if after.get(k, 0) < before[k]}
+    if not lost:
+        print("  OK — nothing lost across the deploy.")
+        return 0
+    print("  DATA LOSS across the deploy:")
+    for k, (b, a) in lost.items():
+        print(f"    {k}: {b} -> {a}")
+    print("  A field with no column in WORKSHEET_HEADERS['Leads'] cannot survive.")
+    return 1
+
+
+# ── config ──────────────────────────────────────────────────────────────────
+def cmd_config(_args) -> int:
+    """Which capabilities are live IN PRODUCTION — not on this laptop."""
+    code, h = http("/api/health")
+    if code in (401, 403):
+        print("\n  No valid DASHBOARD_API_KEY on this machine.")
+        return 1
+    if code != 200 or not isinstance(h, dict):
+        print(f"\n  /api/health returned {code}")
+        return 1
+    env_c = (h.get("hardening") or {}).get("env_contract") or {}
+    live, total = env_c.get("capabilities_live"), env_c.get("capabilities_total")
+    print(f"\n  PRODUCTION CAPABILITIES — {live}/{total} live")
+    print("  " + "=" * 66)
+    print("  (Asked of Render. A local boot with no .env reports missing")
+    print("   capabilities by construction and measures nothing.)")
+    missing = env_c.get("missing_required") or []
+    if missing:
+        print(f"\n  MISSING REQUIRED: {', '.join(map(str, missing))}")
+    dis = env_c.get("disabled_capabilities") or {}
+    if dis:
+        print()
+        for name, why in dis.items():
+            print(f"  off   {name:<34} {why}")
+    else:
+        print("\n  Everything configured.")
+    sched = h.get("scheduler") or {}
+    if sched:
+        print("\n  LANES")
+        for lane, state in sched.items():
+            print(f"  {'ok ' if state == 'Active' else '-- '}  {lane:<20} {state}")
+    return 0
+
+
+# ── agents ──────────────────────────────────────────────────────────────────
+def cmd_agents(args) -> int:
+    if args.run:
+        print(f"\n  Running lane '{args.run}' ...")
+        code, res = http("/api/agents/run", method="POST", body={"agent": args.run})
+        print(f"  -> {code} {str(res)[:300]}")
+        # 'ok' has meant 'did nothing' here before: a fire-and-forget task was
+        # garbage collected and the error callback skipped cancelled tasks.
+        print("  'ok' is not evidence of work — check `nova.py logs` next.")
+        return 0 if code == 200 else 1
+    code, res = http("/api/agents")
+    if code != 200:
+        print(f"\n  /api/agents returned {code}")
+        return 1
+    print("\n  AGENTS")
+    print("  " + "=" * 66)
+    items = res.get("agents", res) if isinstance(res, dict) else res
+    print("  " + json.dumps(items, indent=2)[:2000])
+    return 0
+
+
+# ── sheet ───────────────────────────────────────────────────────────────────
+def cmd_sheet(_args) -> int:
+    """Resync the Leads sheet — a new column does not backfill itself."""
+    print("\n  Resyncing the Leads sheet (paced inside Google's 60 reads/min) ...")
+    code, res = http("/api/actions/resync-sheet", method="POST", body={})
+    print(f"  -> {code} {str(res)[:300]}")
+    return 0 if code == 200 else 1
+
+
 # ── entry ───────────────────────────────────────────────────────────────────
 def main() -> int:
     p = argparse.ArgumentParser(
@@ -489,6 +698,21 @@ def main() -> int:
     h.add_argument("--niche"); h.add_argument("--location"); h.add_argument("--state")
     h.add_argument("-y", "--yes", action="store_true", help="skip confirmation")
 
+    lg = sub.add_parser("logs", help="what production is actually saying")
+    lg.add_argument("-n", type=int, default=40)
+    lg.add_argument("--errors", action="store_true", help="only failure-shaped lines")
+    lg.add_argument("--grep", help="substring filter")
+
+    d = sub.add_parser("deploy", help="watch a deploy land, verify data survived")
+    d.add_argument("--timeout", type=int, default=600)
+    d.add_argument("--interval", type=int, default=20)
+
+    sub.add_parser("config", help="capabilities live IN PRODUCTION")
+    sub.add_parser("sheet", help="resync the Leads sheet")
+
+    ag = sub.add_parser("agents", help="lane status, or --run <lane>")
+    ag.add_argument("--run", help="lane name to trigger")
+
     o = sub.add_parser("outcome", help="log a call disposition")
     o.add_argument("lead_id"); o.add_argument("disposition")
     o.add_argument("notes", nargs="*")
@@ -499,7 +723,9 @@ def main() -> int:
         cmd_calls(argparse.Namespace(limit=10))
         return rc
     return {"status": cmd_status, "calls": cmd_calls, "leaks": cmd_leaks,
-            "gates": cmd_gates, "hunt": cmd_hunt, "outcome": cmd_outcome}[args.cmd](args)
+            "gates": cmd_gates, "hunt": cmd_hunt, "outcome": cmd_outcome,
+            "logs": cmd_logs, "deploy": cmd_deploy, "config": cmd_config,
+            "agents": cmd_agents, "sheet": cmd_sheet}[args.cmd](args)
 
 
 if __name__ == "__main__":
