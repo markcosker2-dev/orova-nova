@@ -48,9 +48,9 @@ tags: [brain, active, session-start]
 
 | | |
 |---|---|
-| **Build live** | `05996a5` · `db: ok` · `memory: ok` (2026-08-16) |
-| **Leads in production** | **39** · 31 sole operators · 30 with verified cover |
-| **Tests** | 1368 passing · repo is now **PRIVATE** |
+| **Build live** | `40465c5` · `db: ok` · `memory: ok` (2026-08-20) |
+| **Leads in production** | **46** · 38 sole operators · 37 with verified cover · 11 with an email |
+| **Tests** | 1417 passing · repo is **PUBLIC** ⚠️ see below |
 | **Open PRs** | [#155](https://github.com/markcosker2-dev/orova-nova/pull/155) — cold-start handoff for 2026-08-09 |
 | **Conversations ever** | **0** |
 
@@ -60,7 +60,13 @@ tags: [brain, active, session-start]
 > **Nothing in the codebase is the constraint any more.**
 
 > [!important] Three state changes on 2026-08-15/16 — read before acting
-> - **The repo is PRIVATE.** Prospect PII cleaned in #172 was still reachable
+> - **The repo was set PRIVATE on 2026-08-15 and is PUBLIC again as of
+>   2026-08-20** — nobody recorded why. Verified unauthenticated: the raw diff
+>   of PR #165 serves a real contractor's mobile, name and domain over HTTP
+>   200. **Resolve this before anything else** —
+>   see [[handoff-2026-08-20]] §0. The rest of this bullet describes why
+>   private was chosen and still applies if it is restored.
+> - Prospect PII cleaned in #172 was still reachable
 >   in older commits and in merged PR diffs (a history rewrite does not touch
 >   PR diffs). Private gates all three at once and is reversible. Verified
 >   unauthenticated: old blobs and PR file views 404. No Support ticket needed.
