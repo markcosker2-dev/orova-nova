@@ -124,7 +124,7 @@ CA/OR/WA contractors, which is a local-presence problem for answer rates.
       3 toll-free, they are consent-required regardless.
 - [ ] **Find the Cloudflare account holding `orova.io`** before it lapses on
       **2026-09-28**.
-- [ ] **Rotate `nova_2026`.**
+- [ ] **Rotate `<redacted>`.**
 - [ ] Consider a local-presence caller ID; 716 dialling the West Coast is a
       measurable answer-rate drag.
 - [ ] The offer — Mark's decision, but **not** on the critical path: both live

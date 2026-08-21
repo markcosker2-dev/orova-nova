@@ -113,7 +113,7 @@ bug fix. It also reaches a call script.
 - [ ] **Decide on the `.capitalize()` surname mangling** (`Peter Van dyke`).
 - [ ] **Approve the line-type lookup** (<$1) — 38 geographic numbers were
       queued before the wipe; re-derive after repopulation.
-- [ ] **Rotate `nova_2026`.**
+- [ ] **Rotate `<redacted>`.**
 - [ ] **Sync `retell_pitch`/`retell_inbound` to the live Retell prompt
       verbatim** — now unblocked, #138 has merged. The repo is the stale copy.
 - [ ] **Find the Cloudflare account holding `orova.io`** before 2026-09-28.

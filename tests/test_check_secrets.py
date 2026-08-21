@@ -49,7 +49,8 @@ FAKE_GITHUB = "ghp_" + "aB3dE5gH7jK9lM1nO3pQ5rS7tU9vW1xY3zA5"
 FAKE_SLACK = "xoxb" + "-123456789012-abcdefghijklmno"
 FAKE_GOOGLE = "AIza" + "SyD-aBcDeFgHiJkLmNoPqRsTuVwXyZ12345"
 FAKE_PEM = "-----BEGIN RSA " + "PRIVATE KEY-----"
-BURNED = "nova_admin" + "_2026"      # the rotated DASHBOARD_API_KEY
+BURNED = "nova_admin" + "_2026"      # DASHBOARD_API_KEY, rotated 2026-08-05
+BURNED_2 = "nova" + "_2026"          # DASHBOARD_API_KEY, rotated 2026-08-21
 # High-entropy but matching no provider format — exercises the generic rule.
 FAKE_RANDOM = "Xk9" + "$mQ2vRt7Lp4Wz8Nc3Hy6Bd1Fg5Js0"
 
@@ -65,6 +66,29 @@ def test_burned_literal_is_flagged_anywhere():
 def test_burned_literal_flagged_in_a_header():
     out = scan(f'curl -H "X-API-Key: {BURNED}" https://x/api')
     assert out and "BURNED CREDENTIAL" in out[0]
+
+
+def test_second_burned_key_is_flagged_in_markdown():
+    """The 2026-08-21 leak: the live key sat in seven tracked vault files.
+
+    It reached a public repo through DOCUMENTATION, not code — an unquoted
+    assignment in markdown, one of them annotating it as working.
+    """
+    out = scan(f'`DASHBOARD_API_KEY={BURNED_2}` — **works**, and is in `.env`.')
+    assert out and "BURNED CREDENTIAL" in out[0]
+
+
+def test_the_second_leak_was_invisible_to_every_rule_but_the_blocklist():
+    """Why the blocklist has no length floor, no entropy test, no quoting.
+
+    Pin the reason, not just the fix. This value is 9 characters of one
+    character class in an unquoted markdown assignment, so it fails the
+    quoted-literal match, the 20-char minimum and the entropy check in turn.
+    A future tightening of those rules must not be mistaken for coverage of
+    this case — only naming the burned value catches it.
+    """
+    assert not cs._looks_like_credential(BURNED_2)
+    assert not cs._ASSIGN_RE.search(f'DASHBOARD_API_KEY={BURNED_2}')
 
 
 @pytest.mark.parametrize("literal,label", [
