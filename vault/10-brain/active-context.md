@@ -61,11 +61,14 @@ tags: [brain, active, session-start]
 > **Nothing in the codebase is the constraint any more.**
 
 > [!important] State changes — read before acting
-> - **Repo visibility: RESOLVED 2026-08-21.** Set back to PRIVATE, with Mark's
->   answer on record ("don't remember why it flipped"). Re-verified
->   unauthenticated twice: repo root, API, PR #165 file view and raw diff all
->   404; the `raw.githubusercontent` copies took ~5 min to fall out of CDN cache
->   (`max-age=300`) before also returning 404. **Check twice, not once.**
+> - **Repo visibility: SETTLED — it stays PUBLIC.** See
+>   [[0016-the-repo-stays-public|ADR-0016]]. The repo is connected to Mark's
+>   **Make.com** scenarios. It was flipped private→public three times because
+>   nobody ever wrote the reason down; the reason is now recorded, so **do not
+>   change visibility.** Public is the intended state.
+>   Consequence to act on, not to re-argue: history and merged PR diffs are
+>   world-readable, so any credential ever committed is permanently burned and
+>   prospect PII in old diffs stays reachable. Both accepted knowingly.
 > - **The flip back was 2026-08-15, not 2026-08-20** — about 2½ hours after it
 >   went private, dated from GitHub event ids (the `PublicEvent.created_at`
 >   field lies; it echoes the repo creation date). `2026-08-20` was when it was
@@ -285,8 +288,9 @@ graph LR
 > apps after **exactly 7 days**, by design. Three re-issues, three 7-day deaths.
 
 > [!todo] In priority order
-> 0. **Rotate `DASHBOARD_API_KEY`** — it is burned (see the state callout
->    above). Generate with
+> 0. **Rotate `DASHBOARD_API_KEY` — TOP PRIORITY.** It is burned AND the repo
+>    is public by decision, so the value is readable in history by anyone right
+>    now. Generate with
 >    `python -c "import secrets; print(secrets.token_urlsafe(36))"`, set it in
 >    Render **and** local `.env`. ~5 min.
 > 0b. **Clear CodeQL default setup** — Settings → Code security → Code scanning
