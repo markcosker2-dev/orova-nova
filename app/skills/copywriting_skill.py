@@ -290,7 +290,7 @@ def _template_fallback(fw, prospect, industry, offer):
         f"Hi there,\n\n"
         f"I noticed {prospect} is doing great work in {industry}. "
         f"We specialize in {offer} and have helped similar businesses see 3-5x growth.\n\n"
-        f"Would a 10-minute call this week make sense?\n\n"
+        f"Would a 15-minute call this week make sense?\n\n"
         f"— Mark, CEO of OROVA\n\n"
         f"---\n"
         f"⚠️ AI unavailable — using template fallback\n"

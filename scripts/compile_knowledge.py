@@ -69,7 +69,7 @@ def load_facts(path: Path = FACTS_PATH) -> dict:
 # ── Validation (structural — the "schema" is explicit, no jsonschema dep) ───
 def validate(facts: dict) -> list[str]:
     errors: list[str] = []
-    for key in ("company", "pricing", "packages", "compliance"):
+    for key in ("company", "pricing", "packages", "compliance", "meeting"):
         if key not in facts:
             errors.append(f"facts: missing top-level key '{key}'")
     for pkg in facts.get("packages", []):
@@ -141,8 +141,85 @@ def lint_copy(facts: dict, business_context: dict) -> list[str]:
     return errors
 
 
+# The meeting length is a canonical fact, so copy that contradicts it is drift
+# — the same failure lint_pricing exists to catch, in a different field.
+#
+# Discovered 2026-08-21: 24 prospect-facing strings claimed 10, 15 or "10-15"
+# minutes while the live cal.com event was 30. Four different answers to "how
+# long is this call", none of them checked. A prospect promised ten minutes and
+# handed a thirty-minute booking page has been told two things by one company.
+#
+# Paths are GLOBBED, not listed. A hand-maintained file list is the silent
+# contract that let insurance_amt vanish six times — a new copy module must be
+# covered by default, not by remembering to add it.
+_COPY_GLOBS = (
+    "app/skills/*.py",
+    "app/core/business_context.json",
+    ".claude/skills/sales-intelligence/**/*.md",
+)
+
+# A duration is prospect-facing only when it modifies a call/chat/meeting.
+# "auto-execute in 30 min" and "runs every 30 minutes" are timers and must
+# never be flagged, so CONTEXT decides rather than the filename. Deliberately
+# narrow, for the reason check_secrets.py gives: a linter that cries wolf gets
+# switched off, and a switched-off linter is worse than none.
+_DURATION_RE = re.compile(
+    r"\b(?P<num>(?:\d{1,3})(?:\s*-\s*\d{1,3})?)[\s-]?(?:min|mins|minute|minutes)\b",
+    re.IGNORECASE,
+)
+_MEETING_WORD_RE = re.compile(r"call|chat|meeting|conversation|version", re.IGNORECASE)
+
+# "call the homeowner IN 5 minutes" is speed-to-lead — a latency, and the
+# differentiator the entire pitch rests on. "a 15-minute call" is a length.
+# Both sit beside the word "call", so the preposition is what separates them.
+# Without this the linter flags the differentiator on every run, and a linter
+# that cries wolf gets switched off (see check_secrets.py for the same rule).
+_LATENCY_RE = re.compile(r"\b(?:in|within|under|every|after|takes?|lasts?)\s*$",
+                         re.IGNORECASE)
+_ALLOW_MARKER = "noqa: duration"      # a reviewed, intentional exception
+_CTX = 40
+
+
+def lint_meeting_duration(facts: dict) -> list[str]:
+    """Prospect-facing copy must not state a call length other than canonical."""
+    meeting = facts.get("meeting") or {}
+    canon = meeting.get("duration_minutes")
+    if not isinstance(canon, int):
+        return ["facts: meeting.duration_minutes must be an int"]
+
+    errors: list[str] = []
+    seen: set[Path] = set()
+    for pattern in _COPY_GLOBS:
+        for path in sorted(ROOT.glob(pattern)):
+            if not path.is_file() or path in seen:
+                continue
+            seen.add(path)
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            rel = str(path.relative_to(ROOT)).replace("\\", "/")
+            for m in _DURATION_RE.finditer(text):
+                ctx = text[max(0, m.start() - _CTX): m.end() + _CTX]
+                if not _MEETING_WORD_RE.search(ctx):
+                    continue                       # a timer, not an ask
+                if _LATENCY_RE.search(text[max(0, m.start() - 12): m.start()]):
+                    continue                       # speed-to-lead, not a length
+                if m.group("num") == str(canon):
+                    continue
+                line = text.count("\n", 0, m.start()) + 1
+                if _ALLOW_MARKER in text.split("\n")[line - 1]:
+                    continue
+                errors.append(
+                    f"meeting drift: {rel}:{line} offers a "
+                    f"'{m.group(0)}' call but canonical is {canon} minutes"
+                )
+    return errors
+
+
 def lint(facts: dict, business_context: dict) -> list[str]:
-    return validate(facts) + lint_pricing(facts, business_context) + lint_copy(facts, business_context)
+    return (validate(facts) + lint_pricing(facts, business_context)
+            + lint_copy(facts, business_context) + lint_meeting_duration(facts))
 
 
 # ── Projection: read-only facts.md for humans (Obsidian) ───────────────────

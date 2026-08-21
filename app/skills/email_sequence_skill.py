@@ -39,7 +39,7 @@ SEQUENCES = {
                     "Saw {company} and thought of you. We help {industry} businesses on the West Coast "
                     "stop chasing bad leads — our system qualifies every lead automatically so you only "
                     "talk to people who are actually interested.\n\n"
-                    "Worth a 10-min chat?\n\n"
+                    "Worth a 15-min chat?\n\n"
                     "Nova @ OROVA"
                 ),
                 "purpose": "Initial introduction"

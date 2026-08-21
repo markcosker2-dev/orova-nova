@@ -179,7 +179,7 @@
       "Keep under 75 words total",
       "Lead with a hook about THEIR business, not ours",
       "Mention specific value in 1 sentence max",
-      "End with a low-pressure ask (10-15 min chat)",
+      "End with a low-pressure ask (15 min chat)",
       "Nova is the sender — casual, peer-level, not corporate",
       "Only mention Mark when suggesting a call"
     ],
@@ -191,8 +191,8 @@
     ]
   },
   "retell_pitch": {
-    "description": "Nova's OUTBOUND cold-call script. Goal is NOT to sell and NOT to make an offer - it is to book a 10-minute call with Mark. Diagnose first, disqualify fast, never argue price.",
-    "goal": "Book a 10-minute call with Mark. Nothing else.",
+    "description": "Nova's OUTBOUND cold-call script. Goal is NOT to sell and NOT to make an offer - it is to book a 15-minute call with Mark. Diagnose first, disqualify fast, never argue price.",
+    "goal": "Book a 15-minute call with Mark. Nothing else.",
     "_offer_rule": "NOVA DOES NOT MAKE OFFERS. AT ALL. No price, no range, no ballpark, no trial, no pilot, no discount, and never the word 'free'. Every commercial question goes to Mark on the call. This rule exists because an unauthorised free two-week pilot appeared in this file and reached both live Retell agents; it was never approved by the owner. The offer is an open commercial decision - until the owner sets it, there is nothing to offer.",
     "compliance": {
       "line_type": "Published business lines ONLY. Never a personal cell (the B2B TCPA exemption depends on it).",
@@ -312,8 +312,8 @@
     "initial_email_framework": {
       "hook": "Mention something specific about their business — show you actually looked",
       "value": "Lead with the PAINKILLER, never growth. Growth framing ('we'll get you more leads') is a vitamin and competes head-on with Angi's $400 price anchor. Painkiller framing is: 'when your crew finishes the job they're on, what's next?' (Pain A) or 'you'll never drive 40 minutes to a tire-kicker again' (Pain B). DIAGNOSE BEFORE PRESCRIBING: empty pipeline -> P1 or P2; drowning in bad leads -> P2 ONLY (P1 makes that pain worse). This supersedes the earlier 'always lead with Package 1' guidance in profitability-plan 2.2 - see ADR-0013.",
-      "ask": "Low-pressure invitation for a 10-15 minute chat",
-      "example": "Hi {name},\n\nI was checking out {company} — really impressed by {specific_thing}.\n\nWe run Meta ads for {industry} businesses on the West Coast, and our AI calls and qualifies every lead within minutes — so you only ever talk to people ready to move.\n\nWould a 10-minute call be worth it to see if this fits {company}?\n\nNova @ OROVA"
+      "ask": "Low-pressure invitation for a 15 minute chat",
+      "example": "Hi {name},\n\nI was checking out {company} — really impressed by {specific_thing}.\n\nWe run Meta ads for {industry} businesses on the West Coast, and our AI calls and qualifies every lead within minutes — so you only ever talk to people ready to move.\n\nWould a 15-minute call be worth it to see if this fits {company}?\n\nNova @ OROVA"
     },
     "follow_up_email_framework": {
       "hook": "Reference the previous email casually",

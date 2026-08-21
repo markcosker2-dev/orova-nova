@@ -26,7 +26,7 @@ update them as failure modes appear.
       "Validates the concern first (does not argue or immediately pitch price)",
       "Reframes: most agencies hand over leads to chase (the part that burned them); OROVA qualifies every lead before it reaches them",
       "States actual pricing correctly ($4k / $5k) without offering a discount",
-      "Ends with a forward secondary ask (e.g. offer a 10-minute comparison call), not silence",
+      "Ends with a forward secondary ask (e.g. offer a 15-minute comparison call), not silence",
       "Makes no past-client claims and no guaranteed-number promises"
     ]
   },

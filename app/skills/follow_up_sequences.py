@@ -47,7 +47,7 @@ I came across {company} while researching {industry} in {location} — impressiv
 
 At OROVA, we help businesses like yours generate more high-value clients through AI-powered marketing and outreach.
 
-Would you be open to a quick 10-minute call this week? I'd love to share a few ideas specific to {company}.
+Would you be open to a quick 15-minute call this week? I'd love to share a few ideas specific to {company}.
 
 — Mark Cosker, OROVA""",
 
@@ -69,7 +69,7 @@ Quick story: One of our clients (similar to {company}) was stuck at {pain_point}
 ✅ {result_1}
 ✅ {result_2}
 
-I genuinely think we could do the same for {company}. Happy to walk you through it on a 10-minute call.
+I genuinely think we could do the same for {company}. Happy to walk you through it on a 15-minute call.
 
 — Mark""",
 
