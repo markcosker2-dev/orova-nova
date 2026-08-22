@@ -152,21 +152,47 @@ function updateNovaStatus(msg) {
     if (el) el.textContent = msg;
 }
 
-const NOVA_STATUSES = [
-    "Analyzing Business Growth...",
-    "Reviewing Client ROI...",
-    "Routing Lead Sequences...",
-    "Optimizing Ad Spend...",
-    "Identifying Offer Gaps...",
-    "Drafting CEO Commands..."
-];
-
-setInterval(() => {
-    if (Math.random() > 0.7) {
-        const randomStatus = NOVA_STATUSES[Math.floor(Math.random() * NOVA_STATUSES.length)];
-        updateNovaStatus(randomStatus);
+// This used to rotate six hardcoded strings at random every 8 seconds —
+// "Analyzing Business Growth...", "Optimizing Ad Spend..." — none of which
+// measured anything, and one of which described work Nova does not do.
+//
+// Invented status is worse than no status: it sits beside the real health
+// indicators and teaches you to discount them too. It now reports the build
+// actually running, or nothing at all.
+async function refreshNovaPulse() {
+    try {
+        const r = await fetch('/health', { cache: 'no-store' });
+        const j = await r.json();
+        updateNovaStatus(j && j.status === 'Operational'
+            ? 'Live \u00b7 ' + String(j.build || '').slice(0, 7)
+            : 'Unreachable');
+    } catch (e) {
+        updateNovaStatus('Unreachable');
     }
-}, 8000);
+}
+refreshNovaPulse();
+setInterval(refreshNovaPulse, 60000);
+
+// Collapsible System group. Collapsed by default: those screens answer "how is
+// Nova doing", not "who do I call". The choice is remembered so it does not
+// re-expand on every load.
+(function initSystemGroup() {
+    const toggle = document.getElementById('system-toggle');
+    if (!toggle) return;
+    const items = document.querySelectorAll('.nav-system');
+    function apply(open) {
+        items.forEach(function (el) { el.style.display = open ? '' : 'none'; });
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        toggle.classList.toggle('open', open);
+        try { localStorage.setItem('OROVA_NAV_SYSTEM_OPEN', open ? '1' : '0'); } catch (e) {}
+    }
+    apply(localStorage.getItem('OROVA_NAV_SYSTEM_OPEN') === '1');
+    function flip() { apply(toggle.getAttribute('aria-expanded') !== 'true'); }
+    toggle.addEventListener('click', flip);
+    toggle.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); }
+    });
+})();
 
 // ═══════════════════ TOAST SYSTEM ═══════════════════
 function showToast(message, type) {
@@ -592,6 +618,11 @@ async function refreshLiveFeed() {
 }
 
 // ═══════════════════ LEAD PIPELINE ═══════════════════
+function setNavLeadCount(n) {
+    const el = document.getElementById('nav-lead-count');
+    if (el) el.textContent = (n === null || n === undefined) ? '' : String(n);
+}
+
 async function renderLeads() {
     var tbody = document.getElementById('leads-tbody');
     if (!tbody) return;
@@ -603,9 +634,11 @@ async function renderLeads() {
         return;
     }
     if (!data.leads || data.leads.length === 0) {
+        setNavLeadCount(0);
         tbody.innerHTML = '<tr><td colspan="6" class="leads-empty">No leads in pipeline. Click Hunt Leads to start.</td></tr>';
         return;
     }
+    setNavLeadCount(data.leads.length);
 
     tbody.innerHTML = data.leads.map(function (lead) {
         var score = lead.score || 0;

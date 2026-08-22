@@ -286,6 +286,54 @@ body {
     text-align: center;
 }
 
+/* ─── NAV GROUPS (added 2026-08-22) ───
+   Fourteen flat items gave every screen equal weight, so Leads — the one that
+   serves booked meetings — sat seventh in an undifferentiated list. Groups
+   restore hierarchy without removing anything. */
+.nav-group-label {
+    padding: 14px 16px 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    opacity: 0.55;
+    user-select: none;
+}
+
+.nav-group-label:first-child { padding-top: 4px; }
+
+.nav-group-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: opacity var(--transition), background var(--transition);
+}
+
+.nav-group-toggle:hover { opacity: 0.9; background: rgba(99, 102, 241, 0.06); }
+.nav-group-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.nav-chevron {
+    font-size: 10px;
+    transition: transform var(--transition);
+}
+
+.nav-group-toggle.open .nav-chevron { transform: rotate(90deg); }
+
+/* The count belongs on the item, not in a panel you have to open to see. */
+.nav-count {
+    margin-left: auto;
+    font-size: 12px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-dim);
+    opacity: 0.7;
+}
+
+.nav-item.active .nav-count { color: var(--accent-light); opacity: 1; }
+
 /* ─── NOVA PULSE (AI-NATIVE) ─── */
 .nova-pulse {
     margin: auto 16px 16px;
