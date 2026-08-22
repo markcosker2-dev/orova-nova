@@ -15,6 +15,8 @@ every check that existed.
     python scripts/nova.py                 status + today's call sheet
     python scripts/nova.py status          is anything broken, what's on me
     python scripts/nova.py calls           who to ring, in what order
+    python scripts/nova.py brief 4         everything known, before you dial
+    python scripts/nova.py brief --top 3 --research
     python scripts/nova.py leaks           secrets + what the internet can see
     python scripts/nova.py gates           the three CI gates, locally
     python scripts/nova.py logs --errors     what production is actually saying
@@ -723,6 +725,188 @@ def cmd_sheet(_args) -> int:
     return 0 if code == 200 else 1
 
 
+# ── brief ───────────────────────────────────────────────────────────────────
+# Everything outbound_dialer.py assembles for Retell, rendered for the human
+# who is actually allowed to make the call.
+#
+# The AI caller has had a careful per-call context for months — business, owner
+# first name, crew_status, niche, icebreaker — while CALLS_AUTOPILOT=0 keeps it
+# from ever using it. Mark, who is not an ADAD and can dial today, had none of
+# it. This is the same assembly pointed at the person instead of the machine.
+#
+# Two facts are read from their canonical owners rather than restated here:
+#   · crew_status  -> app.skills.lead_validator (CLAUDE.md single-source rule)
+#   · the pains    -> app/core/business_context.json
+# Restating either would create a second writer of the same fact, which is the
+# defect that put four different meeting durations into the copy at once.
+
+def _business_context() -> dict:
+    try:
+        return json.loads((ROOT / "app" / "core" / "business_context.json")
+                          .read_text(encoding="utf-8"))
+    except Exception:                                        # noqa: BLE001
+        return {}
+
+
+def _pain_guidance() -> str:
+    """The painkiller framing, verbatim from the canonical business context."""
+    bc = _business_context()
+    return ((bc.get("outreach") or {}).get("initial_email_framework") or {}).get("value", "")
+
+
+def _crew_status(lead: dict) -> str:
+    """Delegate to the canonical implementation; never guess.
+
+    UNKNOWN is a real answer. 58.9% of WA contractors are single-principal, so
+    a default is a coin flip that opens the call on the wrong pain — which
+    burns the one question the opener gets.
+    """
+    try:
+        sys.path.insert(0, str(ROOT))
+        from app.skills.lead_validator import crew_status   # noqa: PLC0415
+        return crew_status(lead)
+    except Exception:                                        # noqa: BLE001
+        n = lead.get("principal_count")
+        try:
+            n = int(n or 0)
+        except (TypeError, ValueError):
+            return "unknown"
+        return "unknown" if n <= 0 else ("solo" if n == 1 else "has_crew")
+
+
+async def _research(lead: dict) -> dict:
+    try:
+        sys.path.insert(0, str(ROOT))
+        from app.skills.dossier import build_dossier         # noqa: PLC0415
+        return await build_dossier(lead) or {}
+    except Exception as e:                                   # noqa: BLE001
+        return {"_error": f"{type(e).__name__}: {e}"}
+
+
+def cmd_brief(args) -> int:
+    code, data = http("/api/leads")
+    if code in (401, 403):
+        print("\n  No valid DASHBOARD_API_KEY on this machine.")
+        return 1
+    if code != 200:
+        print(f"\n  /api/leads returned {code}")
+        return 1
+    rows = data.get("leads", data) if isinstance(data, dict) else data
+    rows = rows if isinstance(rows, list) else []
+
+    if args.lead_id:
+        picked = [r for r in rows if str(r.get("id")) == str(args.lead_id)]
+        if not picked:
+            print(f"\n  No lead with id {args.lead_id}.")
+            return 1
+    else:
+        worked = {"Archived", "Bad Number", "Meeting Booked", "Closed Won", "Closed Lost"}
+        picked = [r for r in rows
+                  if r.get("phone") and (r.get("status") or "New") not in worked]
+        picked.sort(key=lambda r: -(r.get("icp_score") or r.get("score") or 0))
+        picked = picked[: args.top]
+
+    if args.research:
+        billable = [r for r in picked if (r.get("website") or "").startswith("http")]
+        if not billable:
+            print("\n  None of these have a website to research.")
+        else:
+            print(f"\n  Researching {len(billable)} website(s). This calls the "
+                  f"scraper and an LLM.")
+            if not args.yes and input("  Proceed? [y/N] ").strip().lower() not in ("y", "yes"):
+                print("  Skipping research; showing stored data only.")
+                args.research = False
+
+    for lead in picked:
+        _print_brief(lead, args)
+    return 0
+
+
+def _print_brief(lead: dict, args) -> None:
+    import asyncio                                           # noqa: PLC0415
+
+    lid = lead.get("id")
+    crew = _crew_status(lead)
+    cover = lead.get("insurance_amt") or 0
+    owner = (lead.get("owner") or "").strip()
+    first = owner.split()[0] if owner else ""
+    score = int(lead.get("icp_score") or lead.get("score") or 0)
+
+    print("\n  " + "=" * 66)
+    print(f"  LEAD {lid} — {str(lead.get('business', '')).upper()}"
+          f"{' ' * max(1, 46 - len(str(lead.get('business', ''))))}score {score}")
+    print("  " + "=" * 66)
+    print(f"  Owner    {owner or '(unknown)':<28} ask for {first or '(no first name)'}")
+    print(f"  Phone    {lead.get('phone') or '(none)':<28} {lead.get('state') or ''}")
+    money = f"${cover / 1_000_000:.1f}M" if cover >= 1_000_000 else (
+        f"${cover / 1_000:.0f}K" if cover else "not on file")
+    print(f"  Cover    {money:<28} {lead.get('vertical') or ''}")
+
+    if crew == "solo":
+        print("  Crew     SOLO — one named principal on the licence")
+        print("           His deadline is his OWN calendar, not payroll.")
+        print("           Solo is a DISCOUNT, not a disqualification: 42% of")
+        print("           contractors above the $1M cover minimum are solo.")
+    elif crew == "has_crew":
+        print(f"  Crew     HAS CREW — {lead.get('principal_count')} named principals")
+        print("           He feels payroll every Friday. That is the deadline.")
+    else:
+        print("  Crew     UNKNOWN — the registry named no principals")
+        print("           ASK on the call. Do not guess: ~59% of WA contractors")
+        print("           are single-principal, so either default is a coin flip")
+        print("           that opens on the wrong pain.")
+
+    site = lead.get("website") or ""
+    print(f"  Site     {site or '(none on file)'}")
+
+    ice = (lead.get("icebreaker") or "").strip()
+    if args.research and site.startswith("http"):
+        res = asyncio.run(_research(lead))
+        if res.get("_error"):
+            print(f"  Research FAILED — {res['_error']}")
+            print("           (fail-open by design; the brief still stands)")
+        elif res:
+            ice = (res.get("icebreaker") or ice).strip()
+            for obs in (res.get("observations") or [])[:3]:
+                print(f"  Observed {obs}")
+            for sig in (res.get("premium_signals") or [])[:2]:
+                print(f"  Premium  {sig}")
+        else:
+            print("  Research nothing usable found on the site")
+    if ice:
+        print(f"  Opener   \"{ice}\"")
+
+    guidance = _pain_guidance()
+    if guidance:
+        print("\n  THE PAINKILLER (canonical, business_context.json)")
+        for line in _wrap(guidance, 64):
+            print(f"    {line}")
+
+    print("\n  NEVER")
+    print("    · state or imply a price — commercial_terms is UNRESOLVED")
+    print("    · pitch \"we're AI-operated\" — worthless to him")
+    print("      (answering \"are you a bot?\" honestly is different: always do that)")
+    print("    · sell growth/more leads — that is a vitamin, and it loses to")
+    print("      Angi's ~$400 anchor at 16x")
+
+    print("\n  AFTER")
+    print(f"    /outcome {lid} talked <what he actually said>")
+    print(f"    /outcome {lid} na | vm | gk | cb | ni | bad")
+
+
+def _wrap(text: str, width: int) -> list[str]:
+    words, line, out = text.split(), "", []
+    for w in words:
+        if len(line) + len(w) + 1 > width:
+            out.append(line)
+            line = w
+        else:
+            line = f"{line} {w}".strip()
+    if line:
+        out.append(line)
+    return out
+
+
 # ── entry ───────────────────────────────────────────────────────────────────
 def main() -> int:
     p = argparse.ArgumentParser(
@@ -738,6 +922,13 @@ def main() -> int:
     h = sub.add_parser("hunt", help="kick a lead hunt (spends budget)")
     h.add_argument("--niche"); h.add_argument("--location"); h.add_argument("--state")
     h.add_argument("-y", "--yes", action="store_true", help="skip confirmation")
+
+    b = sub.add_parser("brief", help="everything known about a lead, before you dial")
+    b.add_argument("lead_id", nargs="?", help="one lead; omit for the top N")
+    b.add_argument("--top", type=int, default=3)
+    b.add_argument("--research", action="store_true",
+                   help="scrape the site for an icebreaker (costs LLM calls)")
+    b.add_argument("-y", "--yes", action="store_true", help="skip the research prompt")
 
     lg = sub.add_parser("logs", help="what production is actually saying")
     lg.add_argument("-n", type=int, default=40)
@@ -766,6 +957,7 @@ def main() -> int:
     return {"status": cmd_status, "calls": cmd_calls, "leaks": cmd_leaks,
             "gates": cmd_gates, "hunt": cmd_hunt, "outcome": cmd_outcome,
             "logs": cmd_logs, "deploy": cmd_deploy, "config": cmd_config,
+            "brief": cmd_brief,
             "agents": cmd_agents, "sheet": cmd_sheet}[args.cmd](args)
 
 
