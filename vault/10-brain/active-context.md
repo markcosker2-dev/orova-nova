@@ -44,6 +44,13 @@ tags: [brain, active, session-start]
 
 ---
 
+> [!tip] Check state with one command, not fifteen
+> `python scripts/nova.py` prints live status + today's call sheet.
+> `nova.py logs --errors` · `nova.py config` · `nova.py deploy` · `nova.py leaks`
+> · `nova.py gates`. It asks production rather than inferring, which is the
+> rule this file keeps having to re-learn. Anything below that disagrees with
+> the tool is stale — **the system wins, and you fix the doc.**
+
 ## 🚦 Status at a glance
 
 | | |
@@ -74,11 +81,14 @@ tags: [brain, active, session-start]
 >   field lies; it echoes the repo creation date). `2026-08-20` was when it was
 >   noticed. Full working in
 >   [[2026-08-21-a-redaction-that-leaves-the-recipe]].
-> - **`DASHBOARD_API_KEY` is BURNED and not yet rotated.** It was in plaintext
->   in 7 tracked vault files on the public repo — the current tree, not just
->   history — one of them noting that it worked. #182 redacts it, blocklists it,
->   and removes the sentence that explained how to derive it. **None of that
->   un-burns it: rotation in Render is still outstanding.**
+> - **`DASHBOARD_API_KEY` — ROTATED 2026-08-21. Closed.** It had been in
+>   plaintext in 7 tracked vault files on the public repo (the current tree, not
+>   just history), one of them noting that it worked. #182 redacted it,
+>   blocklisted it, and removed the sentence explaining how to derive it from
+>   the previous key. The value itself was then replaced in Render and verified:
+>   new key 200 on `/api/leads`, `/api/agents`, `/api/booking_link`; **old key
+>   403**; unauthenticated 403. The old value stays in `BURNED_LITERALS`
+>   forever — it is in 28 commits of public history and nothing can remove it.
 > - Prospect PII cleaned in #172 was still reachable
 >   in older commits and in merged PR diffs (a history rewrite does not touch
 >   PR diffs). Private gates all three at once and is reversible. Verified
@@ -288,11 +298,11 @@ graph LR
 > apps after **exactly 7 days**, by design. Three re-issues, three 7-day deaths.
 
 > [!todo] In priority order
-> 0. **Rotate `DASHBOARD_API_KEY` — TOP PRIORITY.** It is burned AND the repo
->    is public by decision, so the value is readable in history by anyone right
->    now. Generate with
->    `python -c "import secrets; print(secrets.token_urlsafe(36))"`, set it in
->    Render **and** local `.env`. ~5 min.
+> 0. ~~Rotate `DASHBOARD_API_KEY`~~ — **DONE 2026-08-21**, verified both ways.
+>    Any future rotation: generate with
+>    `python -c "import secrets; print(secrets.token_urlsafe(36))"`, set Render
+>    FIRST, then local `.env` — the reverse order breaks every local check
+>    until production catches up.
 > 0b. **Clear CodeQL default setup** — Settings → Code security → Code scanning
 >    → Default setup → Disable. It cannot complete on a private repo without
 >    GHAS and currently fails on every push to `main`.
