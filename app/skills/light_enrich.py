@@ -184,7 +184,9 @@ JUNK_EMAIL_PATTERNS = [
     'privacy@', 'legal@', 'abuse@', 'postmaster@', 'mailer-daemon',
 ]
 
-BLOCK_SIGNALS = [
+# Strings that do NOT occur on an ordinary site — seeing one means the page
+# really is an interstitial rather than the site.
+_HARD_BLOCK_SIGNALS = [
     "cf-browser-verification",
     "challenge-form",
     "checking your browser",
@@ -192,9 +194,37 @@ BLOCK_SIGNALS = [
     "ddos-guard",
     "just a moment",
     "ray id",
+]
+
+# Words that also appear on ordinary sites, so they cannot be trusted alone.
+#
+# Measured 2026-08-22 against every reachable prospect site in production:
+# a bare "captcha" substring discarded 9 of 10. All ten returned HTTP 200 with
+# real content; the match was invariably an attribute on the business's own
+# CONTACT FORM — `captcha="true" data-captcha-position="bottomleft"`.
+#
+# That is worse than a random 90% loss, because a contact form is exactly what
+# a GOOD contractor site has: the detector preferentially destroyed the best
+# prospects. It silently emptied every consumer of _fetch_page —
+# build_dossier (icebreaker 0/10), contact_waterfall (owner_title 0/10), and
+# the light_enrich crawl — and each one fails open, so nothing ever raised.
+#
+# Same shape as the Houzz ad-signal false positive: a detector that fires on
+# almost everything is not a detector. Live-test signals against ~10 real
+# sites before trusting them.
+_WEAK_BLOCK_SIGNALS = [
     "captcha",
     "bot protection",
 ]
+
+# A genuine interstitial IS the whole response: a few KB of challenge markup
+# with no site content. The smallest REAL prospect site measured was 19KB, and
+# Cloudflare-style challenges run well under 10KB, so 12KB separates them with
+# room on both sides.
+_WEAK_BLOCK_MAX_CHARS = 12_000
+
+# Kept as the union for anything that imports the old name.
+BLOCK_SIGNALS = _HARD_BLOCK_SIGNALS + _WEAK_BLOCK_SIGNALS
 
 TITLE_KEYWORDS = [
     "owner", "founder", "co-founder", "ceo", "chief executive",
@@ -457,7 +487,17 @@ async def _fetch_page(url: str) -> Optional[Dict[str, str]]:
 
 
 def _is_blocked(html_lower: str) -> bool:
-    return any(sig in html_lower for sig in BLOCK_SIGNALS)
+    """Is this response a bot-wall rather than the site?
+
+    Hard signals decide on their own. Generic ones ("captcha") only count when
+    the response is small enough to BE the challenge — on a full page they are
+    almost always the site's own contact form. See _WEAK_BLOCK_SIGNALS.
+    """
+    if any(sig in html_lower for sig in _HARD_BLOCK_SIGNALS):
+        return True
+    if len(html_lower) <= _WEAK_BLOCK_MAX_CHARS:
+        return any(sig in html_lower for sig in _WEAK_BLOCK_SIGNALS)
+    return False
 
 
 def _extract_emails(html: str) -> list:
