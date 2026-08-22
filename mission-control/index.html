@@ -42,48 +42,64 @@
             </select>
             <button id="add-client-btn" class="workspace-add" title="Add New Client">+</button>
         </div>
+        <!-- Grouped 2026-08-22. Fourteen flat items gave every screen the
+             same weight, so the one that serves the north-star metric —
+             booked meetings — was seventh in a list and the eight
+             machine-introspection screens were indistinguishable from it.
+             Nothing is removed; SYSTEM is collapsed because it answers
+             "how is Nova doing" rather than "who do I call". -->
         <ul class="nav-links">
-            <li class="nav-item active" data-screen="taskboard">
-                <span class="nav-icon">☰</span><span class="nav-label">Task Board</span>
-            </li>
-            <li class="nav-item" data-screen="analytics">
-                <span class="nav-icon">◈</span><span class="nav-label">Analytics</span>
-            </li>
-            <li class="nav-item" data-screen="pipeline">
-                <span class="nav-icon">▶</span><span class="nav-label">Content Pipeline</span>
+            <li class="nav-group-label">Pipeline</li>
+            <li class="nav-item active" data-screen="leads">
+                <span class="nav-icon">&#9679;</span><span class="nav-label">Leads</span>
+                <span class="nav-count" id="nav-lead-count"></span>
             </li>
             <li class="nav-item" data-screen="calendar">
-                <span class="nav-icon">▦</span><span class="nav-label">Calendar</span>
+                <span class="nav-icon">&#9638;</span><span class="nav-label">Calendar</span>
             </li>
-            <li class="nav-item" data-screen="leads">
-                <span class="nav-icon">⊕</span><span class="nav-label">Lead Pipeline</span>
+            <li class="nav-item" data-screen="taskboard">
+                <span class="nav-icon">&#9776;</span><span class="nav-label">Tasks</span>
             </li>
-            <li class="nav-item" data-screen="memory">
-                <span class="nav-icon">◉</span><span class="nav-label">Memory Bank</span>
+            <li class="nav-item" data-screen="analytics">
+                <span class="nav-icon">&#9672;</span><span class="nav-label">Analytics</span>
             </li>
-            <li class="nav-item" data-screen="team">
-                <span class="nav-icon">⬡</span><span class="nav-label">Team Structure</span>
-            </li>
-            <li class="nav-item" data-screen="skills">
-                <span class="nav-icon">⚡</span><span class="nav-label">Skills Hub</span>
-            </li>
-            <li class="nav-item" data-screen="workflows">
-                <span class="nav-icon">⚙️</span><span class="nav-label">Pipeline Runner</span>
-            </li>
-            <li class="nav-item" data-screen="office">
-                <span class="nav-icon">⬢</span><span class="nav-label">Digital Office</span>
-            </li>
-            <li class="nav-item" data-screen="ceobrain">
-                <span class="nav-icon">🧠</span><span class="nav-label">CEO Brain</span>
+
+            <li class="nav-group-label">Content</li>
+            <li class="nav-item" data-screen="pipeline">
+                <span class="nav-icon">&#9654;</span><span class="nav-label">Content</span>
             </li>
             <li class="nav-item" data-screen="proofreader">
-                <span class="nav-icon">✅</span><span class="nav-label">Proofreader</span>
+                <span class="nav-icon">&#10003;</span><span class="nav-label">Proofreader</span>
             </li>
-            <li class="nav-item" data-screen="improvement">
-                <span class="nav-icon">📈</span><span class="nav-label">Self-Improvement</span>
+
+            <li class="nav-group-label nav-group-toggle" id="system-toggle"
+                role="button" tabindex="0" aria-expanded="false"
+                aria-controls="system-group">
+                <span>System</span><span class="nav-chevron">&#9656;</span>
             </li>
-            <li class="nav-item" data-screen="lanes">
-                <span class="nav-icon">⚙️</span><span class="nav-label">Worker Lanes</span>
+            <li class="nav-item nav-system" data-screen="lanes">
+                <span class="nav-icon">&#9881;</span><span class="nav-label">Worker Lanes</span>
+            </li>
+            <li class="nav-item nav-system" data-screen="ceobrain">
+                <span class="nav-icon">&#9635;</span><span class="nav-label">CEO Brain</span>
+            </li>
+            <li class="nav-item nav-system" data-screen="improvement">
+                <span class="nav-icon">&#9650;</span><span class="nav-label">Self-Improvement</span>
+            </li>
+            <li class="nav-item nav-system" data-screen="memory">
+                <span class="nav-icon">&#9673;</span><span class="nav-label">Memory Bank</span>
+            </li>
+            <li class="nav-item nav-system" data-screen="skills">
+                <span class="nav-icon">&#9889;</span><span class="nav-label">Skills Hub</span>
+            </li>
+            <li class="nav-item nav-system" data-screen="workflows">
+                <span class="nav-icon">&#9881;</span><span class="nav-label">Pipeline Runner</span>
+            </li>
+            <li class="nav-item nav-system" data-screen="team">
+                <span class="nav-icon">&#11041;</span><span class="nav-label">Team Structure</span>
+            </li>
+            <li class="nav-item nav-system" data-screen="office">
+                <span class="nav-icon">&#11042;</span><span class="nav-label">Digital Office</span>
             </li>
         </ul>
         <!-- AI-NATIVE: Nova Pulse -->
@@ -92,8 +108,8 @@
                 <div class="pulse-ring"></div>
             </div>
             <div class="pulse-info">
-                <span class="pulse-label">Nova Intelligence</span>
-                <span id="nova-status" class="pulse-status">Analyzing Lead Quality...</span>
+                <span class="pulse-label">Nova</span>
+                <span id="nova-status" class="pulse-status">&mdash;</span>
             </div>
         </div>
 
