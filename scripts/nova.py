@@ -644,12 +644,53 @@ def cmd_config(_args) -> int:
             print(f"  off   {name:<34} {why}")
     else:
         print("\n  Everything configured.")
+    # A provider catalog that turns over under a hardcoded slug has now cost
+    # this project twice — OpenRouter in 2026-07, Groq in 2026-08 — and both
+    # times the symptom was silence, because every caller fails open. Ask the
+    # provider whether the configured model still exists.
+    _check_llm_model()
+
     sched = h.get("scheduler") or {}
     if sched:
         print("\n  LANES")
         for lane, state in sched.items():
             print(f"  {'ok ' if state == 'Active' else '-- '}  {lane:<20} {state}")
     return 0
+
+
+def _check_llm_model() -> None:
+    """Is the configured Groq model still on the account?"""
+    key = ENV.get("GROQ_API_KEY", "").strip()
+    if not key:
+        return
+    try:
+        src = (ROOT / "app" / "core" / "ai_client.py").read_text(encoding="utf-8")
+        m = re.search(r'GROQ_MODEL\s*=\s*["\']([^"\']+)["\']', src)
+    except OSError:
+        return
+    if not m:
+        return
+    configured = m.group(1)
+    req = urllib.request.Request("https://api.groq.com/openai/v1/models")
+    req.add_header("Authorization", f"Bearer {key}")
+    # Groq 403s urllib's default agent, exactly as cal.com does. Same lesson,
+    # second time in this file: any request built outside http() has to carry
+    # the User-Agent too, or the check reports a failure that is its own.
+    req.add_header("User-Agent", "Mozilla/5.0 (compatible; orova-nova-cli/1.0)")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            models = {x.get("id") for x in json.loads(r.read().decode()).get("data", [])}
+    except Exception:                                        # noqa: BLE001
+        print("\n  LLM       could not reach Groq to verify the model")
+        return
+    if configured in models:
+        print(f"\n  LLM       {configured} is live on this key")
+    else:
+        print(f"\n  LLM       {BAD}: GROQ_MODEL '{configured}' is NOT on this key.")
+        print("            Every Tier-1 call 404s and falls through silently.")
+        chat = sorted(x for x in models
+                      if not any(k in x for k in ("whisper", "guard", "orpheus")))
+        print(f"            Available: {', '.join(chat[:6])}")
 
 
 # ── agents ──────────────────────────────────────────────────────────────────
