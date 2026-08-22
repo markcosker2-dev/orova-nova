@@ -72,9 +72,14 @@
                 <span class="nav-icon">&#10003;</span><span class="nav-label">Proofreader</span>
             </li>
 
+            <!-- No aria-controls: the collapsed items are sibling <li>s matched
+                 by class, and there is no element to point at. A <div> wrapper
+                 inside a <ul> would be invalid, and a dangling reference is
+                 worse than none — it promises a target that does not exist.
+                 aria-expanded carries the state, which is the part that
+                 screen readers actually act on. -->
             <li class="nav-group-label nav-group-toggle" id="system-toggle"
-                role="button" tabindex="0" aria-expanded="false"
-                aria-controls="system-group">
+                role="button" tabindex="0" aria-expanded="false">
                 <span>System</span><span class="nav-chevron">&#9656;</span>
             </li>
             <li class="nav-item nav-system" data-screen="lanes">

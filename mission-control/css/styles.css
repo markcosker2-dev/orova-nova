@@ -291,7 +291,13 @@ body {
    serves booked meetings — sat seventh in an undifferentiated list. Groups
    restore hierarchy without removing anything. */
 .nav-group-label {
-    padding: 14px 16px 6px;
+    /* Base is tight; the gap BETWEEN groups is added by the adjacent-sibling
+       rule below. Position-independent on purpose — the previous
+       `:first-child` reset depended on this label being the first element in
+       the list, which silently breaks the moment anything (a search box, a
+       header) is inserted above it. `:first-of-type` would not have helped:
+       every child of .nav-links is an <li>, so it resolves to the same node. */
+    padding: 4px 16px 6px;
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.08em;
@@ -301,7 +307,8 @@ body {
     user-select: none;
 }
 
-.nav-group-label:first-child { padding-top: 4px; }
+/* Space appears only where one group follows another, wherever that is. */
+.nav-item + .nav-group-label { padding-top: 14px; }
 
 .nav-group-toggle {
     display: flex;
