@@ -135,7 +135,23 @@ class UnifiedAIClient:
         "nvidia/nemotron-3-super-120b-a12b:free",
     ]
 
-    GROQ_MODEL = "llama-3.3-70b-versatile"
+    # Groq decommissioned llama-3.3-70b-versatile. Every Tier-1 call had been
+    # returning 404 model_not_found and falling through to Gemini, whose free
+    # tier caps at 20 requests/day — so the AI layer was running on fumes and
+    # nothing said so: a 404 here is indistinguishable from "provider busy" to
+    # every fail-open caller downstream.
+    #
+    # SECOND time a provider catalog turned over under a hardcoded slug; see
+    # the OpenRouter note above recording the same failure in 2026-07.
+    # `nova.py config` now verifies this string against the account's live
+    # model list, so the third time is caught in one command.
+    #
+    # Chosen from what the key actually offers and tested live at
+    # max_tokens=150 — the smallest budget any call site uses
+    # (light_enrich.py:915). gpt-oss is a REASONING model: it spends completion
+    # tokens thinking before it writes, so a tight budget can return EMPTY
+    # content rather than an error. Measured 60 of 150 on a real extraction.
+    GROQ_MODEL = "openai/gpt-oss-120b"
 
     def __init__(self):
         self.admin_chat_id = os.getenv("ADMIN_CHAT_ID")
