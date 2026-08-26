@@ -41,11 +41,32 @@ head-on with Angi's price anchor — a fight we lose at 16x. Painkiller framing:
 | Pain found on the call | Prescribe |
 |---|---|
 | Empty pipeline (Pain A) | Package 1 **or** Package 2 — he needs volume |
-| Drowning in bad leads (Pain B) | **Package 2 ONLY** |
+| Drowning in bad leads (Pain B) | ~~Package 2 ONLY~~ → **Package 3** (see below) |
+| Both | Package 2 |
 
 **P1 makes Pain B worse** — more leads means more wasted Saturdays. The prior
 "always lead with P1 because it's the lower-friction yes" guidance is wrong when
 the pain is qualification, not volume. Ask first; prescribe second.
+
+> [!important] Amended 2026-08-22 — Pain B is now Package 3
+> "Package 2 ONLY" was correct while P1 and P2 were the only options: *not P1*
+> then meant *therefore P2*. **Package 3** — the AI qualification caller sold
+> standalone at $3,000/mo — makes that inference false.
+>
+> A man drowning in bad leads is **not short of leads**. Prescribing P2 sells
+> him $5,000/mo *plus* $2,000–2,500 of ad spend to fix a pipeline that is not
+> empty. P3 is $3,000, no media, and is exactly his problem — cheaper for him
+> and a cleaner fit.
+>
+> **The reasoning above is untouched and still right.** P1 still makes Pain B
+> worse; a painkiller still beats a vitamin. Only the prescription moved,
+> because a third door opened.
+>
+> This matters more than a copy tweak: Pain B is the diagnosis the
+> [[0017-the-sample-is-the-proof|ADR-0017]] demo call produces most often. A
+> contractor who has just let an AI qualify him has, by definition, leads worth
+> qualifying — so the prescription that fires hardest after a successful demo
+> was the one pointing at the wrong package.
 
 ### 3. Timing qualifies harder than vertical
 Four qualifiers, **all four must be true**:
