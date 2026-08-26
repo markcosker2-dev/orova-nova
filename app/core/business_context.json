@@ -157,7 +157,7 @@
       "already_paying_for_leads_and_unhappy": "Angi/HomeAdvisor/Thumbtack/LSA. Proves the wallet already opens for this job-to-be-done."
     },
     "pains": {
-      "_diagnose_first": "Ask before prescribing. Empty pipeline -> P1/P2. Drowning in bad leads -> P2 only, never P1.",
+      "_diagnose_first": "Ask before prescribing. Empty pipeline -> P1/P2. Drowning in bad leads -> P3 (the caller alone), never P1. Both problems -> P2.",
       "pain_a_the_gap": {
         "what": "Current job wraps in ~3 weeks and nothing is signed after it. Six guys on W-2 payroll (~$30-40K/mo) burning with no revenue; the next step is laying off a lead carpenter he trained for four years.",
         "felt": "Episodic (quarterly) but existential - this is what creates URGENCY and closes deals.",
@@ -166,8 +166,9 @@
       "pain_b_the_wasted_saturday": {
         "what": "Drove 40 minutes each way to measure, three hours that night writing the proposal, homeowner ghosted - or wanted a $60K remodel for $22K, or was collecting a third quote. Happened six times last month. Estimates happen nights and weekends because days are job sites.",
         "felt": "WEEKLY - this is the wedge (clears the daily/weekly bar).",
-        "prescribe": "Package 2 ONLY. P1 makes this pain WORSE (more leads = more wasted Saturdays)."
-      }
+        "prescribe": "Package 3 — the AI qualification caller, standalone. He is NOT short of leads, so selling him ads solves a problem he does not have: P2 costs $5,000 plus $2,000-2,500 of ad spend he never asked for, where P3 is $3,000 and no media at all. P1 remains actively wrong (more leads = more wasted Saturdays). Only reach for P2 if he ALSO says the pipeline is thin — that is both pains, not this one."
+      },
+      "_superseded_2026_08_22": "This entry used to read 'Package 2 ONLY' for Pain B, which was correct while P1 and P2 were the only options: 'not P1' then meant 'therefore P2'. Package 3 (owner-set 2026-08-22) makes that inference false. ADR-0013's REASONING is untouched and still right — P1 makes Pain B worse, and a painkiller beats a vitamin. Only the prescription changed, because a third door opened. Note this is the diagnosis the ADR-0017 demo call produces most often: a contractor who just let an AI qualify him has, by definition, leads worth qualifying."
     }
   },
   "email_rules": {
@@ -326,7 +327,7 @@
   "outreach": {
     "initial_email_framework": {
       "hook": "Mention something specific about their business — show you actually looked",
-      "value": "Lead with the PAINKILLER, never growth. Growth framing ('we'll get you more leads') is a vitamin and competes head-on with Angi's $400 price anchor. Painkiller framing is: 'when your crew finishes the job they're on, what's next?' (Pain A) or 'you'll never drive 40 minutes to a tire-kicker again' (Pain B). DIAGNOSE BEFORE PRESCRIBING: empty pipeline -> P1 or P2; drowning in bad leads -> P2 ONLY (P1 makes that pain worse). This supersedes the earlier 'always lead with Package 1' guidance in profitability-plan 2.2 - see ADR-0013.",
+      "value": "Lead with the PAINKILLER, never growth. Growth framing ('we'll get you more leads') is a vitamin and competes head-on with Angi's $400 price anchor. Painkiller framing is: 'when your crew finishes the job they're on, what's next?' (Pain A) or 'you'll never drive 40 minutes to a tire-kicker again' (Pain B). DIAGNOSE BEFORE PRESCRIBING: empty pipeline -> P1 or P2; drowning in bad leads -> P3, the caller alone (P1 makes that pain worse, and P2 sells ads he does not need). This supersedes the earlier 'always lead with Package 1' guidance in profitability-plan 2.2 - see ADR-0013.",
       "ask": "Low-pressure invitation for a 15 minute chat",
       "example": "Hi {name},\n\nI was checking out {company} — really impressed by {specific_thing}.\n\nWe run Meta ads for {industry} businesses on the West Coast, and our AI calls and qualifies every lead within minutes — so you only ever talk to people ready to move.\n\nWould a 15-minute call be worth it to see if this fits {company}?\n\nNova @ OROVA"
     },
