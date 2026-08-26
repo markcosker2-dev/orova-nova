@@ -18,6 +18,7 @@ status: active
 |---|---|---|---|---|
 | Package 1 — Meta Lead Gen + Ad Creatives | $4,000 | $4,000 | $10,000 | $18,000 |
 | Package 2 — Lead Gen + AI Qualification + CRM + Appointments | $5,000 | $5,000 | $13,000 | $24,000 |
+| Package 3 — AI Lead Qualification Caller (standalone) | $3,000 | $3,000 | $7,000 | $12,000 |
 
 Recommended client ad spend: **$2000-2500/mo** (paid by the client directly to Meta).
 

@@ -9,6 +9,7 @@
   "pricing": {
     "service_fee_p1_usd": 4000,
     "service_fee_p2_usd": 5000,
+    "service_fee_p3_usd": 3000,
     "ad_spend_recommended_usd": "2000-2500"
   },
   "packages": [
@@ -23,6 +24,13 @@
       "name": "Package 2 — Lead Gen + AI Qualification + CRM + Appointments",
       "price_monthly_usd": "{{ref:pricing.service_fee_p2_usd}}",
       "tiers_usd": { "1_month": "{{ref:pricing.service_fee_p2_usd}}", "3_month": 13000, "6_month": 24000 }
+    },
+    {
+      "_doc": "Owner-set 2026-08-22. The AI lead qualification caller sold on its own, for owners who already have lead flow (referrals, Angi, their own site) and whose problem is chasing bad leads rather than an empty pipeline. This is the offering ADR-0017's demo call actually demonstrates, so it is the price a convinced prospect asks for first. Multi-month tiers are DERIVED, not invented: P1 and P2 both discount a 3-month by exactly $2,000 and a 6-month by exactly $6,000, so the same flat structure applies here. Confirm if that is wrong.",
+      "id": "package_3",
+      "name": "Package 3 — AI Lead Qualification Caller (standalone)",
+      "price_monthly_usd": "{{ref:pricing.service_fee_p3_usd}}",
+      "tiers_usd": { "1_month": "{{ref:pricing.service_fee_p3_usd}}", "3_month": 7000, "6_month": 12000 }
     }
   ],
   "compliance": {

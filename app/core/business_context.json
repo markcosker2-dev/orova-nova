@@ -44,6 +44,17 @@
       ],
       "includes_crm": true,
       "includes_appointments": "optional — only when the business monetizes via appointments"
+    },
+    {
+      "name": "Package 3 — AI Lead Qualification Caller (standalone)",
+      "price_monthly_usd": 3000,
+      "pricing_tiers_usd": {
+        "1_month": 3000,
+        "3_month": 7000,
+        "6_month": 12000
+      },
+      "description": "The AI lead qualification caller on its own, without OROVA running any ads. Every lead the client already gets — from referrals, Angi, their own site, anywhere — is called within minutes, screened, and the real ones are booked. For owners whose pipeline is NOT empty: the problem is driving to tire-kickers, not a shortage of enquiries. No ad spend is involved, because OROVA is not buying media on this package.",
+      "sold_when": "DIAGNOSE, never recite the menu. Plenty of leads but chasing bad ones -> this. Empty pipeline -> Package 1 or 2. Both problems -> Package 2."
     }
   ],
   "commercial_terms": {
