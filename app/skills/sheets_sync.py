@@ -272,7 +272,15 @@ WORKSHEET_HEADERS = {
     # what is lost is the only part a human actually wrote.
     "CallLog": ["CallID", "LeadID", "Business", "Phone", "Outcome", "Duration",
                 "Date", "Notes"],
-    "Meetings": ["MeetingID", "LeadID", "Business", "DateTime", "CalLink", "Status"]
+    "Meetings": ["MeetingID", "LeadID", "Business", "DateTime", "CalLink", "Status"],
+    # Consent added 2026-08-22. The ledger call_consent.py writes lives in
+    # DatabaseManager state, which sits on Render's ephemeral disk and is
+    # carried ONLY by the Drive snapshot — and Drive has been invalid_grant for
+    # weeks. So a consent record would not survive the next deploy, and
+    # call_consent's own docstring is the reason that matters: "consent that
+    # cannot be pointed at later is not consent." This tab is the durable
+    # copy — the legal artifact, not the working one.
+    "Consent": ["Phone", "LeadID", "Business", "Source", "Detail", "Actor", "RecordedAt"]
 }
 
 async def get_sheets_client() -> Optional[gspread.Client]:
@@ -691,6 +699,32 @@ async def log_call_to_sheets(call_data: Dict[str, Any], workbook_name: Optional[
         return {"ok": True}
     except Exception as exc:
         logger.error(f"[SheetsSync] log_call_to_sheets failed: {exc}")
+        return {"ok": False, "error": str(exc)}
+
+
+async def log_consent_to_sheets(entry: Dict[str, Any],
+                                 workbook_name: Optional[str] = None) -> Dict[str, Any]:
+    """Append a consent record to the Consent tab.
+
+    Never fatal to the caller: a Sheets outage must not stop consent being
+    recorded in the ledger. But it IS logged loudly, because a consent that
+    exists only on an ephemeral disk is one deploy from not existing.
+    """
+    try:
+        worksheet = await _get_worksheet("Consent", workbook_name)
+        await asyncio.to_thread(worksheet.append_row, [
+            entry.get("phone") or "",
+            entry.get("lead_id") or "",
+            entry.get("business") or "",
+            entry.get("source") or "",
+            (entry.get("detail") or "")[:1000],
+            entry.get("actor") or "",
+            entry.get("recorded_at") or "",
+        ])
+        return {"ok": True}
+    except Exception as exc:
+        logger.error(f"[SheetsSync] log_consent_to_sheets FAILED — the consent "
+                     f"record is only in ephemeral state now: {exc}")
         return {"ok": False, "error": str(exc)}
 
 
