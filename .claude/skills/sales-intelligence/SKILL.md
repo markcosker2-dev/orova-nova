@@ -38,17 +38,24 @@ on-brand, and tuned to book qualified conversations.
 
 1. **We sell premium revenue growth, not "lead generation."** Never generic
    agency-speak ("we generate leads", "grow your business", "boost sales").
-2. **Lead with the system promise / differentiator:** *"every lead is called and
-   qualified within minutes — you only talk to people ready to buy,"* and *"you've
-   already seen it work — that's how we reached you."* The product demos itself.
+2. **Lead with the SAMPLE, not a claim** ([[0017-the-sample-is-the-proof]],
+   2026-08-22). There are no testimonials and none may be invented, so the
+   artefact does the persuading: *"we've already built the AI lead qualifier —
+   can I have it call you?"* The prospect is then qualified BY it and books from
+   inside the demo. The differentiator underneath is unchanged: *"every lead is
+   called and qualified within minutes — you only talk to people ready to buy."*
+   **Asking permission is also the legal cure** — a yes on a live call is prior
+   express consent under §227(b). Record it: `nova.py consent <id> dm|call|email`.
 3. **The past is closed.** Zero past-client claims, names, numbers, or verticals.
    Never mention Mark's previous agency, any channel, ever. If asked "am I your
    first?": *"No — I've signed and worked with clients before."*
 4. **Cadence is a hard cap:** 1 email → up to 3 follow-ups (different days) → 1
    cold call → mark cold, never contact again. **Five touches, ever.** The
    break-up email must be true.
-5. **Price is the price.** P1 $4k/mo, P2 $5k/mo (tiers in business_context). No
-   discounts, no freebies, no fake urgency, no spam-trigger words.
+5. **Price is the price.** P1 $4k/mo (ads), **P3 $3k/mo (the AI caller alone)**,
+   P2 $5k/mo (both). Tiers in `business_context.json > services`. No discounts,
+   no freebies, no fake urgency, no spam-trigger words. **Nova never states a
+   price at all** — every commercial question goes to Mark on the call.
 6. **Compliance:** business lines only (TCPA); the voice agent discloses AI when
    asked; ad spend / signing / publishing are always human-approved.
 

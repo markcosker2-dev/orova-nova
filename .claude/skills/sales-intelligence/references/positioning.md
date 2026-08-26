@@ -45,9 +45,28 @@ only one; home builders / luxury RE / high-ticket services still qualify.)
 
 - **Package 1 — $4k/mo:** Meta (FB+IG) lead gen + AI ad creatives. Client handles
   the leads. Ad spend separate (~$2–2.5k/mo).
-- **Package 2 — $5k/mo:** P1 + Retell AI qualification + CRM kept current +
-  appointment booking. This is where the "you only talk to qualified buyers"
-  promise lives. Tiers: 1/3/6-month (see `business_context.json > services`).
+- **Package 3 — $3k/mo:** the AI lead qualification caller **standalone** — no ads,
+  no media spend. Every lead they ALREADY get (referrals, Angi, their own site) is
+  called within minutes, screened, and the real ones booked. Added 2026-08-22.
+- **Package 2 — $5k/mo:** P1 + P3 together — ads *and* qualification + CRM kept
+  current + appointment booking. Tiers: 1/3/6-month (see
+  `business_context.json > services`).
 
-For a cold first touch with no case study, **lead with P1**; only surface P2's AI
-qualification if they ask "what do you do with the leads." (per `outreach`.)
+**Prescribe by diagnosis, never by reciting the menu:**
+
+| What he says | Prescribe |
+|---|---|
+| Pipeline is thin / "what's next after this job" (Pain A) | P1 or P2 |
+| Drowning in bad leads / wasted Saturdays (Pain B) | **P3** |
+| Both | P2 |
+
+> **Superseded 2026-08-22.** This section used to say *"for a cold first touch with
+> no case study, lead with P1; only surface P2's AI qualification if they ask."*
+> Both halves are now wrong. ADR-0017 leads with the AI caller **precisely
+> because** there is no case study — the sample replaces the proof. And Pain B is
+> P3, not P2: a man drowning in bad leads is not short of leads, so selling him
+> ads costs him $5k plus media to fix a pipeline that is not empty (ADR-0013,
+> amended).
+>
+> **Nova states no price, ever.** These numbers are for Claude's judgement about
+> which package FITS. Mark quotes.
