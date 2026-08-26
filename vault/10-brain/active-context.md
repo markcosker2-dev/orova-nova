@@ -198,6 +198,26 @@ graph LR
     E --> F[Follow-up email — legitimate]
 ```
 
+> [!success] 🎯 THE PLAY — the sample IS the proof ([[0017-the-sample-is-the-proof|ADR-0017]])
+> Owner decision 2026-08-22. No testimonials, no results claims, no free trial.
+> The pitch is **"we've already built the AI lead qualifier — can I have it
+> call you?"**, and the prospect is then qualified BY it. The call opens as a
+> demo and transitions into booking Mark.
+>
+> **Asking permission is also the legal cure.** A yes on a live call is prior
+> express consent under §227(b), and CA PUC §2874 specifically requires a LIVE
+> OPERATOR to obtain consent before an automated system plays — which is the
+> shape of this method exactly.
+>
+> Consent is recorded with `nova.py consent <id> dm|call|email "<what they
+> said>"`. Note what #194 found: `call_consent.ai_call_allowed()` had been a
+> complete, correct, fail-closed gate for weeks with **no path that could ever
+> grant consent** — so it refused every number permanently.
+>
+> **Still open:** RCW 80.36.400 (WA) may have no consent cure, and **93% of
+> leads are WA** (77 of 82). `AI_CALL_ALLOWED_STATES` starts EMPTY —
+> never guess which states permit AI calls; a wrong entry is $500–1,500/call.
+
 > [!success] ✅ INSTAGRAM — open, legal, free, unblocked
 > The only channel available today.
 > **DM #1 is manual** — the API physically cannot initiate threads
