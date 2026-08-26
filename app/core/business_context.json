@@ -4,7 +4,7 @@
   "company": {
     "name": "OROVA",
     "type": "Marketing Agency",
-    "description": "OROVA runs Meta ads (Facebook + Instagram) for luxury and premium businesses on the US West Coast — lead generation plus AI-crafted ad creatives, with optional AI lead qualification and appointment setting so owners only talk to buyers.",
+    "description": "OROVA sells THREE things to luxury and premium businesses on the US West Coast. (1) Meta lead generation (Facebook + Instagram) with AI-crafted ad creatives. (2) An AI lead qualification caller that rings every lead within minutes, screens them, and books the real ones — sold STANDALONE, for owners who already have lead flow from referrals, Angi or their own site. (3) Both together. The AI caller is a product in its own right, NOT an optional add-on: it is the thing outreach now leads with, because a prospect who has been qualified by it has felt the product rather than heard a claim (ADR-0017).",
     "ceo": "Mark",
     "ai_team_member": "Nova",
     "timezone": "America/Los_Angeles",
@@ -267,7 +267,9 @@
       "{{niche}}": "their vertical",
       "{{icebreaker}}": "personalised opener line, may be empty",
       "{{crew_status}}": "'solo' | 'has_crew' | 'unknown' — from the named principals on the state licence. Selects which pain to open on in step 2. Never guess on 'unknown'."
-    }
+    },
+    "_offerings": "OROVA sells THREE things and Nova must not describe it as ads-only: (1) Meta lead gen + AI creatives, (2) the AI lead qualification caller STANDALONE for owners who already have lead flow, (3) both together. Which one fits is decided by DIAGNOSIS, not by pitching: if they already get plenty of leads and the problem is chasing bad ones, that is the caller alone. If the pipeline is empty, that is ads. Never recite the menu — ask first, then name the one that fits. Prices for all three are Mark's to state, never Nova's.",
+    "_deployed_drift": "The DEPLOYED prompt is not generated from this file — nothing pushes it — so it drifts. Known drift as of 2026-08-22: the deployed text says 'ten minutes' while canonical is 15 (knowledge/facts/company.json meeting.duration_minutes), and both deployed prompts describe OROVA as Meta-ads-only. Retell updates an LLM version IN PLACE with no rollback pin, so verify before sending."
   },
   "retell_inbound": {
     "description": "Nova's INBOUND script, for when a prospect rings the number back after a voicemail. Separate agent from the outbound dialler: no dynamic variables exist on an inbound call, so the outbound prompt would read '{{name}}' aloud.",
@@ -293,7 +295,9 @@
       "two preferred times in their own words"
     ],
     "_timezone_steer": "Same constraint as outbound: only US early morning and late afternoon PT are workable for Mark. Never offer US midday. Never name a specific slot - ask open and let them state a time.",
-    "_post_call_fields": "name, company, contact number, email, appointment date and time, preferred times, appointment booked, opt out requested, lead temperature, specific objection, was returning our call. Names match what /api/retell/webhook reads, so an inbound booking still creates the calendar event and Telegram alert; the webhook's `if lead_id:` guard makes a lead-less inbound call safe."
+    "_post_call_fields": "name, company, contact number, email, appointment date and time, preferred times, appointment booked, opt out requested, lead temperature, specific objection, was returning our call. Names match what /api/retell/webhook reads, so an inbound booking still creates the calendar event and Telegram alert; the webhook's `if lead_id:` guard makes a lead-less inbound call safe.",
+    "_offerings": "OROVA sells THREE things and Nova must not describe it as ads-only: (1) Meta lead gen + AI creatives, (2) the AI lead qualification caller STANDALONE for owners who already have lead flow, (3) both together. Which one fits is decided by DIAGNOSIS, not by pitching: if they already get plenty of leads and the problem is chasing bad ones, that is the caller alone. If the pipeline is empty, that is ads. Never recite the menu — ask first, then name the one that fits. Prices for all three are Mark's to state, never Nova's.",
+    "_deployed_drift": "The DEPLOYED prompt is not generated from this file — nothing pushes it — so it drifts. Known drift as of 2026-08-22: the deployed text says 'ten minutes' while canonical is 15 (knowledge/facts/company.json meeting.duration_minutes), and both deployed prompts describe OROVA as Meta-ads-only. Retell updates an LLM version IN PLACE with no rollback pin, so verify before sending."
   },
   "case_studies": {
     "_note": "Owner rule (2026-07-11 interview): NEVER cite past clients, past results, past verticals, or tenure — not even placeholders. All claims are forward-looking (what OROVA will do for THEM) or system promises (what the machine verifiably does). The scripts below are the ONLY approved responses.",
