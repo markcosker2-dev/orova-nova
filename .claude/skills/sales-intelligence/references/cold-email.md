@@ -8,7 +8,9 @@ and `> outreach` — this is the craft.
 - **Hook (1 line):** something specific and *true* about THEIR business. Not
   "I came across your site" — name the car on their lot, the service, the city.
 - **Value (1 line):** one relevant sentence of the differentiator, in their terms.
-  First touch → Package 1 framing; hold P2 unless they ask.
+  First touch → the SAMPLE, not a package: *"we've already built the AI lead
+  qualifier — can I have it call you?"* (ADR-0017). Name no package and no
+  price. Which one fits is a diagnosis made later, on the call.
 - **Ask (1 line):** low-pressure, time-boxed. "Worth a 15-minute call?" Never
   "hop on a quick call to discuss synergies."
 
