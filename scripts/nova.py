@@ -16,6 +16,8 @@ every check that existed.
     python scripts/nova.py status          is anything broken, what's on me
     python scripts/nova.py calls           who to ring, in what order
     python scripts/nova.py brief 4         everything known, before you dial
+    python scripts/nova.py consent 4 dm "said send it over"
+    python scripts/nova.py demo 4          AI demo call (needs consent + allowed state)
     python scripts/nova.py brief --top 3 --research
     python scripts/nova.py leaks           secrets + what the internet can see
     python scripts/nova.py gates           the three CI gates, locally
@@ -907,6 +909,190 @@ def _wrap(text: str, width: int) -> list[str]:
     return out
 
 
+# ── consent + demo ──────────────────────────────────────────────────────────
+# call_consent.py has had a complete, correct §227(b) gate for weeks —
+# ai_call_allowed(), failing closed, placed where all five call paths
+# converge — and NOTHING in the codebase ever called record_call_consent().
+# So the gate refused every number, permanently, and the phone lane looked
+# blocked by CALLS_AUTOPILOT when it was equally blocked by a consent that
+# could not be granted. This is the missing half.
+
+_CONSENT_SOURCES = {
+    "dm": "ig_dm_reply",
+    "call": "manual",
+    "email": "email_reply",
+    "inbound": "inbound_call",
+    "form": "web_form",
+}
+
+
+def _allowed_states() -> set:
+    """States where an AI-placed call is permitted — EMPTY until decided.
+
+    Deliberately not a list compiled from my reading of the statutes. State
+    ADAD laws vary, several are stricter than federal, and a wrong entry is
+    $500-$1,500 per call. This is a decision for Mark or a lawyer, expressed
+    as configuration:
+
+        AI_CALL_ALLOWED_STATES=OR        after Oregon is cleared
+        AI_CALL_ALLOWED_STATES=OR,CA     after the lawyer answers
+
+    Empty means nothing is permitted, which is the correct default for a
+    question nobody has answered yet.
+
+    Note what this gate is NOT: call_consent.ai_call_allowed() covers federal
+    §227(b) only. RCW 80.36.400 (WA) and CA PUC §2874 are separate statutes
+    with their own rules, and §2874 in particular requires a LIVE OPERATOR to
+    obtain consent before an automated system may play — which is exactly the
+    shape of "can I have it call you?". That is the question worth asking a
+    lawyer; this gate holds the line until it is answered.
+    """
+    raw = (ENV.get("AI_CALL_ALLOWED_STATES") or "").strip()
+    return {s.strip().upper() for s in raw.split(",") if s.strip()}
+
+
+def _lead_by_id(lead_id) -> dict | None:
+    code, data = http("/api/leads")
+    if code != 200:
+        return None
+    rows = data.get("leads", data) if isinstance(data, dict) else data
+    for r in (rows if isinstance(rows, list) else []):
+        if str(r.get("id")) == str(lead_id):
+            return r
+    return None
+
+
+def cmd_consent(args) -> int:
+    """Record that a prospect agreed to be called by the AI."""
+    import asyncio                                           # noqa: PLC0415
+
+    source = _CONSENT_SOURCES.get(args.source.lower())
+    if not source:
+        print(f"\n  Unknown source '{args.source}'. "
+              f"Use: {' | '.join(sorted(_CONSENT_SOURCES))}")
+        return 1
+    detail = " ".join(args.detail).strip()
+    if not detail:
+        # The module's own words: consent that cannot be pointed at later is
+        # not consent. An undocumented record is worse than none, because it
+        # looks like evidence.
+        print("\n  A detail is REQUIRED — what did they actually say, and where?")
+        print('  e.g. nova.py consent 4 dm "said send it over — IG DM 22 Aug"')
+        return 1
+
+    lead = _lead_by_id(args.lead_id)
+    if not lead:
+        print(f"\n  No lead with id {args.lead_id}.")
+        return 1
+    phone = lead.get("phone") or ""
+    if not phone:
+        print(f"\n  Lead {args.lead_id} has no phone number.")
+        return 1
+
+    try:
+        sys.path.insert(0, str(ROOT))
+        from app.core.call_consent import record_call_consent, ai_call_allowed  # noqa: PLC0415
+        ok = asyncio.run(record_call_consent(phone, source, detail, actor="desk"))
+    except Exception as e:                                   # noqa: BLE001
+        print(f"\n  Could not record consent locally ({type(e).__name__}: {e}).")
+        return 1
+    if not ok:
+        print("\n  record_call_consent refused — see the log line above.")
+        return 1
+
+    print(f"\n  Consent recorded for lead {args.lead_id} "
+          f"({lead.get('business', '')}) via {source}.")
+    try:
+        allowed, why = asyncio.run(ai_call_allowed(phone))
+        print(f"  Federal §227(b) gate: {'ALLOWED' if allowed else 'BLOCKED'} — {why}")
+    except Exception:                                        # noqa: BLE001
+        pass
+
+    st = (lead.get("state") or "").upper()
+    allow = _allowed_states()
+    if st and st not in allow:
+        print(f"  State {st} is NOT in AI_CALL_ALLOWED_STATES "
+              f"({sorted(allow) or 'empty'}) — `demo` will still refuse.")
+    print("\n  NOTE: the ledger lives in ephemeral state. Run `nova.py sheet`")
+    print("  or check the Consent tab if this must survive a deploy.")
+    return 0
+
+
+def cmd_demo(args) -> int:
+    """Place the AI demo call — the sample that replaces a testimonial."""
+    import asyncio                                           # noqa: PLC0415
+
+    lead = _lead_by_id(args.lead_id)
+    if not lead:
+        print(f"\n  No lead with id {args.lead_id}.")
+        return 1
+    phone = lead.get("phone") or ""
+    st = (lead.get("state") or "").upper()
+    biz = lead.get("business") or ""
+
+    print(f"\n  DEMO CALL — lead {args.lead_id}, {biz} ({st or 'state unknown'})")
+    print("  " + "=" * 66)
+
+    # ── Jurisdiction gate. Separate from, and additional to, §227(b). ──
+    allow = _allowed_states()
+    if not allow:
+        print("  REFUSED: AI_CALL_ALLOWED_STATES is empty.")
+        print("  No state has been cleared for AI-placed calls yet. RCW 80.36.400")
+        print("  (WA) and CA PUC §2874 are separate from federal §227(b) and are")
+        print("  not answered by a consent record. Set the variable once someone")
+        print("  qualified has decided — it is one line, not a code change.")
+        return 1
+    if st not in allow:
+        print(f"  REFUSED: {st or 'unknown state'} is not in "
+              f"AI_CALL_ALLOWED_STATES ({sorted(allow)}).")
+        print("  You can still call this lead yourself — that was never blocked.")
+        return 1
+
+    # ── Federal gate. Not reimplemented here; the good one already exists. ──
+    try:
+        sys.path.insert(0, str(ROOT))
+        from app.core.call_consent import ai_call_allowed    # noqa: PLC0415
+        ok, why = asyncio.run(ai_call_allowed(phone))
+    except Exception as e:                                   # noqa: BLE001
+        print(f"  REFUSED: consent gate errored ({type(e).__name__}: {e}) — fail-closed.")
+        return 1
+    if not ok:
+        print(f"  REFUSED by the §227(b) gate: {why}")
+        print(f'  Record consent first:  nova.py consent {args.lead_id} '
+              f'call "what they said"')
+        return 1
+    print(f"  §227(b): {why}")
+
+    if not args.yes:
+        print(f"\n  This DIALS {phone} with an artificial voice. It spends money.")
+        if input("  Place the call? [y/N] ").strip().lower() not in ("y", "yes"):
+            print("  Cancelled.")
+            return 0
+
+    owner = (lead.get("owner") or "").strip()
+    context = {
+        "lead_id": lead.get("id"),
+        "business_name": biz,
+        "owner_name": owner,
+        "niche": lead.get("vertical") or "",
+        "icebreaker": lead.get("icebreaker") or "",
+        "principal_count": lead.get("principal_count"),
+        "client_id": 0,
+    }
+    try:
+        from app.skills.outbound_dialer import trigger_retell_call  # noqa: PLC0415
+        res = asyncio.run(trigger_retell_call(phone, context))
+    except Exception as e:                                   # noqa: BLE001
+        print(f"  Call failed to start: {type(e).__name__}: {e}")
+        return 1
+    if res.get("success"):
+        print(f"  Placed. call_id={res.get('call_id')}")
+        print(f"  Log the result after:  /outcome {args.lead_id} talked <what he said>")
+        return 0
+    print(f"  Not placed: {res.get('error')}")
+    return 1
+
+
 # ── entry ───────────────────────────────────────────────────────────────────
 def main() -> int:
     p = argparse.ArgumentParser(
@@ -929,6 +1115,15 @@ def main() -> int:
     b.add_argument("--research", action="store_true",
                    help="scrape the site for an icebreaker (costs LLM calls)")
     b.add_argument("-y", "--yes", action="store_true", help="skip the research prompt")
+
+    cs = sub.add_parser("consent", help="record that a prospect agreed to an AI call")
+    cs.add_argument("lead_id")
+    cs.add_argument("source", help="dm | call | email | inbound | form")
+    cs.add_argument("detail", nargs="*", help="what they said, and where (REQUIRED)")
+
+    dm = sub.add_parser("demo", help="place the AI demo call (gated)")
+    dm.add_argument("lead_id")
+    dm.add_argument("-y", "--yes", action="store_true")
 
     lg = sub.add_parser("logs", help="what production is actually saying")
     lg.add_argument("-n", type=int, default=40)
@@ -957,7 +1152,7 @@ def main() -> int:
     return {"status": cmd_status, "calls": cmd_calls, "leaks": cmd_leaks,
             "gates": cmd_gates, "hunt": cmd_hunt, "outcome": cmd_outcome,
             "logs": cmd_logs, "deploy": cmd_deploy, "config": cmd_config,
-            "brief": cmd_brief,
+            "brief": cmd_brief, "consent": cmd_consent, "demo": cmd_demo,
             "agents": cmd_agents, "sheet": cmd_sheet}[args.cmd](args)
 
 
