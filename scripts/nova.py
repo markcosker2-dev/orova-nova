@@ -863,10 +863,18 @@ def _print_brief(lead: dict, args) -> None:
 
     ice = (lead.get("icebreaker") or "").strip()
     if args.research and site.startswith("http"):
-        res = asyncio.run(_research(lead))
+        # Server-side: it persists the icebreaker, runs where the provider
+        # keys are, and needs no Python deps here. Running it locally printed
+        # the result and threw it away, so every run re-scraped and re-spent.
+        code, res = http(f"/api/leads/{lid}/research", method="POST", body={})
+        res = res if isinstance(res, dict) else {}
+        if code != 200:
+            res = {"_error": f"HTTP {code}"}
         if res.get("_error"):
             print(f"  Research FAILED — {res['_error']}")
             print("           (fail-open by design; the brief still stands)")
+        elif res.get("skipped"):
+            print(f"  Research {res.get('message', 'skipped')}")
         elif res:
             ice = (res.get("icebreaker") or ice).strip()
             for obs in (res.get("observations") or [])[:3]:
@@ -927,28 +935,20 @@ _CONSENT_SOURCES = {
 
 
 def _allowed_states() -> set:
-    """States where an AI-placed call is permitted — EMPTY until decided.
+    """Delegate to the canonical gate — never a second copy of the rule.
 
-    Deliberately not a list compiled from my reading of the statutes. State
-    ADAD laws vary, several are stricter than federal, and a wrong entry is
-    $500-$1,500 per call. This is a decision for Mark or a lawyer, expressed
-    as configuration:
-
-        AI_CALL_ALLOWED_STATES=OR        after Oregon is cleared
-        AI_CALL_ALLOWED_STATES=OR,CA     after the lawyer answers
-
-    Empty means nothing is permitted, which is the correct default for a
-    question nobody has answered yet.
-
-    Note what this gate is NOT: call_consent.ai_call_allowed() covers federal
-    §227(b) only. RCW 80.36.400 (WA) and CA PUC §2874 are separate statutes
-    with their own rules, and §2874 in particular requires a LIVE OPERATOR to
-    obtain consent before an automated system may play — which is exactly the
-    shape of "can I have it call you?". That is the question worth asking a
-    lawyer; this gate holds the line until it is answered.
+    This held the allowlist itself, which is exactly the defect self-review
+    caught: five paths reach trigger_retell_call, and a gate living in the CLI
+    protects only the CLI. It now sits in call_consent beside the consent
+    check, where every path converges.
     """
-    raw = (ENV.get("AI_CALL_ALLOWED_STATES") or "").strip()
-    return {s.strip().upper() for s in raw.split(",") if s.strip()}
+    try:
+        sys.path.insert(0, str(ROOT))
+        from app.core.call_consent import allowed_states  # noqa: PLC0415
+        return allowed_states()
+    except Exception:                                        # noqa: BLE001
+        raw = (ENV.get("AI_CALL_ALLOWED_STATES") or "").strip()
+        return {s.strip().upper() for s in raw.split(",") if s.strip()}
 
 
 def _lead_by_id(lead_id) -> dict | None:

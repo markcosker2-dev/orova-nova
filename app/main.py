@@ -163,7 +163,9 @@ async def require_client(x_client_id: Optional[str] = Header(None), client_id: O
 
 from app.skills.agentmail_skill import check_replies
 from app.skills.vault_skill import backup_database, restore_latest, vault_scheduler_loop
-from app.skills.sheets_sync import restore_leads_from_sheets, update_lead_status_sheets
+from app.skills.sheets_sync import (restore_leads_from_sheets,
+                                    restore_consent_from_sheets,
+                                    update_lead_status_sheets)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -265,6 +267,20 @@ async def lifespan(app: FastAPI):
             logger.info(f"ℹ️ No Drive snapshot ({restore_res.get('error') or 'unusable'}) — "
                         f"optional tier. Restoring leads from Google Sheets...")
             leads = await restore_leads_from_sheets()
+            # The consent ledger lives in DatabaseManager state, which this
+            # ephemeral disk has just destroyed. Rebuild it from the Consent
+            # tab, or every lawfully-consented number is refused until someone
+            # re-records it by hand.
+            try:
+                from app.core.call_consent import _CONSENT_KEY as _CK
+                _consent = await restore_consent_from_sheets()
+                if _consent:
+                    await DatabaseManager.set_state(_CK, _consent)
+            except Exception as _cerr:
+                logger.warning(f"[CONSENT] Ledger restore failed ({_cerr}) — "
+                               f"consented numbers will be refused until "
+                               f"re-recorded. This blocks lawful calls; it "
+                               f"never permits unlawful ones.")
             if leads:
                 restored = 0
                 for lead in leads:
@@ -1003,6 +1019,47 @@ async def get_logs(authorized: bool = Depends(require_dashboard_api_key)):
 async def get_performance(client_id: int = 0, authorized: bool = Depends(require_dashboard_api_key)):
     stats = await DatabaseManager.get_performance_stats(client_id)
     return {"status": "ok", "performance": stats}
+
+@app.post("/api/leads/{lead_id}/research")
+async def action_research_lead(lead_id: int,
+                               authorized: bool = Depends(require_dashboard_api_key)):
+    """Run the dossier for one lead and SAVE the icebreaker.
+
+    `nova.py brief --research` used to run build_dossier locally, print the
+    result and throw it away: every run re-scraped the same site, re-spent the
+    LLM call, and `icebreaker` stayed 0/10 in the database forever — the very
+    metric that exposed the bot-wall false positive in #190.
+
+    Running it here instead fixes all of that at once: the result persists, it
+    executes where the provider keys actually are, and the caller needs no
+    Python dependencies.
+    """
+    row = await DatabaseManager.query(
+        "SELECT id, business, website, icebreaker FROM leads WHERE id = ?",
+        (lead_id,), fetchone=True)
+    if not row:
+        raise HTTPException(status_code=404, detail=f"No lead {lead_id}")
+    lead = dict(row)
+    if not (lead.get("website") or "").startswith("http"):
+        return {"status": "ok", "skipped": True,
+                "message": "no website on file — nothing to research"}
+    from app.skills.dossier import build_dossier
+    res = await build_dossier(lead) or {}
+    ice = (res.get("icebreaker") or "").strip()
+    if ice:
+        await DatabaseManager.query(
+            "UPDATE leads SET icebreaker = ? WHERE id = ?", (ice, lead_id))
+        # A field that is not in the sheet cannot survive the next deploy.
+        try:
+            from app.core.durability import persist_leads_durably
+            await persist_leads_durably(recent_count=1, source="research")
+        except Exception as e:
+            logger.warning(f"[RESEARCH] saved but not synced to Sheets: {e}")
+    return {"status": "ok", "lead_id": lead_id, "icebreaker": ice,
+            "observations": res.get("observations") or [],
+            "premium_signals": res.get("premium_signals") or [],
+            "saved": bool(ice)}
+
 
 @app.post("/api/leads/{lead_id}/approve")
 async def approve_lead(lead_id: int, authorized: bool = Depends(require_dashboard_api_key)):
