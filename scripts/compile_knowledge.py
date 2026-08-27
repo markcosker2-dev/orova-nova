@@ -163,11 +163,37 @@ _COPY_GLOBS = (
 # never be flagged, so CONTEXT decides rather than the filename. Deliberately
 # narrow, for the reason check_secrets.py gives: a linter that cries wolf gets
 # switched off, and a switched-off linter is worse than none.
+# SPOKEN copy spells numbers out. The digit-only version of this pattern let
+# "ten minutes" sit in retell_pitch and retell_inbound for four months while
+# canonical was 15 — the exact drift this linter exists to catch, in the only
+# form a CALL SCRIPT ever writes it. Words are matched as well as digits, and
+# _WORD_NUMBERS maps them back so the comparison against canonical still works.
+_WORD_NUMBERS = {
+    "five": 5, "ten": 10, "fifteen": 15, "twenty": 20, "thirty": 30,
+    "fortyfive": 45, "forty-five": 45, "sixty": 60,
+}
 _DURATION_RE = re.compile(
-    r"\b(?P<num>(?:\d{1,3})(?:\s*-\s*\d{1,3})?)[\s-]?(?:min|mins|minute|minutes)\b",
+    r"\b(?P<num>(?:\d{1,3})(?:\s*-\s*\d{1,3})?"
+    r"|five|ten|fifteen|twenty|thirty|forty-five|sixty)"
+    r"[\s-]?(?:min|mins|minute|minutes)\b",
     re.IGNORECASE,
 )
-_MEETING_WORD_RE = re.compile(r"call|chat|meeting|conversation|version", re.IGNORECASE)
+# `\bmark\b` is here because SPOKEN copy names the person, not the artefact:
+# the ask is "would you be open to fifteen minutes with Mark?", in which the
+# word "call" never appears. Without the CEO's name this gate rejected every
+# real instance of the drift it was written to catch. Word-bounded so it does
+# not fire on "marked" / "market" / "watermark" / "benchmark".
+#
+# KNOWN COST, accepted deliberately: "Mark" is also a verb we use ("mark as
+# booked_solid"), so `Mark the lead cold, 20 minutes wasted` would be flagged
+# even though it states no meeting length. That needs THREE coincidences at
+# once — a duration, disagreeing with canonical, within 40 characters of the
+# CEO's name, and not already excused as a latency — and when it does happen
+# the line takes a `noqa: duration` marker. Recall is the right side to err on
+# here: a missed drift is a wrong number spoken to a prospect on every call,
+# while a false positive is one annotated line.
+_MEETING_WORD_RE = re.compile(
+    r"call|chat|meeting|conversation|version|\bmark\b", re.IGNORECASE)
 
 # "call the homeowner IN 5 minutes" is speed-to-lead — a latency, and the
 # differentiator the entire pitch rests on. "a 15-minute call" is a length.
@@ -205,7 +231,9 @@ def lint_meeting_duration(facts: dict) -> list[str]:
                     continue                       # a timer, not an ask
                 if _LATENCY_RE.search(text[max(0, m.start() - 12): m.start()]):
                     continue                       # speed-to-lead, not a length
-                if m.group("num") == str(canon):
+                num = m.group("num").lower()
+                num = str(_WORD_NUMBERS.get(num.replace(" ", ""), num))
+                if num == str(canon):
                     continue
                 line = text.count("\n", 0, m.start()) + 1
                 if _ALLOW_MARKER in text.split("\n")[line - 1]:

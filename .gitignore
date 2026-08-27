@@ -128,3 +128,4 @@ vault/10-brain/strategy-snapshot.md
 
 # Runtime state written by app/skills/notes_skill.py (log_skill_note)
 app/notes.json
+.retell-backups/
