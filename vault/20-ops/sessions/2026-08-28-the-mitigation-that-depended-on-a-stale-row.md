@@ -32,9 +32,11 @@ security conclusion resting on it. That is the lesson worth more than the fix:
 `cf7e7a1` — *"redact prospect PII from fixtures on a public repo"* — fixed four
 files. The same data was in twenty-two more, because nothing checked.
 
-Verified rather than assumed: `+12065506026` in `test_yelp_discovery.py`,
-paired with "Cherry Design + Build". Houzz lists that Seattle contractor at
-(206) 550-6026. Byte-identical.
+Verified rather than assumed: a number in `test_yelp_discovery.py`, paired
+with a real Seattle general contractor's business name. Houzz lists that
+contractor at the identical number.
+
+The number is deliberately not written here — see the postscript.
 
 The fix hit a guard rail worth recording. `is_placeholder_phone()` deliberately
 **rejects** the 555 range as dummy data — correctly. So *"never store a fake
@@ -115,3 +117,26 @@ it costs two minutes, and it needs no lawyer, no key and no PR.
 ## Linked
 
 [[active-context]] · [[0016-the-repo-stays-public]] · [[0017-the-sample-is-the-proof]]
+
+
+## Postscript — the note was itself a leak
+
+The first version of this file quoted the real number as evidence.
+`check_secrets.py` rule 3, added in the same session, failed CI on it.
+
+That is the corollary the file's own header states for the rotated API key:
+
+> *"The corollary rule 1 cannot enforce: do not DESCRIBE a live key either.
+> The same handoff that withheld the literal explained how to derive it from
+> the previous one, which leaks it just as well."*
+
+Writing up a PII leak is a way to leak it. The finding survives intact without
+the digits.
+
+**And it exposed a hole in how I verified.** `check_secrets.py` scans
+**tracked** files (`tracked_files()` shells out to git), so a brand-new file
+passes locally right up until it is committed. I ran the gate, saw green, and
+the green was measuring a file git had never heard of.
+
+> **Run the secret scan after `git add`, not before.** A clean gate on an
+> untracked file is not a clean gate.
