@@ -687,6 +687,44 @@ async def reply_to_email(message_id: str, body: str, inbox_id: str = None) -> Di
     if not inbox:
         return {"status": "error", "message": "No inbox available."}
 
+    # ── OPT-OUT GATE — the chokepoint, not the call site ─────────────────────
+    # `send_outreach` checks suppression, CAN-SPAM address, ICP and approval.
+    # This function checked NOTHING, and it is not a lesser path: worker.py:910
+    # uses it for the HOT-reply booking funnel — the mail we send at the exact
+    # moment a prospect says yes — and `planner.py:281` registers it as an
+    # LLM-CALLABLE TOOL, in OUTREACH_TOOLS and TERMINAL_TOOLS.
+    #
+    # That is the same shape as the hole `outbound_dialer` documents:
+    #   "Gating at each call site is how that hole opened, and an
+    #    LLM-invokable path cannot be gated by convention at all."
+    #
+    # So the gate goes HERE, where the worker and the model both arrive.
+    # A reply is solicited, so CAN-SPAM's postal-address rule is arguable and
+    # is deliberately NOT enforced on this path — but an opt-out is never
+    # arguable. If someone asked to be removed, nothing may mail them again.
+    #
+    # The recipient is not a parameter (callers have only a message_id), so it
+    # is resolved from the message. Resolution failure yields "", and
+    # `is_email_suppressed("")` is True — fail-closed, matching every other
+    # gate here. The cost of a skipped reply is one Telegram nudge to Mark; the
+    # cost of mailing someone who opted out is a compliance breach.
+    recipient = ""
+    try:
+        loop = asyncio.get_running_loop()
+        msg = await loop.run_in_executor(
+            None, lambda: client.inboxes.messages.get(inbox_id=inbox,
+                                                      message_id=message_id))
+        recipient = getattr(msg, "from_", None) or getattr(msg, "sender", "") or ""
+    except Exception as e:
+        logger.error(f"[AgentMail] Could not resolve the recipient of "
+                     f"{message_id} ({e}) — blocking reply (fail-closed).")
+    from app.core.dnc import is_email_suppressed
+    if await is_email_suppressed(recipient):
+        logger.warning("[AgentMail] Blocked reply — recipient is on the email "
+                       "opt-out list, or could not be resolved (fail-closed).")
+        return {"status": "error", "skipped": True,
+                "error": "Recipient opted out or unresolvable — reply blocked."}
+
     try:
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
