@@ -242,7 +242,7 @@ signup, no API key.
 
 | Field | Reality |
 |---|---|
-| `PhoneNumber` | **100% fill** (236/236). Format `(323) 470 1937` — NOT E.164 |
+| `PhoneNumber` | **100% fill** (236/236). Format `(323) 555 0101` — NOT E.164 |
 | `BusinessName`, `Address`, `City`, `County`, `ZIP` | full |
 | `Classification(s)` | present — e.g. `B-2 \| C36`. WA L&I has no category field at all |
 | `BusinessType` | Corporation 109 · **Sole Owner 103** · Limited Liability 24 |

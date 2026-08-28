@@ -47,7 +47,7 @@ async def _allow_dnc():
 
 @pytest.mark.asyncio
 async def test_no_consent_means_no_call(store):
-    assert await cc.has_call_consent("+15035757663") is False
+    assert await cc.has_call_consent("+15035550102") is False
 
 
 @pytest.mark.asyncio
@@ -61,26 +61,26 @@ async def test_lookup_error_blocks_the_call(monkeypatch):
     """A DB hiccup must never open the gate."""
     monkeypatch.setattr(cc.DatabaseManager, "get_state",
                         AsyncMock(side_effect=RuntimeError("db down")))
-    assert await cc.has_call_consent("+15035757663") is False
+    assert await cc.has_call_consent("+15035550102") is False
 
 
 # ── recording consent ──────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_records_and_finds_consent(store):
-    ok = await cc.record_call_consent("+15035757663", "ig_dm_reply",
+    ok = await cc.record_call_consent("+15035550102", "ig_dm_reply",
                                       detail="'yeah give me a call tomorrow'",
                                       actor="mark")
     assert ok is True
-    assert await cc.has_call_consent("+15035757663") is True
+    assert await cc.has_call_consent("+15035550102") is True
 
 
 @pytest.mark.asyncio
 async def test_consent_carries_its_provenance(store):
     """Undocumented consent is worthless in the dispute where it matters."""
-    await cc.record_call_consent("+15035757663", "ig_dm_reply",
+    await cc.record_call_consent("+15035550102", "ig_dm_reply",
                                  detail="'sure, call me'", actor="mark")
-    rec = await cc.consent_record("+15035757663")
+    rec = await cc.consent_record("+15035550102")
     assert rec["source"] == "ig_dm_reply"
     assert rec["detail"] == "'sure, call me'"
     assert rec["actor"] == "mark"
@@ -90,16 +90,16 @@ async def test_consent_carries_its_provenance(store):
 @pytest.mark.asyncio
 async def test_unrecognised_source_is_refused(store):
     """A source we cannot point at later is not evidence."""
-    assert await cc.record_call_consent("+15035757663", "vibes") is False
-    assert await cc.has_call_consent("+15035757663") is False
+    assert await cc.record_call_consent("+15035550102", "vibes") is False
+    assert await cc.has_call_consent("+15035550102") is False
 
 
 @pytest.mark.asyncio
 async def test_scraped_from_a_licence_register_is_not_consent(store):
     """The whole point: a published business number is NOT permission to send
     an artificial voice at it."""
-    assert await cc.record_call_consent("+15035757663", "licence_registry") is False
-    assert await cc.has_call_consent("+15035757663") is False
+    assert await cc.record_call_consent("+15035550102", "licence_registry") is False
+    assert await cc.has_call_consent("+15035550102") is False
 
 
 @pytest.mark.asyncio
@@ -109,10 +109,10 @@ async def test_empty_number_never_recorded(store):
 
 @pytest.mark.asyncio
 async def test_matches_across_country_code_formatting(store):
-    """'+15035757663' and '5035757663' are the same line written two ways."""
-    await cc.record_call_consent("+15035757663", "inbound_call")
-    assert await cc.has_call_consent("5035757663") is True
-    assert await cc.has_call_consent("(503) 575-7663") is True
+    """'+15035550102' and '5035550102' are the same line written two ways."""
+    await cc.record_call_consent("+15035550102", "inbound_call")
+    assert await cc.has_call_consent("5035550102") is True
+    assert await cc.has_call_consent("(503) 555-0102") is True
 
 
 # ── the combined gate ──────────────────────────────────────────────────────
@@ -121,7 +121,7 @@ async def test_matches_across_country_code_formatting(store):
 async def test_gate_refuses_an_unknown_line_type_without_consent(store):
     """The common case: a geographic number we cannot prove is a landline."""
     with patch("app.core.dnc.is_suppressed", AsyncMock(return_value=False)):
-        allowed, why = await cc.ai_call_allowed("+15035757663")
+        allowed, why = await cc.ai_call_allowed("+15035550102")
     assert allowed is False
     assert "UNKNOWN" in why
 
@@ -132,9 +132,9 @@ async def test_verified_landline_needs_no_consent(store):
     number. That was too broad. §227(b)(1)(B) reaches only a RESIDENTIAL line,
     and (A)(iii) reaches cellular / called-party-charged services — so a
     verified business landline is outside both, and blocking it was wrong."""
-    await cc.record_line_type("+15035757663", cc.LINE_LANDLINE, source="carrier_lookup")
+    await cc.record_line_type("+15035550102", cc.LINE_LANDLINE, source="carrier_lookup")
     with patch("app.core.dnc.is_suppressed", AsyncMock(return_value=False)):
-        allowed, why = await cc.ai_call_allowed("+15035757663")
+        allowed, why = await cc.ai_call_allowed("+15035550102")
     assert allowed is True
     assert "landline" in why
 
@@ -142,9 +142,9 @@ async def test_verified_landline_needs_no_consent(store):
 @pytest.mark.asyncio
 async def test_verified_mobile_still_requires_consent(store):
     """(A)(iii) covers cellular regardless of business use."""
-    await cc.record_line_type("+15035757663", cc.LINE_MOBILE, source="carrier_lookup")
+    await cc.record_line_type("+15035550102", cc.LINE_MOBILE, source="carrier_lookup")
     with patch("app.core.dnc.is_suppressed", AsyncMock(return_value=False)):
-        allowed, why = await cc.ai_call_allowed("+15035757663")
+        allowed, why = await cc.ai_call_allowed("+15035550102")
     assert allowed is False
     assert "mobile" in why
 
@@ -154,7 +154,7 @@ async def test_toll_free_requires_consent_despite_being_a_business_line(store):
     """Counterintuitive but statutory: (A)(iii) also covers 'any service for
     which the called party is charged for the call'. Toll-free is the WORST
     AI-call candidate, not the safest."""
-    for tf in ("+18888470823", "+18007249946", "+18442264262"):
+    for tf in ("+18885550101", "+18005550101", "+18445550101"):
         assert await cc.get_line_type(tf) == cc.LINE_TOLL_FREE
         with patch("app.core.dnc.is_suppressed", AsyncMock(return_value=False)):
             allowed, why = await cc.ai_call_allowed(tf)
@@ -166,15 +166,15 @@ async def test_toll_free_requires_consent_despite_being_a_business_line(store):
 async def test_line_type_is_never_guessed_from_a_geographic_prefix(store):
     """US number portability killed prefix inference. Unknown must stay
     unknown rather than optimistically resolving to landline."""
-    assert await cc.get_line_type("+15035757663") == cc.LINE_UNKNOWN
-    assert await cc.record_line_type("+15035757663", "probably_landline") is False
+    assert await cc.get_line_type("+15035550102") == cc.LINE_UNKNOWN
+    assert await cc.record_line_type("+15035550102", "probably_landline") is False
 
 
 @pytest.mark.asyncio
 async def test_gate_allows_with_consent(store):
-    await cc.record_call_consent("+15035757663", "ig_dm_reply", actor="mark")
+    await cc.record_call_consent("+15035550102", "ig_dm_reply", actor="mark")
     with patch("app.core.dnc.is_suppressed", AsyncMock(return_value=False)):
-        allowed, why = await cc.ai_call_allowed("+15035757663")
+        allowed, why = await cc.ai_call_allowed("+15035550102")
     assert allowed is True
     assert "ig_dm_reply" in why
 
@@ -182,18 +182,18 @@ async def test_gate_allows_with_consent(store):
 @pytest.mark.asyncio
 async def test_suppression_beats_consent(store):
     """An opt-out overrides any earlier yes. Suppression always wins."""
-    await cc.record_call_consent("+15035757663", "ig_dm_reply", actor="mark")
+    await cc.record_call_consent("+15035550102", "ig_dm_reply", actor="mark")
     with patch("app.core.dnc.is_suppressed", AsyncMock(return_value=True)):
-        allowed, why = await cc.ai_call_allowed("+15035757663")
+        allowed, why = await cc.ai_call_allowed("+15035550102")
     assert allowed is False
     assert "DNC" in why or "opt-out" in why
 
 
 @pytest.mark.asyncio
 async def test_dnc_lookup_failure_blocks(store):
-    await cc.record_call_consent("+15035757663", "ig_dm_reply", actor="mark")
+    await cc.record_call_consent("+15035550102", "ig_dm_reply", actor="mark")
     with patch("app.core.dnc.is_suppressed", AsyncMock(side_effect=RuntimeError("x"))):
-        allowed, why = await cc.ai_call_allowed("+15035757663")
+        allowed, why = await cc.ai_call_allowed("+15035550102")
     assert allowed is False
 
 

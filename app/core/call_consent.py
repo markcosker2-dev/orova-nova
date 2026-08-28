@@ -170,7 +170,7 @@ def _normalize(phone: str) -> str:
 def _same_number(a: str, b: str) -> bool:
     """Compare two numbers ignoring a missing country code.
 
-    '+15035757663' and '5035757663' are the same line written two ways, and a
+    '+15035550102' and '5035550102' are the same line written two ways, and a
     consent record must not be missed because of it. Compares the last ten
     digits, which is the NANP subscriber number.
     """

@@ -27,7 +27,7 @@ def _biz(**kw):
     """A Yelp business in the real v3 shape, in-ICP by default."""
     base = {
         "name": "Cherry Design + Build",
-        "phone": "+12065506026",
+        "phone": "+12065550103",
         "rating": 4.7,
         "review_count": 32,
         "is_closed": False,
@@ -49,7 +49,7 @@ def test_in_icp_business_becomes_a_lead():
     lead = _yelp_row_to_lead(_biz(), _fresh(), set())
     assert lead is not None
     assert lead["business"] == "Cherry Design + Build"
-    assert lead["phone"] == "+12065506026"
+    assert lead["phone"] == "+12065550103"
     assert lead["state"] == "WA"
     assert lead["source"] == "yelp"
     assert "4.7" in lead["notes"] and "32 reviews" in lead["notes"]

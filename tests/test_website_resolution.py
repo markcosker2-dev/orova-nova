@@ -23,7 +23,7 @@ from app.skills.website_resolver import (
     candidate_domains, is_non_business_host, resolve_website, verify_page,
 )
 
-OR_PHONE = "+15035757663"          # VITAN CONSTRUCTION LLC, verbatim from OR CCB
+OR_PHONE = "+15035550102"          # VITAN CONSTRUCTION LLC, verbatim from OR CCB
 
 
 def _page(title="", body="", phone=""):
@@ -61,15 +61,15 @@ def test_candidates_empty_for_junk():
 # ── the acceptance rule ─────────────────────────────────────────────────────
 
 def test_registry_phone_on_page_is_accepted():
-    html = _page("Vitan Construction", "Portland Oregon", "(503) 575-7663")
+    html = _page("Vitan Construction", "Portland Oregon", "(503) 555-0102")
     v = verify_page(html, "VITAN CONSTRUCTION LLC", OR_PHONE)
     assert v["confidence"] == 0.95
     assert OR_PHONE in v["evidence"]
 
 
 def test_phone_matches_in_any_format():
-    for fmt in ("503-575-7663", "503.575.7663", "5035757663", "(503) 575 7663",
-                "1-503-575-7663"):
+    for fmt in ("503-555-0102", "503.555.0102", "5035550102", "(503) 555 0102",
+                "1-503-555-0102"):
         v = verify_page(_page("Vitan Construction", "", fmt),
                         "VITAN CONSTRUCTION LLC", OR_PHONE)
         assert v["confidence"] == 0.95, fmt
@@ -79,19 +79,19 @@ def test_same_name_different_state_is_REJECTED():
     """The exact live failure: cedarcreekconstruction.com is a Pennsylvania
     company. Name matches perfectly; the phone does not."""
     html = _page("Cedar Creek Construction | Outdoor Living",
-                 "Serving Chester County", "(610) 557-1376")
-    v = verify_page(html, "CEDAR CREEK CONSTRUCTION LLC", "+15032013017")
+                 "Serving Chester County", "(610) 555-0101")
+    v = verify_page(html, "CEDAR CREEK CONSTRUCTION LLC", "+15035550101")
     assert v["confidence"] == 0.0
     assert "same-named" in v["evidence"]
 
 
 def test_name_match_alone_is_never_enough():
     html = _page("Bright Construction", "Quality builders since 1998")
-    assert verify_page(html, "BRIGHT CONSTRUCTION LLC", "+19716786618")["confidence"] == 0.0
+    assert verify_page(html, "BRIGHT CONSTRUCTION LLC", "+19715550101")["confidence"] == 0.0
 
 
 def test_wrong_phone_on_page_is_rejected():
-    html = _page("Vitan Construction", "", "(231) 632-9653")
+    html = _page("Vitan Construction", "", "(231) 555-0101")
     assert verify_page(html, "VITAN CONSTRUCTION LLC", OR_PHONE)["confidence"] == 0.0
 
 
@@ -102,7 +102,7 @@ def test_wrong_phone_on_page_is_rejected():
 ])
 def test_parked_and_placeholder_pages_are_rejected(marker):
     """All observed live on 2026-08-05 returning HTTP 200."""
-    html = _page(marker, marker, "(503) 575-7663")
+    html = _page(marker, marker, "(503) 555-0102")
     v = verify_page(html, "VITAN CONSTRUCTION LLC", OR_PHONE)
     assert v["confidence"] == 0.0, marker
     assert "parked" in v["evidence"]
@@ -120,7 +120,7 @@ def test_empty_html_is_rejected():
 def test_phone_in_a_script_block_does_not_count():
     """Analytics/config blobs routinely carry unrelated numbers."""
     html = ("<html><head><title>Vitan Construction</title></head><body>"
-            "<script>var t='5035757663';</script>"
+            "<script>var t='5035550102';</script>"
             "<p>We build custom homes and remodels for local families here.</p>"
             "</body></html>")
     assert verify_page(html, "VITAN CONSTRUCTION LLC", OR_PHONE)["confidence"] == 0.0
@@ -165,7 +165,7 @@ def _client_returning(pages: dict):
 @pytest.mark.asyncio
 async def test_resolves_when_the_phone_matches():
     pages = {"vitanconstruction.com": _page("Vitan Construction", "Portland",
-                                            "(503) 575-7663")}
+                                            "(503) 555-0102")}
     with patch.object(wr.httpx, "AsyncClient", return_value=_client_returning(pages)):
         hit = await resolve_website("VITAN CONSTRUCTION LLC", phone=OR_PHONE,
                                     city="Clackamas", state="OR")
@@ -178,10 +178,10 @@ async def test_resolves_when_the_phone_matches():
 async def test_returns_empty_rather_than_a_plausible_guess():
     """A miss must beat a wrong domain — this is the whole point of the module."""
     pages = {"cedarcreekconstruction.com": _page("Cedar Creek Construction",
-                                                 "Chester County", "(610) 557-1376")}
+                                                 "Chester County", "(610) 555-0101")}
     with patch.object(wr.httpx, "AsyncClient", return_value=_client_returning(pages)):
         hit = await resolve_website("CEDAR CREEK CONSTRUCTION LLC",
-                                    phone="+15032013017", city="Oregon City",
+                                    phone="+15035550101", city="Oregon City",
                                     state="OR")
     assert hit["website"] == ""
     assert hit["confidence"] == 0.0

@@ -93,7 +93,7 @@ def test_the_row_carries_niche_state_and_sole_owner():
         return _WS()
 
     lead = {"business": "PEAK BUILDERS INC", "owner": "Jeffrey Rudd",
-            "phone": "+12062323554", "state": "wa", "vertical": "General",
+            "phone": "+12065550102", "state": "wa", "vertical": "General",
             "principal_count": 6, "website": "https://peakbuilders.example"}
     with patch.object(ss, "_get_worksheet", _fake_ws):
         res = asyncio.run(ss.sync_lead_to_sheets(lead))
@@ -114,7 +114,7 @@ def test_restore_round_trips_state_website_and_principals():
     """A backup that loses fields is only half a backup."""
     records = [{
         "ID": 1, "Business": "ACCRETE CONSTRUCTION LLC", "Owner": "Michael Cholerton",
-        "Email": "", "Phone": "+12532863900", "Website": "https://accrete.example",
+        "Email": "", "Phone": "+12535550101", "Website": "https://accrete.example",
         "URL": "", "Status": "New", "Score": 45, "Source": "wa_lni_licences",
         "Date": "2026-08-09", "Notes": "", "Niche": "General", "State": "wa",
         "Principals": 5, "SoleOwner": "No",

@@ -37,7 +37,7 @@ def test_state_never_guesses_when_absent():
 
 def test_leads_at_is_generic_not_direct():
     lead = {"owner": "Eric Curran", "email": "leads@drivesfexoticcars.com",
-            "email_status": "found", "phone": "+14047334400"}
+            "email_status": "found", "phone": "+14045550101"}
     r = outreach_ready(lead)
     assert not r["has_direct_email"]          # leads@ no longer leaks through
     assert r["callable"] and not r["emailable"]
@@ -46,6 +46,6 @@ def test_leads_at_is_generic_not_direct():
 
 def test_personal_email_still_counts_as_direct():
     lead = {"owner": "Eric Curran", "email": "eric@drivesfexoticcars.com",
-            "email_status": "found", "phone": "+14047334400"}
+            "email_status": "found", "phone": "+14045550101"}
     r = outreach_ready(lead)
     assert r["has_direct_email"] and r["emailable"] and r["ready"]

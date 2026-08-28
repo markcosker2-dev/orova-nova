@@ -494,7 +494,7 @@ def validate_lead_for_storage(lead: dict) -> dict:
 
     # Gate inputs are NOT guaranteed to be strings: gspread's
     # get_all_records() returns ints for numeric-looking Sheet cells
-    # (Google Sheets coerces "+14047334400" to the number 14047334400),
+    # (Google Sheets coerces "+14045550101" to the number 14045550101),
     # and that int crashed .strip() in the boot restore loop — killing
     # every fresh deploy with uvicorn exit 3 (live 2026-07-21, three
     # consecutive update_failed deploys). Coerce every consumed field.

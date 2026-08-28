@@ -98,7 +98,7 @@ _ROWS = [
     {   # in-ICP, complete → must become a lead
         "businessname": "360 HOUSE REMODELING LLC",
         "primaryprincipalname": "PETERSON, CHAD DEVIN",
-        "phonenumber": "2062269951", "address1": "123 PIKE ST",
+        "phonenumber": "2065550101", "address1": "123 PIKE ST",
         "city": "SEATTLE", "state": "WA", "zip": "98101",
         "contractorlicensenumber": "REMOD123NN",
         "licenseeffectivedate": "2025-08-15T00:00:00.000",
@@ -113,7 +113,7 @@ _ROWS = [
     {   # duplicate phone of row 1 → shared line, dropped
         "businessname": "168 REMODELING LLC",
         "primaryprincipalname": "LEE, MARIA",
-        "phonenumber": "2062269951", "address1": "5 OAK AVE",
+        "phonenumber": "2065550101", "address1": "5 OAK AVE",
         "city": "KENT", "state": "WA", "zip": "98032",
     },
     {   # unparseable principal → never stored (no fabricated owner)
@@ -142,7 +142,7 @@ async def test_source_emits_only_the_clean_in_icp_row():
     lead = leads[0]
     assert lead["business"] == "360 HOUSE REMODELING LLC"
     assert lead["owner_name"] == "Chad Peterson"      # "LAST, FIRST MIDDLE" parsed
-    assert lead["phone"] == "+12062269951"            # bare 10-digit -> E.164
+    assert lead["phone"] == "+12065550101"            # bare 10-digit -> E.164
     assert lead["state"] == "WA"
     assert lead["source"] == "wa_lni_licences"
     assert lead["owner_confidence"] == 90

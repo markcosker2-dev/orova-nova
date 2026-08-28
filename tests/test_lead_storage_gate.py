@@ -4,7 +4,7 @@ Live production (verified via /api/leads) held exactly two leads, both junk:
 1. The repo's own make_blueprint/sample_webhook_payload.json fixture, stored
    verbatim: "Acme Remodeling Co" / "Jane Doe" / jane.doe@acme.com /
    +1-555-123-4567 / score 85 taken straight from the payload.
-2. A row with NO business name whose phone (14047334400) rendered in the
+2. A row with NO business name whose phone (17166703920) rendered in the
    Mission Control "Business" column.
 
 Both entered through the ungated Sheets restore path. The gate now lives in
@@ -35,7 +35,7 @@ PROD_FIXTURE_ACME = {
 }
 PROD_FIXTURE_NO_NAME = {
     "business": "", "owner": "Member Circles",
-    "email": "access@high.org", "phone": "14047334400", "status": "New", "score": 50,
+    "email": "access@high.org", "phone": "17166703920", "status": "New", "score": 50,
 }
 
 
@@ -54,7 +54,7 @@ def test_gate_rejects_business_less_row():
 
 
 def test_gate_rejects_phone_as_business_name():
-    result = validate_lead_for_storage({"business": "14047334400"})
+    result = validate_lead_for_storage({"business": "17166703920"})
     assert result["ok"] is False
     assert "phone number" in result["reasons"][0]
 
@@ -116,7 +116,7 @@ def test_gate_passes_real_lead_and_recomputes_score():
     # we would actually sell to, so the expected 100 stays meaningful.
     lead = {
         "business": "Prestige Custom Home Builders", "owner": "Maria Santos",
-        "email": "maria@prestigecustomhomes.com", "phone": "+1 404 733 4400",
+        "email": "maria@prestigecustomhomes.com", "phone": "+1716 670 3920",
         "website": "https://prestigecustomhomes.com",
         "vertical": "luxury home remodeling california",
         "score": 999,  # fabricated payload score must not survive
@@ -124,7 +124,7 @@ def test_gate_passes_real_lead_and_recomputes_score():
     result = validate_lead_for_storage(lead)
     assert result["ok"] is True
     cleaned = result["lead"]
-    assert cleaned["phone"] == "+14047334400"  # normalized E.164
+    assert cleaned["phone"] == "+17166703920"  # normalized E.164
     # Reweighted 2026-08-09: owner(20) + direct email(15) + phone(15) +
     # website(5) + luxury(10) + vertical(10) + affordability(10, unknown) +
     # urgency(6, unknown) = 91. Email was down-weighted and phone up, because
@@ -167,7 +167,7 @@ def test_phone_cleaner_rejects_known_fakes():
 
 
 def test_phone_cleaner_normalizes_real_numbers():
-    assert clean_phone_for_storage("404-733-4400") == "+14047334400"
+    assert clean_phone_for_storage("716-670-3920") == "+17166703920"
     assert clean_phone_for_storage("+44 20 7946 0958", "GB") == "+442079460958"
 
 
@@ -188,9 +188,9 @@ def test_url_cleaner_rejects_documentation_hosts():
 
 def test_placeholder_phone_and_phone_like_heuristics():
     assert is_placeholder_phone("+1-555-123-4567")
-    assert not is_placeholder_phone("+14047334400")
-    assert _looks_like_phone("14047334400")
-    assert _looks_like_phone("+1 (404) 733-4400")
+    assert not is_placeholder_phone("+17166703920")
+    assert _looks_like_phone("17166703920")
+    assert _looks_like_phone("+1 (716) 670-3920")
     assert not _looks_like_phone("Kunkel & Daughters 4x4")
     assert not _looks_like_phone("")
 
@@ -212,8 +212,8 @@ def test_confidence_tracks_email_verification_status():
 
 
 def test_confidence_phone_requires_e164():
-    assert contact_confidence({"phone": "+14047334400"})["phone"] == 70
-    assert contact_confidence({"phone": "404-733-4400"})["phone"] == 30  # unnormalized
+    assert contact_confidence({"phone": "+17166703920"})["phone"] == 70
+    assert contact_confidence({"phone": "716-670-3920"})["phone"] == 30  # unnormalized
 
 
 def test_confidence_owner_grows_with_corroboration():
@@ -227,7 +227,7 @@ def test_confidence_owner_grows_with_corroboration():
 # ── outreach_ready — the owner bar: decision-maker name + direct email + phone ─
 
 _READY_FULL = {"owner": "Eric Curran", "email": "eric@wcexotics.com",
-               "email_status": "verified", "phone": "+14047334400"}
+               "email_status": "verified", "phone": "+17166703920"}
 
 
 def test_outreach_ready_full_lead_clears_the_bar():
@@ -247,7 +247,7 @@ def test_outreach_ready_generic_email_is_callable_not_emailable():
 
 def test_outreach_ready_name_plus_business_phone_no_email():
     # The owner's explicit fallback: no email found → business number + the name.
-    r = outreach_ready({"owner": "Eric Curran", "phone": "+14047334400"})
+    r = outreach_ready({"owner": "Eric Curran", "phone": "+17166703920"})
     assert r["ready"] and r["callable"] and not r["emailable"]
     assert "no email" in r["blockers"]
 
@@ -255,7 +255,7 @@ def test_outreach_ready_name_plus_business_phone_no_email():
 def test_outreach_ready_requires_the_decision_maker_name():
     # Perfect email + phone but no name is NOT ready — can't bypass the gatekeeper.
     r = outreach_ready({"email": "john@dealer.com", "email_status": "verified",
-                        "phone": "+14047334400"})
+                        "phone": "+17166703920"})
     assert not r["ready"] and not r["has_name"]
     assert "no verified decision-maker name" in r["blockers"]
 
@@ -321,7 +321,7 @@ def hygiene_db(tmp_path, monkeypatch):
     # 1: the Acme fixture, 2: the no-name row — the two live prod rows
     conn.execute(ins, ("Acme Remodeling Co", "Jane Doe", "jane.doe@acme.com",
                        "+1-555-123-4567", "https://acme.example.com/contact", "", "new", 85))
-    conn.execute(ins, ("", "Member Circles", "access@high.org", "14047334400", "", "", "New", 50))
+    conn.execute(ins, ("", "Member Circles", "access@high.org", "17166703920", "", "", "New", 50))
     # 3: a real lead with one junk field (555 phone) — cleaned, not quarantined
     # (on-ICP exemplar since 2026-08-09 — ADR-0012/0015; scores the same 90)
     conn.execute(ins, ("Prestige Custom Home Builders", "Maria Santos",
@@ -330,7 +330,7 @@ def hygiene_db(tmp_path, monkeypatch):
                        "luxury home remodeling california", "New", 50))
     # 4: a fully clean, already-contacted lead — untouched (score preserved)
     conn.execute(ins, ("Legacy Motors", "Ann Kim", "ann@legacymotors.com",
-                       "+14047334400", "https://legacymotors.com", "dealer", "Email Sent", 60))
+                       "+17166703920", "https://legacymotors.com", "dealer", "Email Sent", 60))
     conn.commit()
 
     import app.core.lead_hygiene as hygiene

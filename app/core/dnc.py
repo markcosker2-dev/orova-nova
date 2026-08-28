@@ -35,11 +35,11 @@ def _normalize(phone: str) -> str:
     therefore produced several non-matching keys, and a suppressed number
     queried in a different format was reported as NOT suppressed:
 
-        stored '+13239352985' -> is_suppressed('+13239352985')   = True
-        stored '+13239352985' -> is_suppressed('3239352985')     = False  BYPASS
-        stored '+13239352985' -> is_suppressed('(323) 935-2985') = False  BYPASS
-        stored '+13239352985' -> is_suppressed('13239352985')    = False  BYPASS
-        stored '+13239352985' -> is_suppressed('323-935-2985')   = False  BYPASS
+        stored '+13235550102' -> is_suppressed('+13235550102')   = True
+        stored '+13235550102' -> is_suppressed('3235550102')     = False  BYPASS
+        stored '+13235550102' -> is_suppressed('(323) 555-0102') = False  BYPASS
+        stored '+13235550102' -> is_suppressed('13235550102')    = False  BYPASS
+        stored '+13235550102' -> is_suppressed('323-555-0102')   = False  BYPASS
 
     4 of 6 real-world formats bypassed the gate. Production was safe only by
     coincidence: every ingestion path already normalises to E.164
@@ -51,8 +51,8 @@ def _normalize(phone: str) -> str:
     despite being on the list.
 
     The old unit test could not catch it: it asserted the two mismatched
-    outputs as CORRECT ("(323) 935-2985" -> "3239352985" alongside
-    "+1 323 935 2985" -> "+13239352985"), i.e. it encoded the defect.
+    outputs as CORRECT ("(323) 555-0102" -> "3235550102" alongside
+    "+1 323 555 0102" -> "+13235550102"), i.e. it encoded the defect.
 
     ── Why this is strictly a strengthening ────────────────────────────────
     Fail-closed behaviour is preserved exactly and extended, never relaxed:
