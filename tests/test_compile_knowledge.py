@@ -126,3 +126,56 @@ def test_timers_are_not_flagged_as_meeting_durations():
     errors = ck.lint_meeting_duration(facts)
     assert not any("ceo_brain" in e or "worker.py" in e for e in errors)
 
+
+
+def test_lint_catches_spelled_out_duration_drift(tmp_path, monkeypatch):
+    """A CALL SCRIPT writes "ten minutes", never "10 minutes".
+
+    The digit-only pattern this linter shipped with could not see the one form
+    the drift actually takes, so "ten minutes" sat in retell_pitch and
+    retell_inbound for four months while canonical was 15 — the exact failure
+    the linter exists to prevent, invisible to the linter.
+    """
+    facts = ck.load_facts()
+    canon = facts["meeting"]["duration_minutes"]
+    words = {5: "five", 10: "ten", 15: "fifteen", 20: "twenty", 30: "thirty"}
+    wrong_word = words[10] if canon != 10 else words[20]
+
+    target = ck.ROOT / "app" / "core" / "business_context.json"
+    original = target.read_text(encoding="utf-8")
+    try:
+        # The spoken ask names the PERSON, not the artefact — no "call" in sight.
+        target.write_text(
+            original.replace(
+                f"Would you be open to {words[canon]} minutes with Mark?",
+                f"Would you be open to {wrong_word} minutes with Mark?", 1),
+            encoding="utf-8")
+        errors = ck.lint_meeting_duration(facts)
+        assert errors, "spelled-out duration drift was not caught"
+        assert any("business_context.json" in e for e in errors)
+    finally:
+        target.write_text(original, encoding="utf-8")
+    assert ck.lint_meeting_duration(facts) == []
+
+
+def test_spelled_out_canonical_duration_is_not_flagged():
+    """"fifteen minutes with Mark" is correct copy and must stay silent."""
+    facts = ck.load_facts()
+    canon = facts["meeting"]["duration_minutes"]
+    bc = ck.BUSINESS_CONTEXT_PATH.read_text(encoding="utf-8")
+    assert canon == 15 and "fifteen minutes with Mark" in bc, (
+        "the canonical spoken ask should be in the copy")
+    assert ck.lint_meeting_duration(facts) == []
+
+
+def test_speed_to_lead_survives_the_spelled_out_pattern():
+    """"within five minutes" is the differentiator and must never be flagged.
+
+    Adding word-numbers to the pattern put the single most repeated phrase in
+    the entire pitch in scope for the first time. If this ever fails, the
+    linter starts crying wolf on the one line that appears in every script.
+    """
+    facts = ck.load_facts()
+    bc = ck.BUSINESS_CONTEXT_PATH.read_text(encoding="utf-8")
+    assert "within five minutes" in bc
+    assert not any("five minute" in e for e in ck.lint_meeting_duration(facts))

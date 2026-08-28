@@ -41,8 +41,8 @@ def test_registry_owner_carries_source():
 
 def test_field_sources_recorded_in_priority_order():
     out = _run_4step(
-        website={"email": "dana@vividmotors.com", "phone": "(404) 733-4400"},
-        google={"phone": "404-733-4400", "owner_name": "Dana Ferrari"},
+        website={"email": "dana@vividmotors.com", "phone": "(716) 670-3920"},
+        google={"phone": "716-670-3920", "owner_name": "Dana Ferrari"},
     )
     assert out["email_source"] == "website"
     assert out["email_status"] == "found"
@@ -52,15 +52,15 @@ def test_field_sources_recorded_in_priority_order():
 
 def test_phone_corroborated_by_two_sources_is_verified():
     out = _run_4step(
-        website={"phone": "(404) 733-4400"},
-        google={"phone": "+1 404 733 4400"},
+        website={"phone": "(716) 670-3920"},
+        google={"phone": "+1716 670 3920"},
     )
-    assert out["phone"] == "+14047334400"
+    assert out["phone"] == "+17166703920"
     assert out["phone_verified"] is True
 
 
 def test_single_source_phone_is_not_verified():
-    out = _run_4step(website={"phone": "(404) 733-4400"})
+    out = _run_4step(website={"phone": "(716) 670-3920"})
     assert out["phone_verified"] is False
 
 
@@ -77,8 +77,8 @@ def test_guessed_email_is_labeled_guessed_never_found():
 # ── confidence consumes the new provenance ───────────────────────────────────
 
 def test_confidence_phone_verified_reaches_90():
-    assert contact_confidence({"phone": "+14047334400", "phone_verified": 1})["phone"] == 90
-    assert contact_confidence({"phone": "+14047334400"})["phone"] == 70
+    assert contact_confidence({"phone": "+17166703920", "phone_verified": 1})["phone"] == 90
+    assert contact_confidence({"phone": "+17166703920"})["phone"] == 70
 
 
 def test_confidence_registry_owner_outranks_scraped():
@@ -118,12 +118,12 @@ def test_gate_drops_implausible_owner_and_derived_guessed_email():
         "business": "Calabasas Luxury Motorcars",
         "owner": "THANKS TO",
         "email": "thanks@calabasasluxurymotorcars.com",
-        "phone": "+18889922249",
+        "phone": "+17166703920",
     })
     assert result["ok"] is True
     assert result["lead"]["owner"] == ""
     assert result["lead"]["email"] == ""  # fabrication squared — gone
-    assert result["lead"]["phone"] == "+18889922249"  # real data untouched
+    assert result["lead"]["phone"] == "+17166703920"  # real data untouched
 
 
 def test_gate_keeps_unrelated_email_when_owner_dropped():

@@ -56,7 +56,7 @@ def _registry_lead(business="HAWK CONSTRUCTION", state="WA", **over):
         "owner": "Kulwinder Gakhal",
         "owner_title": "Licence Principal",
         "owner_source": "wa_lni",
-        "phone": "+12065782277",
+        "phone": "+12065550104",
         "phone_source": "wa_lni",
         "phone_verified": 1,
         "owner_confidence": 90,

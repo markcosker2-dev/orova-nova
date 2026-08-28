@@ -147,6 +147,42 @@ def is_placeholder(value: str) -> bool:
     return bool(_PLACEHOLDER_RE.match(value.strip()))
 
 
+
+# ── Rule 3: a real person's phone number ────────────────────────────────────
+# Added 2026-08-28 after finding ~22 real US numbers and ~40 licence-registry
+# company names in test fixtures on this PUBLIC repo. One was verified against
+# Houzz: a real Seattle contractor's business line, byte-identical to the
+# fixture. Commit cf7e7a1 ("redact prospect PII from fixtures on a public
+# repo") had already fixed four files; the same data was in twenty-two more,
+# because nothing checked.
+#
+# A phone number is the actionable half of prospect PII — it is how a stranger
+# reaches the person. Same narrowness rule as everything else here: this flags
+# ONLY a number that could actually route. Excluded, in order: the NANP
+# fiction range (555 in either position), invalid NPA/NXX (must start 2-9),
+# N11 service codes, monotonic digit runs used as placeholders, and OROVA's
+# own published line, which belongs in the tree.
+OWN_NUMBERS = {"7166703920"}          # OROVA's published Retell line
+
+_DIGIT_RUNS = {"0123456789", "1234567890", "9876543210", "0987654321",
+               "2345678901", "1112223333"}
+
+_PHONE_RE = re.compile(
+    r"(?<!\d)(?:\+1[ -]?)?\(?([2-9]\d{2})\)?[ .-]?([2-9]\d{2})[ .-]?(\d{4})(?!\d)")
+
+
+def _is_routable_number(npa: str, nxx: str, sub: str) -> bool:
+    """True only for a number that could reach a real person."""
+    full = npa + nxx + sub
+    if full in _DIGIT_RUNS or full in OWN_NUMBERS:
+        return False
+    if npa == "555" or nxx == "555":      # NANP reserved-for-fiction
+        return False
+    if npa[1:] == "11":                    # N11 service code
+        return False
+    return True
+
+
 def scan_text(rel: str, text: str) -> list[str]:
     findings: list[str] = []
     lines = text.split("\n")
@@ -169,6 +205,16 @@ def scan_text(rel: str, text: str) -> list[str]:
                     f"{rel}:{i}: CREDENTIAL FORMAT — looks like a {label}. "
                     f"Move it to the environment and rotate it; anything "
                     f"committed must be treated as burned."
+                )
+
+        for pm in _PHONE_RE.finditer(line):
+            npa, nxx, sub = pm.groups()
+            if _is_routable_number(npa, nxx, sub):
+                findings.append(
+                    f"{rel}:{i}: PROSPECT PII — {pm.group(0)} is a routable "
+                    f"phone number. Use the NANP fiction range "
+                    f"({npa}-555-01NN) so it can never reach a real person, "
+                    f"or append '# {ALLOW_MARKER}' if it is genuinely ours."
                 )
 
         m = _ASSIGN_RE.search(line)

@@ -179,8 +179,8 @@ def _col_letter(n: int) -> str:
 async def _append_with_backoff(worksheet, row, retries=4):
     """Appends a row to a worksheet with exponential backoff for Google API 429 errors.
 
-    RAW input option: without it Sheets parses "+14047334400" as the NUMBER
-    14047334400, which round-trips back as an int and crashed the boot
+    RAW input option: without it Sheets parses "+14045550101" as the NUMBER
+    14045550101, which round-trips back as an int and crashed the boot
     restore (2026-07-21). RAW stores exactly the strings we send."""
     for attempt in range(retries):
         try:

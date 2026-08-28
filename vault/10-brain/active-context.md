@@ -10,9 +10,22 @@ tags: [brain, active, session-start]
 # 🧭 Active Context
 
 > [!abstract] Read this first
-> Session-start file (CLAUDE.md rule). Last full refresh **2026-07-31**.
+> Session-start file (CLAUDE.md rule). Last corrected **2026-08-28**.
 > Verify against production before trusting anything here — if a doc and the
 > running system disagree, **the system wins**, and you fix the doc.
+>
+> **2026-08-28 audit — five corrections, one of them consequential.** This file
+> said the repo was PRIVATE. It is public, and that single wrong row was
+> load-bearing: the prospect-PII entry declared the exposure closed *because*
+> the repo was private. It is not closed. The others: Pain B still prescribed
+> "P2 ONLY" three PRs after that was superseded by Package 3; CodeQL was listed
+> as a permanently red check and an owner action when it has been passing since
+> the repo went public; the Instagram warning contradicted the owner action six
+> sections below it; and the test count was 38 low.
+>
+> The pattern worth naming: **every one of these was a stale row sitting beside
+> a correct one.** Nothing here was ever wrong when written. A file this size
+> decays by accretion, and a reader believes whichever end they open.
 
 > [!warning] Corrected 2026-08-15 — two "open" defects were fixed weeks ago
 > This file had drifted two weeks against `main`. Flagged by an external
@@ -55,11 +68,11 @@ tags: [brain, active, session-start]
 
 | | |
 |---|---|
-| **Build live** | `12fdf488975b` · `db: ok` · `memory: ok` (verified 2026-08-21) |
-| **Leads in production** | **51** · 43 sole operators · 42 with verified cover · 51 with a phone · 13 with an email |
-| **Tests** | 1417 exist · **CI green on Linux** · a full local Windows run gives 1407 pass / 10 order-dependent failures (all pass in isolation) |
-| **Repo** | **PRIVATE** — restored 2026-08-21 |
-| **Open PRs** | #182 — vault redaction + burned-key blocklist |
+| **Build live** | `12fdf488975b` (2026-08-21) — **STALE, unverified.** The 2026-08-28 session had no network route to `orova-nova.onrender.com`; run `nova.py status`. |
+| **Leads in production** | **51** (2026-08-21) — **unverified since.** The 2026-08-28 handoff draft says 82. Neither was checkable from that session's container; `nova.py` is the authority. |
+| **Tests** | **1455 passing**, verified locally 2026-08-28 · CI green on Linux |
+| **Repo** | **PUBLIC** — verified 2026-08-28 via the GitHub API (`"private": false`). See the correction below; this row said PRIVATE for a week and that error was load-bearing. |
+| **Open PRs** | **#199** (self-review fixes, CI red) · **#200** (Retell inbound agent) |
 | **Conversations ever** | **0** |
 
 > [!danger] The number that matters
@@ -89,19 +102,27 @@ tags: [brain, active, session-start]
 >   new key 200 on `/api/leads`, `/api/agents`, `/api/booking_link`; **old key
 >   403**; unauthenticated 403. The old value stays in `BURNED_LITERALS`
 >   forever — it is in 28 commits of public history and nothing can remove it.
-> - Prospect PII cleaned in #172 was still reachable
->   in older commits and in merged PR diffs (a history rewrite does not touch
->   PR diffs). Private gates all three at once and is reversible. Verified
->   unauthenticated: old blobs and PR file views 404. No Support ticket needed.
-> - **CodeQL: the ruff gate replaced it, but CodeQL itself is still running
->   and now FAILS on every push to `main`.** #177 deleted the workflow file and
->   that was not enough — this is GitHub **default setup**, a dynamic workflow
->   at `dynamic/github-code-scanning/codeql` with no file in the repo. On a
->   private repo without GHAS the analysis cannot complete, and the REST
->   endpoint to disable it returns `403`. **Only Mark can clear it:** Settings →
->   Code security → Code scanning → Default setup → Disable. Until then `main`
->   carries a permanently red check, which is the exact failure mode
->   `check_secrets.py` was written to avoid.
+> - **🔴 PROSPECT PII IS EXPOSED RIGHT NOW. This entry used to say it wasn't.**
+>   It read: *"Private gates all three at once... old blobs and PR file views
+>   404. No Support ticket needed."* That was true only while the repo was
+>   private. **The repo is public** (API, 2026-08-28: `"private": false`), so
+>   the gate it describes is not in place and the PII in older commits and
+>   merged PR diffs is world-readable again.
+>   Confirmed 2026-08-28 by walking history: `cf7e7a1^` — the parent of
+>   *"redact prospect PII from fixtures on a public repo"* — still carries a
+>   real person's name and mobile across four test fixtures.
+>   **This is a decision for Mark, not a code fix.** Three options, no default:
+>   a GitHub Support history purge, knowing acceptance, or contacting the
+>   individual. A history rewrite alone does NOT clear merged PR diffs.
+>   The *current tree* was separately cleaned on 2026-08-28 (22 routable
+>   numbers, one verified against Houzz as a real Seattle contractor), and
+>   `check_secrets.py` rule 3 now fails the build on any routable number.
+> - **CodeQL: RESOLVED, and not by anyone doing anything.** This entry used to
+>   call it a permanently red check needing an owner action. That was true only
+>   while the repo was private — CodeQL default setup cannot complete on a
+>   private repo without GHAS. **The repo is public, so it runs free and
+>   passes:** verified 2026-08-28, `conclusion: success` on both #199 and #200.
+>   No owner action is needed; the old instruction to disable it is withdrawn.
 >   The replacement gate is narrow on purpose (exec / eval / pickle /
 >   yaml.load / shell / os.system / string-built SQL): the full bandit ruleset
 >   reports 112 findings here and all 112 are false positives, as were CodeQL's
@@ -169,7 +190,7 @@ tags: [brain, active, session-start]
 > Angi's ~$400 price anchor at 16×. **Sell the deadline.**
 >
 > - **Pain A — The Gap:** *"When your crew finishes the job they're on, what's next?"* → P1 or P2
-> - **Pain B — The Wasted Saturday:** *"You'll never drive 40 minutes to a tire-kicker again."* → **P2 ONLY** — P1 makes this pain worse
+> - **Pain B — The Wasted Saturday:** *"You'll never drive 40 minutes to a tire-kicker again."* → **PACKAGE 3** (the AI caller standalone). Corrected 2026-08-28: this row said "P2 ONLY", which was right only while P1 and P2 were the only options — then "not P1" meant "therefore P2". P3 makes that inference false, and a man drowning in bad leads is not short of leads. `business_context.json` and the sales-intelligence skill were fixed in #197/#198; this file was missed.
 >
 > **Diagnose before prescribing.**
 
@@ -225,8 +246,12 @@ graph LR
 > Everything after it can be automated. See [[instagram-outreach-plan-2026-07-30]]
 > for 10 qualified targets and drafts, and [[ig-reply-agent-scheduled-task-prompt]].
 >
-> ⚠️ `orova.co` is currently **PRIVATE** — the messaging API returns empty for
-> personal accounts. Must be Business/Creator + public before any of this works.
+> ⚠️ ~~`orova.co` is currently PRIVATE~~ — **stale, and it contradicted owner
+> action 3 in this same file.** That action records it fixed with evidence:
+> *verified live 2026-08-02, `account_type: BUSINESS`, 11 posts, 201 followers*.
+> Dated evidence beats an undated warning, so the warning is retired.
+> Unverified since 2026-08-02 — re-check before a DM run, because the API does
+> return empty for a personal account and that failure is silent.
 
 > [!danger] ⛔ PHONE — built, merged, and NOT safe to enable
 > Lane merged in PR #123 and **inert** (`CALLS_AUTOPILOT=0`). Do not flip it.
@@ -323,9 +348,9 @@ graph LR
 >    `python -c "import secrets; print(secrets.token_urlsafe(36))"`, set Render
 >    FIRST, then local `.env` — the reverse order breaks every local check
 >    until production catches up.
-> 0b. **Clear CodeQL default setup** — Settings → Code security → Code scanning
->    → Default setup → Disable. It cannot complete on a private repo without
->    GHAS and currently fails on every push to `main`.
+> 0b. ~~Clear CodeQL default setup~~ — **not an owner action.** It only failed
+>    while the repo was private. Public repos get CodeQL free; verified passing
+>    2026-08-28 on #199 and #200. Leave it enabled.
 > 1. ~~Re-auth Google Drive~~ — **no longer an owner action.** Sheets is now the
 >    primary durability tier (service-account credential, no expiry, proven in
 >    production 2026-08-02: `Sheets fallback: 1/1 leads synced`). Drive is
