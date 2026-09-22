@@ -9,6 +9,11 @@ tags: [brain, active, session-start]
 
 # 🧭 Active Context
 
+> [!important] September 21 update
+> Current operating direction: [[zero-budget-operations-2026-09-21]]. Strict $0
+> pre-revenue workflow, useful Telegram commands, no invented activity. The
+> historical snapshots below do not establish today's deployment or backup health.
+
 > [!abstract] Read this first
 > Session-start file (CLAUDE.md rule). Last full refresh **2026-07-31**.
 > Verify against production before trusting anything here — if a doc and the

@@ -62,8 +62,8 @@ def hunt_complete(count: int, query: str, top_business: str = "",
             best += f", scoring {int(top_score)}"
         lines.append(best + ".")
     if sole_operators:
-        lines.append(f"{sole_operators} of them are sole operators.")
-    lines.append("They're in the sheet. " + _NOTHING_NEEDED)
+        lines.append(f"{sole_operators} have one registered principal; crew size is unverified.")
+    lines.append("Saved in the pipeline. Use /leads to prepare contact; no message is implied sent.")
     return "\n".join(lines)
 
 

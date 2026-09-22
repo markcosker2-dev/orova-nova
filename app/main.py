@@ -340,7 +340,8 @@ async def lifespan(app: FastAPI):
         webhook_url = f"{render_url}/telegram"
         try:
             async with httpx.AsyncClient() as client:
-                tg_webhook_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
+                from app.core.hardening import telegram_webhook_secret
+                tg_webhook_secret = telegram_webhook_secret()
                 payload = {"url": webhook_url, "allowed_updates": ["message"]}
                 if tg_webhook_secret:
                     payload["secret_token"] = tg_webhook_secret
@@ -1085,6 +1086,11 @@ async def process_telegram_message(data: dict):
         if not chat_id:
             logger.warning("[Telegram] Missing chat_id in message")
             return
+
+        from app.core.hardening import operator_chat_allowed
+        if not operator_chat_allowed(chat_id):
+            logger.warning("[Telegram] Ignored message outside configured operator chats")
+            return
         
         if not text:
             # Send informative reply for media/unsupported types
@@ -1326,13 +1332,22 @@ async def cal_webhook(request: Request):
 @app.post("/telegram")
 async def telegram_webhook(request: Request):
     """Ingest point for Telegram via Queue."""
-    tg_webhook_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
-    if tg_webhook_secret:
-        header_token = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
-        if not secrets.compare_digest(header_token, tg_webhook_secret):
-            logger.warning(f"[Telegram] Rejected webhook with invalid secret token")
-            return JSONResponse(status_code=403, content={"status": "unauthorized"})
-    data = await request.json()
+    from app.core.hardening import telegram_webhook_secret, operator_chat_allowed
+    tg_webhook_secret = telegram_webhook_secret()
+    header_token = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+    if not tg_webhook_secret or not secrets.compare_digest(header_token, tg_webhook_secret):
+        return JSONResponse(status_code=403, content={"status": "unauthorized"})
+    try:
+        data = await request.json()
+    except (ValueError, UnicodeDecodeError):
+        return JSONResponse(status_code=400, content={"status": "invalid_update"})
+    if not isinstance(data, dict):
+        return JSONResponse(status_code=400, content={"status": "invalid_update"})
+    msg = data.get("message") or {}
+    if not isinstance(msg, dict) or not isinstance(msg.get("chat"), dict):
+        return {"status": "ignored"}
+    if not operator_chat_allowed(msg.get("chat", {}).get("id")):
+        return {"status": "ignored"}
     logger.info(f"[Telegram] Webhook received update: {list(data.keys())}")
     accepted = await tg_queue.enqueue(data)
     if not accepted:
@@ -1626,7 +1641,9 @@ async def delete_memory(request: Request, authorized: bool = Depends(require_das
 
 @app.get("/api/chat/history")
 async def get_chat_history(authorized: bool = Depends(require_dashboard_api_key)):
-    return {"status": "ok", "history": []}
+    from app.core.router import bounded_chat_history
+    history = await DatabaseManager.get_state("nova_chat:0", [])
+    return {"status": "ok", "history": bounded_chat_history(history)}
 
 @app.post("/api/chat")
 async def chat_with_agent(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
@@ -1951,7 +1968,9 @@ async def action_send_emails(authorized: bool = Depends(require_dashboard_api_ke
 async def action_generate_report(authorized: bool = Depends(require_dashboard_api_key)):
     try:
         res = await backup_database()
-        return {"status": "ok", "report": res.get("message", f"CEO report and vault snapshot complete: {res.get('filename', 'orova.db')}")}
+        if not isinstance(res, dict) or res.get("ok") is not True:
+            return {"status": "error", "message": "Database backup failed. No complete snapshot was confirmed; check the backup configuration and server logs."}
+        return {"status": "ok", "report": f"Database snapshot uploaded: {res.get('filename', 'orova.db')}"}
     except Exception as e:
         logger.error(f"[API] Internal error: {e}", exc_info=True)
         return {"status": "error", "message": "Internal error — see server logs"}

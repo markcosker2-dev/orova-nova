@@ -374,7 +374,13 @@ async def send_pending_drip_emails():
                     (campaign_id,)
                 )
                 continue
-                
+
+            # Approval pending, opt-out, missing configuration and provider
+            # failures are NOT sends. Retry the same step; never invent a touch.
+            if send_res.get("status") != "success":
+                logger.info("[DRIP] Lead %s not sent; retaining step %s", lead_id, step)
+                continue
+
             next_step = step + 1
             last_sent = datetime.now().isoformat()
             
