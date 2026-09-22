@@ -30,6 +30,7 @@ _BREAKER_COOLDOWN  = 60.0   # seconds before half-open retry
 
 # ── [P6] ECONOMICS (Cost per 1M tokens) ──
 MODEL_COSTS = {
+    "openrouter/free": (0.0, 0.0),  # Official free-model router
     "meta-llama/llama-3.3-70b-instruct:free": (0.0, 0.0), # Free tier
     "qwen/qwen3-next-80b-a3b-instruct:free": (0.0, 0.0), # Free tier
     "qwen/qwen3-coder:free": (0.0, 0.0), # Free tier
@@ -42,6 +43,19 @@ MODEL_COSTS = {
 def estimate_cost(model: str, t_in: int, t_out: int) -> float:
     rates = MODEL_COSTS.get(model, MODEL_COSTS["__default__"])
     return round((t_in / 1e6) * rates[0] + (t_out / 1e6) * rates[1], 8)
+
+
+def _is_zero_cost_openrouter_model(model: str) -> bool:
+    """Structural spend gate for OpenRouter.
+
+    Named free variants end in ``:free``. ``openrouter/free`` is the provider's
+    official zero-price router, which selects only free models and filters for
+    requested capabilities such as tool calling. Nothing else is permitted in
+    zero-budget mode.
+    """
+    value = str(model or "")
+    return value.endswith(":free") or value == "openrouter/free"
+
 
 def _provider(model_name: str) -> str:
     return model_name
@@ -133,6 +147,10 @@ class UnifiedAIClient:
     FALLBACK_CHAIN = [
         "google/gemma-4-31b-it:free",
         "nvidia/nemotron-3-super-120b-a12b:free",
+        # Catalog-resilient final fallback. OpenRouter's free catalog changes
+        # frequently; the router selects a currently live $0 model that
+        # supports the request's tools/structured-output requirements.
+        "openrouter/free",
     ]
 
     # Groq decommissioned llama-3.3-70b-versatile. Every Tier-1 call had been
@@ -374,14 +392,14 @@ class UnifiedAIClient:
             # unless OPENROUTER_ALLOW_PAID=1 is explicitly set. Structural —
             # a future edit that adds a paid model to the chain can't spend.
             if zero_budget_mode() or os.getenv("OPENROUTER_ALLOW_PAID", "0") != "1":
-                free_chain = [m for m in chain if str(m).endswith(":free")]
+                free_chain = [m for m in chain if _is_zero_cost_openrouter_model(m)]
                 dropped = [m for m in chain if m not in free_chain]
                 if dropped:
                     logger.warning(f"[AI] OpenRouter free-only guard dropped paid model(s): {dropped}")
                 chain = free_chain
                 if not chain:
                     _record_provider_failure("openrouter", "-", None,
-                                             detail="no :free models in chain (free-only guard)",
+                                             detail="no zero-cost models in chain (free-only guard)",
                                              log_stack=False)
 
             for attempt, model_name in enumerate(chain):
