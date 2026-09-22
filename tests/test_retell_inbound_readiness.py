@@ -3,8 +3,10 @@ from scripts.retell_inbound_readiness import (
     EXPECTED_AGENT_ID,
     EXPECTED_EVENT_TYPE_ID,
     EXPECTED_LLM_ID,
+    _cal_duration,
     evaluate_snapshot,
 )
+from unittest.mock import patch
 
 
 def _healthy_snapshot():
@@ -78,3 +80,24 @@ def test_unverified_cal_duration_is_a_hard_hold():
     assert result["ready"] is False
     duration = next(c for c in result["checks"] if c["label"] == "Cal duration")
     assert "independently verified" in duration["detail"]
+
+
+def test_public_cal_page_can_independently_verify_duration_without_api_key():
+    page = (
+        '<script>eventTypeId=2804866;data={\\"length\\":15,'
+        '\\"title\\":\\"OROVA Calls\\"}</script>'
+    ).encode()
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return page
+
+    with patch("scripts.retell_inbound_readiness.urllib.request.urlopen",
+               return_value=Response()):
+        assert _cal_duration({}) == 15

@@ -40,14 +40,15 @@ def test_demo_cannot_turn_into_an_unapproved_offer_or_claim():
 def test_inbound_source_marks_live_demo_prompt_as_unverified():
     drift = INBOUND["_deployed_drift"].lower()
     assert "no invited-demo branch" in drift
-    assert "redacted backup" in drift
+    assert "exact dpapi-encrypted rollback snapshot" in drift
 
 
-def test_booking_remains_truthful_while_cal_duration_is_wrong():
+def test_booking_remains_truthful_until_migrated_tools_pass_end_to_end():
     goal = INBOUND["goal"].lower()
     branch = INBOUND["branches"]["interested"].lower()
     post_call = INBOUND["_post_call_fields"].lower()
-    assert "half an hour" in goal and "canonical meeting is 15" in goal
+    assert "live-verified at 15 minutes" in goal
+    assert "legacy" in goal and "end-to-end" in goal
     assert "do not use" in goal
     assert "only after the tool succeeds" in branch
     assert "preferred times alone are not a booking" in post_call

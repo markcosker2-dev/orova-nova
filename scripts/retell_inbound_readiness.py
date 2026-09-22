@@ -32,6 +32,7 @@ EXPECTED_AGENT_ID = "agent_850b1ed50ca29bcd7b66ac3a55"
 EXPECTED_LLM_ID = "llm_2e8ffc461d20535ee17bcd64bdd5"
 EXPECTED_EVENT_TYPE_ID = 2804866
 EXPECTED_PHONE_NUMBER = "+17166703920"
+EXPECTED_CAL_EVENT_URL = "https://cal.com/mark-b.-cosker-j4zcat/discovery-call"
 LEGACY_CAL_TOOL_NAMES = {"check_availability_cal", "book_appointment_cal"}
 
 for _stream in (sys.stdout, sys.stderr):
@@ -229,34 +230,51 @@ def evaluate_snapshot(phone: dict[str, Any], agent: dict[str, Any],
 
 def _cal_duration(env: dict[str, str]) -> int | None:
     key = env.get("CAL_API_KEY") or env.get("CALCOM_API_KEY")
-    if not key:
+    if key:
+        event_id = EXPECTED_EVENT_TYPE_ID
+        # API v2 first. The v1 fallback keeps the read-only check useful for
+        # older Cal accounts while the migration is in progress.
+        status, payload = _get_json(
+            f"https://api.cal.com/v2/event-types/{event_id}", bearer=key,
+            headers={"cal-api-version": "2024-08-13"},
+        )
+        data = (payload or {}).get("data") if status == 200 else None
+        if isinstance(data, dict):
+            for field in ("lengthInMinutes", "length"):
+                try:
+                    return int(data[field])
+                except (KeyError, TypeError, ValueError):
+                    pass
+        quoted = urllib.parse.quote(key, safe="")
+        status, payload = _get_json(
+            f"https://api.cal.com/v1/event-types/{event_id}?apiKey={quoted}",
+            bearer=key,
+        )
+        if status == 200 and isinstance(payload, dict):
+            for field in ("length", "lengthInMinutes"):
+                try:
+                    return int(payload[field])
+                except (KeyError, TypeError, ValueError):
+                    pass
+
+    # The booking page is public and embeds the event's exact length. This is
+    # independent of Retell and avoids turning a missing local Cal API key into
+    # a permanent false blocker. Require the reviewed event ID to be present so
+    # a redirect or another public event cannot silently clear the gate.
+    public_url = env.get("CAL_PUBLIC_EVENT_URL") or EXPECTED_CAL_EVENT_URL
+    request = urllib.request.Request(
+        public_url,
+        headers={"User-Agent": "Mozilla/5.0", "Accept": "text/html"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            page = response.read().decode("utf-8", "replace")
+        if str(EXPECTED_EVENT_TYPE_ID) not in page:
+            return None
+        match = re.search(r'\\"length\\":(\d+)', page)
+        return int(match.group(1)) if match else None
+    except Exception:  # noqa: BLE001 - status only; never dump the page
         return None
-    event_id = EXPECTED_EVENT_TYPE_ID
-    # API v2 first. The v1 fallback keeps the read-only check useful for older
-    # Cal accounts while the migration is in progress.
-    status, payload = _get_json(
-        f"https://api.cal.com/v2/event-types/{event_id}", bearer=key,
-        headers={"cal-api-version": "2024-08-13"},
-    )
-    data = (payload or {}).get("data") if status == 200 else None
-    if isinstance(data, dict):
-        for field in ("lengthInMinutes", "length"):
-            try:
-                return int(data[field])
-            except (KeyError, TypeError, ValueError):
-                pass
-    quoted = urllib.parse.quote(key, safe="")
-    status, payload = _get_json(
-        f"https://api.cal.com/v1/event-types/{event_id}?apiKey={quoted}",
-        bearer=key,
-    )
-    if status == 200 and isinstance(payload, dict):
-        for field in ("length", "lengthInMinutes"):
-            try:
-                return int(payload[field])
-            except (KeyError, TypeError, ValueError):
-                pass
-    return None
 
 
 def main() -> int:
