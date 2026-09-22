@@ -43,6 +43,8 @@ class Router:
             r"/start": self._show_help,
             r"/leads": self._leads_handler,
             r"/contact\s+(\d+)": self._contact_handler,
+            r"/focus": self._focus_handler,
+            r"/next": self._focus_handler,
             r"/approve_pruning": self._approve_pruning_handler,
             r"/status": self._status_handler,
             r"/cancel\s+(\S+)": self._cancel_handler,
@@ -74,9 +76,19 @@ class Router:
         tracer.trace(request_id, "route_start", {"client_id": chat_id, "agent_id": agent_id, "msg_len": len(message)})
         
         lower_msg = _command_text(message)
-        aliases = {"status": "/status", "leads": "/leads", "show leads": "/leads",
-                   "show me the leads": "/leads", "help": "/help"}
+        aliases = {
+            "status": "/status", "leads": "/leads", "show leads": "/leads",
+            "show me the leads": "/leads", "help": "/help",
+            "next": "/next", "what next": "/next", "what should i do": "/focus",
+            "take the lead": "/focus", "run the day": "/focus",
+        }
         lower_msg = aliases.get(lower_msg, lower_msg)
+
+        if re.match(
+            r"(?:please\s+)?(?:find|prepare|get|pick)\b.*\bnext\b.*\b(?:lead|prospect|contact)\b",
+            lower_msg,
+        ):
+            lower_msg = "/next"
 
         if _IDENTITY_PROBE_RE.search(lower_msg):
             logger.info(f"[Router] {request_id} Identity probe intercepted")
@@ -95,8 +107,11 @@ class Router:
         if lower_msg.startswith("/"):
             return "Unknown command or missing argument. " + await self._show_help()
         if re.match(r"(?:please\s+)?(?:find|hunt|send|email|call|contact|message|book)\b", lower_msg):
-            return ("I haven't taken any action. Use /leads, then /contact ID for a sourced contact card "
-                    "and a draft. New hunts run from Mission Control. I can't send DMs or place calls from chat.")
+            return (
+                "I stopped at the external-action gate—nothing was sent, called or booked. "
+                "Send /next and I will choose and prepare the highest-ranked eligible "
+                "prospect now. New hunts run from Mission Control."
+            )
 
         # Free-form message → lean conversational Nova (human tone, grounded
         # in the live pipeline snapshot). No agentic tool-loop. Outbound
@@ -122,6 +137,10 @@ class Router:
     async def _contact_handler(self, lead_id):
         from app.core.nova_chat import lead_contact_cards
         return await lead_contact_cards(int(lead_id))
+
+    async def _focus_handler(self):
+        from app.core.nova_chat import operator_focus
+        return await operator_focus()
 
     async def _cancel_handler(self, task_id: str = None):
         """Handle /cancel {task_id} command - cancel pending auto-execution."""
@@ -176,11 +195,13 @@ class Router:
         return "✅ System Status: ONLINE"
 
     async def _show_help(self):
-        return ("/status — actual pipeline counts and blockers\n"
+        return ("/focus or /next — Nova picks and prepares the next safe move\n"
+                "/status — actual pipeline counts and blockers\n"
                 "/leads — five uncontacted prospects\n"
                 "/contact ID — recorded contact details and a manual first-message draft\n"
                 "/forget — clear recent chat context only\n"
-                "Chat answers questions; it does not execute outreach. No paid calls or automatic cold outreach in $0 mode.")
+                "Nova advances safe preparation autonomously. Sending, calling, spending, "
+                "publishing and deployment remain gated; no automatic cold outreach in $0 mode.")
 
     async def _confirm_presence(self):
         return "Yes, Boss. I am here."

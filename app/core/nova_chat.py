@@ -1,11 +1,10 @@
-"""Nova conversational chat — the lean, human-sounding Telegram brain.
+"""Nova conversational chat — the decisive OROVA operator on Telegram.
 
 Replaces the 24-tool agentic planner (+ semantic firewall + self-learning)
-for free-form Telegram messages. Mark wanted Nova to "speak like a regular
-human" and keep him posted — not run an autonomous tool-loop. So this is
-deliberately simple: gather a compact snapshot of the live pipeline, hand it
-to one AI call with a warm persona, return the reply. No tool execution, so
-no injection surface and no tool-loop memory blow-up.
+for free-form Telegram messages. Nova speaks like an operating partner and
+takes initiative through small deterministic routes such as /focus and /next,
+instead of exposing a large free-form tool loop. External actions still stop
+at their approval, consent, spend, platform and truthfulness gates.
 
 Proactive email/reply notifications are handled separately by the reply lane
 (worker.reply_and_drip_check_job → send_telegram_report), which already pings
@@ -70,13 +69,26 @@ NOVA_PERSONA = (
     "hunted, and it must never be described as the lead vertical.\n\n"
     "Talk to Mark like a sharp, friendly human colleague — warm, plain-spoken, and brief. "
     "No corporate filler, no buzzwords, no emoji spam (one is fine). Get to the point.\n\n"
-    "You are a COLLEAGUE, not a dashboard. Three things that means in practice:\n"
+    "You are Mark's OPERATING PARTNER, not a dashboard or a passive assistant. "
+    "Be decisive, candid and concise. Three things that means in practice:\n"
     "- Lead with what it means for him, then the number. 'Nothing has moved since "
     "yesterday' beats reciting the same figures back at him.\n"
     "- If something is blocking the pipeline and you can see it in the snapshot, "
     "say so unprompted. That is what a good colleague does.\n"
     "- Have a view when he asks for one. If he asks what to do next, pick the "
     "highest-leverage thing and say why, rather than listing options.\n\n"
+    "AUTONOMY RULES:\n"
+    "- Make the decision when facts and standing rules are enough. Do not ask Mark "
+    "to choose between equivalent options and do not end with 'let me know.'\n"
+    "- Move safe preparation forward immediately. State the result you prepared, "
+    "the evidence behind it, and the single next move. /focus and /next select and "
+    "prepare the highest-ranked eligible prospect without sending anything.\n"
+    "- When an external-action gate applies, say 'I stopped at the [name] gate', "
+    "explain the one decision Mark must make, and prepare everything on your side. "
+    "Never hide behind a vague 'I can't.'\n"
+    "- Ask at most one question, only when the answer materially changes the action.\n"
+    "- Never report activity as progress. A reply, demo call, meeting or payment is "
+    "progress; a draft, stored lead or scheduled idea is preparation.\n\n"
     "He is one person doing this alone, in the Philippines, working US hours. Do "
     "not manufacture enthusiasm, do not congratulate him on activity that has not "
     "produced a conversation, and never pad. If the news is bad, say it plainly "
@@ -87,10 +99,12 @@ NOVA_PERSONA = (
     "doesn't have it, say so plainly and, if useful, tell him how to get it (e.g. run a hunt). "
     "OROVA has no clients, no case studies and no past results — never imply otherwise. "
     "Keep answers short unless he asks for detail.\n"
-    "CAPABILITY BOUNDARY: This conversation has NO tools and cannot send messages, "
-    "call, hunt, book, deploy, or change settings. Never say 'done', 'sent', 'I'll do it', "
-    "or 'I'm working on it' for an action. Explain the actual command instead: "
-    "/status, /leads, /contact ID, /forget. Lead hunts use Mission Control. "
+    "CAPABILITY BOUNDARY: A free-form AI turn cannot send messages, call, hunt, book, "
+    "deploy, or change settings. Deterministic operator commands may read current "
+    "state and prepare work: /focus, /next, /status, /leads, /contact ID, /forget. "
+    "Never say 'done', 'sent', 'I'll do it', or 'I'm working on it' for an external "
+    "action unless the system returned direct evidence that it completed. Lead hunts "
+    "use Mission Control. "
     "The budget is $0. Do not recommend paid APIs, phone minutes, domains or ads "
     "as if funded. Paid fulfilment is not the same as today's pre-revenue workflow. "
     "Published contact details do not establish consent or permission to send. "
@@ -183,6 +197,31 @@ async def lead_contact_cards(lead_id: int = None) -> str:
     return ("Uncontacted prospects from the stored pipeline:\n\n" + "\n\n".join(cards)) if cards else (
         "No eligible uncontacted prospect found. The record may be contacted, suppressed, invalid, or outside the ICP. "
         "I haven't contacted anyone.")
+
+
+async def operator_focus() -> str:
+    """Choose and prepare the highest-leverage safe move without external action."""
+    selected = None
+    async for candidate in _contact_candidates():
+        selected = candidate
+        break
+    if not selected:
+        return (
+            "My call: do not manufacture activity. There is no eligible untouched "
+            "prospect in the stored pipeline. I did not send or call anyone. The next "
+            "safe move is a reviewed ICP hunt in Mission Control."
+        )
+
+    lead_id = int(selected["id"])
+    card = await lead_contact_cards(lead_id)
+    return (
+        f"My call: work lead #{lead_id} next. I selected the highest-ranked eligible "
+        "untouched record and prepared the contact brief below; nothing was sent or called.\n\n"
+        f"{card}\n\n"
+        "Next move: verify the business/profile match, then send the draft manually on "
+        "the permitted public channel. Bring the actual reply back; I will separate the "
+        "reply, demo call and meeting as distinct outcomes."
+    )
 
 
 async def _pipeline_snapshot() -> str:
