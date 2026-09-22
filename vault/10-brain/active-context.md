@@ -9,16 +9,17 @@ tags: [brain, active, session-start]
 
 # 🧭 Active Context
 
-> [!important] September 23 approved change window — partial completion
-> Cal event `2804866` is now **live-verified at 15 minutes**. An exact Retell
-> number/agent/LLM rollback snapshot was encrypted with Windows DPAPI outside
-> Git and verified by decrypting it. The live Retell gate improved from five to
-> **four blockers**: recording consent, labelled simulation, post-demo diagnosis
-> and the 15-minute handoff. Both Cal tools target the correct event but remain
-> legacy and untested. The authenticated Retell browser now shows first-time
-> “Create your workspace” onboarding instead of the workspace that owns the
-> live agent. No workspace or Retell prompt was changed. Mark must confirm the
-> owning Retell login/workspace before draft/migration/test/publish continues.
+> [!important] September 23 approved change window — Draft V1 prepared
+> The correct Retell workspace and reviewed inbound agent are confirmed. V0 was
+> published unchanged as the exact pre-migration baseline and remains bound to
+> the phone. Unpublished Draft V1 now has consent-first capture-only behavior,
+> labelled simulation, diagnosis, the 15-minute handoff, current Cal functions,
+> 30-day non-PII storage, handbook AI disclosure and safe booking extraction.
+> A current Cal availability test passed. The tightened read-only V1 gate passes
+> all of those checks and holds on exactly one blocker: the two legacy Cal
+> functions remain attached. Mark's action-time approval is required before
+> deleting them, spending Retell balance on simulations/web call, or creating
+> and deleting a real Cal test appointment. V1 is not published or phone-bound.
 
 > [!info] Telegram autonomy — prepared locally, not deployed
 > Nova now acts like a decisive operating partner in Telegram. `/focus` and
@@ -30,17 +31,14 @@ tags: [brain, active, session-start]
 > [[0020-telegram-autonomy-is-safe-preparation-first]].
 
 > [!important] September 23 launch gate
-> Superseded in part by the change-window update above. Demo traffic remains
-> **on HOLD**, based on a live GET-only Retell check. The
-> inbound number is still bound to the reviewed agent/LLM and both Cal tools
-> target event `2804866`, but the live prompt lacks recording consent, the
-> labelled demo simulation, post-demo diagnosis and the canonical 15-minute
-> ask. Cal duration is now independently verified at 15 minutes; the
-> agent also stores “Everything,” the handbook disclosure flag is false, and
-> legacy Cal tools must be migrated. Use
-> `python scripts/retell_inbound_readiness.py` and
+> Demo traffic remains **on HOLD**. Inspect Draft V1 with
+> `python scripts/retell_inbound_readiness.py --version 1`; it currently reports
+> one hard blocker, the attached legacy Cal functions. The published V0 remains
+> the phone-bound baseline and intentionally does not contain the new behavior.
+> Use `python scripts/retell_inbound_readiness.py` and
 > [[retell-inbound-demo-launch-runbook-2026-09-23]]. No DM may expose the phone
-> number until the gate passes and Mark approves the final phone test.
+> number until migration, booking tests, simulations, web call and the final
+> owner-approved phone test pass.
 
 > [!info] September 23 reliability update
 > Malformed decision-maker names are now rejected even when stale evidence has

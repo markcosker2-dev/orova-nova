@@ -14,6 +14,7 @@ The final paid phone-call test remains a human approval step either way.
 """
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import re
@@ -115,16 +116,40 @@ def _all_tools(llm: dict[str, Any]) -> list[dict[str, Any]]:
 def _event_type_id(tool: dict[str, Any]) -> int | None:
     for key in ("event_type_id", "eventTypeId"):
         value = tool.get(key)
+        if value is None:
+            continue
         try:
-            return int(value) if value is not None else None
+            return int(value)
         except (TypeError, ValueError):
             return None
+    # Current integration-app tools store fixed inputs in a JSON-schema-like
+    # parameter definition instead of the legacy top-level field.
+    for parameter in tool.get("parameters") or []:
+        if not isinstance(parameter, dict):
+            continue
+        properties = parameter.get("properties") or {}
+        if not isinstance(properties, dict):
+            continue
+        event_field = properties.get("event_type_id") or properties.get("eventTypeId")
+        if isinstance(event_field, dict):
+            value = event_field.get("const")
+            try:
+                return int(value) if value is not None else None
+            except (TypeError, ValueError):
+                return None
     return None
 
 
 def _check(label: str, passed: bool, detail: str, *, severity: str = "BLOCK") -> dict[str, Any]:
     return {"label": label, "passed": bool(passed), "detail": detail,
             "severity": severity}
+
+
+def _analysis_field(agent: dict[str, Any], name: str) -> dict[str, Any]:
+    for field in agent.get("post_call_analysis_data") or []:
+        if isinstance(field, dict) and str(field.get("name") or "").lower() == name.lower():
+            return field
+    return {}
 
 
 def evaluate_snapshot(phone: dict[str, Any], agent: dict[str, Any],
@@ -173,6 +198,35 @@ def evaluate_snapshot(phone: dict[str, Any], agent: dict[str, Any],
         severity="WARN",
     ))
 
+    appointment_time = _analysis_field(agent, "appointment date and time")
+    time_description = str(appointment_time.get("description") or "").lower()
+    appointment_time_safe = (
+        appointment_time.get("required") is False
+        and "15-minute" in time_description
+        and "booking tool succeeds" in time_description
+    )
+    checks.append(_check(
+        "appointment time field",
+        appointment_time_safe,
+        "confirmed 15-minute bookings only; unconfirmed preferences stay separate"
+        if appointment_time_safe
+        else "appointment date/time extraction field is missing or unsafe",
+    ))
+    appointment_booked = _analysis_field(agent, "appointment booked")
+    booked_description = str(appointment_booked.get("description") or "").lower()
+    appointment_booked_safe = (
+        appointment_booked.get("required") is False
+        and "book_calcom_appointment" in booked_description
+        and "preferred times alone are not a booking" in booked_description
+    )
+    checks.append(_check(
+        "appointment booked field",
+        appointment_booked_safe,
+        "true only after booking success or Mark's confirmation"
+        if appointment_booked_safe
+        else "appointment-booked extraction field is missing or unsafe",
+    ))
+
     checks.append(_check("LLM identity", llm.get("llm_id") == EXPECTED_LLM_ID,
                          "reviewed response engine retrieved"))
     prompt = " ".join(str(llm.get(key) or "") for key in ("begin_message", "general_prompt"))
@@ -197,10 +251,14 @@ def evaluate_snapshot(phone: dict[str, Any], agent: dict[str, Any],
 
     tools = _all_tools(llm)
     by_name = {str(tool.get("name") or ""): tool for tool in tools}
-    for name in sorted(LEGACY_CAL_TOOL_NAMES):
-        tool = by_name.get(name)
+    tool_roles = {
+        "Cal availability tool": ("check_calcom_availability", "check_availability_cal"),
+        "Cal booking tool": ("book_calcom_appointment", "book_appointment_cal"),
+    }
+    for label, candidates in tool_roles.items():
+        tool = next((by_name[name] for name in candidates if name in by_name), None)
         checks.append(_check(
-            name, bool(tool) and _event_type_id(tool) == EXPECTED_EVENT_TYPE_ID,
+            label, bool(tool) and _event_type_id(tool) == EXPECTED_EVENT_TYPE_ID,
             "tool points to reviewed event type" if tool
             and _event_type_id(tool) == EXPECTED_EVENT_TYPE_ID
             else "tool missing or points to another event type",
@@ -211,7 +269,6 @@ def evaluate_snapshot(phone: dict[str, Any], agent: dict[str, Any],
         "Cal migration", not legacy_present,
         "new Retell Cal integration is in use" if not legacy_present
         else "legacy built-in Cal tools: edits end 2026-09-30; runtime migration is due by 2026-10-31",
-        severity="WARN",
     ))
     canonical = _canonical_duration()
     checks.append(_check(
@@ -278,10 +335,20 @@ def _cal_duration(env: dict[str, str]) -> int | None:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--version", default="prod",
+        help="Retell agent version or environment tag to inspect (default: prod)",
+    )
+    args = parser.parse_args()
+    version = str(args.version).strip().lower()
+    if not re.fullmatch(r"(?:prod|staging|\d+)", version):
+        parser.error("--version must be prod, staging, or a non-negative integer")
+
     env = load_env()
     api_key = env.get("RETELL_API_KEY", "")
     phone_number = env.get("RETELL_INBOUND_NUMBER") or EXPECTED_PHONE_NUMBER
-    print("\n  OROVA INBOUND DEMO — READ-ONLY READINESS")
+    print(f"\n  OROVA INBOUND DEMO — READ-ONLY READINESS ({version})")
     if not api_key:
         missing = ["RETELL_API_KEY"]
         print(f"  HOLD  missing local configuration: {', '.join(missing)}")
@@ -295,14 +362,17 @@ def main() -> int:
     phone_status, phone = _get_json(
         f"{RETELL_BASE}/get-phone-number/{encoded_phone}", bearer=api_key)
     agent_status, agent = _get_json(
-        f"{RETELL_BASE}/get-agent/{EXPECTED_AGENT_ID}?version=prod", bearer=api_key)
+        f"{RETELL_BASE}/get-agent/{EXPECTED_AGENT_ID}?version={version}", bearer=api_key)
     if phone_status != 200 or agent_status != 200 or not phone or not agent:
         print(f"  HOLD  Retell reads failed (number={phone_status}, agent={agent_status})")
         return 2
     engine = agent.get("response_engine") or {}
     llm_id = engine.get("llm_id") or EXPECTED_LLM_ID
+    llm_version = engine.get("version")
+    llm_query = (f"?version={urllib.parse.quote(str(llm_version), safe='')}"
+                 if llm_version is not None else "")
     llm_status, llm = _get_json(
-        f"{RETELL_BASE}/get-retell-llm/{urllib.parse.quote(str(llm_id), safe='')}",
+        f"{RETELL_BASE}/get-retell-llm/{urllib.parse.quote(str(llm_id), safe='')}{llm_query}",
         bearer=api_key,
     )
     if llm_status != 200 or not llm:
@@ -318,7 +388,8 @@ def main() -> int:
         state = "OK" if check["passed"] else check["severity"]
         print(f"  {state:<5} {check['label']:<22} {check['detail']}")
     if result["ready"]:
-        print("\n  READY by machine checks. Still run one owner-approved phone test before DMs.")
+        print("\n  READY by machine checks. Still run the booking test, simulations, "
+              "web call, and owner-approved phone test before DMs.")
         return 0
     print(f"\n  HOLD demo traffic: {result['blocker_count']} blocking check(s), "
           f"{result['warning_count']} warning(s). No live settings were changed.")

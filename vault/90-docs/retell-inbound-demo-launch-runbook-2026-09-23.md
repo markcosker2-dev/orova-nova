@@ -9,13 +9,12 @@ tags: [retell, cal, inbound-demo, deployment, consent]
 
 # Retell inbound-demo launch runbook — 2026-09-23
 
-The live number is correctly attached to the reviewed inbound agent, but demo
-traffic is on **HOLD**. Cal event type `2804866` was corrected and live-verified
-at 15 minutes on 2026-09-23. The read-only gate now finds four blockers:
-recording consent, labelled simulation, post-demo diagnosis and the canonical
-15-minute handoff. The authenticated dashboard browser currently shows
-first-time workspace onboarding instead of the workspace that owns the live
-agent, so the draft/tool migration cannot safely continue yet.
+The live number remains attached to published V0, the reviewed unchanged
+baseline, and demo traffic is on **HOLD**. Cal event type `2804866` is
+live-verified at 15 minutes. Draft V1 contains the consent-first capture-only
+prompt, current Cal functions, safer retention/disclosure settings and guarded
+booking extraction. The V1 read-only gate now finds one blocker: both legacy
+Cal functions are still attached alongside the current replacements.
 
 ## Pre-change evidence
 
@@ -32,7 +31,8 @@ agent, so the draft/tool migration cannot safely continue yet.
 
 1. **Done 2026-09-23:** change event type `2804866` from 30 to the canonical
    **15 minutes** and verify the live editor/public booking page.
-2. Connect Retell's current Cal.com integration and replace the legacy
+2. **Prepared:** Retell's current Cal.com availability and booking functions
+   target event `2804866`; the availability test passed. Delete the legacy
    `check_availability_cal` / `book_appointment_cal` tools. Retell says legacy
    tools stop accepting edits on **2026-09-30** and must migrate before
    **2026-10-31**.
@@ -41,20 +41,21 @@ agent, so the draft/tool migration cannot safely continue yet.
 4. Run a test booking, verify the calendar event is exactly 15 minutes, then
    remove the test event.
 
-> [!warning] Current dashboard gate
-> The OROVA Google login reached Retell, but the current screen is “Create your
-> workspace.” Do not complete it: a new empty workspace would not establish
-> access to the workspace that owns the reviewed live agent. Mark must confirm
-> which Retell login/workspace owns that agent before migration continues.
+> [!warning] Current action-time gate
+> Deleting the two legacy Draft V1 functions, consuming Retell test balance,
+> and creating/deleting a real Cal test appointment require Mark's confirmation
+> immediately before those actions. V1 must stay unpublished until they pass.
 
 ## Draft and test
 
 1. Render the fail-closed review package:
    `python scripts/render_retell_inbound_prompt.py --format text`.
-2. Create a new Retell draft version from the current production version.
-3. Paste the generated begin message and general prompt. Keep capture-only mode
+2. **Done:** published V0 unchanged as the rollback baseline and created Draft
+   V1 from it.
+3. **Done:** pasted the generated begin message and general prompt. Keep capture-only mode
    until the Cal tests above pass; only then render `--booking-mode verified`.
-4. Attach the reviewed availability and booking tools to the reviewed event.
+4. **Done:** attached the current availability and booking tools to the reviewed
+   event; do not enable booking behavior until the end-to-end test passes.
 5. Run simulations for: consent yes/no; invited demo; explicit end of
    simulation; lead-volume diagnosis; qualification diagnosis; booked-solid
    disqualification; price question; opt-out; wrong number; tool failure; and
@@ -77,5 +78,6 @@ agent, so the draft/tool migration cannot safely continue yet.
 - [Retell Get Phone Number](https://docs.retellai.com/api-references/get-phone-number)
 - [Retell privacy/data storage](https://docs.retellai.com/accounts/privacy-disable)
 - [Retell Cal.com integration](https://docs.retellai.com/integrations/cal-com-functions)
+- [Retell testing pricing](https://docs.retellai.com/test/testing-pricing)
 
 Linked: [[0018-the-prospect-initiates-the-demo-call]] · [[active-context]]

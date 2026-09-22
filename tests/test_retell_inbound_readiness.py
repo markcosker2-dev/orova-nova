@@ -4,6 +4,7 @@ from scripts.retell_inbound_readiness import (
     EXPECTED_EVENT_TYPE_ID,
     EXPECTED_LLM_ID,
     _cal_duration,
+    _event_type_id,
     evaluate_snapshot,
 )
 from unittest.mock import patch
@@ -21,6 +22,26 @@ def _healthy_snapshot():
                             "version": 1},
         "data_storage_setting": "everything_except_pii",
         "handbook_config": {"ai_disclosure": True},
+        "post_call_analysis_data": [
+            {
+                "type": "string",
+                "name": "appointment date and time",
+                "description": (
+                    "The confirmed date and time for Mark's 15-minute call only "
+                    "after the booking tool succeeds."
+                ),
+                "required": False,
+            },
+            {
+                "type": "boolean",
+                "name": "appointment booked",
+                "description": (
+                    "True only after book_calcom_appointment succeeds; preferred "
+                    "times alone are not a booking."
+                ),
+                "required": False,
+            },
+        ],
     }
     llm = {
         "llm_id": EXPECTED_LLM_ID,
@@ -45,13 +66,26 @@ def _healthy_snapshot():
 
 def test_healthy_snapshot_clears_blocking_gates():
     phone, agent, llm = _healthy_snapshot()
+    llm["general_tools"] = [
+        {
+            "type": "integration_app",
+            "name": "check_calcom_availability",
+            "parameters": [{
+                "properties": {"event_type_id": {"const": "2804866"}},
+            }],
+        },
+        {
+            "type": "integration_app",
+            "name": "book_calcom_appointment",
+            "parameters": [{
+                "properties": {"event_type_id": {"const": "2804866"}},
+            }],
+        },
+    ]
     result = evaluate_snapshot(phone, agent, llm, cal_duration=15)
     assert result["ready"] is True
     assert result["blocker_count"] == 0
-    # The synthetic fixture intentionally uses the legacy tool names, so the
-    # time-bound migration reminder remains a warning rather than pretending
-    # that prompt/booking correctness and vendor migration are the same gate.
-    assert result["warning_count"] == 1
+    assert result["warning_count"] == 0
 
 
 def test_known_live_drift_holds_demo_traffic():
@@ -101,3 +135,64 @@ def test_public_cal_page_can_independently_verify_duration_without_api_key():
     with patch("scripts.retell_inbound_readiness.urllib.request.urlopen",
                return_value=Response()):
         assert _cal_duration({}) == 15
+
+
+def test_current_cal_integration_reads_nested_constant_event_type():
+    tool = {
+        "type": "integration_app",
+        "name": "check_calcom_availability",
+        "parameters": [{
+            "properties": {"event_type_id": {"const": "2804866"}},
+        }],
+    }
+    assert _event_type_id(tool) == EXPECTED_EVENT_TYPE_ID
+
+
+def test_current_cal_tools_clear_tool_and_migration_checks():
+    phone, agent, llm = _healthy_snapshot()
+    llm["general_tools"] = [
+        {
+            "type": "integration_app",
+            "name": "check_calcom_availability",
+            "parameters": [{
+                "properties": {"event_type_id": {"const": "2804866"}},
+            }],
+        },
+        {
+            "type": "integration_app",
+            "name": "book_calcom_appointment",
+            "parameters": [{
+                "properties": {"event_type_id": {"const": "2804866"}},
+            }],
+        },
+    ]
+    result = evaluate_snapshot(phone, agent, llm, cal_duration=15)
+    failed = {check["label"] for check in result["checks"] if not check["passed"]}
+    assert "Cal availability tool" not in failed
+    assert "Cal booking tool" not in failed
+    assert "Cal migration" not in failed
+
+
+def test_legacy_cal_tools_are_a_hard_hold_before_launch():
+    phone, agent, llm = _healthy_snapshot()
+    result = evaluate_snapshot(phone, agent, llm, cal_duration=15)
+    migration = next(
+        check for check in result["checks"] if check["label"] == "Cal migration"
+    )
+    assert result["ready"] is False
+    assert migration["severity"] == "BLOCK"
+    assert migration["passed"] is False
+
+
+def test_unsafe_booking_extraction_is_a_hard_hold():
+    phone, agent, llm = _healthy_snapshot()
+    agent["post_call_analysis_data"][1]["description"] = (
+        "True when the caller agrees and gives a preferred time."
+    )
+    result = evaluate_snapshot(phone, agent, llm, cal_duration=15)
+    check = next(
+        item for item in result["checks"]
+        if item["label"] == "appointment booked field"
+    )
+    assert check["severity"] == "BLOCK"
+    assert check["passed"] is False

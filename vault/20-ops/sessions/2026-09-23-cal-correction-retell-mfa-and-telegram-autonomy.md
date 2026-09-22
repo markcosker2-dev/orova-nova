@@ -1,6 +1,6 @@
 ---
 name: session-2026-09-23-cal-correction-retell-access-and-telegram-autonomy
-description: Corrected the live Cal duration, secured an exact Retell rollback snapshot, and made Telegram Nova more autonomously useful without widening external authority.
+description: Corrected Cal, preserved Retell V0, prepared consent-first V1 with current Cal tools, and made Telegram Nova more autonomous without widening external authority.
 type: session
 created: 2026-09-23
 status: active
@@ -21,17 +21,32 @@ status: active
 
 ## Retell state
 
-The rerun gate now passes Cal duration. It still holds demo traffic on four
-prompt blockers: recording consent, labelled simulation, post-demo diagnosis
-and the 15-minute handoff. Both existing Cal tools still point to the correct
-event, but they are legacy and untested. The inbound number is directly bound
-to unpublished V0 rather than a production tag.
+- Correct owning workspace **Mark B. Cosker's** and reviewed inbound agent were
+  visibly confirmed.
+- V0 was published unchanged as
+  `Baseline before inbound demo migration — 2026-09-23`; it remains bound to
+  the inbound number and is the exact pre-migration baseline.
+- Draft V1 `Consent-first inbound demo + Cal migration` was created from V0.
+  It is not published or phone-bound.
+- V1 now has the consent-first capture-only prompt, labelled simulation,
+  two-path diagnosis, canonical 15-minute handoff and the hard boundary
+  `no price, no trial, no pilot`.
+- Retell's AI-disclosure handbook control is enabled. Storage changed from
+  Everything/forever to Everything except PII with 30-day retention.
+- Current Cal.com availability and booking functions both target event type
+  `2804866`. A read-only availability test succeeded. Direct booking remains
+  disabled in the prompt until an end-to-end booking test passes.
+- Post-call `appointment date and time` and `appointment booked` fields now
+  remain empty unless a booking succeeds or Mark explicitly confirms it;
+  preferred times alone cannot become a booked appointment.
+- The tightened V1 gate passes every prompt, privacy, extraction, event and
+  duration check. It correctly holds on one blocker: the two legacy Cal
+  functions are still attached alongside the current functions.
 
-The OROVA Google login first reached Retell's MFA flow, then resolved to
-first-time “Create your workspace” onboarding. That does not prove access to
-the workspace that owns the reviewed live agent. No MFA method, workspace,
-prompt or tool was changed. The dashboard tab was left ready for handoff; do
-not create a new empty workspace until Mark confirms the owning Retell login.
+Pending action-time approval: delete only the two legacy functions from Draft
+V1, spend Retell balance on simulations/a short browser call, and create then
+delete one real 15-minute Cal test appointment. Do not publish V1, move the
+phone binding or expose the number until those tests pass.
 
 ## Telegram autonomy — local only
 
@@ -43,21 +58,22 @@ not create a new empty workspace until Mark confirms the owning Retell login.
   route.
 - The unrestricted agentic planner remains off. External sending, calls,
   booking, spend, publishing and deployment retain their gates.
-- Combined Retell/Telegram regression suite: **96 passed**.
+- Combined Retell/Telegram regression suite: **96 passed** before the latest
+  readiness-gate tests; the focused readiness suite is now **9 passed**.
 
 ## Verification
 
-- Full repository suite: **1,537 passed**, 26 dependency deprecation warnings.
+- Full repository suite: **1,541 passed**, 26 dependency deprecation warnings.
 - Canonical knowledge compilation: current, no drift.
 - Repository secret scan: clean.
 - Git whitespace validation: clean.
 
 ## Single next action
 
-Mark confirms which Retell login/workspace owns agent
-`agent_850b1ed50ca29bcd7b66ac3a55`. Then resume in that workspace: create a
-draft from V0, migrate both Cal tools, paste the generated capture-only prompt,
-run simulations/web call, publish and move the number only after the gate passes.
+After Mark's action-time approval, delete the two legacy Cal functions from
+Draft V1, run the billable simulation/browser tests, and create/verify/delete
+one test booking. Only then render verified-booking mode, retest, publish and
+move the inbound binding through a reviewed rollback tag.
 
 Linked: [[0020-telegram-autonomy-is-safe-preparation-first]] ·
 [[retell-inbound-demo-launch-runbook-2026-09-23]] · [[active-context]]
