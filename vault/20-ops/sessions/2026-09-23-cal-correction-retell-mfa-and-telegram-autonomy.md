@@ -1,12 +1,12 @@
 ---
-name: session-2026-09-23-cal-correction-retell-mfa-and-telegram-autonomy
+name: session-2026-09-23-cal-correction-retell-access-and-telegram-autonomy
 description: Corrected the live Cal duration, secured an exact Retell rollback snapshot, and made Telegram Nova more autonomously useful without widening external authority.
 type: session
 created: 2026-09-23
 status: active
 ---
 
-# Session: Cal correction, Retell MFA and Telegram autonomy (2026-09-23)
+# Session: Cal correction, Retell access and Telegram autonomy (2026-09-23)
 
 ## Verified live changes
 
@@ -27,10 +27,11 @@ and the 15-minute handoff. Both existing Cal tools still point to the correct
 event, but they are legacy and untested. The inbound number is directly bound
 to unpublished V0 rather than a production tag.
 
-The OROVA Google login reached Retell's mandatory MFA-enrollment screen. No
-phone number, authenticator secret or security setting was entered. Creating a
-persistent MFA method requires Mark's action-time choice. The dashboard tab was
-left ready for handoff; the live Retell prompt and tools were not changed.
+The OROVA Google login first reached Retell's MFA flow, then resolved to
+first-time “Create your workspace” onboarding. That does not prove access to
+the workspace that owns the reviewed live agent. No MFA method, workspace,
+prompt or tool was changed. The dashboard tab was left ready for handoff; do
+not create a new empty workspace until Mark confirms the owning Retell login.
 
 ## Telegram autonomy — local only
 
@@ -53,10 +54,10 @@ left ready for handoff; the live Retell prompt and tools were not changed.
 
 ## Single next action
 
-Mark completes Retell MFA enrollment using either SMS or an authenticator. Then
-resume in the same dashboard: create a draft from V0, migrate both Cal tools,
-paste the generated capture-only prompt, run simulations/web call, publish and
-move the number only after the gate passes.
+Mark confirms which Retell login/workspace owns agent
+`agent_850b1ed50ca29bcd7b66ac3a55`. Then resume in that workspace: create a
+draft from V0, migrate both Cal tools, paste the generated capture-only prompt,
+run simulations/web call, publish and move the number only after the gate passes.
 
 Linked: [[0020-telegram-autonomy-is-safe-preparation-first]] ·
 [[retell-inbound-demo-launch-runbook-2026-09-23]] · [[active-context]]

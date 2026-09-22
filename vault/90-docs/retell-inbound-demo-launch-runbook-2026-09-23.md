@@ -13,8 +13,9 @@ The live number is correctly attached to the reviewed inbound agent, but demo
 traffic is on **HOLD**. Cal event type `2804866` was corrected and live-verified
 at 15 minutes on 2026-09-23. The read-only gate now finds four blockers:
 recording consent, labelled simulation, post-demo diagnosis and the canonical
-15-minute handoff. Retell dashboard access is waiting on mandatory MFA
-enrollment before the draft/tool migration can continue.
+15-minute handoff. The authenticated dashboard browser currently shows
+first-time workspace onboarding instead of the workspace that owns the live
+agent, so the draft/tool migration cannot safely continue yet.
 
 ## Pre-change evidence
 
@@ -41,9 +42,10 @@ enrollment before the draft/tool migration can continue.
    remove the test event.
 
 > [!warning] Current dashboard gate
-> Retell requires the OROVA Google account to enroll MFA. Mark must choose SMS
-> or an authenticator and complete the enrollment; no security method was
-> selected automatically.
+> The OROVA Google login reached Retell, but the current screen is “Create your
+> workspace.” Do not complete it: a new empty workspace would not establish
+> access to the workspace that owns the reviewed live agent. Mark must confirm
+> which Retell login/workspace owns that agent before migration continues.
 
 ## Draft and test
 

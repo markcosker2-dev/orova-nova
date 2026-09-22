@@ -11,9 +11,10 @@ status: active
 > [!important] Live overlay — 2026-09-23 approved change window
 > Cal event `2804866` is now 15 minutes and publicly verified. The Retell
 > rollback snapshot is exact, DPAPI-encrypted, outside Git and decrypt-verified.
-> Demo traffic remains held by four live prompt blockers; Retell login now
-> requires Mark to enroll SMS or authenticator MFA before the draft/tool
-> migration can proceed. No Retell prompt or number binding changed.
+> Demo traffic remains held by four live prompt blockers. The authenticated
+> Retell browser shows first-time “Create your workspace” onboarding, not the
+> workspace that owns the live agent. Do not create a new empty workspace;
+> confirm the owning login/workspace first. No Retell prompt or binding changed.
 >
 > Telegram Nova's more autonomous operator voice, `/focus` and `/next` are
 > locally implemented and tested. They are **not deployed**. External actions

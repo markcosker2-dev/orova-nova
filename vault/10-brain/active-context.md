@@ -15,9 +15,10 @@ tags: [brain, active, session-start]
 > Git and verified by decrypting it. The live Retell gate improved from five to
 > **four blockers**: recording consent, labelled simulation, post-demo diagnosis
 > and the 15-minute handoff. Both Cal tools target the correct event but remain
-> legacy and untested. Retell dashboard login is stopped at mandatory MFA
-> enrollment; no MFA method or Retell prompt was changed. Mark must complete MFA
-> before the draft/migration/test/publish sequence can continue.
+> legacy and untested. The authenticated Retell browser now shows first-time
+> “Create your workspace” onboarding instead of the workspace that owns the
+> live agent. No workspace or Retell prompt was changed. Mark must confirm the
+> owning Retell login/workspace before draft/migration/test/publish continues.
 
 > [!info] Telegram autonomy — prepared locally, not deployed
 > Nova now acts like a decisive operating partner in Telegram. `/focus` and
