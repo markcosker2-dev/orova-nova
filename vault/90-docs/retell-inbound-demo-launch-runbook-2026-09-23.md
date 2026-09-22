@@ -10,23 +10,27 @@ tags: [retell, cal, inbound-demo, deployment, consent]
 # Retell inbound-demo launch runbook — 2026-09-23
 
 The live number is correctly attached to the reviewed inbound agent, but demo
-traffic is on **HOLD**. The read-only gate found five blockers: recording
-consent, labelled simulation, post-demo diagnosis, canonical 15-minute handoff,
-and independent verification that Cal event type `2804866` is 15 minutes.
+traffic is on **HOLD**. Cal event type `2804866` was corrected and live-verified
+at 15 minutes on 2026-09-23. The read-only gate now finds four blockers:
+recording consent, labelled simulation, post-demo diagnosis and the canonical
+15-minute handoff. Retell dashboard access is waiting on mandatory MFA
+enrollment before the draft/tool migration can continue.
 
 ## Pre-change evidence
 
 1. Run `python scripts/retell_inbound_readiness.py`; save only its redacted
    result, never raw API bodies.
-2. Export the exact live number, agent version, LLM version, prompt, tools and
+2. **Done 2026-09-23:** export the exact live number, agent version, LLM version, prompt, tools and
    settings to a private encrypted backup outside Git. A redacted summary is
-   evidence, not a rollback payload.
+   evidence, not a rollback payload. The current snapshot is DPAPI-encrypted
+   and decrypt-verified under the Windows account.
 3. Record the current `prod` tag and number binding. Do not edit the production
    version in place.
 
 ## Cal migration first
 
-1. Change event type `2804866` from 30 to the canonical **15 minutes**.
+1. **Done 2026-09-23:** change event type `2804866` from 30 to the canonical
+   **15 minutes** and verify the live editor/public booking page.
 2. Connect Retell's current Cal.com integration and replace the legacy
    `check_availability_cal` / `book_appointment_cal` tools. Retell says legacy
    tools stop accepting edits on **2026-09-30** and must migrate before
@@ -35,6 +39,11 @@ and independent verification that Cal event type `2804866` is 15 minutes.
    late-afternoon Pacific slots. Confirm US midday is unavailable.
 4. Run a test booking, verify the calendar event is exactly 15 minutes, then
    remove the test event.
+
+> [!warning] Current dashboard gate
+> Retell requires the OROVA Google account to enroll MFA. Mark must choose SMS
+> or an authenticator and complete the enrollment; no security method was
+> selected automatically.
 
 ## Draft and test
 

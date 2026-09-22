@@ -8,6 +8,18 @@ status: active
 
 # STATUS — 2026-07-11
 
+> [!important] Live overlay — 2026-09-23 approved change window
+> Cal event `2804866` is now 15 minutes and publicly verified. The Retell
+> rollback snapshot is exact, DPAPI-encrypted, outside Git and decrypt-verified.
+> Demo traffic remains held by four live prompt blockers; Retell login now
+> requires Mark to enroll SMS or authenticator MFA before the draft/tool
+> migration can proceed. No Retell prompt or number binding changed.
+>
+> Telegram Nova's more autonomous operator voice, `/focus` and `/next` are
+> locally implemented and tested. They are **not deployed**. External actions
+> remain gated; the unrestricted planner remains off. See
+> [[0020-telegram-autonomy-is-safe-preparation-first]].
+
 > [!important] Superseding current overlay — 2026-09-23
 > The historical July snapshot below is preserved for provenance; it is not the
 > current launch instruction. The first-client lane is five individually

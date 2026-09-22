@@ -9,12 +9,32 @@ tags: [brain, active, session-start]
 
 # 🧭 Active Context
 
+> [!important] September 23 approved change window — partial completion
+> Cal event `2804866` is now **live-verified at 15 minutes**. An exact Retell
+> number/agent/LLM rollback snapshot was encrypted with Windows DPAPI outside
+> Git and verified by decrypting it. The live Retell gate improved from five to
+> **four blockers**: recording consent, labelled simulation, post-demo diagnosis
+> and the 15-minute handoff. Both Cal tools target the correct event but remain
+> legacy and untested. Retell dashboard login is stopped at mandatory MFA
+> enrollment; no MFA method or Retell prompt was changed. Mark must complete MFA
+> before the draft/migration/test/publish sequence can continue.
+
+> [!info] Telegram autonomy — prepared locally, not deployed
+> Nova now acts like a decisive operating partner in Telegram. `/focus` and
+> `/next` choose and prepare the highest-ranked eligible untouched prospect;
+> natural “what next?” requests use the same deterministic route. She asks at
+> most one material question and names exact gates instead of returning a vague
+> refusal. The unrestricted planner remains off, and external messages, calls,
+> bookings, spend, publishing and deployment remain human-gated. See
+> [[0020-telegram-autonomy-is-safe-preparation-first]].
+
 > [!important] September 23 launch gate
-> Demo traffic is **on HOLD**, based on a live GET-only Retell check. The
+> Superseded in part by the change-window update above. Demo traffic remains
+> **on HOLD**, based on a live GET-only Retell check. The
 > inbound number is still bound to the reviewed agent/LLM and both Cal tools
 > target event `2804866`, but the live prompt lacks recording consent, the
 > labelled demo simulation, post-demo diagnosis and the canonical 15-minute
-> ask. Cal duration cannot be independently verified with the local keys; the
+> ask. Cal duration is now independently verified at 15 minutes; the
 > agent also stores “Everything,” the handbook disclosure flag is false, and
 > legacy Cal tools must be migrated. Use
 > `python scripts/retell_inbound_readiness.py` and
