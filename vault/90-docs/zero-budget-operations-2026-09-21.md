@@ -127,3 +127,46 @@ Use individual, researched messages from the existing account where permitted;
 stop on refusal and do not repeatedly message nonresponders. Agency email
 replies can use AgentMail after the existing recipient and approval checks.
 Its terms prohibit unsolicited messaging, so it is not the cold-email lane.
+
+## Inbound demo-call continuation, September 22
+
+The owner selected a simpler first-conversation path: an individual, researched
+Instagram or LinkedIn DM may invite the prospect to call OROVA's inbound demo
+number. The prospect initiates the call; OROVA does not auto-dial them. This
+preserves ADR-0017's “sample is the proof” idea while removing its automated
+outbound-call step. See [[0018-the-prospect-initiates-the-demo-call]].
+
+The local canonical `retell_inbound` source now contains an invited-demo branch,
+AI disclosure, recording-permission boundary, an explicitly labelled simulation,
+honest bottleneck diagnosis and the canonical 15-minute handoff. Four regression
+tests pin those boundaries. This is **prepared locally only**: the live Retell
+prompt has not been backed up, compared, changed or verified. Do not send demo
+traffic until that live check is complete.
+
+Current free-model order remains deliberately narrow:
+
+1. Groq `openai/gpt-oss-120b` is the strongest practical zero-cost primary in
+   the existing code and its key passed a read-only model check.
+2. Gemini 2.5 Flash/Flash-Lite remains the secondary. Free-tier prompts may be
+   used to improve Google's products, so do not route prospect PII, credentials
+   or private client material through the free tier.
+3. OpenRouter stays an emergency free-model-only fallback. The local key is
+   invalid and the no-credit free allowance is small; do not disguise quota
+   failure with a paid fallback.
+4. Cloudflare Workers AI is a possible later fourth provider, not an immediate
+   dependency. Adding another key and adapter before real outreach outcomes
+   would add surface area without solving the current bottleneck.
+
+Nova's learning code already records outcomes and uses conservative
+champion/challenger selection. With no real conversations, it has nothing
+credible to learn from. The next learning improvement is correct event capture
+from five reviewed DMs and any resulting inbound calls—not another model.
+
+### Social publishing gate
+
+Do not publish the existing `carousel_10_why_we_built` or
+`carousel_11_inside_a_call` unchanged. Their images make unsupported history,
+speed and booking claims. `social/carousel_12_demo_is_proof/` is the current
+claim-safe replacement: it invites `DM “DEMO”`, labels the call as a simulation
+and does not expose the number before the live flow is ready. It remains a
+draft until exact post copy and destination receive human approval.

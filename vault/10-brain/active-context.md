@@ -9,6 +9,17 @@ tags: [brain, active, session-start]
 
 # 🧭 Active Context
 
+> [!important] September 22 operating lane
+> The current first-conversation path is **individual researched Instagram or
+> LinkedIn DM → prospect voluntarily calls OROVA's inbound AI-demo number →
+> Nova runs a disclosed simulation → Mark handles the meeting**. OROVA does
+> not auto-dial the prospect. Bulk/automated cold DMs, cold SMS and automated
+> outbound AI calls remain off. The canonical inbound prompt now describes
+> this path, but the live Retell prompt is **not yet verified or updated**;
+> back it up and verify recording consent, the 15-minute handoff and all three
+> OROVA offerings before inviting traffic. See [[0018-the-prospect-initiates-the-demo-call]]
+> and [[2026-09-22-codex-resume-and-inbound-demo]].
+
 > [!important] September 21 update
 > Current operating direction: [[zero-budget-operations-2026-09-21]]. Strict $0
 > pre-revenue workflow, useful Telegram commands, no invented activity. The
