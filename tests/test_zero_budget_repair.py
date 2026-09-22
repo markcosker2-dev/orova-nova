@@ -118,7 +118,7 @@ def test_contact_card_is_draft_only_and_does_not_invent_name_or_email():
     assert "not sent" in card
     assert "Hi there" in card
     assert "Guessed" not in card and "guessed@example.com" not in card
-    assert "https://example.com" in card
+    assert "Website: https://example.com" in card.splitlines()
     write.assert_not_awaited()
 
 
