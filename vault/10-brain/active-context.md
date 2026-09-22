@@ -9,6 +9,27 @@ tags: [brain, active, session-start]
 
 # 🧭 Active Context
 
+> [!important] September 23 launch gate
+> Demo traffic is **on HOLD**, based on a live GET-only Retell check. The
+> inbound number is still bound to the reviewed agent/LLM and both Cal tools
+> target event `2804866`, but the live prompt lacks recording consent, the
+> labelled demo simulation, post-demo diagnosis and the canonical 15-minute
+> ask. Cal duration cannot be independently verified with the local keys; the
+> agent also stores “Everything,” the handbook disclosure flag is false, and
+> legacy Cal tools must be migrated. Use
+> `python scripts/retell_inbound_readiness.py` and
+> [[retell-inbound-demo-launch-runbook-2026-09-23]]. No DM may expose the phone
+> number until the gate passes and Mark approves the final phone test.
+
+> [!info] September 23 reliability update
+> Malformed decision-maker names are now rejected even when stale evidence has
+> positive confidence. The zero-budget LLM order is Groq → Gemini → named
+> OpenRouter free models → `openrouter/free`; the configured OpenRouter key
+> currently returns HTTP 401, so that tier is not operational. Adding a model
+> provider is redundancy, not learning—real improvement comes from recorded
+> outreach outcomes. See [[free-llm-routing-2026-09-23]] and
+> [[0019-free-llm-redundancy-is-not-self-learning]].
+
 > [!important] September 22 operating lane
 > The current first-conversation path is **individual researched Instagram or
 > LinkedIn DM → prospect voluntarily calls OROVA's inbound AI-demo number →

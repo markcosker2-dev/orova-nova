@@ -8,6 +8,22 @@ status: active
 
 # STATUS — 2026-07-11
 
+> [!important] Superseding current overlay — 2026-09-23
+> The historical July snapshot below is preserved for provenance; it is not the
+> current launch instruction. The first-client lane is five individually
+> researched manual Instagram/LinkedIn DMs inviting the prospect to initiate a
+> disclosed inbound AI-demo call. Automated cold calls, cold SMS and automated
+> first-touch DMs remain off. Retell demo traffic is currently **on HOLD** until
+> `python scripts/retell_inbound_readiness.py` exits 0 and Mark approves the
+> final paid phone test. See [[active-context]] and
+> [[retell-inbound-demo-launch-runbook-2026-09-23]].
+>
+> HermesClaw's current zero-cost inference order is Groq → Gemini → OpenRouter
+> free models. The OpenRouter credential returned HTTP 401 on 2026-09-23, so
+> that tier needs a replacement key before it provides redundancy. This does
+> not block Groq/Gemini operation. The old “Google refresh token is the single
+> next action” statement below must not override the live first-client gate.
+
 > Live snapshot. Update whenever the state changes materially.
 
 ## Where the project stands
