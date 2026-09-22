@@ -785,6 +785,41 @@ async def _research(lead: dict) -> dict:
         return {"_error": f"{type(e).__name__}: {e}"}
 
 
+def _safe_owner_for_display(lead: dict) -> str:
+    """Return only a name safe to put in an operator's mouth.
+
+    Prefer the canonical storage rule. The conservative stdlib fallback keeps
+    ``nova.py`` useful when the project environment is unavailable while still
+    refusing role fragments and concatenated team-card text.
+    """
+    owner = (lead.get("owner") or lead.get("owner_name") or "").strip()
+    if not owner:
+        return ""
+    try:
+        sys.path.insert(0, str(ROOT))
+        from app.skills.lead_validator import is_safe_owner_name  # noqa: PLC0415
+        return owner if is_safe_owner_name(
+            owner,
+            owner_confidence=lead.get("owner_confidence") or 0,
+            owner_source=lead.get("owner_source") or "",
+        ) else ""
+    except Exception:                                        # noqa: BLE001
+        parts = owner.split()
+        blocked = {
+            "owner", "founder", "ceo", "cfo", "coo", "president",
+            "principal", "partner", "director", "manager", "general",
+            "chief", "executive", "officer", "operations", "marketing",
+            "sales", "finance", "accounting", "team", "staff",
+        }
+        if not (2 <= len(parts) <= 4):
+            return ""
+        if any(p.lower().strip("'-") in blocked for p in parts):
+            return ""
+        if not all(re.fullmatch(r"[A-Za-z][A-Za-z'\-]*", p) for p in parts):
+            return ""
+        return owner
+
+
 def cmd_brief(args) -> int:
     code, data = http("/api/leads")
     if code in (401, 403):
@@ -830,7 +865,7 @@ def _print_brief(lead: dict, args) -> None:
     lid = lead.get("id")
     crew = _crew_status(lead)
     cover = lead.get("insurance_amt") or 0
-    owner = (lead.get("owner") or "").strip()
+    owner = _safe_owner_for_display(lead)
     first = owner.split()[0] if owner else ""
     score = int(lead.get("icp_score") or lead.get("score") or 0)
 
