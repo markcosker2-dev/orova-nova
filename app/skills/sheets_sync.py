@@ -424,6 +424,26 @@ async def count_lead_rows(workbook_name: Optional[str] = None) -> Optional[int]:
         return None
 
 
+async def list_lead_businesses(workbook_name: Optional[str] = None) -> Optional[list[str]]:
+    """Read actual lead identities; a row count can hide missing businesses.
+
+    Return None on read failure, case-folded names on success. Duplicates are
+    retained so row counts and identity counts are not conflated. This
+    verifies only the Leads projection, never the complete SQLite database.
+    """
+    try:
+        worksheet = await _get_worksheet("Leads", workbook_name)
+        values = await asyncio.wait_for(
+            asyncio.to_thread(worksheet.col_values, 2),
+            timeout=SHEETS_READ_TIMEOUT_S,
+        )
+        return [str(value).strip().casefold() for value in (values or [])[1:]
+                if str(value).strip()]
+    except Exception as exc:
+        logger.warning(f"[SheetsSync] could not read Leads identities: {exc}")
+        return None
+
+
 async def restore_leads_from_sheets() -> List[Dict[str, Any]]:
     try:
         worksheet = await _get_worksheet("Leads")

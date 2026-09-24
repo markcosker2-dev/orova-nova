@@ -61,8 +61,9 @@ def _canonical_icp_line() -> str:
 
 
 NOVA_PERSONA = (
-    "You are Nova, Mark's AI partner at OROVA. OROVA runs Meta ads (Facebook + "
+    "You are Nova, Mark's AI partner at OROVA. OROVA runs Meta ads (Facebook + "  # noqa: S608
     "Instagram) and offers AI lead qualification. Nova assists its sales work.\n\n"
+    # Only the canonical business context contributes dynamic text here.
     f"OROVA's ICP is: {_canonical_icp_line()}.\n"
     "If Mark asks about the ICP, answer with exactly that and nothing broader. "
     "Exotic/luxury automotive is OPPORTUNISTIC ONLY — it is not the ICP, it is not "
@@ -70,6 +71,13 @@ NOVA_PERSONA = (
     "Talk to Mark like a sharp, friendly human colleague — warm, plain-spoken, and brief. "
     "No corporate filler, no buzzwords, no emoji spam (one is fine). Get to the point.\n\n"
     "You are Mark's OPERATING PARTNER, not a dashboard or a passive assistant. "
+    "Keep two workflows distinct: OROVA prospects are researched for individual, "
+    "permitted manual first contact; a future client's opted-in Meta leads may "
+    "be qualified by an authorized AI call. An inbound demo is a labelled "
+    "simulation, not evidence of a real client result. Retell executes an "
+    "authorized call; it never decides whether a call is allowed. "
+    "Use current records and outcomes to choose the next safe preparation; "
+    "never pretend a draft, queue entry, or model suggestion is a completed action.\n\n"
     "Be decisive, candid and concise. Three things that means in practice:\n"
     "- Lead with what it means for him, then the number. 'Nothing has moved since "
     "yesterday' beats reciting the same figures back at him.\n"
@@ -122,14 +130,14 @@ async def pipeline_status(client_id: int = 0) -> str:
     from app.core.hardening import zero_budget_mode
     m = await DatabaseManager.aget_metrics(client_id)
     mode = "$0 preparation mode" if zero_budget_mode() else "Approval-gated mode"
-    return (f"{mode}. Current stored pipeline (not daily activity):\n"
-            f"Leads: {m.get('leads_found', 0)}\n"
-            f"Marked contacted/email sent: {m.get('emails_sent', 0)}\n"
-            f"Marked replied: {m.get('replies_received', 0)}\n"
-            f"Marked meeting booked: {m.get('meetings_booked', 0)}\n"
-            "These are CRM status counts, not independently verified delivery totals.\n"
-            "Use /leads then /contact ID to prepare a first conversation. "
-            "Nothing is sent by those commands.")
+    return (f"{mode}. Here is the stored pipeline, not a daily activity report:\n"
+            f"{m.get('leads_found', 0)} stored leads; "
+            f"{m.get('emails_sent', 0)} marked Contacted/Email Sent; "
+            f"{m.get('replies_received', 0)} marked Replied; "
+            f"{m.get('meetings_booked', 0)} marked Meeting Booked.\n\n"
+            "Those status labels do not prove a message was delivered or a "
+            "meeting happened. My next move is /focus: I'll pick one eligible "
+            "lead and prepare a researched first contact. Nothing is sent.")
 
 
 async def _contact_candidates(lead_id: int = None):
@@ -215,12 +223,11 @@ async def operator_focus() -> str:
     lead_id = int(selected["id"])
     card = await lead_contact_cards(lead_id)
     return (
-        f"My call: work lead #{lead_id} next. I selected the highest-ranked eligible "
-        "untouched record and prepared the contact brief below; nothing was sent or called.\n\n"
+        f"I'd work lead #{lead_id} next. It's the highest-ranked eligible untouched "
+        "record I can see. I prepared the brief; nothing was sent or called.\n\n"
         f"{card}\n\n"
-        "Next move: verify the business/profile match, then send the draft manually on "
-        "the permitted public channel. Bring the actual reply back; I will separate the "
-        "reply, demo call and meeting as distinct outcomes."
+        "Next: verify the profile match and send the draft individually if that "
+        "channel permits it. Bring me the reply so I can track the actual outcome."
     )
 
 
@@ -234,7 +241,7 @@ async def _pipeline_snapshot() -> str:
         m = await DatabaseManager.aget_metrics(0)
         parts.append(
             "CURRENT CRM STATUS COUNTS, not daily activity or verified sends — leads: {leads}, "
-            "marked contacted/email sent: {sent}, marked replied: {rep}, marked meeting booked: {mtg}".format(
+            "status Contacted/Email Sent: {sent}, status Replied: {rep}, status Meeting Booked: {mtg}".format(
                 leads=m.get("leads_found", 0), sent=m.get("emails_sent", 0),
                 rep=m.get("replies_received", 0), mtg=m.get("meetings_booked", 0)))
     except Exception as e:

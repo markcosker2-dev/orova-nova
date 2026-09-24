@@ -165,6 +165,7 @@ def cmd_status(_args) -> int:
     print("  " + "=" * 66)
 
     problems: list[str] = []
+    unknowns: list[str] = []
 
     # build vs origin/main
     code, health = http("/health", auth=False)
@@ -257,18 +258,26 @@ def cmd_status(_args) -> int:
             row("MEMORY", BAD, f"{mem.get('memory_mb', 0):.0f}MB of {mem.get('limit_mb')}MB")
             problems.append("memory critical")
         if h.get("errors"):
-            row("ERRORS", ACT, f"{h['errors']} in the last 24h — nova.py logs --errors")
+            row("ERRORS", ACT, f"{h['errors']} provider failures — nova.py logs --errors")
+            problems.append("inspect provider failures with nova.py logs --errors")
+    else:
+        unknowns.append("production capability and error health could not be read")
+
+    # Neither /health nor /api/health proves a complete SQLite snapshot. Sheets
+    # is only a lead projection, so a green health endpoint is not a deploy gate.
+    row("BACKUP", HOLD, "full SQLite backup/restore is not verified by this check")
+    unknowns.append("verify a complete database backup and restore before deploy")
 
     # gates that stay closed on purpose — reported, never 'fixed'
     row("GATES", HOLD, "CALLS_AUTOPILOT=0 until the ADAD question is answered")
     if "national DNC scrub" in str((h or {}) if isinstance(h, dict) else ""):
         row("DNC", HOLD, "no DNC scrub configured — is_dnc_registered fails OPEN")
 
-    header("BLOCKED ON YOU" if problems else "NOTHING BLOCKING")
+    header("NEEDS ACTION" if problems else "NEEDS VERIFICATION")
     for i, p in enumerate(problems, 1):
         print(f"  {i}. {p}")
-    if not problems:
-        print("  Everything green. The only thing left is a phone call.")
+    for item in unknowns:
+        print(f"  ? {item}")
     return 1 if any("not answering" in p or "cannot read" in p for p in problems) else 0
 
 

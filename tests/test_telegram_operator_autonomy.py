@@ -13,6 +13,8 @@ def test_persona_is_decisive_but_truthful_about_external_actions():
     assert "Ask at most one question" in NOVA_PERSONA
     assert "I stopped at the [name] gate" in NOVA_PERSONA
     assert "unless the system returned direct evidence" in NOVA_PERSONA
+    assert "two workflows distinct" in NOVA_PERSONA
+    assert "Retell executes an authorized call" in NOVA_PERSONA
 
 
 def test_natural_next_move_request_uses_deterministic_focus_route():
@@ -38,7 +40,7 @@ def test_operator_focus_selects_one_lead_and_states_nothing_was_sent():
     assert "lead #42" in result
     assert "nothing was sent or called" in result
     assert "contact card" in result
-    assert "Next move:" in result
+    assert "Next:" in result
 
 
 def test_operator_focus_does_not_fake_progress_when_queue_is_empty():
@@ -50,3 +52,14 @@ def test_operator_focus_does_not_fake_progress_when_queue_is_empty():
         result = asyncio.run(nova_chat.operator_focus())
     assert "do not manufacture activity" in result
     assert "did not send or call anyone" in result
+
+
+def test_status_never_equates_contact_label_with_verified_send():
+    metrics = {"leads_found": 312, "emails_sent": 48,
+               "replies_received": 0, "meetings_booked": 0}
+    with patch("app.core.database.DatabaseManager.aget_metrics",
+               AsyncMock(return_value=metrics)):
+        result = asyncio.run(nova_chat.pipeline_status())
+    assert "48 marked Contacted/Email Sent" in result
+    assert "do not prove a message was delivered" in result
+    assert "/focus" in result

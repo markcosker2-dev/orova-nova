@@ -14,6 +14,22 @@ Diagnose empty pipeline versus unqualified enquiries before proposing a package.
 Commercial terms are unresolved: never invent offers, prices, trials, clients,
 results, urgency, crew size, or contact consent.
 
+## Engineering mission, distilled from Mark's master prompt
+
+Keep two lanes separate: OROVA's own researched, individual prospecting and
+future clients' consent-checked inbound Meta-lead qualification. Retell is an
+executor for authorized calls, never a legal decision maker. AI may reason and
+draft; deterministic code owns permission, side effects, state transitions,
+idempotency and result verification. Database/events are truth; Sheets is a
+projection and partial lead-recovery tier, not a full database backup.
+
+Inspect the real caller/data contract before a change, patch the smallest
+material failure, run targeted and full gates, then verify external state.
+Prioritize replies and qualified opportunities over accumulating more leads.
+Do not convert the aspirational heartbeat/memory architecture into a second
+state store or a free-form high-impact agent. Autonomy means safe preparation
+and truthful escalation while $0 and consent gates remain closed.
+
 Extend the existing database, evidence ledger, event log and router before
 introducing abstractions. Every change must improve data quality, conversion,
 or reliability. Prefer disabling unnecessary runtime work to deleting connected

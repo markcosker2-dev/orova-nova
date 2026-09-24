@@ -48,7 +48,8 @@ def probe_video(path: Path) -> dict:
         "format=duration,size:stream=codec_type,codec_name,width,height,r_frame_rate,sample_rate,bit_rate",
         "-of", "json", str(path),
     ]
-    result = subprocess.run(command, capture_output=True, text=True, timeout=20, check=True)
+    # Fixed ffprobe executable and fixed flags; the path is one argv element.
+    result = subprocess.run(command, capture_output=True, text=True, timeout=20, check=True)  # noqa: S603
     return json.loads(result.stdout)
 
 
