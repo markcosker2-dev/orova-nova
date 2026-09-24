@@ -102,6 +102,17 @@ def test_merge_empty_is_fabrication_safe():
     assert r.name == "" and r.confidence == 0 and r.ledger() == []
 
 
+def test_merge_rejects_concatenated_team_card_fragment_even_when_confident():
+    evs = [
+        Evidence("Kalin CFO Daisy General", 90, "website_team", "page_scrape", TODAY),
+        Evidence("Mark Beirwagen", 70, "website_about", "page_scrape", TODAY,
+                 title="Founder"),
+    ]
+    r = merge_candidates(evs)
+    assert r.name == "Mark Beirwagen"
+    assert r.confidence == 70
+
+
 def test_higher_confidence_candidate_wins():
     evs = [
         Evidence("Alex Reed", 85, "ca_sos", "registry_api", TODAY, title="Owner"),
@@ -206,6 +217,15 @@ def test_apply_ignores_unconfident_result():
     assert lead["owner"] == ""  # below CONFIDENCE_MIN, not stored
 
 
+def test_apply_rejects_confident_but_unsafe_owner_fragment():
+    lead = {"business": "Stone Creek Building", "owner": "", "owner_confidence": 0}
+    dm = DecisionMakerResult(name="Kalin CFO Daisy General", confidence=90,
+                             source="website_team")
+    apply_decision_maker(lead, dm)
+    assert lead["owner"] == ""
+    assert lead["owner_confidence"] == 0
+
+
 # ── reenrich lane over stored leads ──────────────────────────────────────────
 
 def test_reenrich_upgrades_low_confidence_lead():
@@ -273,6 +293,30 @@ def test_storage_gate_still_drops_unvetted_fragment():
     result = validate_lead_for_storage({"business": "X", "owner": "THANKS TO",
                                         "owner_confidence": 0})
     assert result["lead"]["owner"] == ""
+
+
+def test_storage_gate_drops_vetted_metadata_when_name_is_unsafe():
+    from app.skills.lead_validator import validate_lead_for_storage
+    result = validate_lead_for_storage({
+        "business": "Stone Creek Building",
+        "owner": "Kalin CFO Daisy General",
+        "owner_title": "Owner",
+        "owner_source": "website_team",
+        "owner_confidence": 90,
+        "evidence_json": '[{"source":"website_team"}]',
+    })
+    assert result["lead"]["owner"] == ""
+    assert result["lead"]["owner_title"] == ""
+    assert result["lead"]["owner_source"] == ""
+    assert result["lead"]["owner_confidence"] == 0
+    assert result["lead"]["evidence_json"] == ""
+
+
+def test_contact_confidence_never_trusts_unsafe_name_metadata():
+    from app.skills.lead_validator import contact_confidence
+    lead = {"owner": "Kalin CFO Daisy General", "owner_confidence": 90,
+            "owner_source": "website_team"}
+    assert contact_confidence(lead)["owner"] == 0
 
 
 def test_confidence_uses_waterfall_owner_confidence():

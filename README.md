@@ -1,242 +1,49 @@
-<p align="center">
-  <img src="resources/feature.png" alt="HermesClaw Logo" />
-</p>
+# OROVA Nova
 
+Nova is OROVA's sales assistant: a Python/FastAPI service, a Telegram interface,
+and the Mission Control web dashboard. The business is pre-revenue and the
+operating budget is $0.
 
-<h1 align="center">HermesClaw</h1>
+Start with [the current operating guide](vault/90-docs/zero-budget-operations-2026-09-21.md)
+and [Codex instructions](AGENTS.md). The Obsidian vault contains the business
+decisions and historical handoffs; old notes are not evidence of current service state.
 
-<p align="center">
-  <strong>A desktop control plane for OpenClaw, Hermes agents, channels, skills, and local AI workflows</strong>
-</p>
+## What works without paid outreach
 
-<p align="center">
-  <a href="#overview">Overview</a> ·
-  <a href="#why-hermesclaw-is-different">Why Different</a> ·
-  <a href="#core-capabilities">Capabilities</a> ·
-  <a href="#quick-start">Quick Start</a> ·
-  <a href="#development">Development</a>
-</p>
+- Research and store prospects using existing sources, evidence and quality gates.
+- Review the pipeline with Telegram `/status` and `/leads`.
+- Prepare recorded contact details and an unsent first-message draft with `/contact ID`.
+- Retain recent chat context; `/forget` clears only that context.
+- Monitor incoming email, preserve approval/opt-out gates, and back up data.
 
-<p align="center">
-  <a href="README_CN.md">中文</a> · <a href="README_ES.md">Español</a> · <a href="README_HI.md">Hindi</a> · <a href="README_AR.md">العربية</a> · <a href="README_PT.md">Português</a> · <a href="README_FR.md">Français</a> · <a href="README_RU.md">Русский</a> · <a href="README_JA.md">日本語</a> · <a href="README_DE.md">Deutsch</a> · English
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platform" />
-  <img src="https://img.shields.io/badge/status-in%20development-yellow" alt="Status: in development" />
-  <img src="https://img.shields.io/badge/electron-40+-47848F?logo=electron" alt="Electron" />
-  <img src="https://img.shields.io/badge/react-19-61DAFB?logo=react" alt="React" />
-  <img src="https://img.shields.io/badge/license-MIT-green" alt="License" />
-</p>
-
-<p align="center">
-  <a href="https://github.com/NextAgentX/HermesClaw">
-    <img src="https://img.shields.io/github/stars/NextAgentX/HermesClaw?style=social" alt="GitHub Stars" />
-  </a>
-</p>
-
-<p align="center">
-  <b>If HermesClaw saves you time or sparks ideas, a ⭐ on GitHub means a lot — it helps others discover this project.</b>
-</p>
-
----
-
-## Overview
-
-HermesClaw is an open-source desktop workspace for running and managing AI agents. It combines the OpenClaw gateway, HermesAgent runtime, model-provider configuration, channels, skills, tasks, logs, and runtime maintenance into one cross-platform application.
-
-The goal is not to build another chat-only shell. HermesClaw is designed as a local agent operations console: users get a graphical way to configure and operate agent workflows, while developers get a TypeScript/Electron codebase that packages OpenClaw, HermesAgent, plugin mirrors, preinstalled skills, and desktop update flows into a reproducible app.
-
-HermesClaw is useful when you want a local-first agent desktop that can talk to model providers, run agent skills, connect to real messaging channels, and keep the underlying runtime visible and repairable.
-
-## Why HermesClaw Is Different
-
-- **Agent runtime control plane, not only chat**: HermesClaw exposes the practical parts of running agents: runtime status, provider keys, channels, skills, scheduled tasks, logs, updates, rollback, and repair.
-- **OpenClaw + Hermes in one desktop flow**: The default combined mode lets OpenClaw handle gateway/channel orchestration while HermesAgent is packaged as a managed runtime resource.
-- **Local-first and inspectable**: Runtime resources are bundled on disk, logs are reachable from the UI, and Settings includes doctor/repair flows instead of hiding failures behind a generic error.
-- **Channel-ready by design**: Third-party OpenClaw channel plugins such as DingTalk, WeCom, Feishu/Lark, and Weixin are bundled or mirrored so packaged builds can install and upgrade them without asking users to manage `node_modules` manually.
-- **Model-provider flexibility**: Users can configure API keys, OAuth-based providers, GitHub Copilot authorization, and OpenAI-compatible custom endpoints from the desktop app.
-- **Developer-friendly packaging**: Build scripts prepare OpenClaw, HermesAgent, uv, Node binaries, preinstalled skills, extension bridges, installer assets, and platform-specific resources for Electron packaging.
-
-## Core Capabilities
-
-- **Graphical onboarding**: First-run setup covers language, runtime mode, model providers, and built-in skills.
-- **Agent chat workspace**: Markdown conversation UI with history and `@agent` routing for switching agent context.
-- **Runtime management**: Start, stop, restart, install, update, roll back, repair, and inspect OpenClaw and Hermes-related runtime components.
-- **Provider management**: Configure API keys, OAuth credentials, default provider selection, compatibility options, custom OpenAI-compatible base URLs, and GitHub Copilot auth.
-- **Skills and marketplace flows**: Browse, install, enable, and inspect OpenClaw skills, including ClawHub-backed skill and marketplace integration.
-- **Channels and accounts**: Manage external channel plugins, account bindings, agent bindings, and channel startup synchronization.
-- **Scheduled tasks**: Configure recurring jobs that connect agents to real workflows instead of one-off chat sessions.
-- **Desktop updates**: Packaged builds use GitHub Releases for HermesClaw app updates and include runtime update/rollback flows for bundled agent resources.
-- **Cross-platform app shell**: Electron + React + TypeScript renderer/main architecture for macOS, Windows, and Linux.
-
-## Use Cases
-
-- Run OpenClaw/Hermes locally without managing every runtime command by hand.
-- Configure model providers and credentials through a desktop UI instead of editing config files.
-- Connect agents to messaging channels and keep channel plugins updated in packaged builds.
-- Inspect and repair local runtime state when gateway, plugin, or model configuration changes.
-- Develop, test, and package a complete agent desktop distribution around OpenClaw and HermesAgent.
-
-## Screenshots
-
-<p align="center">
-  <img src="resources/screenshot/chat.jpg" style="width: 100%; height: auto;" alt="HermesClaw chat" />
-</p>
-
-<p align="center">
-  <img src="resources/screenshot/agents.jpg" style="width: 100%; height: auto;" alt="HermesClaw agents" />
-</p>
-
-<p align="center">
-  <img src="resources/screenshot/skills.jpg" style="width: 100%; height: auto;" alt="HermesClaw skills" />
-</p>
-
-<p align="center">
-  <img src="resources/screenshot/channels.jpg" style="width: 100%; height: auto;" alt="HermesClaw channels" />
-</p>
-
-<p align="center">
-  <img src="resources/screenshot/tasks.jpg" style="width: 100%; height: auto;" alt="HermesClaw tasks" />
-</p>
-
-<p align="center">
-  <img src="resources/screenshot/model.jpg" style="width: 100%; height: auto;" alt="HermesClaw model" />
-</p>
-
-<p align="center">
-  <img src="resources/screenshot/provider.jpg" style="width: 100%; height: auto;" alt="HermesClaw provider" />
-</p>
-
-<p align="center">
-  <img src="resources/screenshot/setting.jpg" style="width: 100%; height: auto;" alt="HermesClaw settings" />
-</p>
-
-## Runtime Architecture
-
-HermesClaw has three main layers:
-
-- **Renderer app**: React UI for chat, settings, setup, providers, channels, skills, and tasks.
-- **Electron main process**: Owns the app lifecycle, secure IPC/API bridge, update handling, extension registry, gateway management, and runtime services.
-- **Bundled agent runtimes**: OpenClaw gateway resources, HermesAgent Python runtime, OpenClaw plugin mirrors, CLI wrappers, uv, and platform-specific binaries.
-
-OpenClaw-to-Hermes data flow:
-
-```mermaid
-graph LR
-  A[User message] --> OC(OpenClaw gateway)
-  OC -->|Parse message and channel context| B{Need Hermes?}
-  B -- Yes --> CallHermes[Hermes bridge]
-  CallHermes -->|STDIN/HTTP| HermesCore[HermesAgent runtime]
-  HermesCore -->|Result| CallHermes
-  CallHermes -->|Return| OC
-  B -- No --> OCAgent[OpenClaw agent flow]
-  OCAgent -->|Generate reply| OC
-  OC -->|Send response| C[User or channel]
-```
-
-## Quick Start
-
-### Runtime environment
-
-- **Node.js**: Node.js 24 is recommended to match the CI environment.
-- **Python**: HermesAgent packaging uses Python 3.11.10; `pnpm run init` downloads the uv runtime, and HermesAgent builds/packages create the matching Python virtual environment through uv.
-- **Package manager**: Use pnpm 10.31.0, as locked by the project's `packageManager` field.
-- **Operating systems**: macOS, Windows, and Linux are supported; local development needs the Electron runtime environment for the target platform.
-- **Ports**: The development server uses `5173` by default, and OpenClaw Gateway uses `18789` by default. See `.env.example` if you need to change them.
-- **OpenClaw version**: The packaged baseline is pinned by `package.json` to `openclaw@2026.4.27`; builds can override it with `OPENCLAW_VERSION` or `OPENCLAW_PACKAGE_SPEC`.
-
-Clone this repository, then run the following commands in the project directory:
-
-```bash
-cd HermesClaw
-pnpm run init
-pnpm dev
-```
-
-## Packaging
-
-Build a local Windows installer:
-
-```bash
-pnpm run package:win
-```
-
-Build other platforms:
-
-```bash
-pnpm run package:mac
-pnpm run package:linux
-```
-
-Packaging runs the same resource preparation used by release builds: extension bridge generation, Vite build, OpenClaw bundle, OpenClaw plugin mirrors, HermesAgent bundle, preinstalled skills, and Electron Builder packaging. Output goes to `release/`.
-
-Do not run `pnpm run release` unless you intend to publish. The release workflow can push version tags and publish artifacts.
+`ZERO_BUDGET_MODE=1` defaults on: paid Retell calls and automated cold emails are
+blocked, speculative CEO auto-execution and unnecessary scheduled work are off.
+Free-tier API limits still apply. Groq/Gemini billing settings must be checked in
+their accounts; possessing a key does not establish that it is free.
 
 ## Development
 
-Common commands:
+Use Python 3.11 or 3.12. Install `requirements.txt` plus `pytest pytest-asyncio`.
+Run `python -m pytest tests -q`, `python scripts/compile_knowledge.py --check`,
+and `python scripts/check_secrets.py`.
 
-```bash
-pnpm install
-pnpm run init
-pnpm dev
-pnpm run typecheck
-pnpm run test
-pnpm run build:vite
-```
+The app starts with `uvicorn app.main:app --host 127.0.0.1 --port 18790`.
+**Do not run it locally using production credentials**: startup registers the
+Telegram webhook and starts scheduled jobs. Use isolated test data and dummy
+credentials for local verification.
 
-Focused packaging commands:
+## Deployment and data
 
-```bash
-pnpm run bundle:openclaw
-pnpm run bundle:openclaw-plugins
-pnpm run bundle:hermes-agent
-pnpm run bundle:preinstalled-skills
-pnpm run ext:bridge
-```
+Render uses the Dockerfile and serves Mission Control from `mission-control/`.
+Check the exact build SHA at `/health`, not just HTTP 200. Free Render disk is
+ephemeral. Sheets preserves leads; a working full database backup is needed for
+conversation, approval, suppression and event state. Read the operating guide
+before deploying, particularly its expired Google Drive authorization warning.
 
-Project structure:
+No contact records, keys, raw production logs or database exports belong in this
+public repository. Business facts originate in `knowledge/facts/company.json`;
+do not independently edit generated pricing or ICP projections.
 
-```text
-HermesClaw/
-├── electron/        # Electron main process, runtime services, gateway management, preload
-├── src/             # React renderer application
-├── resources/       # Runtime resources, CLI wrappers, screenshots, and bundled assets
-├── scripts/         # Build, packaging, installer, and maintenance scripts
-├── shared/          # Shared constants and cross-process types
-└── tests/           # Unit and end-to-end tests
-```
-
-## Contributing
-
-Issues, documentation improvements, translations, bug fixes, tests, packaging fixes, and feature suggestions are welcome. Good contributions keep the change focused, explain the user impact, and include verification steps.
-
-Useful contribution areas include:
-
-- Improving Windows/macOS/Linux packaging reliability.
-- Extending channel plugin support and runtime dependency bundling.
-- Improving provider configuration and compatibility behavior.
-- Expanding tests for runtime, gateway, and settings flows.
-- Improving README, release notes, and localized documentation.
-
-## Acknowledgements
-
-HermesClaw was made possible with thanks to OpenClaw, HermesAgent, and ClawX.
-
-- **OpenClaw**: Provides the agent gateway and runtime foundation.
-- **HermesAgent**: Inspired Hermes integration, agent runtime design, and bridge direction.
-- **ClawX**: Provided important references for desktop product shape, interaction experience, and project foundation.
-
-Thanks to everyone who contributes ideas, code, tests, documentation, and feedback.
-
-## License
-
-HermesClaw is open source under the [MIT License](LICENSE).
-
----
-
-<p align="center">
-  <b>Found HermesClaw useful? Give it a ⭐ on GitHub — it helps the project grow and reach more developers building with local AI agents.</b><br/>
-  <a href="https://github.com/NextAgentX/HermesClaw">⭐ Star HermesClaw on GitHub</a>
-</p>
+The former Electron/HermesClaw desktop application is retained on
+`archive/electron-gui`; its old setup instructions do not apply to this service.
+See [LICENSE](LICENSE).

@@ -12,8 +12,11 @@ from unittest.mock import AsyncMock, patch
 
 def _run_hunt():
     from app.worker import run_lead_hunt_slow_lane
-    return asyncio.run(run_lead_hunt_slow_lane(client_id=0, niche="exotic car dealer",
-                                               location="California"))
+    # Other hunt tests exercise the process-global daily counter. Keep this
+    # suite independent of execution order in the full test run.
+    with patch("app.worker.daily_hunt_counter", 0):
+        return asyncio.run(run_lead_hunt_slow_lane(client_id=0, niche="exotic car dealer",
+                                                   location="California"))
 
 
 def _common_patches(found_leads):
@@ -49,6 +52,49 @@ def test_hunt_without_leads_does_not_snapshot():
          patches[6] as mock_backup:
         _run_hunt()
     mock_backup.assert_not_awaited()
+
+
+def test_hunt_reports_sheet_status_only_after_persistence():
+    lead = {"business": "Vivid Motors", "url": "https://vividmotors.com",
+            "owner_name": "", "email": "", "phone": "", "score": 0}
+    patches = _common_patches([lead])
+    events = []
+
+    async def persist(*, recent_count, source, lead_ids):
+        assert (recent_count, source, lead_ids) == (1, "hunt", [7])
+        events.append("persist")
+        return {"sheets_synced": 1, "sheets_total": 1, "verified": True}
+
+    async def report(message):
+        events.append("report")
+        assert "OROVA CRM Google Sheet" in message
+        assert "backup is not verified" not in message
+
+    with patches[0], patches[1], patches[2], patches[3], patches[4], \
+         patch("app.worker.send_telegram_report", side_effect=report), \
+         patch("app.worker.DatabaseManager.get_state", new_callable=AsyncMock,
+               return_value=None), \
+         patch("app.worker.DatabaseManager.set_state", new_callable=AsyncMock), \
+         patch("app.core.durability.persist_leads_durably", side_effect=persist):
+        _run_hunt()
+    assert events == ["persist", "report"]
+
+
+def test_hunt_does_not_claim_sheet_save_when_unverified():
+    lead = {"business": "Vivid Motors", "url": "https://vividmotors.com",
+            "owner_name": "", "email": "", "phone": "", "score": 0}
+    patches = _common_patches([lead])
+    with patches[0], patches[1], patches[2], patches[3], patches[4], \
+         patch("app.worker.send_telegram_report", new_callable=AsyncMock) as report, \
+         patch("app.worker.DatabaseManager.get_state", new_callable=AsyncMock,
+               return_value=None), \
+         patch("app.worker.DatabaseManager.set_state", new_callable=AsyncMock), \
+         patch("app.core.durability.persist_leads_durably", new_callable=AsyncMock,
+               return_value={"sheets_synced": 0, "sheets_total": 1,
+                             "verified": False}):
+        _run_hunt()
+    assert report.await_count == 1
+    assert "backup is not verified" in report.await_args.args[0]
 
 
 def test_backup_failure_does_not_fail_the_hunt():

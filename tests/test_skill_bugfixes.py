@@ -34,10 +34,15 @@ def test_gmail_non_bounce_passes_through():
 def test_sheets_outcome_notes_path_awaits_cell():
     """The notes branch must await the cell lookup before reading .value."""
     ws = MagicMock()
-    ws.col_values.return_value = ["ID", "5"]           # header + our lead at row 2
+    ws.get_all_values.return_value = [
+        ["ID", "Business"],
+        ["5", "Example Builder"] + [""] * 11 + ["WA"],
+    ]
     ws.cell.return_value = SimpleNamespace(value="prior note")
     ws.update_cell.return_value = None
-    with patch.object(sheets_sync, "_get_worksheet", AsyncMock(return_value=ws)):
+    with patch.object(sheets_sync, "_get_worksheet", AsyncMock(return_value=ws)), \
+         patch("app.core.database.DatabaseManager.fetchone", new_callable=AsyncMock,
+               return_value={"business": "Example Builder", "url": "", "state": "WA"}):
         res = asyncio.run(sheets_sync.sync_lead_outcome_to_sheets(
             lead_id=5, action="email_sent", result="sent", details="follow-up",
         ))

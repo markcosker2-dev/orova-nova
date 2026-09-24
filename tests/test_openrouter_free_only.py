@@ -9,16 +9,23 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from app.core.ai_client import UnifiedAIClient
+from app.core.ai_client import UnifiedAIClient, _is_zero_cost_openrouter_model
 from tests.test_provider_chain_resilience import _bare_client, _completions
 
 
 def test_all_configured_openrouter_models_are_free():
     # The shipped config must already be free-only.
     for m in UnifiedAIClient.ROLE_MODELS.values():
-        assert m.endswith(":free"), m
+        assert _is_zero_cost_openrouter_model(m), m
     for m in UnifiedAIClient.FALLBACK_CHAIN:
-        assert m.endswith(":free"), m
+        assert _is_zero_cost_openrouter_model(m), m
+
+
+def test_official_free_router_is_allowed_but_similar_paid_names_are_not():
+    assert _is_zero_cost_openrouter_model("openrouter/free")
+    assert _is_zero_cost_openrouter_model("google/gemma-4-31b-it:free")
+    assert not _is_zero_cost_openrouter_model("openrouter/auto")
+    assert not _is_zero_cost_openrouter_model("openai/gpt-4o")
 
 
 def test_paid_model_is_dropped_from_openrouter_chain():
@@ -58,3 +65,21 @@ def test_allow_paid_env_opts_in():
          patch.dict(os.environ, {"OPENROUTER_ALLOW_PAID": "1"}):
         asyncio.run(client.chat("hi"))
     assert called == ["openai/gpt-4o"]  # explicit opt-in honored
+
+
+def test_official_free_router_survives_zero_budget_filter():
+    called = []
+
+    async def capture(**kw):
+        called.append(kw["model"])
+        return SimpleNamespace(choices=[SimpleNamespace(
+            message=SimpleNamespace(content="ok", tool_calls=None))])
+
+    client = _bare_client(primary=_completions(capture))
+    with patch.object(UnifiedAIClient, "ROLE_MODELS",
+                      {"default": "openrouter/free", "nova": "openrouter/free"}), \
+         patch.object(UnifiedAIClient, "FALLBACK_CHAIN", ["openrouter/free"]), \
+         patch.dict(os.environ, {}, clear=False):
+        os.environ.pop("OPENROUTER_ALLOW_PAID", None)
+        asyncio.run(client.chat("hi"))
+    assert called == ["openrouter/free"]

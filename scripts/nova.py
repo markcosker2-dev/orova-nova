@@ -165,6 +165,7 @@ def cmd_status(_args) -> int:
     print("  " + "=" * 66)
 
     problems: list[str] = []
+    unknowns: list[str] = []
 
     # build vs origin/main
     code, health = http("/health", auth=False)
@@ -188,7 +189,7 @@ def cmd_status(_args) -> int:
                 problems.append(f"{field} is {val}")
 
     # data — the field-level check, because a row count reconciles either way
-    code, leads = http("/api/leads")
+    code, leads = http("/api/leads?limit=2000")
     if code == 200:
         rows = leads.get("leads", leads) if isinstance(leads, dict) else leads
         rows = rows if isinstance(rows, list) else []
@@ -257,18 +258,26 @@ def cmd_status(_args) -> int:
             row("MEMORY", BAD, f"{mem.get('memory_mb', 0):.0f}MB of {mem.get('limit_mb')}MB")
             problems.append("memory critical")
         if h.get("errors"):
-            row("ERRORS", ACT, f"{h['errors']} in the last 24h — nova.py logs --errors")
+            row("ERRORS", ACT, f"{h['errors']} provider failures — nova.py logs --errors")
+            problems.append("inspect provider failures with nova.py logs --errors")
+    else:
+        unknowns.append("production capability and error health could not be read")
+
+    # Neither /health nor /api/health proves a complete SQLite snapshot. Sheets
+    # is only a lead projection, so a green health endpoint is not a deploy gate.
+    row("BACKUP", HOLD, "full SQLite backup/restore is not verified by this check")
+    unknowns.append("verify a complete database backup and restore before deploy")
 
     # gates that stay closed on purpose — reported, never 'fixed'
     row("GATES", HOLD, "CALLS_AUTOPILOT=0 until the ADAD question is answered")
     if "national DNC scrub" in str((h or {}) if isinstance(h, dict) else ""):
         row("DNC", HOLD, "no DNC scrub configured — is_dnc_registered fails OPEN")
 
-    header("BLOCKED ON YOU" if problems else "NOTHING BLOCKING")
+    header("NEEDS ACTION" if problems else "NEEDS VERIFICATION")
     for i, p in enumerate(problems, 1):
         print(f"  {i}. {p}")
-    if not problems:
-        print("  Everything green. The only thing left is a phone call.")
+    for item in unknowns:
+        print(f"  ? {item}")
     return 1 if any("not answering" in p or "cannot read" in p for p in problems) else 0
 
 
@@ -558,8 +567,9 @@ def cmd_logs(args) -> int:
 def cmd_deploy(args) -> int:
     """Watch a deploy land, then check the data survived it.
 
-    Render's disk is ephemeral: every deploy destroys the DB and restores from
-    the Leads sheet. A reconciling ROW COUNT proves nothing about fields — cover
+    Render's disk is ephemeral: a deploy restores a full snapshot when available,
+    otherwise it falls back to the Leads sheet. A reconciling ROW COUNT proves
+    nothing about fields — cover
     went 30 -> 10 across one deploy while the count reconciled at 40/40 — so
     this compares the fields too, and says which ones moved.
     """
@@ -589,7 +599,8 @@ def cmd_deploy(args) -> int:
 
 
 def _snapshot() -> dict:
-    code, leads = http("/api/leads")
+    # The API defaults to 100 rows. A truncated snapshot can conceal data loss.
+    code, leads = http("/api/leads?limit=2000")
     if code != 200:
         return {}
     rows = leads.get("leads", leads) if isinstance(leads, dict) else leads
@@ -785,6 +796,41 @@ async def _research(lead: dict) -> dict:
         return {"_error": f"{type(e).__name__}: {e}"}
 
 
+def _safe_owner_for_display(lead: dict) -> str:
+    """Return only a name safe to put in an operator's mouth.
+
+    Prefer the canonical storage rule. The conservative stdlib fallback keeps
+    ``nova.py`` useful when the project environment is unavailable while still
+    refusing role fragments and concatenated team-card text.
+    """
+    owner = (lead.get("owner") or lead.get("owner_name") or "").strip()
+    if not owner:
+        return ""
+    try:
+        sys.path.insert(0, str(ROOT))
+        from app.skills.lead_validator import is_safe_owner_name  # noqa: PLC0415
+        return owner if is_safe_owner_name(
+            owner,
+            owner_confidence=lead.get("owner_confidence") or 0,
+            owner_source=lead.get("owner_source") or "",
+        ) else ""
+    except Exception:                                        # noqa: BLE001
+        parts = owner.split()
+        blocked = {
+            "owner", "founder", "ceo", "cfo", "coo", "president",
+            "principal", "partner", "director", "manager", "general",
+            "chief", "executive", "officer", "operations", "marketing",
+            "sales", "finance", "accounting", "team", "staff",
+        }
+        if not (2 <= len(parts) <= 4):
+            return ""
+        if any(p.lower().strip("'-") in blocked for p in parts):
+            return ""
+        if not all(re.fullmatch(r"[A-Za-z][A-Za-z'\-]*", p) for p in parts):
+            return ""
+        return owner
+
+
 def cmd_brief(args) -> int:
     code, data = http("/api/leads")
     if code in (401, 403):
@@ -830,7 +876,7 @@ def _print_brief(lead: dict, args) -> None:
     lid = lead.get("id")
     crew = _crew_status(lead)
     cover = lead.get("insurance_amt") or 0
-    owner = (lead.get("owner") or "").strip()
+    owner = _safe_owner_for_display(lead)
     first = owner.split()[0] if owner else ""
     score = int(lead.get("icp_score") or lead.get("score") or 0)
 

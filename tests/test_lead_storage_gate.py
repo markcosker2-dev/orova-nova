@@ -294,6 +294,8 @@ LEADS_SCHEMA = """
         phone TEXT, vertical TEXT, status TEXT DEFAULT 'New', notes TEXT,
         icebreaker TEXT, score REAL DEFAULT 0, client_id INTEGER DEFAULT 0,
         email_status TEXT, owner_title TEXT, linkedin_url TEXT,
+        owner_source TEXT, owner_confidence INTEGER DEFAULT 0,
+        evidence_json TEXT DEFAULT '',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP
     );
@@ -331,6 +333,16 @@ def hygiene_db(tmp_path, monkeypatch):
     # 4: a fully clean, already-contacted lead — untouched (score preserved)
     conn.execute(ins, ("Legacy Motors", "Ann Kim", "ann@legacymotors.com",
                        "+14047334400", "https://legacymotors.com", "dealer", "Email Sent", 60))
+    # 5: a real business whose scraper concatenated adjacent team-card text;
+    # confidence/provenance must be cleared with the unsafe value so the
+    # waterfall can repair it on its next pass.
+    conn.execute(ins, ("Stone Creek Building", "Kalin CFO Daisy General", "",
+                       "+14047334400", "https://stonecreekbuilding.com",
+                       "custom home builder", "New", 70))
+    conn.execute(
+        "UPDATE leads SET owner_title='Owner', owner_source='website_team', "
+        "owner_confidence=90, evidence_json='[{\"source\":\"website_team\"}]' WHERE id=5"
+    )
     conn.commit()
 
     import app.core.lead_hygiene as hygiene
@@ -357,6 +369,22 @@ def test_sweep_quarantines_prod_junk_and_cleans_partial_rows(hygiene_db):
     assert rows[3]["score"] == 76
     # Row 4: contacted + already clean — completely untouched
     assert rows[4]["score"] == 60 and rows[4]["status"] == "Email Sent"
+    # Row 5: unsafe owner and all its authority metadata are removed. It is not
+    # replaced with a guessed person; owner_confidence=0 makes reenrichment
+    # eligible to find a defensible name later.
+    assert rows[5]["owner"] == ""
+    assert rows[5]["owner_title"] == ""
+    assert rows[5]["owner_source"] == ""
+    assert rows[5]["owner_confidence"] == 0
+    assert rows[5]["evidence_json"] == ""
+
+
+def test_nova_brief_hides_unsafe_owner_name():
+    from scripts.nova import _safe_owner_for_display
+    lead = {"owner": "Kalin CFO Daisy General", "owner_confidence": 90,
+            "owner_source": "website_team"}
+    assert _safe_owner_for_display(lead) == ""
+    assert _safe_owner_for_display({"owner": "Mark Beirwagen"}) == "Mark Beirwagen"
 
 
 def test_sweep_is_idempotent(hygiene_db):

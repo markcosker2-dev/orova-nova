@@ -9,7 +9,8 @@ valuable lead state must call persist_leads_durably() afterwards:
 
     Tier 1  Leads sheet sync      ALWAYS runs. Service-account credential
                                   (GOOGLE_CREDENTIALS_JSON), which does not
-                                  expire. This is the boot-restore source.
+                                  expire. This is a partial lead-recovery
+                                  source, NOT a full SQLite backup.
     Tier 2  Google Drive snapshot Optional extra. Higher fidelity (leads +
                                   learning data), but its credential is
                                   fragile — see below. Never gates Tier 1.
@@ -74,13 +75,16 @@ SHEETS_SYNC_PACING_S = 1.1
 SHEETS_PACING_THRESHOLD = 10
 
 
-async def persist_leads_durably(recent_count: int = 25, source: str = "?") -> dict:
+async def persist_leads_durably(recent_count: int = 25, source: str = "?",
+                                lead_ids: list[int] | None = None) -> dict:
     """Sync the most recent `recent_count` leads to Sheets, then attempt an
     optional full-fidelity Drive snapshot.
 
     Returns {"sheets_synced": int, "sheets_total": int, "drive": bool}.
-    `drive` False is NOT a failure — it is the expected steady state until
-    the OAuth consent screen is published. Lead data is safe either way.
+    `verified=True` means current distinct lead business identities are
+    represented in Sheets. It does NOT mean all lead fields or other database
+    state can survive a restart. `drive=False` means the full-fidelity backup
+    was not confirmed; do not treat this as deployment-ready.
     """
     result = {"sheets_synced": 0, "sheets_total": 0, "drive": False}
 
@@ -89,9 +93,22 @@ async def persist_leads_durably(recent_count: int = 25, source: str = "?") -> di
     try:
         from app.core.database import DatabaseManager
         from app.skills.sheets_sync import sync_lead_to_sheets
-        rows = await DatabaseManager.query(
-            "SELECT * FROM leads WHERE COALESCE(status,'') != 'Invalid' "
-            "ORDER BY id DESC LIMIT ?", (recent_count,), fetchall=True)
+        if lead_ids is not None:
+            ids = tuple(int(i) for i in lead_ids if isinstance(i, int) and i > 0)
+            if ids:
+                placeholders = ",".join("?" for _ in ids)
+                # The interpolated fragment is only question marks made from
+                # validated positive integer IDs; values stay parameterized.
+                rows = await DatabaseManager.query(
+                    f"SELECT * FROM leads WHERE id IN ({placeholders}) "  # noqa: S608
+                    "AND COALESCE(status,'') != 'Invalid' ORDER BY id DESC",
+                    ids, fetchall=True)
+            else:
+                rows = []
+        else:
+            rows = await DatabaseManager.query(
+                "SELECT * FROM leads WHERE COALESCE(status,'') != 'Invalid' "
+                "ORDER BY id DESC LIMIT ?", (recent_count,), fetchall=True)
         rows = rows or []
         result["sheets_total"] = len(rows)
         # Pace only a bulk run. A hunt's five leads pay nothing.
@@ -125,9 +142,9 @@ async def persist_leads_durably(recent_count: int = 25, source: str = "?") -> di
         # backup, and the only thing worse than not having one is believing you
         # do. This costs one extra API call per run.
         try:
-            from app.skills.sheets_sync import count_lead_rows
-            sheet_rows = await count_lead_rows()
-            result["sheet_rows"] = sheet_rows
+            from app.skills.sheets_sync import list_lead_businesses
+            sheet_businesses = await list_lead_businesses()
+            result["sheet_rows"] = len(sheet_businesses) if sheet_businesses is not None else None
 
             # Compare LIKE WITH LIKE (fixed 2026-08-09, first run of this check
             # in production). Two defects were hiding here, and the first one
@@ -152,34 +169,42 @@ async def persist_leads_durably(recent_count: int = 25, source: str = "?") -> di
             #    BACKUP INCOMPLETE while nothing whatsoever was missing — and a
             #    monitor that cries wolf gets ignored exactly when it is right.
             #
-            # So the question the check must answer is "does every distinct
-            # business have a row?", not "do the two totals match?".
-            db_row = await DatabaseManager.fetchone(
-                "SELECT COUNT(*) AS total, "
-                "COUNT(DISTINCT COALESCE(NULLIF(TRIM(url),''), LOWER(TRIM(business)))) AS distinct_ids "
-                "FROM leads WHERE COALESCE(status,'') != 'Invalid'")
-            db_row = dict(db_row) if db_row else {}
-            db_total = db_row.get("total") or 0
-            db_distinct = db_row.get("distinct_ids") or 0
+            # The check must compare actual business identities, not row counts:
+            # duplicate Sheet rows can hide a missing business at equal totals.
+            db_rows = await DatabaseManager.query(
+                "SELECT business FROM leads WHERE COALESCE(status,'') != 'Invalid'",
+                (), fetchall=True,
+            )
+            db_rows = db_rows or []
+            db_total = len(db_rows)
+            db_businesses = {str(dict(row).get("business") or "").strip().casefold()
+                             for row in db_rows}
+            db_businesses.discard("")
+            db_distinct = len(db_businesses)
             result["db_total"] = db_total
             result["db_distinct"] = db_distinct
 
-            if sheet_rows is None:
+            if sheet_businesses is None:
                 logger.warning(f"[DURABILITY:{source}] ⚠️ could not verify the Sheets "
                                f"backup — treat durability as UNKNOWN this run.")
-            elif sheet_rows < db_distinct:
-                result["verified"] = False
-                logger.error(
-                    f"[DURABILITY:{source}] 🚨 BACKUP INCOMPLETE — the database holds "
-                    f"{db_distinct} distinct businesses ({db_total} rows) but the Leads "
-                    f"sheet has only {sheet_rows} rows. {db_distinct - sheet_rows} "
-                    f"business(es) are lost on the next restart. Sheets is the durable "
-                    f"tier; Drive is optional and currently dead.")
             else:
-                result["verified"] = True
-                logger.info(f"[DURABILITY:{source}] ✅ verified: sheet holds {sheet_rows} "
-                            f"rows covering {db_distinct} distinct businesses "
-                            f"({db_total} lead rows)")
+                missing = db_businesses - set(sheet_businesses)
+                result["missing_businesses"] = len(missing)
+                if missing:
+                    result["verified"] = False
+                    logger.error(
+                        f"[DURABILITY:{source}] 🚨 BACKUP INCOMPLETE — "
+                        f"{len(missing)} of {db_distinct} distinct businesses "
+                        f"({db_total} DB rows) are absent from the Leads sheet "
+                        f"despite {len(sheet_businesses)} sheet rows. "
+                        "Sheets is only a lead projection, not a full DB backup.")
+                else:
+                    result["verified"] = True
+                    logger.info(
+                        f"[DURABILITY:{source}] verified lead identities: "
+                        f"{db_distinct} distinct DB businesses represented in "
+                        f"{len(sheet_businesses)} sheet rows ({db_total} DB rows). "
+                        "This does not verify full database durability.")
         except Exception as verify_err:
             logger.warning(f"[DURABILITY:{source}] backup verification failed "
                            f"({verify_err}) — durability UNKNOWN this run.")

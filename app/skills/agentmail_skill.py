@@ -264,6 +264,17 @@ def _apply_compliance_footer(body: str) -> str:
             f"{_AD_DISCLOSURE_LINE}\n{_OPT_OUT_LINE}")
 
 
+def _agentmail_allows_unsolicited_outreach() -> bool:
+    """AgentMail is an inbox/reply provider here, not a cold-email channel.
+
+    This is deliberately not an environment toggle: approval, a postal address,
+    or turning off $0 mode cannot grant permission under the provider's terms.
+    Keep the legacy downstream compliance gates for any future, separately
+    reviewed sending provider, but do not reach them through AgentMail today.
+    """
+    return False
+
+
 async def send_outreach(
     to: str,
     subject: str,
@@ -285,6 +296,18 @@ async def send_outreach(
     if not _validate_email(to):
         logger.warning(f"[AgentMail] Invalid email format: {to}. Skipping send.")
         return {"status": "error", "error": f"Invalid email format: {to}"}
+
+    if not _agentmail_allows_unsolicited_outreach():
+        logger.info("[AgentMail] Prospect outreach blocked by provider policy; no send or approval requested.")
+        return {"status": "blocked", "skipped": True,
+                "error": "AgentMail prospect outreach is disabled by provider policy. "
+                         "Use a researched, individual permitted channel; AgentMail is for verified inbound replies."}
+
+    # A funded workflow must still respect the independent $0 operating gate.
+    from app.core.hardening import zero_budget_mode
+    if zero_budget_mode():
+        return {"status": "blocked", "skipped": True,
+                "error": "$0 mode: automated outreach is disabled. Prepare a contact card with /contact ID."}
 
     # ── Opt-out gate (CAN-SPAM) ──────────────────────────────────────────────
     # Mirrors the DNC gate the calling lane already has. Until now the reply
@@ -651,7 +674,11 @@ async def check_replies(inbox_id: str = None, limit: int = 10, advance_checkpoin
                     "message_id": getattr(msg, 'message_id', 'unknown'),
                     "from": getattr(msg, 'from_', getattr(msg, 'sender', 'unknown')),
                     "subject": getattr(msg, 'subject', 'No subject'),
-                    "snippet": str(getattr(msg, 'text', getattr(msg, 'snippet', '')))[:200],
+                    # The full body can quote our own opt-out footer. Classify
+                    # the provider's extracted inbound text when available.
+                    "snippet": str(getattr(msg, 'extracted_text', None)
+                                   or getattr(msg, 'text', None)
+                                   or getattr(msg, 'preview', ''))[:200],
                     "date": str(msg_ts or '')
                 })
 
@@ -677,7 +704,7 @@ async def check_replies(inbox_id: str = None, limit: int = 10, advance_checkpoin
         return {"status": "error", "message": str(e)}
 
 
-async def reply_to_email(message_id: str, body: str, inbox_id: str = None) -> Dict[str, Any]:
+async def reply_to_email(message_id: str, body: str, inbox_id: str = None, *, _approval_checked: bool = False) -> Dict[str, Any]:
     """Reply to a specific email in Nova's inbox."""
     client, error = _get_client()
     if not client:
@@ -689,11 +716,53 @@ async def reply_to_email(message_id: str, body: str, inbox_id: str = None) -> Di
 
     try:
         loop = asyncio.get_running_loop()
+        # The LLM tool path can reach this function without the worker. Check
+        # the real recipient and referenced inbound content at the sending sink.
+        from email.utils import getaddresses
+        from app.core.dnc import is_email_suppressed
+        original = await loop.run_in_executor(
+            None, lambda: client.inboxes.messages.get(inbox_id=inbox, message_id=message_id))
+        source = getattr(original, "from_", "") or ""
+        targets = getattr(original, "reply_to", None) or [source]
+        if isinstance(targets, str):
+            targets = [targets]
+        addresses = [addr.strip().lower() for _, addr in getaddresses([source] + list(targets))]
+        if not addresses or any(not _validate_email(addr) for addr in addresses):
+            return {"status": "blocked", "message": "Cannot verify reply recipients."}
+        # Replying to a SENT message is a follow-up, not an inbound reply.
+        # The provider can route it to the original outbound recipient, which
+        # would otherwise bypass the $0 cold-outreach gate and suppression.
+        sender_addresses = {addr.lower() for _, addr in getaddresses([source])}
+        if inbox.lower() in sender_addresses:
+            return {"status": "blocked", "message": "Only an inbound email can receive a reply."}
+        recipients = getattr(original, "to", None) or []
+        if isinstance(recipients, str):
+            recipients = [recipients]
+        inbound_targets = {addr.lower() for _, addr in getaddresses(list(recipients))}
+        if inbox.lower() not in inbound_targets:
+            return {"status": "blocked", "message": "Cannot verify an inbound email to this inbox."}
+        for address in set(addresses):
+            if await is_email_suppressed(address):
+                return {"status": "blocked", "message": "Recipient opted out; reply blocked."}
+        inbound_text = getattr(original, "extracted_text", None) or getattr(original, "text", "")
+        if is_optout_reply(getattr(original, "subject", ""), inbound_text):
+            return {"status": "blocked", "message": "Inbound message is an opt-out; no reply sent."}
+        if _contains_price("", body):
+            return {"status": "blocked", "message": "Commercial terms require Mark; no reply sent."}
+        if not _approval_checked:
+            from app.core.approval_gate import gate_allows
+            import hashlib
+            if not await gate_allows("reply", {"message_id": message_id, "inbox_id": inbox,
+                                               "body_hash": hashlib.sha256(body.encode()).hexdigest()},
+                                     reason="Reply to an existing inbound email"):
+                return {"status": "pending", "message": "Reply awaiting approval; not sent."}
         result = await loop.run_in_executor(
             None,
             lambda: client.inboxes.messages.reply(
                 inbox_id=inbox,
                 message_id=message_id,
+                to=sorted({addr.lower() for _, addr in getaddresses(list(targets))}),
+                reply_all=False,
                 text=body
             )
         )

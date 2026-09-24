@@ -28,6 +28,8 @@ from dataclasses import dataclass, field, asdict
 from datetime import date
 from typing import Callable, Dict, List, Optional
 
+from app.skills.lead_validator import is_safe_owner_name
+
 logger = logging.getLogger(__name__)
 
 
@@ -209,7 +211,12 @@ def merge_candidates(evidence: List[Evidence]) -> DecisionMakerResult:
     result = DecisionMakerResult(evidence=list(evidence))
     groups: Dict[str, List[Evidence]] = {}
     for ev in evidence:
-        if not ev.value:
+        if not ev.value or not is_safe_owner_name(
+                ev.value, owner_confidence=ev.confidence,
+                owner_source=ev.source):
+            if ev.value:
+                logger.warning("[WATERFALL] rejected unsafe owner candidate %r from %s",
+                               ev.value, ev.source)
             continue
         groups.setdefault(_norm_name(ev.value), []).append(ev)
     if not groups:
@@ -509,7 +516,9 @@ def apply_decision_maker(lead: dict, dm: DecisionMakerResult) -> dict:
     existing owner (e.g. a registry hit); never writes an unconfident guess."""
     import json as _json
     existing = int(lead.get("owner_confidence") or 0)
-    if dm.name and dm.confidence >= CONFIDENCE_MIN and dm.confidence > existing:
+    safe_name = is_safe_owner_name(
+        dm.name, owner_confidence=dm.confidence, owner_source=dm.source)
+    if safe_name and dm.confidence >= CONFIDENCE_MIN and dm.confidence > existing:
         lead["owner"] = dm.name
         lead["owner_title"] = dm.title or lead.get("owner_title", "")
         lead["owner_source"] = dm.source
@@ -569,7 +578,9 @@ async def reenrich_stored_leads(limit: int = 25, max_confidence: int = 69) -> di
             _gc.collect()
             continue
         existing = int(lead.get("owner_confidence") or 0)
-        if dm.name and dm.confidence >= CONFIDENCE_MIN and dm.confidence > existing:
+        safe_name = is_safe_owner_name(
+            dm.name, owner_confidence=dm.confidence, owner_source=dm.source)
+        if safe_name and dm.confidence >= CONFIDENCE_MIN and dm.confidence > existing:
             try:
                 await DatabaseManager.query(
                     "UPDATE leads SET owner=?, owner_title=?, owner_source=?, "

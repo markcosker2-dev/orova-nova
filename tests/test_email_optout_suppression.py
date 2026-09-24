@@ -21,6 +21,13 @@ from app.skills.agentmail_skill import is_optout_reply
 TARGET = "owner@sierraridgebuilders.com"
 
 
+@pytest.fixture(autouse=True)
+def hypothetical_provider_permission():
+    from app.skills import agentmail_skill
+    with patch.object(agentmail_skill, "_agentmail_allows_unsolicited_outreach", return_value=True):
+        yield
+
+
 # ─── Detection reads ONE keyword list ────────────────────────────
 
 @pytest.mark.parametrize("text", [

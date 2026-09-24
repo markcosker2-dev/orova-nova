@@ -27,6 +27,13 @@ from app.skills.lead_validator import (off_icp_vertical_reason,
 ADDR = "OROVA, 1 Example St, Manila, PH"
 
 
+@pytest.fixture(autouse=True)
+def hypothetical_provider_permission():
+    from app.skills import agentmail_skill
+    with patch.object(agentmail_skill, "_agentmail_allows_unsolicited_outreach", return_value=True):
+        yield
+
+
 def _lead(**over):
     base = {"business": "Sierra Ridge Builders", "owner": "Maria Santos",
             "email": "maria@sierraridgebuilders.com",

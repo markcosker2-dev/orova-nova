@@ -46,7 +46,8 @@ def _clean(text: Optional[str], limit: int = 200) -> str:
 
 def hunt_complete(count: int, query: str, top_business: str = "",
                   top_score: Optional[float] = None,
-                  sole_operators: Optional[int] = None) -> Optional[str]:
+                  sole_operators: Optional[int] = None,
+                  sheet_verified: bool = False) -> Optional[str]:
     """A finished hunt. Silent when it found nothing new.
 
     Re-finding the same businesses is the normal case now the register is
@@ -62,8 +63,18 @@ def hunt_complete(count: int, query: str, top_business: str = "",
             best += f", scoring {int(top_score)}"
         lines.append(best + ".")
     if sole_operators:
-        lines.append(f"{sole_operators} of them are sole operators.")
-    lines.append("They're in the sheet. " + _NOTHING_NEEDED)
+        lines.append(f"{sole_operators} have one registered principal; crew size is unverified.")
+    if sheet_verified:
+        lines.append(
+            "Saved in the OROVA CRM Google Sheet: "
+            "https://docs.google.com/spreadsheets/d/1udNrtV09Y7Eg2bWkU8-5cNbat-8TxZt9ZNoD5j3x-BM/edit"
+        )
+    else:
+        lines.append(
+            "Saved in the live pipeline, but the Google Sheet backup is not "
+            "verified. These leads may be lost on restart; check CRM sync."
+        )
+    lines.append("Use /leads to prepare contact; no message was sent.")
     return "\n".join(lines)
 
 

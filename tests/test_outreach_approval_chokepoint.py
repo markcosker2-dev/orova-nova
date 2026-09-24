@@ -35,6 +35,14 @@ from app.skills import agentmail_skill
 ADDR = "OROVA, 1 Example St, Manila, PH"
 
 
+@pytest.fixture(autouse=True)
+def hypothetical_provider_permission():
+    # These legacy tests isolate the downstream approval gate. Production
+    # AgentMail policy is independently pinned in test_agentmail_policy_stop.
+    with patch.object(agentmail_skill, "_agentmail_allows_unsolicited_outreach", return_value=True):
+        yield
+
+
 def _call(**kw):
     """Invoke send_outreach with every OTHER gate forced open.
 

@@ -424,6 +424,26 @@ async def count_lead_rows(workbook_name: Optional[str] = None) -> Optional[int]:
         return None
 
 
+async def list_lead_businesses(workbook_name: Optional[str] = None) -> Optional[list[str]]:
+    """Read actual lead identities; a row count can hide missing businesses.
+
+    Return None on read failure, case-folded names on success. Duplicates are
+    retained so row counts and identity counts are not conflated. This
+    verifies only the Leads projection, never the complete SQLite database.
+    """
+    try:
+        worksheet = await _get_worksheet("Leads", workbook_name)
+        values = await asyncio.wait_for(
+            asyncio.to_thread(worksheet.col_values, 2),
+            timeout=SHEETS_READ_TIMEOUT_S,
+        )
+        return [str(value).strip().casefold() for value in (values or [])[1:]
+                if str(value).strip()]
+    except Exception as exc:
+        logger.warning(f"[SheetsSync] could not read Leads identities: {exc}")
+        return None
+
+
 async def restore_leads_from_sheets() -> List[Dict[str, Any]]:
     try:
         worksheet = await _get_worksheet("Leads")
@@ -645,15 +665,53 @@ async def sync_lead_to_sheets(lead: Dict[str, Any], workbook_name: Optional[str]
         logger.error(f"[SheetsSync] sync_lead_to_sheets failed: {exc}")
         return {"ok": False, "error": str(exc)}
 
+async def _sheet_row_for_lead(worksheet, lead_id: int) -> Optional[int]:
+    """Resolve a live DB lead by stable identity, not its ephemeral SQLite ID.
+
+    Render restarts have reused IDs. The Leads tab contains ID collisions, so
+    matching column A can silently change another business's status.
+    Ambiguous identity fails closed instead of guessing a row.
+    """
+    from app.core.database import DatabaseManager
+
+    stored = await DatabaseManager.fetchone(
+        "SELECT business, url, state FROM leads WHERE id = ?", (lead_id,))
+    if not stored:
+        return None
+    lead = dict(stored)
+    business = str(lead.get("business") or "").strip().lower()
+    url = str(lead.get("url") or "").strip()
+    state = str(lead.get("state") or "").strip().upper()
+    rows = await asyncio.to_thread(worksheet.get_all_values)
+
+    def cell(row, index):
+        return str(row[index] if len(row) > index else "").strip()
+
+    if url:
+        by_url = [i for i, row in enumerate(rows[1:], start=2)
+                  if cell(row, 6) == url and cell(row, 1).lower() == business]
+        if len(by_url) == 1:
+            return by_url[0]
+    by_business = [i for i, row in enumerate(rows[1:], start=2)
+                   if cell(row, 1).lower() == business
+                   and cell(row, 13).upper() == state]
+    if len(by_business) == 1:
+        return by_business[0]
+    logger.warning(f"[SheetsSync] ambiguous or absent sheet identity for lead {lead_id}")
+    return None
+
+
 async def update_lead_status_sheets(lead_id: int, new_status: str, workbook_name: Optional[str] = None) -> Dict[str, Any]:
     await asyncio.sleep(1)
     try:
         worksheet = await _get_worksheet("Leads", workbook_name)
-        cell = await asyncio.to_thread(worksheet.find, str(lead_id))
+        row_idx = await _sheet_row_for_lead(worksheet, lead_id)
+        if row_idx is None:
+            return {"ok": False, "reason": "lead_not_found_or_ambiguous"}
         headers = WORKSHEET_HEADERS["Leads"]
         status_col = headers.index("Status") + 1
-        await asyncio.to_thread(worksheet.update_cell, cell.row, status_col, new_status)
-        return {"ok": True, "row": cell.row}
+        await asyncio.to_thread(worksheet.update_cell, row_idx, status_col, new_status)
+        return {"ok": True, "row": row_idx}
     except Exception as exc:
         logger.error(f"[SheetsSync] update_lead_status_sheets failed: {exc}")
         return {"ok": False, "error": str(exc)}
@@ -735,14 +793,9 @@ async def sync_lead_status_to_sheets(lead_id: int, new_status: str, notes: str =
     """
     try:
         worksheet = await _get_worksheet("Leads", workbook_name)
-        # Find lead by ID column
-        id_vals = await asyncio.to_thread(worksheet.col_values, 1)
-        search_id = str(lead_id)
-        if search_id not in id_vals:
-            logger.info(f"[SheetsSync] Lead {lead_id} not found in Sheets, skipping status update")
-            return {"ok": False, "reason": "lead_not_found"}
-        
-        row_idx = id_vals.index(search_id) + 1
+        row_idx = await _sheet_row_for_lead(worksheet, lead_id)
+        if row_idx is None:
+            return {"ok": False, "reason": "lead_not_found_or_ambiguous"}
         headers = WORKSHEET_HEADERS["Leads"]
         
         # Update Status column (index 7)
@@ -768,12 +821,9 @@ async def sync_lead_outcome_to_sheets(lead_id: int, action: str, result: str, de
     """
     try:
         worksheet = await _get_worksheet("Leads", workbook_name)
-        id_vals = await asyncio.to_thread(worksheet.col_values, 1)
-        search_id = str(lead_id)
-        if search_id not in id_vals:
-            return {"ok": False, "reason": "lead_not_found"}
-        
-        row_idx = id_vals.index(search_id) + 1
+        row_idx = await _sheet_row_for_lead(worksheet, lead_id)
+        if row_idx is None:
+            return {"ok": False, "reason": "lead_not_found_or_ambiguous"}
         headers = WORKSHEET_HEADERS["Leads"]
         
         # Update Status based on action/result combo

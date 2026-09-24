@@ -100,7 +100,8 @@ def test_live_fake_owner_names_rejected():
     from app.skills.lead_validator import is_plausible_person_name
     # stored as real owners in production, 2026-07-20 hunt
     for fake in ("THANKS TO", "We Proudly", "Good People", "Member Circles",
-                 "Auto Repair", "Free Quote"):
+                 "Auto Repair", "Free Quote", "Kalin CFO Daisy General",
+                 "Alex Owner", "Maria Operations Manager"):
         assert not is_plausible_person_name(fake), fake
 
 
