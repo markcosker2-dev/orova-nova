@@ -15,6 +15,24 @@ from app.core.durability import persist_leads_durably
 _ROWS = [{"id": 1, "business": "A"}, {"id": 2, "business": "B"}]
 
 
+def test_hunt_sync_selects_exact_saved_ids_not_latest_rows():
+    async def exact_rows(sql, params=(), fetchall=False):
+        assert "id IN (?,?)" in sql
+        assert params == (7, 11)
+        return [{"id": 7, "business": "A"}, {"id": 11, "business": "B"}]
+
+    with patch("app.core.database.DatabaseManager.query", side_effect=exact_rows), \
+         patch("app.skills.sheets_sync.sync_lead_to_sheets", new_callable=AsyncMock,
+               return_value={"ok": True}) as sync, \
+         patch("app.skills.vault_skill.backup_database", new_callable=AsyncMock,
+               return_value={"ok": False}):
+        out = asyncio.run(persist_leads_durably(
+            recent_count=2, source="hunt", lead_ids=[7, 11]))
+    assert out["sheets_total"] == 2
+    assert out["sheets_synced"] == 2
+    assert {call.args[0]["id"] for call in sync.await_args_list} == {7, 11}
+
+
 def test_sheets_syncs_even_when_drive_succeeds():
     """REPLACES test_drive_success_skips_sheets (2026-08-02).
 

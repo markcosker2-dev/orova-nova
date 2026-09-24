@@ -191,7 +191,7 @@ async def lead_contact_cards(lead_id: int = None) -> str:
             f"Hi {greeting}, Mark from OROVA. For {r['business']}, is keeping the pipeline full "
             "or following up with incoming enquiries the bigger headache right now?",
             "Send individually only where permitted. Stop if they decline. No price, fabricated research, "
-            "client results, or paid demo promised. AgentMail cold outreach and paid calls are disabled in $0 mode.",
+            "client results, or paid demo promised. AgentMail prospect outreach is disabled by provider policy; paid calls are disabled in $0 mode.",
         ])
         return "\n\n".join(lines)
     return ("Uncontacted prospects from the stored pipeline:\n\n" + "\n\n".join(cards)) if cards else (

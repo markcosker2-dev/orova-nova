@@ -74,7 +74,8 @@ SHEETS_SYNC_PACING_S = 1.1
 SHEETS_PACING_THRESHOLD = 10
 
 
-async def persist_leads_durably(recent_count: int = 25, source: str = "?") -> dict:
+async def persist_leads_durably(recent_count: int = 25, source: str = "?",
+                                lead_ids: list[int] | None = None) -> dict:
     """Sync the most recent `recent_count` leads to Sheets, then attempt an
     optional full-fidelity Drive snapshot.
 
@@ -89,9 +90,20 @@ async def persist_leads_durably(recent_count: int = 25, source: str = "?") -> di
     try:
         from app.core.database import DatabaseManager
         from app.skills.sheets_sync import sync_lead_to_sheets
-        rows = await DatabaseManager.query(
-            "SELECT * FROM leads WHERE COALESCE(status,'') != 'Invalid' "
-            "ORDER BY id DESC LIMIT ?", (recent_count,), fetchall=True)
+        if lead_ids is not None:
+            ids = tuple(int(i) for i in lead_ids if isinstance(i, int) and i > 0)
+            if ids:
+                placeholders = ",".join("?" for _ in ids)
+                rows = await DatabaseManager.query(
+                    f"SELECT * FROM leads WHERE id IN ({placeholders}) "
+                    "AND COALESCE(status,'') != 'Invalid' ORDER BY id DESC",
+                    ids, fetchall=True)
+            else:
+                rows = []
+        else:
+            rows = await DatabaseManager.query(
+                "SELECT * FROM leads WHERE COALESCE(status,'') != 'Invalid' "
+                "ORDER BY id DESC LIMIT ?", (recent_count,), fetchall=True)
         rows = rows or []
         result["sheets_total"] = len(rows)
         # Pace only a bulk run. A hunt's five leads pay nothing.

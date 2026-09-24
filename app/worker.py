@@ -26,7 +26,6 @@ from app.skills.light_enrich import enrich_lead_lite
 from app.skills.lead_validator import score_lead_icp
 from app.core import telegram_voice as tv
 from app.skills.opportunity_scanner import scan_opportunity
-from app.skills.email_sequence_skill import start_drip_campaign
 
 # Logging
 logging.basicConfig(
@@ -411,6 +410,7 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None, state=
 
             # Save each lead to SQLite
             saved_leads = []
+            saved_ids = []
             for lead in leads:
                 if isinstance(lead, dict):
                     # A URL slug is not evidence of a person's name. Skip
@@ -491,6 +491,7 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None, state=
                     if not isinstance(lead_id, int) or lead_id <= 0:
                         continue
                     saved_leads.append(lead)
+                    saved_ids.append(lead_id)
 
                     # Unified event log (ADR-0007): Scout discovered a prospect.
                     if isinstance(lead_id, int) and lead_id > 0:
@@ -503,78 +504,10 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None, state=
                                              payload={"icebreaker": dossier.get("icebreaker", ""),
                                                       "observations": dossier.get("observations", [])})
 
-                    # ── [PIPELINE] Send outreach email + enroll in drip ──
-                    if isinstance(lead_id, int) and lead_id > 0 and not zero_budget_mode():
-                        lead_email = lead.get("email", "").strip()
-                        lead_phone = lead.get("phone", "").strip()
-                        lead_owner = lead.get("owner") or lead.get("owner_name") or "there"
-                        lead_biz = lead.get("business", "your business")
-                        email_status = lead.get("email_status", "")
-
-                        # Guessed emails bounce ~40% of the time and poison sender
-                        # reputation — route those leads to the call lane instead.
-                        if lead_email and email_status == "guessed":
-                            logger.info(f"   -> ⏭️ Email for lead {lead_id} is guessed ({lead_email}); skipping cold email, call lane will pick it up")
-
-                        # Send initial cold outreach email — AI-personalized,
-                        # framework picked by the champion/challenger loop so
-                        # every send feeds real A/B data back into learning.
-                        if lead_email and email_status != "guessed":
-                            try:
-                                from app.skills.outreach_orchestrator import compose_premium_outreach
-                                from app.core.approval_gate import gate_allows
-                                composed = await compose_premium_outreach(lead, niche=niche, client_id=client_id)
-                                # Approval gate: cold email needs Mark's OK unless
-                                # OUTREACH_AUTOPILOT=1. Skips send until approved.
-                                if not await gate_allows(
-                                    "email",
-                                    {"lead_id": lead_id, "to": lead_email},
-                                    reason=f"Cold email to {lead_biz} <{lead_email}> — subject: {composed['subject']}",
-                                ):
-                                    logger.info(f"   -> 🛡️ Cold email to {lead_email} awaiting approval; sends once Mark approves")
-                                    lead["status"] = "Awaiting Approval"
-                                else:
-                                    outreach_result = await send_outreach(
-                                        to=lead_email,
-                                        subject=composed["subject"],
-                                        body=composed["body"],
-                                        recipient_context=f"{lead_owner} ({lead.get('owner_title') or 'Owner'}) of {lead_biz} in {niche} vertical",
-                                        lead_id=lead_id,
-                                        strategy=composed["framework"],
-                                        niche=niche,
-                                        client_id=client_id,
-                                        # Already gated three lines up. Without this the
-                                        # chokepoint gate would request approval a SECOND
-                                        # time and, because approvals are single-use, the
-                                        # one Mark just granted would already be spent —
-                                        # so an approved email would never send.
-                                        _approval_checked=True,
-                                    )
-                                    if outreach_result.get("status") == "success":
-                                        logger.info(f"   -> ✅ Outreach email sent to {lead_email} (lead {lead_id})")
-                                        lead["status"] = "Email Sent"
-                                    else:
-                                        logger.warning(f"   -> ⚠️ Outreach email failed for {lead_email}: {outreach_result.get('error','unknown')}")
-                            except Exception as email_err:
-                                logger.warning(f"   -> ⚠️ Outreach email error for {lead_email}: {email_err}")
-
-                            # Enroll in cold_intro_drip for automated follow-ups.
-                            #
-                            # MOVED INSIDE the `if lead_email and email_status !=
-                            # "guessed"` branch. It used to sit outside it and ran
-                            # unconditionally, so leads with NO email address at all —
-                            # which is most licence-registry rows — were enrolled in an
-                            # email sequence that could never send to them, and leads
-                            # with a pattern-GUESSED address were enrolled despite #124
-                            # establishing that a guessed address must never be emailed.
-                            #
-                            # A follow-up sequence presupposes something to follow up ON.
-                            if lead.get("status") == "Email Sent":
-                                try:
-                                    await start_drip_campaign(lead_id, sequence_type="cold_intro_drip")
-                                except Exception as drip_err:
-                                    logger.warning(f"Drip enrollment error for lead {lead_id}: {drip_err}")
-                    # ────────────────────────────────────────────────────────
+                    # Discovery stores a prospect; it does not request an
+                    # email approval, send through AgentMail, or enroll a cold
+                    # drip. Provider policy blocks that first-contact channel
+                    # regardless of ZERO_BUDGET_MODE (ADR-0021).
 
             leads = saved_leads
             count = len(saved_leads)
@@ -590,6 +523,22 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None, state=
                 }, client_id=client_id)
             except Exception:
                 pass
+
+            # Persist the exact rows this hunt inserted BEFORE telling Mark
+            # they are in the CRM. A successful SQLite insert is not a durable
+            # save on Render's ephemeral disk.
+            durability = {}
+            try:
+                from app.core.durability import persist_leads_durably
+                durability = await persist_leads_durably(
+                    recent_count=count, source="hunt", lead_ids=saved_ids)
+            except Exception as bk_err:
+                logger.warning(f"   -> ⚠️ Post-hunt persistence error: {bk_err}")
+            sheet_verified = (
+                durability.get("sheets_synced") == count
+                and durability.get("sheets_total") == count
+                and durability.get("verified") is True
+            )
 
             # ── Hunt-report debounce (2026-08-02) ────────────────────────────
             # Owner report: "i need Nova to stop spamming me with the thing
@@ -612,7 +561,8 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None, state=
             _names = sorted({(l.get("business") or "").strip().lower()
                              for l in leads if (l.get("business") or "").strip()})
             _fingerprint = _hashlib.sha256(
-                "|".join(_names).encode("utf-8")).hexdigest()[:16]
+                ("|".join(_names) + f"|sheet_verified={sheet_verified}")
+                .encode("utf-8")).hexdigest()[:16]
             _should_report = True
             try:
                 _prev = await DatabaseManager.get_state(HUNT_REPORT_STATE_KEY) or {}
@@ -643,7 +593,8 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None, state=
                     count, query,
                     top_business=(_top.get("business") or ""),
                     top_score=_top.get("score"),
-                    sole_operators=_solo_n)
+                    sole_operators=_solo_n,
+                    sheet_verified=sheet_verified)
                 if _msg:
                     await send_telegram_report(_msg)
                 try:
@@ -655,15 +606,6 @@ async def run_lead_hunt_slow_lane(client_id=0, niche=None, location=None, state=
                 except Exception as _dbe:
                     logger.debug(f"   -> Could not persist hunt report state: {_dbe}")
 
-            # Durability ladder (canonical helper, ADR-0010/SSoT): Drive
-            # snapshot, Sheets fallback on failure. Extracted 2026-07-21 —
-            # the hunt, CSV import, and reenrich paths all lost work to
-            # disk wipes before sharing this one entry point. Fail-open.
-            try:
-                from app.core.durability import persist_leads_durably
-                await persist_leads_durably(recent_count=count, source="hunt")
-            except Exception as bk_err:
-                logger.warning(f"   -> ⚠️ Post-hunt persistence error (non-fatal): {bk_err}")
         else:
             logger.info("   -> No leads found this shift.")
 

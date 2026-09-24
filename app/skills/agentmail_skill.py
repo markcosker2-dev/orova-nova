@@ -264,6 +264,17 @@ def _apply_compliance_footer(body: str) -> str:
             f"{_AD_DISCLOSURE_LINE}\n{_OPT_OUT_LINE}")
 
 
+def _agentmail_allows_unsolicited_outreach() -> bool:
+    """AgentMail is an inbox/reply provider here, not a cold-email channel.
+
+    This is deliberately not an environment toggle: approval, a postal address,
+    or turning off $0 mode cannot grant permission under the provider's terms.
+    Keep the legacy downstream compliance gates for any future, separately
+    reviewed sending provider, but do not reach them through AgentMail today.
+    """
+    return False
+
+
 async def send_outreach(
     to: str,
     subject: str,
@@ -286,9 +297,13 @@ async def send_outreach(
         logger.warning(f"[AgentMail] Invalid email format: {to}. Skipping send.")
         return {"status": "error", "error": f"Invalid email format: {to}"}
 
-    # AgentMail's terms prohibit unsolicited messaging. A paid-service-free
-    # workflow prepares manual first contact; it doesn't turn this inbox into
-    # a cold sender just because a key (or an old approval) exists.
+    if not _agentmail_allows_unsolicited_outreach():
+        logger.info("[AgentMail] Prospect outreach blocked by provider policy; no send or approval requested.")
+        return {"status": "blocked", "skipped": True,
+                "error": "AgentMail prospect outreach is disabled by provider policy. "
+                         "Use a researched, individual permitted channel; AgentMail is for verified inbound replies."}
+
+    # A funded workflow must still respect the independent $0 operating gate.
     from app.core.hardening import zero_budget_mode
     if zero_budget_mode():
         return {"status": "blocked", "skipped": True,

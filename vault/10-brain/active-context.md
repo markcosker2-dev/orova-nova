@@ -9,6 +9,25 @@ tags: [brain, active, session-start]
 
 # 🧭 Active Context
 
+> [!important] September 23 Instagram/CRM/email operating state
+> A truthful Meta-ads-plus-qualification carousel was published through Make
+> and verified live at https://www.instagram.com/p/DdnzTIqCXzt/. The recurring
+> `OROVA Instagram social media manager` task is active Monday/Wednesday/Friday
+> at 21:00 local on a strict $0 budget. Make-to-Composio reports ACTIVE but
+> fails authenticated reads with HTTP 401 because it calls `us2.make.com` for
+> OROVA's `eu2.make.com` workspace; the signed-in EU2 publisher itself works.
+> Future captions now require human-sounding paragraphs and a blank line before
+> spaced hashtags; verify the live result because the first browser entry was
+> flattened. See `social/CAPTION_STYLE.md`.
+> The live DB has 310 distinct business leads and the canonical `OROVA CRM`
+> Sheet has the same 310 distinct businesses in 312 rows (duplicates/stale IDs).
+> New local code verifies exact Sheet sync before Nova claims a durable save and
+> hard-stops prospect AgentMail sends. None of that code is deployed. The live
+> email sink currently fails closed because the postal-address setting is
+> absent; do not enable it. Render deployment remains on HOLD until a fresh,
+> complete, independently verified DB backup exists. See
+> [[2026-09-23-instagram-crm-and-cold-email-safety]].
+
 > [!important] September 23 approved change window — Draft V1 prepared
 > The correct Retell workspace and reviewed inbound agent are confirmed. V0 was
 > published unchanged as the exact pre-migration baseline and remains bound to

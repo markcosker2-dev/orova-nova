@@ -262,7 +262,6 @@ class TaskPlanner:
             "optimize_post": _skills_content.optimize_post,
             "get_inbox": _skills_gmail.get_inbox,
             "search_emails": _skills_gmail.search_emails,
-            "send_email": _skills_gmail.send_email,
             "get_today": _skills_calendar.get_today,
             "get_week": _skills_calendar.get_week,
             "get_office_hour_slots": _skills_calendar.get_office_hour_slots,
@@ -276,7 +275,6 @@ class TaskPlanner:
             "request_approval": _skills_approval.request_approval,
             "list_pending": _skills_approval.list_pending,
             "create_inbox": _skills_agentmail.create_inbox,
-            "send_outreach": _skills_agentmail.send_outreach,
             "check_replies": _skills_agentmail.check_replies,
             "reply_to_email": _skills_agentmail.reply_to_email,
             "summarize_and_categorize_inbox": _skills_agentmail.summarize_and_categorize_inbox,
@@ -320,7 +318,9 @@ class TaskPlanner:
         logger.info("[PLANNER] Semantic Firewall integrated.")
 
     HUNTING_TOOLS = ["find_leads", "google_search", "research_lead", "hunt_hiring_signals"]
-    OUTREACH_TOOLS = ["send_outreach", "send_email", "write_cold_email", "create_drip_campaign", "generate_sequence", "check_replies", "reply_to_email", "get_inbox", "trigger_retell_call", "generate_hiring_outreach", "enrich_lead_apollo", "is_business_hours", "composio_action", "proofread_email", "morning_brief", "pipeline_health_check"]
+    # Nova can prepare outreach and handle verified inbound replies, but she
+    # cannot initiate prospect email through AgentMail or Mark's Gmail account.
+    OUTREACH_TOOLS = ["write_cold_email", "generate_sequence", "check_replies", "reply_to_email", "get_inbox", "trigger_retell_call", "generate_hiring_outreach", "enrich_lead_apollo", "is_business_hours", "composio_action", "proofread_email", "morning_brief", "pipeline_health_check"]
     LIGHT_RESEARCH_TOOLS = ["deep_research", "browse_agent", "run_seo_audit", "bulk_enrich_leads", "next_business_hours_slot", "generate_cal_booking_link", "propose_skill", "activate_skill", "use_forged_skill", "list_forged_skills"]
 
     def _scope_tools_for_agent(self, agent_id: str, goal: str) -> list:
@@ -486,7 +486,7 @@ class TaskPlanner:
         messages.append({"role": "user", "content": goal})
 
         MAX_STEPS = 6
-        TERMINAL_TOOLS = {"send_outreach", "send_email", "reply_to_email"}
+        TERMINAL_TOOLS = {"reply_to_email"}
 
         for step in range(1, MAX_STEPS + 1):
             logger.info(f"[Nova:{agent_id}] Step {step}/{MAX_STEPS}")

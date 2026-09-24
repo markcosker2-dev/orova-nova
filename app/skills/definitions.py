@@ -594,7 +594,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "send_outreach",
-            "description": "Send an email from Nova's own AgentMail inbox. Use this for cold outreach instead of Mark's Gmail.",
+            "description": "Legacy prospect-email action. Disabled under AgentMail provider policy; use only verified inbound reply handling.",
             "parameters": {
                 "type": 'object',
                 "properties": {

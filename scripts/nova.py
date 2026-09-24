@@ -188,7 +188,7 @@ def cmd_status(_args) -> int:
                 problems.append(f"{field} is {val}")
 
     # data — the field-level check, because a row count reconciles either way
-    code, leads = http("/api/leads")
+    code, leads = http("/api/leads?limit=2000")
     if code == 200:
         rows = leads.get("leads", leads) if isinstance(leads, dict) else leads
         rows = rows if isinstance(rows, list) else []
@@ -558,8 +558,9 @@ def cmd_logs(args) -> int:
 def cmd_deploy(args) -> int:
     """Watch a deploy land, then check the data survived it.
 
-    Render's disk is ephemeral: every deploy destroys the DB and restores from
-    the Leads sheet. A reconciling ROW COUNT proves nothing about fields — cover
+    Render's disk is ephemeral: a deploy restores a full snapshot when available,
+    otherwise it falls back to the Leads sheet. A reconciling ROW COUNT proves
+    nothing about fields — cover
     went 30 -> 10 across one deploy while the count reconciled at 40/40 — so
     this compares the fields too, and says which ones moved.
     """
@@ -589,7 +590,8 @@ def cmd_deploy(args) -> int:
 
 
 def _snapshot() -> dict:
-    code, leads = http("/api/leads")
+    # The API defaults to 100 rows. A truncated snapshot can conceal data loss.
+    code, leads = http("/api/leads?limit=2000")
     if code != 200:
         return {}
     rows = leads.get("leads", leads) if isinstance(leads, dict) else leads

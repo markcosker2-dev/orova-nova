@@ -222,7 +222,7 @@ def test_rejected_storage_result_cannot_produce_discovery_or_outreach(rejected_i
          patch.object(DatabaseManager, "asave_lead", AsyncMock(return_value=rejected_id)), \
          patch("app.core.event_log.alog_event", AsyncMock()) as event, \
          patch.object(worker, "send_outreach", AsyncMock()) as send, \
-         patch.object(worker, "start_drip_campaign", AsyncMock()) as drip, \
+         patch("app.skills.email_sequence_skill.start_drip_campaign", AsyncMock()) as drip, \
          patch.object(worker, "send_telegram_report", AsyncMock()) as report, \
          patch("app.skills.vault_skill.backup_database", AsyncMock()) as backup:
         asyncio.run(worker.run_lead_hunt_slow_lane(niche="custom home builder", location="California"))
