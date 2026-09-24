@@ -1,15 +1,19 @@
 {
     "instagram": {
-        "style_guide": "High-contrast Black and White, minimalist, premium luxury aesthetic.",
-        "font_preference": "Serif, elegant",
+        "style_guide": "Minimal, high-contrast and premium. Use the supplied OROVA wordmark, original faceless imagery, varied compositions and a restrained green accent. Explain Meta ad lead generation and qualification/follow-up, not only AI calling.",
+        "font_preference": "Space Grotesk headlines, Inter body text",
         "color_palette": [
-            "#000000",
-            "#FFFFFF"
+            "#111111",
+            "#FAFAF8",
+            "#12BE60"
         ],
+        "logo_source": "social/reel_04_builder_lead_path/orova_wordmark_source.png",
         "banned_elements": [
-            "vibrant colors",
+            "generated or substitute OROVA logos",
+            "vibrant non-brand colors",
             "generic stock photos",
-            "cluttered backgrounds"
+            "cluttered backgrounds",
+            "invented client results or unsupported performance claims"
         ]
     },
     "outreach": {
