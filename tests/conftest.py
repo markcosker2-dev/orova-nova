@@ -13,3 +13,21 @@ def funded_workflow_test_mode(monkeypatch):
     # explicitly tests those defaults as well as blocked network side effects.
     monkeypatch.setenv("ZERO_BUDGET_MODE", "0")
     monkeypatch.setenv("CEO_AUTO_EXECUTE", "1")
+
+
+def pytest_unconfigure(config):
+    """Stop idle test workers left by legacy sync/async fixture combinations.
+
+    The assertions finish, but orphaned asyncio and AnyIO worker threads keep
+    the interpreter (and CI) open indefinitely. This only runs after tests;
+    it does not change the application lifecycle.
+    """
+    import concurrent.futures
+    import gc
+    from anyio._backends._asyncio import WorkerThread
+
+    for obj in gc.get_objects():
+        if isinstance(obj, concurrent.futures.ThreadPoolExecutor):
+            obj.shutdown(wait=False, cancel_futures=True)
+        elif isinstance(obj, WorkerThread) and obj.is_alive():
+            obj.stop()
