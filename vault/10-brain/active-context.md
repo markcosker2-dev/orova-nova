@@ -9,6 +9,9 @@ tags: [brain, active, session-start]
 
 # 🧭 Active Context
 
+> [!important] September 28 Instagram cloud social-manager state
+> A new ChatGPT Work cloud task reported an enabled Monday/Wednesday/Friday 21:00 Asia/Singapore schedule for OROVA Instagram management; its first actual run has not yet been observed. The older Codex local heartbeat was PAUSED after that report. The separate Make EU2 publisher remains active and handles already-vetted queue items while the laptop is off. The cloud manager is draft-only until individual Make queue records, current insights and the exact logo can be verified. See `social/CLOUD_MANAGER_BRIEF.md` and the actual OneDrive Obsidian session note `2026-09-28-instagram-offline-manager`. The narrated Reel at https://www.instagram.com/reel/DdrfY-KgAQ8/ is live. Live Nova reported 327 lead rows on September 28, with every distinct business represented in the canonical Sheet, but full database backup still fails `invalid_grant`; no Render deploy or Telegram persona change has happened.
+
 > [!important] September 23 Instagram/CRM/email operating state
 > A truthful Meta-ads-plus-qualification carousel was published through Make
 > and verified live at https://www.instagram.com/p/DdnzTIqCXzt/. The recurring
