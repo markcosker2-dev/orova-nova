@@ -129,6 +129,10 @@ async def pipeline_status(client_id: int = 0) -> str:
     from app.core.database import DatabaseManager
     from app.core.hardening import zero_budget_mode
     m = await DatabaseManager.aget_metrics(client_id)
+    if m.get("metrics_available") is False:
+        return ("The stored pipeline counts are unavailable right now. I cannot "
+                "tell whether activity changed from this failed read. Retry /status "
+                "when the database responds; these fallback values are not real counts.")
     mode = "$0 preparation mode" if zero_budget_mode() else "Approval-gated mode"
     return (f"{mode}. Here is the stored pipeline, not a daily activity report:\n"
             f"{m.get('leads_found', 0)} stored leads; "
@@ -239,11 +243,15 @@ async def _pipeline_snapshot() -> str:
 
     try:
         m = await DatabaseManager.aget_metrics(0)
-        parts.append(
-            "CURRENT CRM STATUS COUNTS, not daily activity or verified sends — leads: {leads}, "
-            "status Contacted/Email Sent: {sent}, status Replied: {rep}, status Meeting Booked: {mtg}".format(
-                leads=m.get("leads_found", 0), sent=m.get("emails_sent", 0),
-                rep=m.get("replies_received", 0), mtg=m.get("meetings_booked", 0)))
+        if m.get("metrics_available") is False:
+            parts.append("CURRENT CRM STATUS COUNTS UNAVAILABLE: database read failed. "
+                         "Do not infer an empty pipeline or zero activity.")
+        else:
+            parts.append(
+                "CURRENT CRM STATUS COUNTS, not daily activity or verified sends — leads: {leads}, "
+                "status Contacted/Email Sent: {sent}, status Replied: {rep}, status Meeting Booked: {mtg}".format(
+                    leads=m.get("leads_found", 0), sent=m.get("emails_sent", 0),
+                    rep=m.get("replies_received", 0), mtg=m.get("meetings_booked", 0)))
     except Exception as e:
         logger.debug(f"[NOVA_CHAT] metrics fetch failed: {e}")
 

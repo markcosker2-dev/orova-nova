@@ -1,5 +1,5 @@
 import os
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 # Ensure stable auth values for test runs
@@ -9,9 +9,16 @@ os.environ.setdefault("CRON_SECRET", "test-cron-secret")
 from app.main import app
 
 
+@asynccontextmanager
+async def _route_only_lifespan(_app):
+    # These tests exercise routes, not production startup/backup/webhooks.
+    yield
+
+
 @contextmanager
 def _make_test_client():
-    with patch("app.main.restore_leads_from_sheets", new_callable=AsyncMock) as mock_restore_sheets, \
+    with patch.object(app.router, "lifespan_context", _route_only_lifespan), \
+         patch("app.main.restore_leads_from_sheets", new_callable=AsyncMock) as mock_restore_sheets, \
          patch("app.main.restore_latest", new_callable=AsyncMock) as mock_restore_latest, \
          patch("app.main.AgentSoul.initialize", new_callable=AsyncMock) as mock_agent_initialize, \
          patch("app.main.DatabaseManager.init_db", new_callable=MagicMock) as mock_init_db, \
@@ -66,3 +73,21 @@ def test_api_agents_with_api_key():
         payload = response.json()
         assert payload["status"] == "ok"
         assert isinstance(payload["agents"], dict)
+
+
+def test_route_client_does_not_boot_scheduler_or_shutdown_backup():
+    with patch("app.main.AsyncIOScheduler", side_effect=AssertionError("startup attempted")), \
+         patch("app.main.backup_database", AsyncMock(side_effect=AssertionError("live backup attempted"))) as backup:
+        with _make_test_client() as client:
+            assert client.get("/health").status_code == 200
+        backup.assert_not_awaited()
+
+
+def test_verification_never_loads_local_dotenv(tmp_path, monkeypatch):
+    from dotenv import load_dotenv
+    marker = "OROVA_TEST_FILE_CREDENTIAL_MARKER"
+    monkeypatch.delenv(marker, raising=False)
+    env_file = tmp_path / ".env"
+    env_file.write_text(f"{marker}=synthetic-value\n", encoding="utf-8")
+    assert load_dotenv(env_file) is False
+    assert marker not in os.environ

@@ -9,17 +9,27 @@ tags: [retell, cal, inbound-demo, deployment, consent]
 
 # Retell inbound-demo launch runbook — 2026-09-23
 
-The live number remains attached to published V0, the reviewed unchanged
-baseline, and demo traffic is on **HOLD**. Cal event type `2804866` is
-live-verified at 15 minutes. Draft V1 contains the consent-first capture-only
+Last reviewed live setup (2026-09-23): the number was attached to published V0,
+the unchanged baseline, and demo traffic was on **HOLD**. Cal event type `2804866`
+was verified at 15 minutes. Draft V1 contained the consent-first capture-only
 prompt, current Cal functions, safer retention/disclosure settings and guarded
-booking extraction. The V1 read-only gate now finds one blocker: both legacy
+booking extraction. That day's V1 inspection found one blocker: both legacy
 Cal functions are still attached alongside the current replacements.
+
+Source update 2026-09-30: this historical snapshot does not establish current
+readiness. The gate now separates draft inspection from production traffic and
+validates the exact published agent/LLM versions, production tag, reviewed
+number and **every** positive-weight inbound route. Missing/stale/mixed routing,
+unreviewed inbound webhooks or fallback numbers, and legacy tools hold traffic.
 
 ## Pre-change evidence
 
 1. Run `python scripts/retell_inbound_readiness.py`; save only its redacted
    result, never raw API bodies.
+   Default `prod` is the only traffic-readiness check. `--version 1` or
+   `--version staging` is an inspection only: even `INSPECTION PASSED` returns
+   exit 2 and **HOLD demo traffic**. After approved publication/binding, rerun
+   the default check; draft inspection cannot substitute for that step.
 2. **Done 2026-09-23:** export the exact live number, agent version, LLM version, prompt, tools and
    settings to a private encrypted backup outside Git. A redacted summary is
    evidence, not a rollback payload. The current snapshot is DPAPI-encrypted
@@ -66,7 +76,10 @@ Cal functions are still attached alongside the current replacements.
 
 1. Publish only the tested draft and move the `prod` tag to it.
 2. Bind the inbound number through the reviewed production version/tag.
-3. Re-run the readiness gate. It must exit 0 before the number appears in a DM.
+3. Re-run the default production readiness gate. It must exit 0 **and** the
+   separate simulation, booking, web-call and approved phone tests must pass
+   before the number appears in a DM. Machine checks do not authorize spending
+   or outreach; the demo must have confirmed funding within Mark's $0 policy.
 4. Send one owner-reviewed DM, then inspect one real inbound call before scaling
    to the remaining four.
 5. If any gate fails, restore the previous production tag/version and stop

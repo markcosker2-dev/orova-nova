@@ -23,9 +23,21 @@ their accounts; possessing a key does not establish that it is free.
 
 ## Development
 
-Use Python 3.11 or 3.12. Install `requirements.txt` plus `pytest pytest-asyncio`.
-Run `python -m pytest tests -q`, `python scripts/compile_knowledge.py --check`,
-and `python scripts/check_secrets.py`.
+Use Python 3.11 or 3.12. Install `requirements.txt` plus `pytest pytest-asyncio ruff`.
+Node 24 runs the dependency-free dashboard checks.
+
+Run `python scripts/nova.py benchmark` for the complete local evaluation:
+required secret/fact/security verifiers, dashboard behavior and syntax, and
+the full Python regression suite. A missing verifier or a failing test fails
+the command. `python scripts/nova.py benchmark --focused` runs the critical
+permission, Telegram, storage, failure/recovery and Retell contract cases.
+These are project regressions, not public model benchmark scores or evidence
+of live delivery. Neither command starts the service or makes live calls.
+Add `--report .unlazy/benchmark.json` to keep bounded results and check timings;
+this ignored local report excludes raw test logs and provider data.
+Test collection disables dotenv loading, and route-only TestClients bypass
+production startup/shutdown and mock CSV durability. Keep that isolation: unit
+tests must not register webhooks, start schedulers or upload real snapshots.
 
 The app starts with `uvicorn app.main:app --host 127.0.0.1 --port 18790`.
 **Do not run it locally using production credentials**: startup registers the

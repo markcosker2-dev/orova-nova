@@ -12,8 +12,10 @@ import logging
 import os
 import shutil
 import sqlite3
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from app.core.database import DB_PATH
 
 # Note: These imports require google-api-python-client and google-auth
@@ -21,7 +23,7 @@ try:
     from google.oauth2.credentials import Credentials
     from google.oauth2 import service_account
     from googleapiclient.discovery import build
-    from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
+    from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 except ImportError:
     logger = logging.getLogger(__name__)
     logger.warning("⚠️ Google Drive API dependencies missing. /backup and /restore will be disabled.")
@@ -29,7 +31,6 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # ── Settings & Paths ──
-BACKUP_PATH = Path("nova_backup.db")
 DRIVE_FOLDER = "OROVA_BACKUPS"
 BACKUP_PREFIX = "nova_backup_"
 KEEP_N = 5
@@ -117,40 +118,45 @@ def _get_or_create_folder(service) -> str:
     return folder["id"]
 
 async def backup_database() -> dict:
-    """[P6] Atomic hot-copy and upload to Google Drive."""
+    """Hot-copy/upload in one worker that owns its scratch file until done.
+
+    API and scheduler event loops can overlap. Cancellation of an awaiting
+    coroutine must not remove a snapshot that its upload worker still reads.
+    """
+    return await asyncio.to_thread(_backup_database_sync)
+
+
+def _backup_database_sync() -> dict:
     try:
-        # Step 1: Atomic Hot-Copy (WAL safe)
-        src_con = sqlite3.connect(str(DB_PATH))
-        dst_con = sqlite3.connect(str(BACKUP_PATH))
-        with dst_con:
-            src_con.backup(dst_con)
-        src_con.close()
-        dst_con.close()
+        source = Path(DB_PATH).resolve()
+        if not source.is_file():
+            raise FileNotFoundError("Database source is unavailable")
+        with TemporaryDirectory(prefix="orova-backup-") as scratch:
+            snapshot = Path(scratch) / "snapshot.db"
+            # Read-only source also prevents a missing-file race from creating
+            # an empty DB and reporting it as a successful backup. backup()
+            # preserves committed WAL pages; closing is separate from commit.
+            with closing(sqlite3.connect(source.as_uri() + "?mode=ro", uri=True)) as src_con:
+                with closing(sqlite3.connect(str(snapshot))) as dst_con:
+                    with dst_con:
+                        src_con.backup(dst_con)
 
-        # Step 2: Upload
-        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        filename = f"{BACKUP_PREFIX}{ts}.db"
-        
-        service = await asyncio.to_thread(_get_drive_service)
-        folder_id = await asyncio.to_thread(_get_or_create_folder, service)
-
-        media = MediaFileUpload(str(BACKUP_PATH), mimetype="application/octet-stream")
-        file_meta = {"name": filename, "parents": [folder_id]}
-
-        uploaded = await asyncio.to_thread(
-            lambda: service.files().create(body=file_meta, media_body=media, fields="id, name").execute()
-        )
-        logger.info(f"[Vault] Uploaded → {filename}")
-        
-        # Step 3: Rolling Prune
-        await asyncio.to_thread(_prune_old_backups, service, folder_id)
-        
+            ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            filename = f"{BACKUP_PREFIX}{ts}.db"
+            service = _get_drive_service()
+            folder_id = _get_or_create_folder(service)
+            file_meta = {"name": filename, "parents": [folder_id]}
+            # An explicit stream lifetime closes the Google upload handle
+            # before Windows removes this invocation's temporary directory.
+            with snapshot.open("rb") as snapshot_stream:
+                media = MediaIoBaseUpload(snapshot_stream, mimetype="application/octet-stream")
+                service.files().create(body=file_meta, media_body=media, fields="id, name").execute()
+            logger.info(f"[Vault] Uploaded → {filename}")
+            _prune_old_backups(service, folder_id)
         return {"ok": True, "filename": filename}
     except Exception as e:
         logger.error(f"[Vault] Backup failed: {e}")
         return {"ok": False, "error": str(e)}
-    finally:
-        if BACKUP_PATH.exists(): BACKUP_PATH.unlink()
 
 def _prune_old_backups(service, folder_id: str):
     query = f"'{folder_id}' in parents and name contains '{BACKUP_PREFIX}' and trashed=false"

@@ -150,6 +150,10 @@ _OFF_ICP_VERTICALS = {
 }
 _OPPORTUNISTIC_VERTICAL_MARKERS = ("exotic", "luxury", "classic", "supercar")
 
+# ADR-0015 excludes med spas, including imported and legacy rows. Match only
+# explicit trade spellings; a builder renovating a spa is still a prospect.
+_MED_SPA_RE = re.compile(r"\bmed(?:ical)?[\s-]*spas?\b", re.IGNORECASE)
+
 # Cosmetic/appearance auto services — added 2026-08-02 after the owner asked
 # why Telegram kept surfacing automotive leads. These fail the ADR-0012
 # qualifying test harder than the repair shops already listed above: a ceramic
@@ -177,7 +181,7 @@ _OFF_ICP_VERTICAL_SUBSTRINGS = (
 
 
 def off_icp_vertical_reason(lead: dict) -> str:
-    """Why this lead's vertical is outside the ADR-0012 ICP, or '' if it is fine.
+    """Why this lead's vertical is outside the canonical ICP, or '' if it is fine.
 
     Empty verticals are NOT disqualified — absence of a label is not evidence of
     being off-ICP, and other gate rules judge such rows.
@@ -185,6 +189,8 @@ def off_icp_vertical_reason(lead: dict) -> str:
     vertical = (lead.get("vertical") or "").strip().lower()
     if not vertical:
         return ""
+    if _MED_SPA_RE.search(vertical):
+        return f"off-ICP vertical {vertical!r} — ADR-0015 excludes med spas"
     # NOTE (2026-08-02): this leg was briefly changed to read the marker from
     # the BUSINESS NAME instead, on the reasoning that worker.py sets
     # `vertical = niche` (the raw query string), so an 'exotic car dealer
@@ -264,7 +270,7 @@ _OFF_ICP_NAME_RE = re.compile(
 
 
 def off_icp_business_name_reason(lead: dict) -> str:
-    """Why this lead's BUSINESS NAME puts it outside the ADR-0012 ICP, or ''.
+    """Why this lead's BUSINESS NAME puts it outside the canonical ICP, or ''.
 
     Companion to off_icp_vertical_reason for the (now dominant) case of a lead
     that carries no vertical label. Same ADR-0012 rule, different evidence.
@@ -277,6 +283,8 @@ def off_icp_business_name_reason(lead: dict) -> str:
     name = (lead.get("business") or "").strip().lower()
     if not name:
         return ""
+    if _MED_SPA_RE.search(name):
+        return f"off-ICP business name {lead.get('business')!r} — ADR-0015 excludes med spas"
     if any(m in name for m in _OPPORTUNISTIC_VERTICAL_MARKERS):
         return ""   # exotic/luxury/classic auto stays opportunistic, per ADR-0012
     hit = _OFF_ICP_NAME_RE.search(name)
@@ -288,7 +296,7 @@ def off_icp_business_name_reason(lead: dict) -> str:
 
 
 def off_icp_trade_reason(lead: dict) -> str:
-    """The single ADR-0012 trade check: vertical first, then business name.
+    """The canonical trade check: vertical first, then business name.
 
     One entry point so the storage gate, the boot hygiene sweep and the
     pre-send gate cannot drift apart — the divergence that let 48 emails ship.

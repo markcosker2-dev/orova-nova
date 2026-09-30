@@ -1,6 +1,11 @@
 import os
 import pytest
 
+# Installed before test collection imports main/worker. Verification must not
+# inherit credentials from the operator's production-configured local file.
+_prior_dotenv_disabled = os.environ.get("PYTHON_DOTENV_DISABLED")
+os.environ["PYTHON_DOTENV_DISABLED"] = "1"
+
 # Keep tests deterministic and offline: firewall goal alignment falls back to
 # the keyword heuristic instead of calling the embedding API.
 os.environ.setdefault("FIREWALL_SEMANTIC_ALIGNMENT", "0")
@@ -22,6 +27,10 @@ def pytest_unconfigure(config):
     the interpreter (and CI) open indefinitely. This only runs after tests;
     it does not change the application lifecycle.
     """
+    if _prior_dotenv_disabled is None:
+        os.environ.pop("PYTHON_DOTENV_DISABLED", None)
+    else:
+        os.environ["PYTHON_DOTENV_DISABLED"] = _prior_dotenv_disabled
     import concurrent.futures
     import gc
     from anyio._backends._asyncio import WorkerThread

@@ -47,8 +47,8 @@ def render_prompt(*, booking_mode: str = "capture") -> dict[str, str]:
     if booking_mode == "verified":
         booking_policy = (
             "DIRECT BOOKING IS VERIFIED. After the caller explicitly agrees to "
-            "meet, use check_availability_cal before offering a time. Use only a "
-            "slot the tool returns. Call book_appointment_cal only after the caller "
+            "meet, use check_calcom_availability before offering a time. Use only a "
+            "slot the tool returns. Call book_calcom_appointment only after the caller "
             "chooses that slot. Say the meeting is booked only after the booking "
             "tool succeeds. If either tool fails, capture two preferred times and "
             "tell the caller Mark will confirm."

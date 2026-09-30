@@ -19,11 +19,14 @@ def test_capture_mode_is_consent_first_and_fail_closed():
 
 def test_verified_mode_requires_availability_then_explicit_booking():
     prompt = render_prompt(booking_mode="verified")["general_prompt"].lower()
-    availability = prompt.index("check_availability_cal")
-    booking = prompt.index("book_appointment_cal")
+    availability = prompt.index("check_calcom_availability")
+    booking = prompt.index("book_calcom_appointment")
     assert availability < booking
+    assert "check_availability_cal" not in prompt
+    assert "book_appointment_cal" not in prompt
     assert "only after the caller chooses that slot" in prompt
     assert "only after the booking tool succeeds" in prompt
+    assert "if either tool fails, capture two preferred times" in prompt
 
 
 def test_renderer_does_not_use_inbound_template_variables():

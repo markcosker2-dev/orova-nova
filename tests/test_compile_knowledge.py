@@ -106,18 +106,17 @@ def test_lint_catches_meeting_duration_drift(tmp_path, monkeypatch):
     assert ck.lint_meeting_duration(facts) == []
 
 
-def test_speed_to_lead_is_not_a_meeting_duration():
-    """'call the homeowner in 5 minutes' is the differentiator, not a length.
-
-    It sits directly beside the word 'call', so a naive proximity rule flags it
-    on every run — and a linter that cries wolf gets switched off. The
-    preposition is what separates a latency from a duration.
-    """
+def test_speed_to_lead_is_not_a_meeting_duration(tmp_path, monkeypatch):
+    """A latency is not a call length; synthetic copy is not a service promise."""
     facts = ck.load_facts()
-    bc = ck.BUSINESS_CONTEXT_PATH.read_text(encoding="utf-8")
-    assert "in 5 minutes" in bc, "the speed-to-lead claim should still be in the copy"
-    assert not any("business_context.json" in e and "5 minute" in e
-                   for e in ck.lint_meeting_duration(facts))
+    target = tmp_path / "app" / "core" / "business_context.json"
+    target.parent.mkdir(parents=True)
+    monkeypatch.setattr(ck, "ROOT", tmp_path)
+    target.write_text(json.dumps({"example": "Call the homeowner in 5 minutes."}), encoding="utf-8")
+    assert ck.lint_meeting_duration(facts) == []
+    # Positive control: the same number as an appointment length is drift.
+    target.write_text(json.dumps({"example": "Book a 5-minute call."}), encoding="utf-8")
+    assert any("meeting drift" in error for error in ck.lint_meeting_duration(facts))
 
 
 def test_timers_are_not_flagged_as_meeting_durations():

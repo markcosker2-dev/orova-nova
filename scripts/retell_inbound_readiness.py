@@ -9,13 +9,16 @@ truthfulness/consent gates before Mark puts the number in a DM?
 
     python scripts/retell_inbound_readiness.py
 
-Exit 0 means the machine-verifiable gates pass. Exit 2 means HOLD demo traffic.
-The final paid phone-call test remains a human approval step either way.
+Exit 0 means production routing and the machine-verifiable gates pass. Exit 2
+means HOLD demo traffic, including when a non-production inspection passes.
+Draft checks never establish phone readiness. End-to-end booking, simulations,
+and the final phone-call test remain separate human-approved launch gates.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import subprocess
@@ -140,9 +143,55 @@ def _event_type_id(tool: dict[str, Any]) -> int | None:
     return None
 
 
-def _check(label: str, passed: bool, detail: str, *, severity: str = "BLOCK") -> dict[str, Any]:
+def _check(label: str, passed: bool, detail: str, *, severity: str = "BLOCK",
+           scope: str = "inspection") -> dict[str, Any]:
     return {"label": label, "passed": bool(passed), "detail": detail,
-            "severity": severity}
+            "severity": severity, "scope": scope}
+
+
+def _version_number(value: Any) -> int | None:
+    # Retell's resolved resource versions are integers. bool is an int subclass
+    # but is not evidence of a version; do not coerce missing/latest values.
+    return value if type(value) is int and value >= 0 else None
+
+
+def _route_version(value: Any) -> int | str | None:
+    version = _version_number(value)
+    if version is not None:
+        return version
+    if isinstance(value, str):
+        if re.fullmatch(r"[0-9]{1,20}", value):
+            return int(value)
+        if (re.fullmatch(r"[a-z][a-z0-9_-]{0,19}", value)
+                and not re.fullmatch(r"v[0-9]+", value)):
+            return value
+    return None
+
+
+def _validated_routes(value: Any) -> list[dict[str, Any]] | None:
+    """Validate every route, including zero-weight entries, before filtering.
+
+    Retell documents a non-empty routing list with finite numeric weights that
+    total one. Malformed entries must not disappear into a supposedly disabled
+    route; a valid zero-weight entry is the only route we can safely exclude.
+    """
+    if not isinstance(value, list) or not value:
+        return None
+    for route in value:
+        if not isinstance(route, dict):
+            return None
+        agent_id = route.get("agent_id")
+        weight = route.get("weight")
+        if (not isinstance(agent_id, str)
+                or not re.fullmatch(r"[A-Za-z0-9_-]+", agent_id)
+                or type(weight) not in (int, float)
+                or not 0 <= weight <= 1 or not math.isfinite(weight)
+                or _route_version(route.get("agent_version")) is None):
+            return None
+    if not math.isclose(math.fsum(route["weight"] for route in value),
+                        1.0, rel_tol=0.0, abs_tol=1e-9):
+        return None
+    return value
 
 
 def _analysis_field(agent: dict[str, Any], name: str) -> dict[str, Any]:
@@ -153,35 +202,91 @@ def _analysis_field(agent: dict[str, Any], name: str) -> dict[str, Any]:
 
 
 def evaluate_snapshot(phone: dict[str, Any], agent: dict[str, Any],
-                      llm: dict[str, Any], cal_duration: int | None) -> dict[str, Any]:
-    """Evaluate already-fetched, secret-bearing objects without returning them."""
+                      llm: dict[str, Any], cal_duration: int | None, *,
+                      inspection_version: str = "prod") -> dict[str, Any]:
+    """Evaluate fetched objects without returning secret-bearing input.
+
+    The four positional arguments remain compatible. ``ready`` and
+    ``traffic_ready`` are production-only; ``inspection_ready`` reports the
+    selected draft/version's own contract checks, independent of phone routing.
+    A non-prod inspection always holds traffic even if its own checks pass.
+    """
     checks: list[dict[str, Any]] = []
-    inbound = phone.get("inbound_agents") or []
-    bindings = [b for b in inbound if isinstance(b, dict)
-                and b.get("agent_id") == EXPECTED_AGENT_ID]
-    checks.append(_check("number binding", bool(bindings),
-                         "expected inbound agent is bound" if bindings
-                         else "expected inbound agent is NOT bound"))
-    tag_bound = any(str(b.get("agent_version", "")).lower() == "prod" for b in bindings)
-    checks.append(_check("version binding", tag_bound,
-                         "number follows the prod tag" if tag_bound
-                         else "number is not bound through the prod rollback tag",
-                         severity="WARN"))
+    routes = _validated_routes(phone.get("inbound_agents"))
+    active_routes = [route for route in (routes or []) if route["weight"] > 0]
+    reviewed_routes = bool(active_routes) and all(
+        route["agent_id"] == EXPECTED_AGENT_ID for route in active_routes
+    )
+    checks.append(_check("phone identity", phone.get("phone_number") == EXPECTED_PHONE_NUMBER,
+                         "reviewed inbound number retrieved", scope="traffic"))
+    checks.append(_check("routing structure", routes is not None,
+                         "all routes have valid references and weights totalling one",
+                         scope="traffic"))
+    checks.append(_check("number binding", reviewed_routes,
+                         "every active route uses the reviewed inbound agent"
+                         if reviewed_routes else "an active route is missing or unreviewed",
+                         scope="traffic"))
+    checks.append(_check(
+        "routing overrides",
+        phone.get("inbound_webhook_url") in (None, "")
+        and phone.get("fallback_number") in (None, ""),
+        "no unreviewed inbound override or fallback route", scope="traffic",
+    ))
+
+    version = _version_number(agent.get("version"))
+    raw_tags = agent.get("assigned_tags")
+    tags = raw_tags if isinstance(raw_tags, list) and all(
+        isinstance(tag, str) for tag in raw_tags
+    ) else []
+    selector_valid = inspection_version in {"prod", "staging"} or bool(
+        re.fullmatch(r"[0-9]{1,20}", inspection_version)
+    )
+    selected_version_matches = version is not None and selector_valid and (
+        inspection_version == "prod"
+        or (inspection_version == "staging" and "staging" in tags)
+        or (inspection_version.isdecimal() and version == int(inspection_version))
+    )
+    checks.append(_check("inspection version", selected_version_matches,
+                         "response resolves to the explicitly inspected version/tag"))
+    production = inspection_version == "prod"
+    published_prod = agent.get("is_published") is True and "prod" in tags
+    exact_version_bound = reviewed_routes and version is not None and published_prod and all(
+        _route_version(route["agent_version"]) in ("prod", version)
+        for route in active_routes
+    )
+    checks.append(_check("version binding", exact_version_bound,
+                         "every active route resolves to the reviewed published prod version"
+                         if exact_version_bound else "phone routing does not resolve to reviewed published prod",
+                         scope="traffic"))
+    checks.append(_check("production inspection", production,
+                         "prod is being inspected" if production
+                         else "non-prod inspection cannot establish phone traffic readiness",
+                         scope="traffic"))
 
     checks.append(_check("agent identity", agent.get("agent_id") == EXPECTED_AGENT_ID,
-                         "prod resolves to reviewed inbound agent"))
-    response_engine = agent.get("response_engine") or {}
+                         "inspected version uses the reviewed inbound agent"))
+    raw_engine = agent.get("response_engine")
+    response_engine = raw_engine if isinstance(raw_engine, dict) else {}
     checks.append(_check(
         "response engine",
         response_engine.get("type") == "retell-llm"
         and response_engine.get("llm_id") == EXPECTED_LLM_ID,
         "reviewed Retell LLM is attached",
     ))
-    tags = {str(tag).lower() for tag in (agent.get("assigned_tags") or [])}
     checks.append(_check("prod tag", "prod" in tags,
                          "resolved version carries prod" if "prod" in tags
                          else "resolved version does not report prod",
-                         severity="WARN"))
+                         scope="traffic"))
+    checks.append(_check("agent published", agent.get("is_published") is True,
+                         "inspected agent is published", scope="traffic"))
+    llm_version = _version_number(llm.get("version"))
+    engine_version = _version_number(response_engine.get("version"))
+    checks.append(_check(
+        "LLM version", engine_version is not None and llm_version == engine_version,
+        "exact pinned response-engine version retrieved",
+    ))
+    checks.append(_check("LLM published", llm.get("is_published") is True,
+                         "inspected response engine is published", scope="traffic"))
 
     storage = str(agent.get("data_storage_setting") or "unknown").lower()
     checks.append(_check(
@@ -280,8 +385,12 @@ def evaluate_snapshot(phone: dict[str, Any], agent: dict[str, Any],
     ))
 
     blockers = [c for c in checks if c["severity"] == "BLOCK" and not c["passed"]]
+    inspection_blockers = [c for c in blockers if c["scope"] == "inspection"]
     warnings = [c for c in checks if c["severity"] == "WARN" and not c["passed"]]
-    return {"ready": not blockers, "checks": checks,
+    traffic_ready = production and not blockers
+    return {"ready": traffic_ready, "traffic_ready": traffic_ready,
+            "inspection_ready": not inspection_blockers, "checks": checks,
+            "inspection_blocker_count": len(inspection_blockers),
             "blocker_count": len(blockers), "warning_count": len(warnings)}
 
 
@@ -338,11 +447,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--version", default="prod",
-        help="Retell agent version or environment tag to inspect (default: prod)",
+        help="prod checks phone traffic; staging/numeric versions inspect only and keep traffic on HOLD",
     )
     args = parser.parse_args()
     version = str(args.version).strip().lower()
-    if not re.fullmatch(r"(?:prod|staging|\d+)", version):
+    if not re.fullmatch(r"(?:prod|staging|[0-9]{1,20})", version):
         parser.error("--version must be prod, staging, or a non-negative integer")
 
     env = load_env()
@@ -363,14 +472,20 @@ def main() -> int:
         f"{RETELL_BASE}/get-phone-number/{encoded_phone}", bearer=api_key)
     agent_status, agent = _get_json(
         f"{RETELL_BASE}/get-agent/{EXPECTED_AGENT_ID}?version={version}", bearer=api_key)
-    if phone_status != 200 or agent_status != 200 or not phone or not agent:
-        print(f"  HOLD  Retell reads failed (number={phone_status}, agent={agent_status})")
+    if agent_status != 200 or not agent:
+        print(f"  HOLD  Retell agent read failed (status={agent_status})")
         return 2
-    engine = agent.get("response_engine") or {}
+    if phone_status != 200 or not phone:
+        phone = {}
+        print(f"  HOLD  number read failed (status={phone_status}); traffic cannot be verified")
+    raw_engine = agent.get("response_engine")
+    engine = raw_engine if isinstance(raw_engine, dict) else {}
     llm_id = engine.get("llm_id") or EXPECTED_LLM_ID
-    llm_version = engine.get("version")
-    llm_query = (f"?version={urllib.parse.quote(str(llm_version), safe='')}"
-                 if llm_version is not None else "")
+    llm_version = _version_number(engine.get("version"))
+    if llm_version is None:
+        print("  HOLD  response-engine version is not pinned; latest cannot verify the inspected agent")
+        return 2
+    llm_query = f"?version={llm_version}"
     llm_status, llm = _get_json(
         f"{RETELL_BASE}/get-retell-llm/{urllib.parse.quote(str(llm_id), safe='')}{llm_query}",
         bearer=api_key,
@@ -379,7 +494,8 @@ def main() -> int:
         print(f"  HOLD  Retell response-engine read failed (status={llm_status})")
         return 2
 
-    result = evaluate_snapshot(phone, agent, llm, _cal_duration(env))
+    result = evaluate_snapshot(phone, agent, llm, _cal_duration(env),
+                               inspection_version=version)
     configured_from = re.sub(r"\D", "", env.get("RETELL_FROM_NUMBER", ""))
     expected_from = re.sub(r"\D", "", EXPECTED_PHONE_NUMBER)
     if configured_from and configured_from != expected_from:
@@ -387,8 +503,14 @@ def main() -> int:
     for check in result["checks"]:
         state = "OK" if check["passed"] else check["severity"]
         print(f"  {state:<5} {check['label']:<22} {check['detail']}")
-    if result["ready"]:
-        print("\n  READY by machine checks. Still run the booking test, simulations, "
+    if version != "prod":
+        inspection = "INSPECTION PASSED" if result["inspection_ready"] else "INSPECTION FAILED"
+        print(f"\n  {inspection}: {result['inspection_blocker_count']} inspected-version blocking check(s).")
+        print("  HOLD demo traffic: a non-prod inspection does not verify production phone routing. "
+              "After publish/binding approval, re-run the default prod check and all launch tests.")
+        return 2
+    if result["traffic_ready"]:
+        print("\n  READY by machine checks for the exact published production route. Still run the booking test, simulations, "
               "web call, and owner-approved phone test before DMs.")
         return 0
     print(f"\n  HOLD demo traffic: {result['blocker_count']} blocking check(s), "

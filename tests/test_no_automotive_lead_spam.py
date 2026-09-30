@@ -148,7 +148,6 @@ IN_ICP_CONTROLS = [
     "Autumn Ridge Custom Homes",
     "Mechanical Contractors of Seattle",
     "Pinnacle Luxury Renovations",
-    "Radiance Med Spa",
     "Bellevue Luxury Properties Group",
 ]
 
@@ -159,6 +158,10 @@ def test_zero_false_positives_on_real_in_icp_names(business):
         f"{business!r} was wrongly quarantined — a blocked remodeler is a lost "
         f"prospect, which costs more than an automotive lead getting through."
     )
+
+
+def test_owner_excluded_med_spa_is_not_an_in_icp_control():
+    assert "ADR-0015" in _gate("Radiance Med Spa", "custom home builder california")
 
 
 # ── 4. The hunt report must not re-announce the same businesses ─────────────

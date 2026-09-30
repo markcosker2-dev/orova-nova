@@ -165,6 +165,24 @@ from app.skills.agentmail_skill import check_replies
 from app.skills.vault_skill import backup_database, restore_latest, vault_scheduler_loop
 from app.skills.sheets_sync import restore_leads_from_sheets, update_lead_status_sheets
 
+
+async def _ensure_auxiliary_restore_schema() -> bool:
+    """Rebuild tables lost by a swap/reset without discarding restored data."""
+    from app.core.event_log import ensure_events_table
+    from app.core.self_learning import ensure_tables
+
+    ok = True
+    for label, ensure in (("events", ensure_events_table), ("learning", ensure_tables)):
+        try:
+            if not await ensure():
+                ok = False
+                logger.error("[RESTORE] %s schema could not be ensured", label)
+        except Exception as error:
+            ok = False
+            logger.error("[RESTORE] %s schema failed (%s)", label, type(error).__name__)
+    return ok
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # [ENV] Report which capabilities are switched off for want of config, before
@@ -226,9 +244,10 @@ async def lifespan(app: FastAPI):
             try:
                 DatabaseManager._init_sqlite_fallback()
                 await DatabaseManager.run_phase5_migrations()
-                # Restored snapshot may predate the events table — re-ensure it.
-                from app.core.event_log import ensure_events_table as _ensure_events
-                await _ensure_events()
+                # The pre-swap bootstrap belongs to the replaced DB. An old
+                # valid snapshot can predate BOTH event and learning tables.
+                # Auxiliary failure is reported, never a reason to erase it.
+                await _ensure_auxiliary_restore_schema()
                 logger.info(f"♻️ Restored database snapshot from Drive: {restore_res.get('filename')}")
                 restored_ok = True
             except Exception as adopt_err:
@@ -246,14 +265,8 @@ async def lifespan(app: FastAPI):
                 # path, which is why production logged `[EVENTS] log
                 # 'lead_discovered' failed (non-fatal): no such table: events`
                 # on a live hunt: ADR-0007's canonical event log did not exist.
-                try:
-                    from app.core.event_log import ensure_events_table as _ensure_events
-                    await _ensure_events()
-                    from app.core.self_learning import ensure_tables as _ensure_learning
-                    await _ensure_learning()
+                if await _ensure_auxiliary_restore_schema():
                     logger.info("[EVENTS] Event + learning tables rebuilt on the fresh DB")
-                except Exception as schema_err:
-                    logger.error(f"⚠️ Could not rebuild schema on the fresh DB: {schema_err}")
             except Exception as reset_err:
                 logger.critical(f"⚠️ DB reset after a failed restore failed: {reset_err}")
             # INFO, not WARNING (2026-08-02). Drive is the OPTIONAL tier — its
@@ -2052,49 +2065,18 @@ async def get_pipelines_list(authorized: bool = Depends(require_dashboard_api_ke
 
 @app.post("/api/pipelines/run")
 async def run_pipeline_action(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
-    data = await request.json()
-    pipeline_name = data.get("pipeline")
-    return {"status": "ok", "message": f"Pipeline {pipeline_name} started successfully"}
+    # This legacy endpoint has no dispatcher. Never confirm nonexistent work.
+    return {"status": "blocked", "message": "This pipeline launcher is not connected. No job was started."}
 
 @app.post("/api/actions/approve-email")
 async def approve_email(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
-    data = await request.json()
-    email_id = data.get("id")
-    if not email_id:
-        raise HTTPException(status_code=400, detail="Missing email ID")
-    content_file = os.path.join(root_path, "content.json")
-    try:
-        with open(content_file, "r", encoding="utf-8") as f:
-            content = json.load(f)
-        for item in content:
-            if item.get("id") == email_id:
-                item["status"] = "sent"
-                break
-        with open(content_file, "w", encoding="utf-8") as f:
-            json.dump(content, f, indent=2)
-    except Exception:
-        pass
-    return {"status": "ok", "message": f"Email {email_id} approved and queued for sending"}
+    # The old UI changed a local label to 'sent' without sending anything or
+    # using the approval chokepoint. It cannot authorize AgentMail cold email.
+    return {"status": "blocked", "message": "This legacy email control is not connected to the approval workflow. Nothing was sent or queued; cold AgentMail outreach remains blocked."}
 
 @app.post("/api/actions/deny-email")
 async def deny_email(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
-    data = await request.json()
-    email_id = data.get("id")
-    if not email_id:
-        raise HTTPException(status_code=400, detail="Missing email ID")
-    content_file = os.path.join(root_path, "content.json")
-    try:
-        with open(content_file, "r", encoding="utf-8") as f:
-            content = json.load(f)
-        for item in content:
-            if item.get("id") == email_id:
-                item["status"] = "denied"
-                break
-        with open(content_file, "w", encoding="utf-8") as f:
-            json.dump(content, f, indent=2)
-    except Exception:
-        pass
-    return {"status": "ok", "message": f"Email {email_id} denied"}
+    return {"status": "blocked", "message": "This legacy email control is not connected. Use reject APPROVAL-ID for an actual pending approval. No approval record was changed."}
 
 
 # ═══════════════════════════════════════════════════════
