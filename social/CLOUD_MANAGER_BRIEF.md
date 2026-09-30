@@ -1,6 +1,6 @@
 # OROVA Instagram cloud social-manager brief
 
-Updated 2026-09-29. This is a non-secret briefing for a ChatGPT Work cloud scheduled task. Verify live state on each run; this document is not proof that a post is queued, published, or performing.
+Updated 2026-09-30. This is a non-secret briefing for a ChatGPT Work cloud scheduled task. Verify live state on each run; this document is not proof that a post is queued, published, or performing.
 
 ## Scope
 
@@ -15,6 +15,20 @@ Run a Monday/Wednesday/Friday review at 21:00 Asia/Singapore in **Work cloud**, 
 - Caption: 2–4 short paragraphs with real blank lines, one specific insight, one clear CTA, then a blank line and 3–5 niche hashtags separated by spaces. Follow [`social/CAPTION_STYLE.md`](./CAPTION_STYLE.md) and [`app/core/brand_guidelines.json`](../app/core/brand_guidelines.json). Check the *persisted* Make value and live Instagram caption, not only the draft file.
 - Rotate acquisition (Meta ads), qualification/follow-up for opted-in enquiries, and founder education. Use no invented client case studies, performance numbers, guarantees, fake scarcity or cold-call claims. The old Instagram “47 qualified calls in 21 days” post is unsubstantiated; do not repeat it. Demo number remains held until inbound Retell gate passes.
 - Use account-specific insights and actual performance rather than generic algorithm promises. Track non-follower reach, saves, shares, profile visits, qualified DMs and meetings; zero interaction must be reported honestly. Cite sources for platform changes.
+
+## Reel direction and review gate
+
+- Build for *relevant builders*, not broad vanity reach. Begin with a builder-specific tension or unanswered question in the first 1–2 seconds; show the payoff rather than a logo intro. Give one concrete check or useful action before asking for a DM. Test different hooks and formats against actual watch time, non-follower reach, saves, shares, profile visits, and qualified conversations. No Reel can be promised to go viral.
+- Make original 9:16, sound-on, faceless, humanless explainers with an informative natural voice, full-length visuals, legible timed captions, and essential text inside Instagram-safe areas. The final visual and narration must end together: no 8-second image stretched under a 25-second script, blank tail, clipped wordmark, or caption-artwork collision. Inspect opening, each scene change, and final frame; listen to the full voice track before approval.
+- Treat narration/music/stock licensing as a publication gate. A no-cost preview voice is not proof of commercial publishing rights; replace or verify it before `ready`. Keep a source/license note for any non-OROVA footage or music.
+- Use the exact supplied wordmark only. Keep the near-black/off-white/green identity while changing *editorial form*: alternate real licensed/original builder footage, animated handoff diagrams, example forms clearly labelled illustrative, architectural details, kinetic type, and real workflow demonstrations. Do not repeat the same card, stock house montage, claim, caption template, or prior Reel asset with minor edits. Avoid fake dashboards, fabricated customer stories, and unverified outcomes.
+- The first revised owner-review concept is [`social/reel_05_lead_handoff/creative_brief.md`](./reel_05_lead_handoff/creative_brief.md). It is a design and copy reference, **not a queued post**. Do not publish it until Mark judges the edit and the normal queue/duplicate checks pass.
+- Meta says Reels creative should be vertical, use audio, and keep important elements in safe zones; Instagram provides watch-time insight for testing where viewers leave. Meta has also reported greater recommendation of original Instagram posts. These guide creative testing, not guaranteed reach or client acquisition: [Reels creative](https://www.facebook.com/business/ads/facebook-instagram-reels-ads), [creator best practices](https://about.fb.com/news/2024/10/best-practices-education-hub-creators-instagram/), [watch-time insight](https://about.fb.com/news/2023/04/instagram-reels-trending-audio-and-gifts-updates/), [original content](https://about.fb.com/news/2026/01/2026-ai-drives-performance/).
+
+### ChatCut access truth
+
+- On September 29 the **local Codex** session had hosted ChatCut project/edit tools, but the separate **Work cloud** task did not expose them or a hosted ChatCut connection. A local plugin, an open laptop browser tab, and a ChatCut editor link do **not** give the laptop-off task video-editing access. Recheck actual callable ChatCut tools/connection on a future cloud run; do not repeat connection speculation or claim they work until a cloud run creates and verifies an editable project without local files.
+- If ChatCut becomes genuinely callable in Work cloud, use it for original editable Reel production, verify that every media source is cloud-readable, and keep the $0 budget: do not invoke credit-charging AI video, TTS, export, or other paid actions without a verified free route and owner approval. If ChatCut remains unavailable, the task may draft a brief/storyboard/caption in Sheets or GitHub but must keep Reels **draft-only**, with no `ready` promotion and no claim that a video was rendered. Continue safe non-Reel planning and the existing Make publishing path according to the queue rules below.
 
 ## Systems and safety
 
