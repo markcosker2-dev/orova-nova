@@ -57,6 +57,7 @@ def test_focused_benchmarks_keep_permission_and_durability_scenarios(monkeypatch
     assert "tests/test_lead_storage_gate.py" in pytest_argv
     assert "tests/test_sheets_restore.py" in pytest_argv
     assert "tests/test_retell_inbound_readiness.py" in pytest_argv
+    assert "tests/test_learning_report_truth.py" in pytest_argv
     assert "LOCAL BENCHMARKS PASS" in capsys.readouterr().out
 
 

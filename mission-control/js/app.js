@@ -1426,48 +1426,53 @@ document.getElementById('btn-run-proofread')?.addEventListener('click', async fu
 });
 
 // ═══════════════════ SELF-IMPROVEMENT ═══════════════════
+function strategyObservation(strategy) {
+    var n = Number(strategy.sample_size);
+    if (!Number.isInteger(n) || n < 0) return 'Sample count unavailable; candidate only';
+    if (n === 0 || strategy.confidence === 'baseline') return 'Seeded/default candidate; no observed results';
+    return 'Stored sample count: ' + n + '; ranking not independently verified';
+}
+
+function learningResultNotice(data) {
+    if (data && data.status === 'observed') {
+        if (data.notification === 'sent' || data.notification === 'suppressed') {
+            return { message: 'Learning ledger checked. No campaign rollout.', kind: 'info' };
+        }
+        return { message: 'Ledger checked; Telegram notice held or unverified. No campaign rollout.', kind: 'warning' };
+    }
+    return { message: 'Learning result unavailable or unverified. No campaign rollout confirmed.', kind: 'error' };
+}
+
 async function renderImprovement() {
     var data = await apiFetch('/api/learned_strategies');
-    if (!data || !data.strategies) return;
-    var strategies = data.strategies;
-
-    // Best framework
-    var fw = strategies.find(function (s) { return s.strategy_type === 'email_framework' && s.active === 1; });
-    if (fw) {
-        document.getElementById('imp-best-framework').textContent = fw.strategy_value.toUpperCase();
-        document.getElementById('imp-framework-meta').textContent = 'Win rate: ' + (fw.win_rate * 100).toFixed(0) + '% | n=' + fw.sample_size + ' | ' + fw.confidence;
-    }
-    // Best timing
-    var timing = strategies.find(function (s) { return s.strategy_type === 'send_timing' && s.active === 1; });
-    if (timing) {
-        document.getElementById('imp-best-timing').textContent = timing.strategy_value + ':00';
-        document.getElementById('imp-timing-meta').textContent = 'Win rate: ' + (timing.win_rate * 100).toFixed(0) + '% | n=' + timing.sample_size + ' | ' + timing.confidence;
-    }
-    // Best niche
-    var niche = strategies.find(function (s) { return s.strategy_type === 'niche' && s.active === 1; });
-    if (niche) {
-        document.getElementById('imp-best-niche').textContent = niche.strategy_value || '—';
-        document.getElementById('imp-niche-meta').textContent = 'ROI: ' + (niche.win_rate * 100).toFixed(0) + '% | n=' + niche.sample_size;
-    }
-
-    // Table
+    var available = data && Array.isArray(data.strategies);
+    var strategies = available ? data.strategies.filter(function (s) { return s && typeof s === 'object'; }) : [];
+    [
+        ['email_framework', 'imp-best-framework', 'imp-framework-meta'],
+        ['send_timing', 'imp-best-timing', 'imp-timing-meta'],
+        ['niche', 'imp-best-niche', 'imp-niche-meta']
+    ].forEach(function (card) {
+        var candidate = strategies.find(function (s) { return s.strategy_type === card[0] && s.active === 1; });
+        document.getElementById(card[1]).textContent = candidate ?
+            String(candidate.strategy_value || 'Unset').slice(0, 100) + ' (candidate)' :
+            (available ? 'Not established' : 'Unverified');
+        document.getElementById(card[2]).textContent = candidate ? strategyObservation(candidate) :
+            (available ? 'No stored candidate; no proven winner' : 'Strategy data unavailable');
+    });
     var tableEl = document.getElementById('imp-strategies-table');
     tableEl.innerHTML = strategies.length > 0 ? strategies.map(function (s) {
-        return '<div class="feed-entry"><span class="feed-time">' + esc(s.strategy_type) + '</span><span class="feed-msg">' + esc(s.strategy_value) + ' — win: ' + (s.win_rate * 100).toFixed(0) + '% (' + s.confidence + ')</span></div>';
-    }).join('') : '<div class="feed-empty">No strategies learned yet</div>';
+        return '<div class="feed-entry"><span class="feed-time">' + esc(s.strategy_type) + '</span><span class="feed-msg">' + esc(s.strategy_value) + ' — ' + esc(strategyObservation(s)) + '</span></div>';
+    }).join('') : '<div class="feed-empty">' + (available ? 'No stored candidates; collect reviewed outcomes' : 'Strategy data unavailable') + '</div>';
 }
 
 document.getElementById('btn-run-improvement')?.addEventListener('click', async function () {
     var btn = this; btn.classList.add('loading'); btn.textContent = '🔄 Running...';
-    showToast('🔄 Running improvement loop...', 'info');
+    showToast('Checking the learning ledger...', 'info');
     var data = await apiFetch('/api/improvement_loop', { method: 'POST', body: '{}' });
-    btn.classList.remove('loading'); btn.textContent = '🔄 Run Improvement';
-    if (data && data.status === 'ok') {
-        showToast('✅ Improvement loop complete!', 'success');
-        await renderImprovement();
-    } else {
-        showToast('❌ Improvement loop failed', 'error');
-    }
+    btn.classList.remove('loading'); btn.textContent = 'Check Learning';
+    var notice = learningResultNotice(data);
+    showToast(notice.message, notice.kind);
+    await renderImprovement();
 });
 
 // ═══════════════════ WORKER LANES ═══════════════════

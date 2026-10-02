@@ -1362,6 +1362,10 @@ def health_check_job():
     _run_async(brain.pipeline_health_check())
 
 def self_improvement_job():
+    if zero_budget_mode():
+        # Also protect direct/API callers, not just the scheduled _safe_job.
+        logger.info("[LANE 8] Held: strategy mutation/tool learning disabled in $0 mode")
+        return
     logger.info("[LANE 8] Triggering Self-Improvement Loop...")
     from app.core.self_improvement import ImprovementLoop
     _run_async(ImprovementLoop().run())

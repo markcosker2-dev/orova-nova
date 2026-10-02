@@ -525,6 +525,7 @@ def cmd_benchmark(args) -> int:
         "tests/test_outreach_approval_chokepoint.py",
         "tests/test_telegram_operator_autonomy.py",
         "tests/test_telegram_repair_regressions.py",
+        "tests/test_learning_report_truth.py",
         "tests/test_nova_chat.py",
         "tests/test_lead_storage_gate.py",
         "tests/test_sheets_restore.py",

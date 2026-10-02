@@ -73,21 +73,15 @@ async def api_improvement_loop(request: dict = None):
     from app.core.self_improvement import ImprovementLoop
     client_id = (request or {}).get("client_id", 0)
     loop = ImprovementLoop()
-    await loop.run(client_id=client_id)
-    return {"status": "ok", "message": "Improvement loop completed"}
+    return await loop.run(client_id=client_id)
 
 
 @router.post("/approve_pruning")
 async def api_approve_pruning():
-    """Approve pending stale lead pruning."""
+    """Reject legacy age-only pruning; it is not a reviewed archive approval."""
     from app.core.router import Router
-    from app.core.planner import TaskPlanner
-    from app.core.ai_client import UnifiedAIClient
-    planner = TaskPlanner(UnifiedAIClient())
-    from app.skills.lead_gen_v3 import find_leads
-    router_obj = Router(planner, find_leads)
-    result = await router_obj._approve_pruning_handler()
-    return {"status": "ok", "message": result}
+    result = await Router()._approve_pruning_handler()
+    return {"status": "blocked", "message": result}
 
 
 @router.get("/outreach_outcomes")
@@ -154,6 +148,9 @@ async def api_improvement_log(since_id: int = 0, limit: int = 500):
 @router.post("/worker/trigger/lane/{lane}")
 async def api_trigger_lane(lane: int, client_id: int = 0):
     """Manually trigger a specific worker lane for testing."""
+    from app.core.hardening import zero_budget_mode
+    if lane == 8 and zero_budget_mode():
+        return {"status": "blocked", "message": "Learning lane is paused in $0 mode. Use Check Learning for ledger observations only."}
     from app.worker import (
         run_ceo_fast_lane, run_lead_hunt_slow_lane, run_reply_monitor,
         run_cold_lead_escalation, run_phone_first_lane, cloud_backup_job,

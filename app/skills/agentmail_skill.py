@@ -20,17 +20,26 @@ logger = logging.getLogger(__name__)
 _TG_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 _TG_CHAT_ID = os.getenv("PERSONAL_CHAT_ID") or os.getenv("ADMIN_CHAT_ID")
 
-async def _send_telegram_alert(message: str):
-    """Async Telegram alert — non-blocking, reuses cached token/chat_id."""
+async def _send_telegram_alert(message: str) -> bool:
+    """True only on Bot API acknowledgement; never log credential-bearing URLs."""
     if not _TG_TOKEN or not _TG_CHAT_ID:
         logger.warning("Telegram report skipped: TOKEN or CHAT_ID missing.")
-        return
+        return False
     url = f"https://api.telegram.org/bot{_TG_TOKEN}/sendMessage"
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            await client.post(url, data={"chat_id": _TG_CHAT_ID, "text": message, "parse_mode": "Markdown"})
+            response = await client.post(url, data={"chat_id": _TG_CHAT_ID, "text": message, "parse_mode": "Markdown"})
+            if response.status_code != 200:
+                logger.warning("Telegram alert not acknowledged (HTTP %s)", response.status_code)
+                return False
+            payload = response.json()
+            if not isinstance(payload, dict) or payload.get("ok") is not True:
+                logger.warning("Telegram alert not acknowledged by Bot API")
+                return False
+            return True
     except Exception as e:
-        logger.error(f"Failed to send Telegram alert: {e}")
+        logger.error("Failed to send Telegram alert (%s)", type(e).__name__)
+        return False
 
 # ── Globals ──────────────────────────────────────────────────────
 _client = None

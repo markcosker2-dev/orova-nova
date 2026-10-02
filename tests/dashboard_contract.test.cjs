@@ -125,3 +125,48 @@ test('all production dashboard scripts parse', () => {
         assert.equal(result.status, 0, result.stderr);
     }
 });
+
+test('seeded strategy rates and weighted scores are not measured wins or ROI', async () => {
+    const { nodes, context } = harness({ apiFetch: async () => ({ strategies: [
+        { strategy_type: 'email_framework', strategy_value: 'pas', active: 1, win_rate: 0.23, sample_size: 0, confidence: 'baseline' },
+        { strategy_type: 'send_timing', strategy_value: '10', active: 1, win_rate: 0.28, sample_size: 2, confidence: 'low' },
+        { strategy_type: 'niche', strategy_value: '<script>', active: 1, win_rate: 2, sample_size: 20, confidence: 'high' }
+    ] }) });
+    vm.runInContext(section('function strategyObservation(', "document.getElementById('btn-run-improvement')"), context);
+    await vm.runInContext('renderImprovement()', context);
+    assert.equal(nodes.get('imp-best-framework').textContent, 'pas (candidate)');
+    assert.match(nodes.get('imp-framework-meta').textContent, /no observed results/);
+    assert.match(nodes.get('imp-timing-meta').textContent, /not independently verified/);
+    const html = nodes.get('imp-strategies-table').innerHTML;
+    assert.ok(!html.includes('23%') && !html.includes('28%') && !html.includes('200%'));
+    assert.ok(html.includes('&lt;script&gt;') && !html.includes('<script>'));
+});
+
+test('missing strategy data clears stale winner cards instead of retaining them', async () => {
+    const { nodes, context } = harness({ apiFetch: async () => null });
+    vm.runInContext(section('function strategyObservation(', "document.getElementById('btn-run-improvement')"), context);
+    await vm.runInContext('renderImprovement()', context);
+    assert.equal(nodes.get('imp-best-framework').textContent, 'Unverified');
+    assert.equal(nodes.get('imp-best-timing').textContent, 'Unverified');
+    assert.equal(nodes.get('imp-best-niche').textContent, 'Unverified');
+    assert.match(nodes.get('imp-strategies-table').innerHTML, /unavailable/);
+});
+
+test('learning action distinguishes observations, held notices and missing results', () => {
+    const { context } = harness();
+    vm.runInContext(section('function strategyObservation(', 'async function renderImprovement()'), context);
+    for (const notification of ['sent', 'suppressed']) {
+        const result = vm.runInContext(`learningResultNotice({status:'observed',notification:'${notification}'})`, context);
+        assert.equal(result.kind, 'info');
+        assert.match(result.message, /No campaign rollout/);
+    }
+    for (const notification of ['delivery_unverified', 'storage_unavailable', 'sent_uncheckpointed', undefined]) {
+        context.data = { status: 'observed', notification };
+        const result = vm.runInContext('learningResultNotice(data)', context);
+        assert.equal(result.kind, 'warning');
+    }
+    for (const data of [null, { status: 'unavailable' }, { status: 'ok' }]) {
+        context.data = data;
+        assert.equal(vm.runInContext('learningResultNotice(data).kind', context), 'error');
+    }
+});

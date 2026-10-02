@@ -154,39 +154,13 @@ class Router:
         return f"❌ Task `{task_id}` not found or already executing."
 
     async def _approve_pruning_handler(self):
-        from app.core.database import DatabaseManager
-        from app.skills.email_sequence_skill import update_sheets_lead_status
-        lead_ids = await DatabaseManager.get_state("pending_prune_lead_ids")
-        if not lead_ids:
-            return "No pending stale leads to prune."
-            
-        try:
-            # Fetch lead details first so we can update Sheets
-            placeholders = ",".join("?" for _ in lead_ids)
-            leads = await DatabaseManager.fetchall(
-                # noqa-safe: `placeholders` is "?,?,?" generated from a count.
-                f"SELECT business FROM leads WHERE id IN ({placeholders})",  # noqa: S608
-                tuple(lead_ids)
-            )
-            
-            # Update status in DB
-            await DatabaseManager.query(
-                # noqa-safe: `placeholders` is "?,?,?" generated from a count.
-                f"UPDATE leads SET status = 'Archived', updated_at = CURRENT_TIMESTAMP WHERE id IN ({placeholders})",  # noqa: S608
-                tuple(lead_ids)
-            )
-            
-            # Clear state
-            await DatabaseManager.set_state("pending_prune_lead_ids", None)
-            
-            # Async background update of Google Sheets
-            for lead in leads:
-                asyncio.create_task(update_sheets_lead_status(lead["business"], "Archived"))
-                
-            return f"✅ Approved! Archived {len(lead_ids)} stale leads in the database and CRM."
-        except Exception as e:
-            logger.error(f"Error executing pruning: {e}")
-            return f"❌ Error executing pruning: {e}"
+        # Legacy ID lists have no tenant scope, expiry, reviewed disposition or
+        # verified contact history. Never consume them after a deployment.
+        return (
+            "No leads were archived. Age-only bulk pruning is disabled. "
+            "Review the actual contact history and disposition before an individual archive decision; "
+            "untouched prospects stay in the CRM."
+        )
 
     async def _greet(self):
         return "👋 I'm Nova, your OROVA AI. Ready to work."
