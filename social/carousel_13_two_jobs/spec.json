@@ -1,0 +1,45 @@
+{
+  "folder": "carousel_13_two_jobs",
+  "seed": 13,
+  "slides": [
+    {
+      "type": "hook",
+      "kicker": "META ADS + LEAD QUALIFICATION",
+      "headline": "Two jobs. One {pipeline}.",
+      "sub": "More enquiries and better follow-up are not the same fix.",
+      "size": 88
+    },
+    {
+      "type": "body",
+      "kicker": "01 / ACQUISITION",
+      "headline": "Generate {demand}.",
+      "sub": "Meta campaigns put a relevant offer in front of the right people. Measure qualified enquiries, not just clicks."
+    },
+    {
+      "type": "body",
+      "kicker": "02 / FOLLOW-UP",
+      "headline": "Qualify {demand}.",
+      "sub": "After a person opts in, ask fit questions, route the enquiry and make the next step clear. AI calling is one option when consent and setup are right.",
+      "dark": true
+    },
+    {
+      "type": "body",
+      "kicker": "THE DIAGNOSIS",
+      "headline": "Fix the {bottleneck} first.",
+      "sub": "Thin pipeline? Review targeting and offer. Plenty of enquiries but few conversations? Review response and qualification."
+    },
+    {
+      "type": "body",
+      "kicker": "THE WORKFLOW",
+      "headline": "Track every {handoff}.",
+      "sub": "Ad to opt-in. Opt-in to consent-appropriate follow-up. Qualification to a human sales meeting. Lead count alone does not tell you where the pipeline stalls.",
+      "dark": true
+    },
+    {
+      "type": "cta",
+      "headline": "Where does your pipeline {stall}?",
+      "keyword": "MAP",
+      "sub": "DM MAP. Tell us whether it is traffic, enquiries or follow-up. We will identify the first bottleneck."
+    }
+  ]
+}

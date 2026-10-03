@@ -8,7 +8,12 @@ status: active
 
 # 🏠 OROVA / HermesClaw — Mission Vault
 
-The shared brain for OROVA/HermesClaw — curated knowledge for **Mark** and **Claude**.
+> [!important] Current Codex handoff — September 21, 2026
+> Read [[zero-budget-operations-2026-09-21]] first. It records the verified
+> Telegram bugs, $0 operating mode and release blockers. Older notes are history,
+> not proof of current behaviour. Repairs are not live until the build is verified.
+
+The shared brain for OROVA/HermesClaw — curated knowledge for **Mark** and **Codex**.
 Production data (leads DB, learned strategies) lives in SQLite on Render; this
 vault holds what's worth *reading*, not a database mirror.
 

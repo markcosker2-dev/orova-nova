@@ -27,6 +27,13 @@ from app.skills.lead_validator import (off_icp_vertical_reason,
 ADDR = "OROVA, 1 Example St, Manila, PH"
 
 
+@pytest.fixture(autouse=True)
+def hypothetical_provider_permission():
+    from app.skills import agentmail_skill
+    with patch.object(agentmail_skill, "_agentmail_allows_unsolicited_outreach", return_value=True):
+        yield
+
+
 def _lead(**over):
     base = {"business": "Sierra Ridge Builders", "owner": "Maria Santos",
             "email": "maria@sierraridgebuilders.com",
@@ -75,8 +82,13 @@ def test_exotic_and_luxury_auto_are_not_disqualified(vertical):
 
 def test_the_target_icp_is_never_blocked():
     for v in ("home remodeling", "custom home builder", "kitchen remodeling",
-              "med spa", "luxury real estate"):
+              "luxury real estate"):
         assert off_icp_vertical_reason({"vertical": v}) == "", v
+
+
+@pytest.mark.parametrize("vertical", ["med spa", "medical spa", "medspa", "luxury med spa"])
+def test_med_spa_verticals_are_excluded_by_adr_0015(vertical):
+    assert "ADR-0015" in off_icp_vertical_reason({"vertical": vertical})
 
 
 def test_empty_vertical_is_not_disqualified():

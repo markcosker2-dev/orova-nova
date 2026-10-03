@@ -56,9 +56,13 @@ async def quarantine_invalid_leads() -> dict:
                 continue
 
             cleaned = gate["lead"]
+            cleanable_fields = (
+                "owner", "owner_title", "owner_source", "owner_confidence",
+                "evidence_json", "email", "phone", "url", "website",
+            )
             field_changes = {
-                f: cleaned.get(f, "") for f in ("owner", "email", "phone", "url", "website")
-                if (cleaned.get(f) or "") != (lead.get(f) or "")
+                f: cleaned.get(f, "") for f in cleanable_fields
+                if f in lead and (cleaned.get(f) or "") != (lead.get(f) or "")
             }
             rescore = ((lead.get("status") or "").lower() not in _CONTACTED_STATUSES
                        and cleaned.get("score") != lead.get("score"))

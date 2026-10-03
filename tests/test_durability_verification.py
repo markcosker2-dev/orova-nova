@@ -23,6 +23,7 @@ import sqlite3
 from unittest.mock import AsyncMock, patch
 
 from app.core import durability
+from app.skills import sheets_sync
 
 
 def _real_row(**cols):
@@ -42,7 +43,7 @@ def _real_row(**cols):
     return conn.execute(sql, tuple(cols[k] for k in keys)).fetchone()
 
 
-def _run(sheet_rows, n_leads, n_distinct=None):
+def _run(sheet_rows, n_leads, n_distinct=None, sheet_names=None):
     """Run persist_leads_durably with a sheet that reports `sheet_rows`.
 
     `n_distinct` is how many DISTINCT businesses those `n_leads` rows cover
@@ -52,23 +53,28 @@ def _run(sheet_rows, n_leads, n_distinct=None):
     """
     if n_distinct is None:
         n_distinct = n_leads
-    rows = [{"id": i, "business": f"Biz {i}", "url": f"https://b{i}.com"}
+    rows = [{"id": i, "business": f"Biz {((i - 1) % n_distinct) + 1}", "url": f"https://b{i}.com"}
             for i in range(1, n_leads + 1)]
+    names = (sheet_names if sheet_names is not None else
+             [f"biz {i}" for i in range(1, (sheet_rows or 0) + 1)])
 
     class _DB:
         @staticmethod
         async def query(sql, params=None, fetchall=False):
+            if "SELECT business FROM leads" in sql:
+                return [_real_row(business=row["business"]) for row in rows]
             return rows
 
         @staticmethod
         async def fetchone(sql, params=None):
             return _real_row(total=n_leads, distinct_ids=n_distinct)
 
-    with patch("app.core.database.DatabaseManager", _DB), \
+    with patch.object(durability, "SHEETS_SYNC_PACING_S", 0), \
+         patch("app.core.database.DatabaseManager", _DB), \
          patch("app.skills.sheets_sync.sync_lead_to_sheets",
                AsyncMock(return_value={"ok": True})), \
-         patch("app.skills.sheets_sync.count_lead_rows",
-               AsyncMock(return_value=sheet_rows)), \
+         patch("app.skills.sheets_sync.list_lead_businesses",
+               AsyncMock(return_value=names if sheet_rows is not None else None)), \
          patch("app.skills.vault_skill.backup_database",
                AsyncMock(return_value={"ok": False, "error": "invalid_grant"})):
         return asyncio.run(durability.persist_leads_durably(recent_count=25, source="test"))
@@ -119,6 +125,8 @@ def test_verification_never_breaks_the_sync_itself():
     class _DB:
         @staticmethod
         async def query(sql, params=None, fetchall=False):
+            if "SELECT business FROM leads" in sql:
+                raise RuntimeError("db exploded during verification")
             return rows
 
         @staticmethod
@@ -128,8 +136,8 @@ def test_verification_never_breaks_the_sync_itself():
     with patch("app.core.database.DatabaseManager", _DB), \
          patch("app.skills.sheets_sync.sync_lead_to_sheets",
                AsyncMock(return_value={"ok": True})), \
-         patch("app.skills.sheets_sync.count_lead_rows",
-               AsyncMock(return_value=1)), \
+         patch("app.skills.sheets_sync.list_lead_businesses",
+               AsyncMock(return_value=["biz 1"])), \
          patch("app.skills.vault_skill.backup_database",
                AsyncMock(return_value={"ok": False, "error": "x"})):
         res = asyncio.run(durability.persist_leads_durably(recent_count=25, source="test"))
@@ -148,6 +156,26 @@ def test_the_check_survives_a_real_sqlite_row():
     res = _run(sheet_rows=10, n_leads=10)
     assert res.get("db_total") == 10, "the verification never read the database"
     assert res.get("verified") is True
+
+
+def test_duplicate_sheet_rows_cannot_mask_a_missing_business():
+    """Four rows for three businesses can still omit a fourth identity."""
+    res = _run(sheet_rows=4, n_leads=4,
+               sheet_names=["biz 1", "biz 2", "biz 3", "biz 1"])
+    assert res["verified"] is False
+    assert res["missing_businesses"] == 1
+
+
+def test_sheet_identity_read_preserves_duplicate_rows():
+    class _Worksheet:
+        def col_values(self, column):
+            assert column == 2
+            return ["Business", "Acme Builders", " acme builders ", "Other Homes"]
+
+    with patch("app.skills.sheets_sync._get_worksheet",
+               AsyncMock(return_value=_Worksheet())):
+        names = asyncio.run(sheets_sync.list_lead_businesses())
+    assert names == ["acme builders", "acme builders", "other homes"]
 
 
 def test_duplicate_lead_rows_are_not_reported_as_a_lost_backup():

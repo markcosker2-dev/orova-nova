@@ -24,6 +24,7 @@ ENV LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2
 ENV MALLOC_CONF=background_thread:true,dirty_decay_ms:1000,muzzy_decay_ms:1000
 
 COPY app/ app/
+COPY config/ config/
 COPY mission-control/ mission-control/
 
 RUN mkdir -p /app/data /app/app/data /app/logs

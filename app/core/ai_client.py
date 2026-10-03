@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from collections import defaultdict
 from dataclasses import dataclass
 from app.core.database import DatabaseManager
+from app.core.hardening import zero_budget_mode
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ _BREAKER_COOLDOWN  = 60.0   # seconds before half-open retry
 
 # ── [P6] ECONOMICS (Cost per 1M tokens) ──
 MODEL_COSTS = {
+    "openrouter/free": (0.0, 0.0),  # Official free-model router
     "meta-llama/llama-3.3-70b-instruct:free": (0.0, 0.0), # Free tier
     "qwen/qwen3-next-80b-a3b-instruct:free": (0.0, 0.0), # Free tier
     "qwen/qwen3-coder:free": (0.0, 0.0), # Free tier
@@ -41,6 +43,19 @@ MODEL_COSTS = {
 def estimate_cost(model: str, t_in: int, t_out: int) -> float:
     rates = MODEL_COSTS.get(model, MODEL_COSTS["__default__"])
     return round((t_in / 1e6) * rates[0] + (t_out / 1e6) * rates[1], 8)
+
+
+def _is_zero_cost_openrouter_model(model: str) -> bool:
+    """Structural spend gate for OpenRouter.
+
+    Named free variants end in ``:free``. ``openrouter/free`` is the provider's
+    official zero-price router, which selects only free models and filters for
+    requested capabilities such as tool calling. Nothing else is permitted in
+    zero-budget mode.
+    """
+    value = str(model or "")
+    return value.endswith(":free") or value == "openrouter/free"
+
 
 def _provider(model_name: str) -> str:
     return model_name
@@ -107,7 +122,7 @@ class UnifiedAIClient:
     # OpenRouter tier was dead despite a valid key). Verified against
     # https://openrouter.ai/api/v1/models. Re-check if OpenRouter 404s again.
     FLAVORS = {
-        "fast":   "openai/gpt-oss-20b:free",
+        "fast":   "google/gemma-4-31b-it:free",
         "smart":  "google/gemma-4-31b-it:free",
         "genius": "nvidia/nemotron-3-super-120b-a12b:free",
     }
@@ -125,14 +140,17 @@ class UnifiedAIClient:
             logger.warning(f"[AI] set_flavor failed: {e}")
 
     ROLE_MODELS = {
-        "default":   "openai/gpt-oss-20b:free",
-        "nova":      "openai/gpt-oss-20b:free",
+        "default":   "google/gemma-4-31b-it:free",
+        "nova":      "google/gemma-4-31b-it:free",
     }
 
     FALLBACK_CHAIN = [
-        "openai/gpt-oss-20b:free",
         "google/gemma-4-31b-it:free",
         "nvidia/nemotron-3-super-120b-a12b:free",
+        # Catalog-resilient final fallback. OpenRouter's free catalog changes
+        # frequently; the router selects a currently live $0 model that
+        # supports the request's tools/structured-output requirements.
+        "openrouter/free",
     ]
 
     # Groq decommissioned llama-3.3-70b-versatile. Every Tier-1 call had been
@@ -258,8 +276,13 @@ class UnifiedAIClient:
 
                     response = await self.groq_client.chat.completions.create(**groq_kwargs)
                     if response.choices:
-                        _record_success("groq")
                         msg = response.choices[0].message
+                        if not msg.tool_calls and not (msg.content or "").strip():
+                            _record_failure("groq")
+                            _record_provider_failure("groq", self.GROQ_MODEL, None,
+                                                     detail="empty text (completion budget exhausted)", log_stack=False)
+                            break
+                        _record_success("groq")
                         if msg.tool_calls:
                             logger.info(f"[+] Groq ({role}): OK with {len(msg.tool_calls)} tool call(s)")
                             return msg
@@ -368,15 +391,15 @@ class UnifiedAIClient:
             # must never bill. Drop any model that isn't a ':free' variant
             # unless OPENROUTER_ALLOW_PAID=1 is explicitly set. Structural —
             # a future edit that adds a paid model to the chain can't spend.
-            if os.getenv("OPENROUTER_ALLOW_PAID", "0") != "1":
-                free_chain = [m for m in chain if str(m).endswith(":free")]
+            if zero_budget_mode() or os.getenv("OPENROUTER_ALLOW_PAID", "0") != "1":
+                free_chain = [m for m in chain if _is_zero_cost_openrouter_model(m)]
                 dropped = [m for m in chain if m not in free_chain]
                 if dropped:
                     logger.warning(f"[AI] OpenRouter free-only guard dropped paid model(s): {dropped}")
                 chain = free_chain
                 if not chain:
                     _record_provider_failure("openrouter", "-", None,
-                                             detail="no :free models in chain (free-only guard)",
+                                             detail="no zero-cost models in chain (free-only guard)",
                                              log_stack=False)
 
             for attempt, model_name in enumerate(chain):
@@ -395,9 +418,16 @@ class UnifiedAIClient:
 
                     response = await self.primary_client.chat.completions.create(**kwargs)
                     if response.choices:
+                        msg = response.choices[0].message
+                        if not msg.tool_calls and not (msg.content or "").strip():
+                            _record_failure(model_name)
+                            _record_provider_failure("openrouter", model_name, None,
+                                                     detail="empty response (no text, no tool calls)",
+                                                     log_stack=False)
+                            continue
                         _record_success(model_name)
                         logger.info(f"[+] OpenRouter ({role}): {model_name} OK")
-                        return response.choices[0].message
+                        return msg
                     _record_provider_failure("openrouter", model_name, None,
                                              detail="empty choices in response", log_stack=False)
                 except Exception as e:

@@ -165,6 +165,24 @@ from app.skills.agentmail_skill import check_replies
 from app.skills.vault_skill import backup_database, restore_latest, vault_scheduler_loop
 from app.skills.sheets_sync import restore_leads_from_sheets, update_lead_status_sheets
 
+
+async def _ensure_auxiliary_restore_schema() -> bool:
+    """Rebuild tables lost by a swap/reset without discarding restored data."""
+    from app.core.event_log import ensure_events_table
+    from app.core.self_learning import ensure_tables
+
+    ok = True
+    for label, ensure in (("events", ensure_events_table), ("learning", ensure_tables)):
+        try:
+            if not await ensure():
+                ok = False
+                logger.error("[RESTORE] %s schema could not be ensured", label)
+        except Exception as error:
+            ok = False
+            logger.error("[RESTORE] %s schema failed (%s)", label, type(error).__name__)
+    return ok
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # [ENV] Report which capabilities are switched off for want of config, before
@@ -226,9 +244,10 @@ async def lifespan(app: FastAPI):
             try:
                 DatabaseManager._init_sqlite_fallback()
                 await DatabaseManager.run_phase5_migrations()
-                # Restored snapshot may predate the events table — re-ensure it.
-                from app.core.event_log import ensure_events_table as _ensure_events
-                await _ensure_events()
+                # The pre-swap bootstrap belongs to the replaced DB. An old
+                # valid snapshot can predate BOTH event and learning tables.
+                # Auxiliary failure is reported, never a reason to erase it.
+                await _ensure_auxiliary_restore_schema()
                 logger.info(f"♻️ Restored database snapshot from Drive: {restore_res.get('filename')}")
                 restored_ok = True
             except Exception as adopt_err:
@@ -246,14 +265,8 @@ async def lifespan(app: FastAPI):
                 # path, which is why production logged `[EVENTS] log
                 # 'lead_discovered' failed (non-fatal): no such table: events`
                 # on a live hunt: ADR-0007's canonical event log did not exist.
-                try:
-                    from app.core.event_log import ensure_events_table as _ensure_events
-                    await _ensure_events()
-                    from app.core.self_learning import ensure_tables as _ensure_learning
-                    await _ensure_learning()
+                if await _ensure_auxiliary_restore_schema():
                     logger.info("[EVENTS] Event + learning tables rebuilt on the fresh DB")
-                except Exception as schema_err:
-                    logger.error(f"⚠️ Could not rebuild schema on the fresh DB: {schema_err}")
             except Exception as reset_err:
                 logger.critical(f"⚠️ DB reset after a failed restore failed: {reset_err}")
             # INFO, not WARNING (2026-08-02). Drive is the OPTIONAL tier — its
@@ -340,7 +353,8 @@ async def lifespan(app: FastAPI):
         webhook_url = f"{render_url}/telegram"
         try:
             async with httpx.AsyncClient() as client:
-                tg_webhook_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
+                from app.core.hardening import telegram_webhook_secret
+                tg_webhook_secret = telegram_webhook_secret()
                 payload = {"url": webhook_url, "allowed_updates": ["message"]}
                 if tg_webhook_secret:
                     payload["secret_token"] = tg_webhook_secret
@@ -1085,6 +1099,11 @@ async def process_telegram_message(data: dict):
         if not chat_id:
             logger.warning("[Telegram] Missing chat_id in message")
             return
+
+        from app.core.hardening import operator_chat_allowed
+        if not operator_chat_allowed(chat_id):
+            logger.warning("[Telegram] Ignored message outside configured operator chats")
+            return
         
         if not text:
             # Send informative reply for media/unsupported types
@@ -1326,13 +1345,22 @@ async def cal_webhook(request: Request):
 @app.post("/telegram")
 async def telegram_webhook(request: Request):
     """Ingest point for Telegram via Queue."""
-    tg_webhook_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
-    if tg_webhook_secret:
-        header_token = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
-        if not secrets.compare_digest(header_token, tg_webhook_secret):
-            logger.warning(f"[Telegram] Rejected webhook with invalid secret token")
-            return JSONResponse(status_code=403, content={"status": "unauthorized"})
-    data = await request.json()
+    from app.core.hardening import telegram_webhook_secret, operator_chat_allowed
+    tg_webhook_secret = telegram_webhook_secret()
+    header_token = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+    if not tg_webhook_secret or not secrets.compare_digest(header_token, tg_webhook_secret):
+        return JSONResponse(status_code=403, content={"status": "unauthorized"})
+    try:
+        data = await request.json()
+    except (ValueError, UnicodeDecodeError):
+        return JSONResponse(status_code=400, content={"status": "invalid_update"})
+    if not isinstance(data, dict):
+        return JSONResponse(status_code=400, content={"status": "invalid_update"})
+    msg = data.get("message") or {}
+    if not isinstance(msg, dict) or not isinstance(msg.get("chat"), dict):
+        return {"status": "ignored"}
+    if not operator_chat_allowed(msg.get("chat", {}).get("id")):
+        return {"status": "ignored"}
     logger.info(f"[Telegram] Webhook received update: {list(data.keys())}")
     accepted = await tg_queue.enqueue(data)
     if not accepted:
@@ -1626,7 +1654,9 @@ async def delete_memory(request: Request, authorized: bool = Depends(require_das
 
 @app.get("/api/chat/history")
 async def get_chat_history(authorized: bool = Depends(require_dashboard_api_key)):
-    return {"status": "ok", "history": []}
+    from app.core.router import bounded_chat_history
+    history = await DatabaseManager.get_state("nova_chat:0", [])
+    return {"status": "ok", "history": bounded_chat_history(history)}
 
 @app.post("/api/chat")
 async def chat_with_agent(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
@@ -1951,7 +1981,9 @@ async def action_send_emails(authorized: bool = Depends(require_dashboard_api_ke
 async def action_generate_report(authorized: bool = Depends(require_dashboard_api_key)):
     try:
         res = await backup_database()
-        return {"status": "ok", "report": res.get("message", f"CEO report and vault snapshot complete: {res.get('filename', 'orova.db')}")}
+        if not isinstance(res, dict) or res.get("ok") is not True:
+            return {"status": "error", "message": "Database backup failed. No complete snapshot was confirmed; check the backup configuration and server logs."}
+        return {"status": "ok", "report": f"Database snapshot uploaded: {res.get('filename', 'orova.db')}"}
     except Exception as e:
         logger.error(f"[API] Internal error: {e}", exc_info=True)
         return {"status": "error", "message": "Internal error — see server logs"}
@@ -2033,49 +2065,18 @@ async def get_pipelines_list(authorized: bool = Depends(require_dashboard_api_ke
 
 @app.post("/api/pipelines/run")
 async def run_pipeline_action(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
-    data = await request.json()
-    pipeline_name = data.get("pipeline")
-    return {"status": "ok", "message": f"Pipeline {pipeline_name} started successfully"}
+    # This legacy endpoint has no dispatcher. Never confirm nonexistent work.
+    return {"status": "blocked", "message": "This pipeline launcher is not connected. No job was started."}
 
 @app.post("/api/actions/approve-email")
 async def approve_email(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
-    data = await request.json()
-    email_id = data.get("id")
-    if not email_id:
-        raise HTTPException(status_code=400, detail="Missing email ID")
-    content_file = os.path.join(root_path, "content.json")
-    try:
-        with open(content_file, "r", encoding="utf-8") as f:
-            content = json.load(f)
-        for item in content:
-            if item.get("id") == email_id:
-                item["status"] = "sent"
-                break
-        with open(content_file, "w", encoding="utf-8") as f:
-            json.dump(content, f, indent=2)
-    except Exception:
-        pass
-    return {"status": "ok", "message": f"Email {email_id} approved and queued for sending"}
+    # The old UI changed a local label to 'sent' without sending anything or
+    # using the approval chokepoint. It cannot authorize AgentMail cold email.
+    return {"status": "blocked", "message": "This legacy email control is not connected to the approval workflow. Nothing was sent or queued; cold AgentMail outreach remains blocked."}
 
 @app.post("/api/actions/deny-email")
 async def deny_email(request: Request, authorized: bool = Depends(require_dashboard_api_key)):
-    data = await request.json()
-    email_id = data.get("id")
-    if not email_id:
-        raise HTTPException(status_code=400, detail="Missing email ID")
-    content_file = os.path.join(root_path, "content.json")
-    try:
-        with open(content_file, "r", encoding="utf-8") as f:
-            content = json.load(f)
-        for item in content:
-            if item.get("id") == email_id:
-                item["status"] = "denied"
-                break
-        with open(content_file, "w", encoding="utf-8") as f:
-            json.dump(content, f, indent=2)
-    except Exception:
-        pass
-    return {"status": "ok", "message": f"Email {email_id} denied"}
+    return {"status": "blocked", "message": "This legacy email control is not connected. Use reject APPROVAL-ID for an actual pending approval. No approval record was changed."}
 
 
 # ═══════════════════════════════════════════════════════

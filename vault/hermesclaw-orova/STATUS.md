@@ -8,6 +8,37 @@ status: active
 
 # STATUS — 2026-07-11
 
+> [!important] Live overlay — 2026-09-23 approved change window
+> Cal event `2804866` is 15 minutes and publicly verified. The correct Retell
+> workspace is confirmed; V0 was published unchanged as the exact phone-bound
+> baseline. Unpublished Draft V1 now has consent-first capture-only behavior,
+> current Cal availability/booking functions, guarded post-call booking fields,
+> handbook disclosure and 30-day non-PII storage. Its read-only gate passes all
+> but one hard check: the two legacy Cal functions remain attached. Deleting
+> them, billable Retell tests and a real create/delete Cal booking test await
+> Mark's action-time confirmation. No V1 publish or phone rebinding has occurred.
+>
+> Telegram Nova's more autonomous operator voice, `/focus` and `/next` are
+> locally implemented and tested. They are **not deployed**. External actions
+> remain gated; the unrestricted planner remains off. See
+> [[0020-telegram-autonomy-is-safe-preparation-first]].
+
+> [!important] Superseding current overlay — 2026-09-23
+> The historical July snapshot below is preserved for provenance; it is not the
+> current launch instruction. The first-client lane is five individually
+> researched manual Instagram/LinkedIn DMs inviting the prospect to initiate a
+> disclosed inbound AI-demo call. Automated cold calls, cold SMS and automated
+> first-touch DMs remain off. Retell demo traffic is currently **on HOLD** until
+> `python scripts/retell_inbound_readiness.py` exits 0 and Mark approves the
+> final paid phone test. See [[active-context]] and
+> [[retell-inbound-demo-launch-runbook-2026-09-23]].
+>
+> HermesClaw's current zero-cost inference order is Groq → Gemini → OpenRouter
+> free models. The OpenRouter credential returned HTTP 401 on 2026-09-23, so
+> that tier needs a replacement key before it provides redundancy. This does
+> not block Groq/Gemini operation. The old “Google refresh token is the single
+> next action” statement below must not override the live first-client gate.
+
 > Live snapshot. Update whenever the state changes materially.
 
 ## Where the project stands

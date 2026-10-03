@@ -307,35 +307,36 @@
             <div class="stats-grid" id="stats-grid">
                 <div class="stat-card">
                     <div class="stat-icon">🎯</div>
-                    <div class="stat-value" id="stat-leads">0</div>
-                    <div class="stat-label">Leads Found</div>
+                    <div class="stat-value" id="stat-leads">—</div>
+                    <div class="stat-label">Stored Leads</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-icon">📧</div>
-                    <div class="stat-value" id="stat-emails">0</div>
-                    <div class="stat-label">Emails Sent</div>
+                    <div class="stat-value" id="stat-emails">—</div>
+                    <div class="stat-label">Marked Contacted</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-icon">💬</div>
-                    <div class="stat-value" id="stat-replies">0</div>
-                    <div class="stat-label">Replies</div>
+                    <div class="stat-value" id="stat-replies">—</div>
+                    <div class="stat-label">Marked Replied</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-icon">📅</div>
-                    <div class="stat-value" id="stat-meetings">0</div>
-                    <div class="stat-label">Meetings</div>
+                    <div class="stat-value" id="stat-meetings">—</div>
+                    <div class="stat-label">Marked Booked</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-icon">📞</div>
-                    <div class="stat-value" id="stat-calls">0</div>
-                    <div class="stat-label">Calls Made</div>
+                    <div class="stat-value" id="stat-calls">—</div>
+                    <div class="stat-label">Recorded Calls</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-icon">📝</div>
-                    <div class="stat-value" id="stat-proposals">0</div>
-                    <div class="stat-label">Proposals</div>
+                    <div class="stat-value" id="stat-proposals">—</div>
+                    <div class="stat-label">Recorded Proposals</div>
                 </div>
             </div>
+            <p class="section-subtitle">These saved pipeline labels do not confirm delivery or attendance.</p>
             <div class="analytics-panel">
                 <h3>📈 Metrics Trend (Last 30 Days)</h3>
                 <div id="metrics-chart" style="height:180px;position:relative;overflow:hidden">
@@ -349,20 +350,20 @@
                     <h3>Conversion Funnel</h3>
                     <div class="funnel" id="funnel-chart">
                         <div class="funnel-bar">
-                            <div class="funnel-fill" id="funnel-leads" style="width:100%"></div><span>Leads</span><span
-                                class="funnel-val" id="fv-leads">0</span>
+                            <div class="funnel-fill" id="funnel-leads" style="width:0%"></div><span>Leads</span><span
+                                class="funnel-val" id="fv-leads">—</span>
                         </div>
                         <div class="funnel-bar">
-                            <div class="funnel-fill contacted" id="funnel-contacted" style="width:60%"></div>
-                            <span>Contacted</span><span class="funnel-val" id="fv-contacted">0</span>
+                            <div class="funnel-fill contacted" id="funnel-contacted" style="width:0%"></div>
+                            <span>Contacted</span><span class="funnel-val" id="fv-contacted">—</span>
                         </div>
                         <div class="funnel-bar">
-                            <div class="funnel-fill replied" id="funnel-replied" style="width:30%"></div>
-                            <span>Replied</span><span class="funnel-val" id="fv-replied">0</span>
+                            <div class="funnel-fill replied" id="funnel-replied" style="width:0%"></div>
+                            <span>Replied</span><span class="funnel-val" id="fv-replied">—</span>
                         </div>
                         <div class="funnel-bar">
-                            <div class="funnel-fill booked" id="funnel-booked" style="width:10%"></div>
-                            <span>Booked</span><span class="funnel-val" id="fv-booked">0</span>
+                            <div class="funnel-fill booked" id="funnel-booked" style="width:0%"></div>
+                            <span>Booked</span><span class="funnel-val" id="fv-booked">—</span>
                         </div>
                     </div>
                 </div>
@@ -467,11 +468,11 @@
             <div class="screen-header">
                 <div>
                     <h1>Calendar</h1>
-                    <p class="screen-subtitle">Nova's scheduled tasks & cron jobs — all times in PT</p>
+                    <p class="screen-subtitle">Saved task due dates — cloud schedules are verified separately</p>
                 </div>
                 <div class="header-actions">
                     <button class="cal-nav" id="cal-prev">◀</button>
-                    <span id="cal-month-label" class="cal-month-label">February 2026</span>
+                    <span id="cal-month-label" class="cal-month-label">Loading calendar…</span>
                     <button class="cal-nav" id="cal-next">▶</button>
                 </div>
             </div>
@@ -686,27 +687,27 @@
             <div class="screen-header">
                 <div>
                     <h1>📈 Self-Improvement Loop</h1>
-                    <p class="screen-subtitle">Learn from outcomes, optimize strategies, prune dead leads</p>
+                    <p class="screen-subtitle">Review recorded outcomes; no proven winner or age-only pruning</p>
                 </div>
                 <div class="header-actions">
-                    <button class="btn-primary" id="btn-run-improvement">🔄 Run Improvement</button>
+                    <button class="btn-primary" id="btn-run-improvement">Check Learning</button>
                 </div>
             </div>
             <div class="analytics-panels">
                 <div class="analytics-panel" style="flex:1">
-                    <h3>🏆 Best Email Framework</h3>
+                    <h3>Email Framework Candidate</h3>
                     <div id="imp-best-framework" class="strategy-display"
                         style="text-align:center;padding:2rem;font-size:2rem;font-weight:700">—</div>
                     <div style="text-align:center;font-size:0.8rem;color:var(--text-dim)" id="imp-framework-meta"></div>
                 </div>
                 <div class="analytics-panel" style="flex:1">
-                    <h3>⏰ Best Send Timing</h3>
+                    <h3>Send Timing Candidate</h3>
                     <div id="imp-best-timing" class="strategy-display"
                         style="text-align:center;padding:2rem;font-size:2rem;font-weight:700">—</div>
                     <div style="text-align:center;font-size:0.8rem;color:var(--text-dim)" id="imp-timing-meta"></div>
                 </div>
                 <div class="analytics-panel" style="flex:1">
-                    <h3>🎯 Best Niche</h3>
+                    <h3>Niche Candidate</h3>
                     <div id="imp-best-niche" class="strategy-display"
                         style="text-align:center;padding:2rem;font-size:1.5rem;font-weight:700">—</div>
                     <div style="text-align:center;font-size:0.8rem;color:var(--text-dim)" id="imp-niche-meta"></div>
@@ -714,9 +715,9 @@
             </div>
             <div class="analytics-panels" style="margin-top:1rem">
                 <div class="analytics-panel">
-                    <h3>📊 All Learned Strategies</h3>
+                    <h3>Stored Strategy Candidates</h3>
                     <div id="imp-strategies-table" class="live-feed">
-                        <div class="feed-empty">No strategies learned yet. Run the improvement loop.</div>
+                        <div class="feed-empty">No verified comparison yet. Collect reviewed outcomes.</div>
                     </div>
                 </div>
                 <div class="analytics-panel">

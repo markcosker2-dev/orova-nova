@@ -515,6 +515,9 @@ async def send_throttled_email(
         # so wiring it up later would have bypassed every gate while claiming to
         # have passed them. Found by the compliance review, not by the tests.
         result = await send_outreach(to=to, subject=subject, body=body)
+        if result.get("status") != "success":
+            return {"status": "blocked" if result.get("status") == "blocked" else "error",
+                    "reason": result.get("error", "Email was not sent"), "result": result}
         _last_email_time = time.time()
         _daily_email_count[client_id] += 1
 
@@ -664,6 +667,11 @@ async def run_lead_pipeline(
         ]])
     elif result.get("status") == "rate_limited":
         return {"lead_id": lead_id, "action": "rate_limited", "reason": result.get("reason"), "next_slot": result.get("next_slot")}
+    else:
+        # An attempted action is not a completed touch. In particular, a
+        # provider-policy block must never read like "send_email" succeeded.
+        return {"lead_id": lead_id, "action": "blocked" if result.get("status") == "blocked" else "failed",
+                "stage": stage["label"], "result": result}
 
     return {"lead_id": lead_id, "action": next_act["action"], "stage": stage["label"], "result": result}
 

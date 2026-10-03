@@ -1,15 +1,15 @@
 {
   "_description": "Single source of truth for OROVA business context. Loaded by email pipeline, proofreader, and drip templates. All other files (USER.md, brand_guidelines.json, config.py) should align with this.",
-  "_last_updated": "2026-07-11",
+  "_last_updated": "2026-09-30",
   "company": {
     "name": "OROVA",
     "type": "Marketing Agency",
-    "description": "OROVA sells THREE things to luxury and premium businesses on the US West Coast. (1) Meta lead generation (Facebook + Instagram) with AI-crafted ad creatives. (2) An AI lead qualification caller that rings every lead within minutes, screens them, and books the real ones — sold STANDALONE, for owners who already have lead flow from referrals, Angi or their own site. (3) Both together. The AI caller is a product in its own right, NOT an optional add-on: it is the thing outreach now leads with, because a prospect who has been qualified by it has felt the product rather than heard a claim (ADR-0017).",
+    "description": "OROVA offers Meta lead generation, qualification/follow-up for consent-checked enquiries, or both. Primary prospects are US West Coast custom home builders and high-end remodelers; luxury real-estate top producers are secondary. Diagnose lead volume versus follow-up before proposing scope. AI calling is a separate qualification service for authorized enquiries, subject to verified setup, consent and budget; it does not create demand or guarantee a booking. Acquisition starts with an individually researched manual DM. A prospect may voluntarily call the disclosed inbound simulation only after its live launch gate passes and usage is funded (ADR-0018).",
     "ceo": "Mark",
     "ai_team_member": "Nova",
     "timezone": "America/Los_Angeles",
     "region": "West Coast US",
-    "creative_tooling": "Higgsfield (AI ad creatives)"
+    "creative_tooling": "Approved original or commercially licensed assets within the current $0 budget; local ChatCut is available for review edits, but Work cloud ChatCut access remains unverified."
   },
   "services": [
     {
@@ -20,7 +20,7 @@
         "3_month": 10000,
         "6_month": 18000
       },
-      "description": "Meta ads (Facebook + Instagram) lead generation with ad creatives produced via Higgsfield AI. Client handles the leads themselves. Ad spend is separate.",
+      "description": "Meta ads (Facebook + Instagram) lead generation with approved ad creatives. Client handles the leads themselves. Client-funded ad spend is separate and requires approval.",
       "ad_spend_recommended_monthly_usd": "2000-2500",
       "platforms": [
         "facebook",
@@ -36,7 +36,7 @@
         "3_month": 13000,
         "6_month": 24000
       },
-      "description": "Everything in Package 1, plus OROVA handles the leads: Retell AI cold-call qualification so the client only speaks to leads ready to pay, client CRM kept current (Google Sheets or the client's CRM via Make.com), and appointment booking when the business runs on appointments. The core promise is fewer, higher-quality leads.",
+      "description": "Everything in Package 1, plus follow-up and qualification for consent-checked inbound enquiries, an agreed client CRM workflow (Google Sheets or the client's CRM via Make.com), and appointments where appropriate. Retell may execute authorized qualification calls after setup and budget are verified. Qualification records fit and interest; it does not prove willingness to pay or a sale.",
       "ad_spend_recommended_monthly_usd": "2000-2500",
       "platforms": [
         "facebook",
@@ -53,7 +53,7 @@
         "3_month": 7000,
         "6_month": 12000
       },
-      "description": "The AI lead qualification caller on its own, without OROVA running any ads. Every lead the client already gets — from referrals, Angi, their own site, anywhere — is called within minutes, screened, and the real ones are booked. For owners whose pipeline is NOT empty: the problem is driving to tire-kickers, not a shortage of enquiries. No ad spend is involved, because OROVA is not buying media on this package.",
+      "description": "Qualification and follow-up for the client's existing, consent-checked enquiries without OROVA running ads. Approved calls screen fit and interest and may offer a verified appointment. Lead-source permissions, consent, routing, budget and booking behavior must be checked before calling. Response-time targets are agreed and measured after setup, not guaranteed before testing. No media buying is included.",
       "sold_when": "DIAGNOSE, never recite the menu. Plenty of leads but chasing bad ones -> this. Empty pipeline -> Package 1 or 2. Both problems -> Package 2."
     }
   ],
@@ -71,8 +71,9 @@
   },
   "sales_funnel": {
     "steps": [
-      "Nova sends a high-quality personalized cold email",
-      "If no reply, Nova (Retell AI) cold-calls to book an appointment with Mark",
+      "Mark sends an individually researched manual DM through a permitted public business channel; Nova prepares the draft",
+      "Record the actual reply or opt-out in the existing outreach tracker and diagnose lead volume versus qualification",
+      "If the inbound demo is live-verified and funded, an interested prospect voluntarily calls the disclosed simulation; otherwise Mark handles the conversation directly",
       "Google Meet with Mark",
       "Mark sends agreement + invoice",
       "Onboarding call — get added to client's ad manager + CRM"
@@ -88,7 +89,7 @@
     },
     "signature_objection": {
       "question": "How do I know the AI caller is any good?",
-      "answer": "You already spoke to Nova and got her emails — that's Nova, our AI sales assistant. You've already experienced the product."
+      "answer": "Offer a clearly labelled simulation only when the live demo is verified and funded. If this prospect actually tested it, discuss what they observed; never claim they experienced a call or email that did not happen."
     },
     "qualified_lead_definition": "A lead is qualified only when they booked an appointment AND actually show up / buy — not merely a booking."
   },
@@ -98,13 +99,19 @@
       "lead scraping"
     ],
     "requires_approval_now": [
-      "send cold email",
-      "make cold call"
+      "send a permitted reply with recipient/context verification",
+      "enable consent-checked client qualification after setup and budget checks"
     ],
     "always_requires_approval": [
       "publish ad creatives",
       "spend ad budget",
       "sign a client"
+    ],
+    "disabled_pre_revenue": [
+      "AgentMail cold outreach",
+      "automated cold DMs or SMS",
+      "automated outbound AI prospect calls",
+      "paid usage or ad spend without owner funding approval"
     ],
     "never_unsupervised_risks": [
       "Scraping leads outside the ICP",
@@ -113,14 +120,14 @@
       "Creating the wrong ads or spending money incorrectly"
     ]
   },
-  "differentiator": "THE differentiator (only one, use it): every lead is phoned and qualified by AI within minutes, so the owner only ever drives to a real buyer. Angi sells the same lead to four competitors and hangs up; Houzz gives a profile; a local agency hands over a form fill. NONE of them call the homeowner in 5 minutes and screen them before the appointment. DO NOT pitch these (worthless to the buyer): 'we are AI-operated so our margins are better' (he does not care about our P&L), 'you are talking to our AI right now' (a party trick - he is buying kitchen leads), 'AI-generated creatives' (every agency claims this in 2026 - commodity).",
+  "differentiator": "Connect acquisition to a traceable follow-up and qualification process, so the owner can see which consent-checked enquiries fit and what happens next. Describe the verified system behavior and measured outcomes. Do not promise a fixed response time, real buyer, appointment or sale before the workflow is tested, and do not use unverified competitor comparisons.",
   "value_propositions": {
     "primary": "Stop chasing bad leads — only talk to qualified ones",
     "secondary": [
-      "AI calls every lead within 60 seconds to qualify them",
-      "Screens out tire-kickers before they waste your time",
-      "No leads falling through the cracks — ever",
-      "Your pipeline runs 24/7 without you lifting a finger"
+      "Follow up consent-checked enquiries using an agreed, measured response-time target",
+      "Screen project fit and interest before an owner spends time on a consultation",
+      "Record lead handoffs and failures so they can be reviewed and corrected",
+      "Prepare useful next steps while escalating exceptions to the owner"
     ]
   },
   "icp": {
@@ -137,6 +144,7 @@
       "Premium professional services"
     ],
     "disqualifiers": [
+      "Med spas / medical spas — excluded by owner decision ADR-0015",
       "General auto repair / transmission / oil-change shops — ~$400 gross per job means ~16 extra jobs/mo just to break even, and they do not have $6,500/mo",
       "Franchised new-car dealerships — OEM co-op budgets and corporate marketing mandates block an independent agency",
       "Any business already under contract with a marketing agency unless they volunteer dissatisfaction"
@@ -284,19 +292,21 @@
     "_deployed_drift": "The DEPLOYED prompt is not generated from this file — nothing pushes it — so it drifts. Known drift as of 2026-08-22: the deployed text says 'ten minutes' while canonical is 15 (knowledge/facts/company.json meeting.duration_minutes), and both deployed prompts describe OROVA as Meta-ads-only. Retell updates an LLM version IN PLACE with no rollback pin, so verify before sending."
   },
   "retell_inbound": {
-    "description": "Nova's INBOUND script, for when a prospect rings the number back after a voicemail. Separate agent from the outbound dialler: no dynamic variables exist on an inbound call, so the outbound prompt would read '{{name}}' aloud.",
-    "goal": "Work out who is calling and why, then either capture name/company/number/email/two preferred times for Mark, or action an opt-out. Never book a slot directly - there is no booking tool on the agent.",
+    "description": "Nova's INBOUND script, for a prospect who voluntarily calls the OROVA number after a personal DM invitation, a prior voicemail, or another direct introduction. Separate agent from the outbound dialler: no dynamic variables exist on an inbound call, so the outbound prompt would read '{{name}}' aloud.",
+    "goal": "Work out who is calling and why. For an invited demo caller, run a short, clearly labelled simulation of OROVA's lead-qualification experience, return to normal conversation, diagnose whether their constraint is lead volume or follow-up/qualification, and ask for a 15-minute conversation with Mark only when useful. Capture name/company/number/email/two preferred times, or action an opt-out. Never claim the simulation is a real result. Cal event type 2804866 was corrected and live-verified at 15 minutes on 2026-09-23. The attached Retell tools are still legacy and have not passed an end-to-end booking test, so do not use them or claim a booking yet; capture two preferred times for Mark to confirm until the migration and test are complete.",
     "_deployed": "Retell agent 'Nova - Inbound (callback)' agent_850b1ed50ca29bcd7b66ac3a55 (llm_2e8ffc461d20535ee17bcd64bdd5 v0), bound as inbound_agents on +17166703920 on 2026-07-24. Before this the number had NO inbound agent at all, so a callback from the voicemail rang out to nothing.",
-    "begin_message": "OROVA, this is Nova - I'm an AI assistant on Mark's team. How can I help?",
+    "begin_message": "OROVA, this is Nova - I'm an AI assistant on Mark's team. This call may be recorded. Is it okay to continue?",
     "compliance": {
       "disclosure": "Disclose AI in the first or second sentence, and again honestly whenever asked. Never claim to be human.",
+      "recording_consent": "If recording is enabled, ask for affirmative permission before continuing. If the caller declines, do not continue a recorded conversation; end politely or use an owner-approved non-recorded handoff.",
       "opt_out": "If they ask to be removed: apologise once, confirm removal, END. No rebuttal, no pitch. Post-call field 'opt out requested' must be actioned as a DNC entry.",
       "no_fabrication": "Never invent what was discussed on a previous call, and never claim clients, case studies or results. There are none."
     },
     "branches": {
-      "who_are_you": "Explain honestly why we rang, then diagnose: booked out, or still filling it in? Booked solid -> disqualify politely and end.",
+      "demo_request": "Confirm they called to test the demo. Say this is a simulation, then ask them to play the role of one of their prospective customers. Ask only a few natural qualification questions: what they need, where, timing, and one business-relevant fit question. Summarise the answers and explain that a real configured agent would pass that structured summary to their team. Then explicitly end the simulation, ask whether their real constraint is too few leads or too much time spent chasing and screening them, and name only the OROVA component that fits. Do not claim a result, score, case study, customer, or guaranteed response time. If useful, ask for a 15-minute conversation with Mark. MAKE NO OFFER - no price, no trial, no pilot, never the word 'free'.",
+      "who_are_you": "Explain honestly that Nova is OROVA's AI assistant. If they are returning a prior call, explain that context without inventing details; otherwise ask what led them to call. Then diagnose: booked out, or still filling it in? Booked solid -> disqualify politely and end.",
       "remove_me": "Apologise, confirm removal, end. Nothing else.",
-      "interested": "Painkiller first (every lead called within five minutes and screened), then ask for ten minutes with Mark. MAKE NO OFFER - no price, no trial, no pilot, never the word 'free'. If they ask what it costs, that is Mark's conversation.",
+      "interested": "Describe the relevant painkiller without making a speed or performance guarantee, then ask for 15 minutes with Mark. The event duration is now 15 minutes, but do not use the attached legacy booking tools yet: capture two preferred times and say Mark will confirm. After both tools are migrated and verified end to end, check availability and book only with the caller's explicit agreement; say a meeting is booked only after the tool succeeds. MAKE NO OFFER - no price, no trial, no pilot, never the word 'free'. If they ask what it costs, that is Mark's conversation.",
       "wrong_number": "Apologise for the confusion and end."
     },
     "must_capture": [
@@ -304,12 +314,12 @@
       "company",
       "best callback number",
       "best email (confirmed back letter by letter)",
-      "two preferred times in their own words"
+      "two preferred times in their own words (fallback until direct booking is verified)"
     ],
-    "_timezone_steer": "Same constraint as outbound: only US early morning and late afternoon PT are workable for Mark. Never offer US midday. Never name a specific slot - ask open and let them state a time.",
-    "_post_call_fields": "name, company, contact number, email, appointment date and time, preferred times, appointment booked, opt out requested, lead temperature, specific objection, was returning our call. Names match what /api/retell/webhook reads, so an inbound booking still creates the calendar event and Telegram alert; the webhook's `if lead_id:` guard makes a lead-less inbound call safe.",
+    "_timezone_steer": "Same constraint as outbound: only US early morning and late afternoon PT are workable for Mark. Never offer US midday. Until the migrated Cal.com tools pass an end-to-end booking test, never name a specific slot - ask open and let the caller state two times. After verification, offer only slots actually returned by the availability tool.",
+    "_post_call_fields": "name, company, contact number, email, appointment date and time, preferred times, appointment booked, opt out requested, lead temperature, specific objection, was returning our call. Set 'appointment booked' true only after a successful booking-tool response or Mark's explicit confirmation; preferred times alone are not a booking. Use 'was returning our call' only for a genuine callback, not an invited demo caller. Names match what /api/retell/webhook reads, so an inbound booking still creates the calendar event and Telegram alert; the webhook's `if lead_id:` guard makes a lead-less inbound call safe.",
     "_offerings": "OROVA sells THREE things and Nova must not describe it as ads-only: (1) Meta lead gen + AI creatives, (2) the AI lead qualification caller STANDALONE for owners who already have lead flow, (3) both together. Which one fits is decided by DIAGNOSIS, not by pitching: if they already get plenty of leads and the problem is chasing bad ones, that is the caller alone. If the pipeline is empty, that is ads. Never recite the menu — ask first, then name the one that fits. Prices for all three are Mark's to state, never Nova's.",
-    "_deployed_drift": "The DEPLOYED prompt is not generated from this file — nothing pushes it — so it drifts. Known drift as of 2026-08-22: the deployed text says 'ten minutes' while canonical is 15 (knowledge/facts/company.json meeting.duration_minutes), and both deployed prompts describe OROVA as Meta-ads-only. Retell updates an LLM version IN PLACE with no rollback pin, so verify before sending."
+    "_deployed_drift": "The DEPLOYED prompt is not generated from this file — nothing pushes it — so it drifts. Read-only API verification on 2026-09-23 still found: no invited-demo branch, no recording-consent instruction, a ten-minute ask instead of canonical 15, and Meta-ads-only positioning. Cal event type 2804866 ('OROVA Calls') was changed and live-verified at 15 minutes on 2026-09-23, but the attached Retell Cal tools are legacy and have not passed an end-to-end test. An exact DPAPI-encrypted rollback snapshot of the number, agent v0 and LLM v0 is stored outside the repository. The authenticated Retell browser currently shows first-time 'Create your workspace' onboarding rather than the workspace that owns the live agent; do not create a new empty workspace. Confirm the owning Retell login/workspace, then create and test a new draft version, migrate the tools, and verify the bound inbound number before sending demo traffic."
   },
   "case_studies": {
     "_note": "Owner rule (2026-07-11 interview): NEVER cite past clients, past results, past verticals, or tenure — not even placeholders. All claims are forward-looking (what OROVA will do for THEM) or system promises (what the machine verifiably does). The scripts below are the ONLY approved responses.",

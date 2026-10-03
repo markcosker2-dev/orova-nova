@@ -10,12 +10,109 @@ import json
 import datetime
 from datetime import timedelta
 import asyncio
+import hashlib
 
 from app.core.database import DatabaseManager
 from app.core.ai_client import UnifiedAIClient
+from app.core.hardening import zero_budget_mode
 from app.skills.agentmail_skill import _send_telegram_alert
 
 logger = logging.getLogger(__name__)
+
+
+async def _learning_counts(client_id: int) -> dict | None:
+    """Bounded ledger observations, never seeded rankings or CRM statuses.
+
+    Results are records, not unique prospects, independently verified delivery,
+    opens/clicks, or a controlled performance comparison. A failed read is not 0.
+    """
+    try:
+        row = await DatabaseManager.fetchone(
+            """SELECT
+                   COALESCE(SUM(CASE WHEN result IN ('sent', 'replied', 'meeting') THEN 1 ELSE 0 END), 0) AS successful,
+                   COALESCE(SUM(CASE WHEN result = 'replied' THEN 1 ELSE 0 END), 0) AS replies,
+                   COALESCE(SUM(CASE WHEN result = 'meeting' THEN 1 ELSE 0 END), 0) AS meetings,
+                   COALESCE(SUM(CASE WHEN result IS NULL OR result NOT IN ('sent', 'replied', 'meeting') THEN 1 ELSE 0 END), 0) AS other
+               FROM outreach_outcomes
+               WHERE client_id = ? AND action = 'email_sent'
+                 AND datetime(created_at) >= datetime('now', '-30 days')
+                 AND datetime(created_at) <= datetime('now')""",
+            (client_id,),
+        )
+        if row is None:
+            raise ValueError("missing aggregate")
+        counts = {key: int(row[key]) for key in ("successful", "replies", "meetings", "other")}
+        if any(n < 0 for n in counts.values()):
+            raise ValueError("invalid aggregate")
+        return counts
+    except Exception as exc:
+        logger.error("[LEARNING] Outcome data unavailable (%s)", type(exc).__name__)
+        return None
+
+
+def _learning_report(counts: dict | None, client_id: int) -> str:
+    if counts is None:
+        return "Learning data is unavailable. No campaigns were changed and no archiving was proposed."
+    return (
+        f"Learning check — workspace {client_id}, last 30 days (UTC).\n\n"
+        f"Email ledger: {counts['successful']} successful-send records, "
+        f"{counts['replies']} reply records, {counts['meetings']} meeting records; "
+        f"{counts['other']} other records. These are logged records, not verified delivery.\n\n"
+        "Manual DMs, opens/clicks and comparative lifts aren't measured here. "
+        "No proven winner is established by this summary. No campaigns were changed by this report.\n\n"
+        "Next: /next prepares one eligible prospect. Record the actual reply; "
+        "lead age alone is not an archive reason."
+    )
+
+
+async def _notify_learning_report(report: str, client_id: int) -> str:
+    """Claim before sending; an uncertain delivery stays held, never replayed.
+
+    One atomic SQLite statement arbitrates worker/API loops and restarts. No
+    new queue/store: use existing state_store. A claimed notice also blocks a
+    changed notice until delivery is confirmed or the owner reviews the hold.
+    This favors a visible missed-notice hold over duplicate Telegram messages.
+    """
+    digest = hashlib.sha256(report.encode("utf-8")).hexdigest()
+    key, claimed, sent = f"learning_notice:{client_id}", f"claimed:{digest}", f"sent:{digest}"
+    try:
+        result = await DatabaseManager.query(
+            """INSERT INTO state_store (key, value, updated_at)
+               VALUES (?, ?, CURRENT_TIMESTAMP)
+               ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+               WHERE state_store.value LIKE 'sent:%' AND state_store.value != ?""",
+            (key, claimed, sent),
+        )
+        if not isinstance(result, dict) or result.get("status") != "ok":
+            return "storage_unavailable"
+        if result.get("rows_affected") == 0:
+            return "suppressed"
+        if result.get("rows_affected") != 1:
+            return "storage_unavailable"
+    except Exception as exc:
+        logger.error("[LEARNING] Notification claim unavailable (%s)", type(exc).__name__)
+        return "storage_unavailable"
+
+    try:
+        delivered = await _send_telegram_alert(report)
+    except Exception as exc:
+        logger.error("[LEARNING] Notification delivery unverified (%s)", type(exc).__name__)
+        return "delivery_unverified"
+    if delivered is not True:
+        logger.warning("[LEARNING] Delivery unverified; notice stays held, no automatic retry")
+        return "delivery_unverified"
+    try:
+        result = await DatabaseManager.query(
+            "UPDATE state_store SET value = ?, updated_at = CURRENT_TIMESTAMP WHERE key = ? AND value = ?",
+            (sent, key, claimed),
+        )
+        if (not isinstance(result, dict) or result.get("status") != "ok"
+                or result.get("rows_affected") != 1):
+            raise ValueError("checkpoint not confirmed")
+    except Exception as exc:
+        logger.error("[LEARNING] Sent notice checkpoint unverified (%s)", type(exc).__name__)
+        return "sent_uncheckpointed"
+    return "sent"
 
 
 def wilson_lower_bound(successes: int, n: int, z: float = 1.96) -> float:
@@ -301,6 +398,7 @@ class StrategyOptimizer:
                           SUM(CASE WHEN result='meeting' THEN 1 ELSE 0 END) as meetings
                    FROM outreach_outcomes
                    WHERE action='email_sent' AND client_id=? AND niche IS NOT NULL AND niche != ''
+                     AND result IN ('sent', 'replied', 'meeting')
                    GROUP BY niche""",
                 (client_id,)
             )
@@ -333,24 +431,11 @@ class StrategyOptimizer:
             return ""
 
     async def generate_improvement_report(self, best_framework: str, best_hour: int, best_niche: str, client_id: int = 0) -> str:
-        """Generate an AI-written summary of what changed and why."""
-        logger.info("[STRATEGY_OPTIMIZER] Generating improvement report...")
-        prompt = (
-            f"You are the OROVA AI Strategy Analyst. Write a brief, data-driven improvement report "
-            f"summarizing the following optimizations:\n\n"
-            f"- Optimal email framework: {best_framework.upper()}\n"
-            f"- Optimal send hour: {best_hour}:00\n"
-            f"- Best performing niche: {best_niche or 'N/A'}\n\n"
-            f"Write like the operator of a $100M company reviewing test results: state which "
-            f"strategy is winning, what the data says, and the one change being shipped because "
-            f"of it. 3-4 blunt sentences. No hedging, no filler, decisions over descriptions."
-        )
-        try:
-            report = await self.ai.write(prompt)
-            return report.strip()
-        except Exception as e:
-            logger.error(f"[STRATEGY_OPTIMIZER] Error generating report: {e}")
-            return "Optimization cycle completed. Check learned_strategies table for updated performance data."
+        """Compatibility entry point: candidate strings are not outcome evidence.
+
+        No LLM embellishment, invented uplift or automatic rollout claims.
+        """
+        return _learning_report(await _learning_counts(client_id), client_id)
 
     async def optimize_email_framework(self, client_id: int = 0) -> str:
         """Analyze outreach outcomes by email strategy/framework and save the best one."""
@@ -363,6 +448,7 @@ class StrategyOptimizer:
                           SUM(case when result='replied' then 1 else 0 end) as replies
                    FROM outreach_outcomes 
                    WHERE action='email_sent' AND client_id=?
+                     AND result IN ('sent', 'replied', 'meeting')
                    GROUP BY strategy""",
                 (client_id,)
             )
@@ -425,6 +511,7 @@ class StrategyOptimizer:
                           SUM(case when result='replied' then 1 else 0 end) as replies
                    FROM outreach_outcomes 
                    WHERE action='email_sent' AND client_id=?
+                     AND result IN ('sent', 'replied', 'meeting')
                    GROUP BY send_hour""",
                 (client_id,)
             )
@@ -463,52 +550,12 @@ class StrategyOptimizer:
             return 10
 
     async def prune_dead_leads(self, threshold_days: int = 14, client_id: int = 0) -> str:
+        """Old caller compatibility; age-only bulk pruning is intentionally off.
+
+        Inactivity proves neither contact nor disqualification. Keep all lead
+        records and suppress the recurring lists/unsafe unscoped approval state.
         """
-        Identify dead/stale leads.
-        Does NOT auto-prune. Instead, compiles a list of candidates and proposes
-        them to the CEO via Telegram for approval.
-        """
-        logger.info("[STRATEGY_OPTIMIZER] Finding stale leads for pruning...")
-        try:
-            # Query leads with no activity for threshold_days
-            rows = await DatabaseManager.fetchall(
-                """SELECT id, business, owner, email, status, updated_at 
-                   FROM leads 
-                   WHERE client_id = ? 
-                   AND status IN ('Email Sent', 'Contacted', 'New') 
-                   AND datetime(updated_at) < datetime('now', ?)""",
-                (client_id, f"-{threshold_days} days")
-            )
-            
-            if not rows:
-                return "No stale leads found."
-                
-            lead_list = []
-            lead_ids = []
-            for row in rows:
-                lead_list.append(f"• {row['business']} ({row['owner']}) — last active {row['updated_at']}")
-                lead_ids.append(row["id"])
-                
-            # Propose pruning to CEO via Telegram
-            stale_leads_text = "\n".join(lead_list[:15])
-            if len(lead_list) > 15:
-                stale_leads_text += f"\n...and {len(lead_list) - 15} more leads."
-                
-            proposal_msg = (
-                f"🗑️ **Stale Leads Pruning Proposal**\n\n"
-                f"Nova has identified **{len(lead_list)}** leads with zero activity in {threshold_days}+ days.\n\n"
-                f"**Stale Leads:**\n{stale_leads_text}\n\n"
-                f"Would you like me to archive these leads? Reply with `/approve_pruning` to confirm."
-            )
-            
-            # Save the proposal state to state_store
-            await DatabaseManager.set_state("pending_prune_lead_ids", lead_ids)
-            await _send_telegram_alert(proposal_msg)
-            
-            return f"Proposed archiving of {len(lead_list)} stale leads."
-        except Exception as e:
-            logger.error(f"[STRATEGY_OPTIMIZER] Error proposing lead pruning: {e}")
-            return f"Error proposing lead pruning: {e}"
+        return "No archiving proposed: inactivity alone does not disqualify a lead."
 
 
 class ImprovementLoop:
@@ -562,32 +609,20 @@ class ImprovementLoop:
         return retired
 
     async def run(self, client_id: int = 0):
-        """Main self-improvement loop runner.
-        Aggregates outcomes → runs optimizations → persists strategies → logs changes.
+        """Observe first; $0/manual runs never seed/promote email strategies.
+
+        Funded ranking retains the old evaluator after a minimum observation
+        floor, but is not a controlled experiment or permission to send/roll out.
         """
-        logger.info("[IMPROVEMENT_LOOP] Running self-improvement cycle...")
-
-        # 1. Run optimizations
-        best_framework = await self.optimizer.optimize_email_framework(client_id)
-        best_hour = await self.optimizer.optimize_send_timing(client_id)
-        best_niche = await self.optimizer.optimize_niche_targeting(client_id)
-
-        # 1.5 Evaluate challengers: retire proven losers, keep exploring the rest
-        retired = []
-        for stype in ("email_framework", "send_timing"):
-            retired.extend(await self.evaluate_challengers(stype, client_id))
-        
-        # 2. Propose stale leads for pruning
-        prune_proposal = await self.optimizer.prune_dead_leads(threshold_days=14, client_id=client_id)
-        
-        # 3. Generate AI-written improvement report
-        report_text = await self.optimizer.generate_improvement_report(
-            best_framework=best_framework,
-            best_hour=best_hour,
-            best_niche=best_niche,
-            client_id=client_id
-        )
-        
-        # 4. Send weekly learning report to Telegram
-        retired_note = f"\n\n🧪 Retired strategies: {', '.join(retired)}" if retired else ""
-        await _send_telegram_alert(f"📈 **Nova Learning Report**\n\n{report_text}\n\n🗑️ Stale leads: {prune_proposal}{retired_note}")
+        counts = await _learning_counts(client_id)
+        report_text = _learning_report(counts, client_id)
+        if counts is None:
+            return {"status": "unavailable", "report": report_text, "notification": "not_attempted"}
+        if not zero_budget_mode() and counts["successful"] >= 20:
+            await self.optimizer.optimize_email_framework(client_id)
+            await self.optimizer.optimize_send_timing(client_id)
+            await self.optimizer.optimize_niche_targeting(client_id)
+            for stype in ("email_framework", "send_timing"):
+                await self.evaluate_challengers(stype, client_id)
+        notification = await _notify_learning_report(report_text, client_id)
+        return {"status": "observed", "report": report_text, "notification": notification}
