@@ -148,3 +148,28 @@ def test_restore_latest_all_corrupt_falls_back(monkeypatch, tmp_path):
     assert "corrupt" in res["error"]
     # live DB was a valid sqlite file at start and must remain openable
     assert vault_skill._sqlite_ok(fake_db)
+
+
+@pytest.mark.parametrize("setting", [None, "0", "true", "malformed"])
+def test_backup_retention_is_disabled_without_explicit_opt_in(monkeypatch, setting):
+    if setting is None:
+        monkeypatch.delenv("BACKUP_PRUNE_ENABLED", raising=False)
+    else:
+        monkeypatch.setenv("BACKUP_PRUNE_ENABLED", setting)
+    service = MagicMock()
+    vault_skill._prune_old_backups(service, "synthetic-folder")
+    service.files.assert_not_called()
+
+
+def test_opted_in_retention_trashes_only_excess_never_deletes(monkeypatch):
+    monkeypatch.setenv("BACKUP_PRUNE_ENABLED", "1")
+    service = MagicMock()
+    service.files.return_value.list.return_value.execute.return_value = {
+        "files": [{"id": f"synthetic-{n}", "name": f"nova_backup_synthetic_{n}.db"} for n in range(7)]}
+    vault_skill._prune_old_backups(service, "synthetic-folder")
+    assert service.files.return_value.update.call_count == 2
+    assert [call.kwargs for call in service.files.return_value.update.call_args_list] == [
+        {"fileId": "synthetic-0", "body": {"trashed": True}},
+        {"fileId": "synthetic-1", "body": {"trashed": True}},
+    ]
+    service.files.return_value.delete.assert_not_called()

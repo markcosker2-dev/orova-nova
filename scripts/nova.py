@@ -540,6 +540,7 @@ def cmd_benchmark(args) -> int:
         "tests/test_operator_safety_regressions.py",
         "tests/test_reliability_concurrency.py",
         "tests/test_restore_auxiliary_schema.py",
+        "tests/test_partial_recovery.py",
         "tests/test_dashboard_action_truth.py",
         "tests/test_csv_import.py",
         "tests/test_dashboard_api.py",

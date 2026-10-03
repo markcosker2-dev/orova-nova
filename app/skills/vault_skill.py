@@ -159,13 +159,17 @@ def _backup_database_sync() -> dict:
         return {"ok": False, "error": str(e)}
 
 def _prune_old_backups(service, folder_id: str):
+    # Preserve historical fallbacks by default, especially during incomplete
+    # recovery. Retention is an explicit owner choice, never a permanent delete.
+    if os.getenv("BACKUP_PRUNE_ENABLED", "0").strip() != "1":
+        return
     query = f"'{folder_id}' in parents and name contains '{BACKUP_PREFIX}' and trashed=false"
     results = service.files().list(q=query, orderBy="createdTime asc", fields="files(id, name)").execute()
     files = results.get("files", [])
     if len(files) > KEEP_N:
         for f in files[:-KEEP_N]:
-            service.files().delete(fileId=f["id"]).execute()
-            logger.info(f"[Vault] Pruned: {f['name']}")
+            service.files().update(fileId=f["id"], body={"trashed": True}).execute()
+            logger.info(f"[Vault] Moved old backup to Trash: {f['name']}")
 
 def _sqlite_ok(path: Path) -> bool:
     """True only if `path` is a well-formed SQLite database.
