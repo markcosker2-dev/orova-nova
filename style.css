@@ -1,0 +1,21 @@
+:root { color-scheme: light; font-family: Arial, Helvetica, sans-serif; color: #111; background: #f5f5f3; }
+* { box-sizing: border-box; }
+body { margin: 0; line-height: 1.65; }
+.draft { padding: 12px 24px; background: #111; color: #fff; font-size: 14px; text-align: center; }
+header, main, footer { width: min(920px, calc(100% - 40px)); margin: auto; }
+header { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 30px 0; border-bottom: 1px solid #d3d3d0; }
+.wordmark { font-size: 24px; font-weight: 800; letter-spacing: .08em; }
+nav { display: flex; flex-wrap: wrap; gap: 20px; }
+a { color: inherit; text-underline-offset: 5px; }
+a:focus-visible { outline: 3px solid #111; outline-offset: 5px; }
+main { padding: 48px 0; }
+h1 { font-size: clamp(34px, 7vw, 58px); line-height: 1.1; letter-spacing: -.04em; margin: 12px 0 24px; }
+h2 { font-size: 23px; line-height: 1.25; margin-top: 34px; }
+p, li { max-width: 760px; }
+.eyebrow { letter-spacing: .11em; text-transform: uppercase; font-size: 12px; font-weight: 700; }
+.intro { font-size: 20px; }
+.card { margin-top: 28px; padding: 26px; background: #fff; border: 1px solid #d3d3d0; border-radius: 10px; }
+.card h2 { margin-top: 0; }
+.muted { color: #535353; font-size: 14px; }
+footer { padding: 26px 0 36px; border-top: 1px solid #d3d3d0; font-size: 14px; }
+@media (max-width: 520px) { header { align-items: flex-start; flex-direction: column; } main { padding-top: 30px; } .card { padding: 20px; } }
