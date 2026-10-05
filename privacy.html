@@ -3,26 +3,33 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
-  <title>MikeBot privacy notice — review draft</title><link rel="stylesheet" href="style.css">
+  <title>MikeBot privacy notice</title><link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="draft">REVIEW NOTICE — limited to the documented Drive backup integration</div>
+  <div class="draft">PRIVATE MIKEBOT APPLICATION — Google access and operational data handling</div>
   <header><span class="wordmark">OROVA</span><nav aria-label="Main"><a href="index.html">App information</a><a href="privacy.html" aria-current="page">Privacy</a><a href="terms.html">Use terms</a></nav></header>
   <main>
-    <p class="eyebrow">Documented Nova Drive backup integration</p><h1>Privacy notice.</h1>
-    <p>Mark operates this private MikeBot integration for OROVA. Contact <a href="mailto:markcosker2@gmail.com">markcosker2@gmail.com</a> with access, correction, deletion or security questions.</p>
-    <h2>Data accessed and purpose</h2>
-    <p>The documented integration uses Google Drive file access (<code>drive.file</code>) to create, list, read and recover application-accessible backup files. File metadata and database contents are processed for backup, integrity checking and restoration.</p>
-    <p>Database snapshots may include business contact details, lead status, internal activity, approval and conversation records. A partial recovery file may omit some of these records; it is not represented as a complete backup.</p>
-    <h2>Storage and access</h2>
-    <p>Backup files are stored in the owner's Google Drive. Authorized recovery downloads can be stored on the owner's computer and restored to Nova's private operating environment on Render. OAuth credentials are kept in access-restricted settings or private local files, not this public information site.</p>
-    <p>The backup transport sends file data to Google and downloads it for authorized recovery. Its code does not send backup contents to an LLM. Broader Nova features and the second client sharing this Google project require a completed data-flow disclosure before this draft can become an app-wide policy.</p>
-    <h2>Retention and your controls</h2>
-    <p>There is no verified fixed deletion deadline. Automatic backup pruning is disabled by default in the prepared release; when expressly enabled, its retention routine moves older snapshots to Drive Trash. Revoking Google access stops future authorized access but does not erase existing Drive files or private recovery copies. The owner can delete or request removal of those copies separately.</p>
-    <h2>This information site</h2>
-    <p>This information site has no sign-in form, advertising, analytics scripts, tracking pixels or third-party fonts. On GitHub Pages, GitHub records visitor IP addresses for hosting security under its <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">privacy statement</a>. Contacting support by email sends the information you choose to include through your email provider.</p>
-    <p class="muted">App-wide policy review remains outstanding for the second OAuth client, downstream operational data use and retention. This review notice is not an effective app-wide policy, legal advice, a compliance certification, or a claim that Google has approved the app.</p>
+    <p class="eyebrow">Last updated October 5, 2026</p><h1>Privacy notice.</h1>
+    <p>Mark operates MikeBot for OROVA's private, owner-approved internal work. Contact <a href="mailto:markcosker2@gmail.com">markcosker2@gmail.com</a> about access, correction, deletion or security.</p>
+    <h2>Scope of this notice</h2>
+    <p>This notice covers the currently documented Google-account Drive authorization and its use for Nova backup and recovery, including either registered MikeBot client, hermesclaw-drive-backup or OROVA. It also describes how restored records can enter broader Nova operations. This site offers no public account signup.</p>
+    <p>The current owner-account permission check lists app-specific Drive file access, not Gmail or Calendar. This is not an assertion that every historical client, token or other integration is inactive. Additional Google-account integrations require a separate permission and data-handling review before use.</p>
+    <h2>What is accessed and why</h2>
+    <p>Google Drive access uses <code>drive.file</code> for application-created or application-accessible files. The tools process file names, identifiers, folder relationships, file size and sharing metadata, and backup contents for creation, listing, authorized download, integrity checking and restoration.</p>
+    <p>Backup contents can include business contact information, prospect status, conversations, internal activity, consent, suppression and approval records. A partial recovery may omit records; neither this notice nor a successful transfer means it is a complete snapshot.</p>
+    <h2>Where information goes</h2>
+    <p>Google stores the backup files in the owner's Drive. Authorized recovery copies may be stored on the owner's computer and restored into Nova on Render. The owner and explicitly approved operators may inspect records for recovery, operations or security. OAuth credentials belong in access-restricted settings or private local files, never this public website.</p>
+    <p>The isolated backup transport uploads to Google and downloads for authorized recovery; it does not send backup contents to an LLM. After restoration, however, selected operational information may enter other Nova functions. CRM projection can copy business contact and status fields to owner-controlled Google Sheets using a separate service-account connection.</p>
+    <p>Nova's conversational and drafting functions can send an operator's submitted text, recent conversation context and selected pipeline summaries to a configured AI provider, and return responses through Telegram. Its code supports Groq, Google's Gemini and OpenRouter or an operator-configured compatible endpoint. Actual providers and settings depend on the deployed configuration. This notice does not certify provider retention settings, a training opt-out or zero third-party processing.</p>
+    <p>Do not put credentials, private client material or Google-derived personal data into an unreviewed AI route. Before using such data for AI processing, the operator must review the actual provider, account settings, purpose and required consent. This notice alone does not implement a technical filter or authorize a new transfer.</p>
+    <h2>Retention, deletion and revocation</h2>
+    <p>There is no promised fixed deletion deadline. Copies may remain in Drive, local recovery storage and Nova's operating database until removed or affected by configured retention or hosting behavior. Retention differs by software version: legacy backup code uses rolling retention; the prepared replacement disables automatic pruning by default and uses Drive Trash when expressly enabled. Do not assume the prepared version is already deployed.</p>
+    <p>Revoking MikeBot in your Google Account stops future access through that authorization; it does not automatically delete retained Drive files, local copies, restored records or separately connected services. Contact the owner to identify and remove relevant copies. We may request proportionate identity or account-ownership confirmation before releasing or deleting records. Deletion must also account for suppression and consent records needed to prevent further contact.</p>
+    <h2>This website</h2>
+    <p>The website contains no sign-in form, advertising, analytics script, tracking pixel or third-party font. Its Google verification meta tag is a website-control proof, not a tracking script. GitHub Pages records visitor IP addresses for hosting security under <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub's privacy statement</a>. Emails to support contain the information you choose to send through your email provider.</p>
+    <h2>Changes and limits</h2>
+    <p>This notice must be reviewed when Google permissions, data uses, providers, audience or retention change. It does not authorize selling Google account data, using it for ad targeting, or bypassing consent, suppression or security controls. It is not a legal compliance certification or a claim that Google has approved the application.</p>
   </main>
-  <footer><a href="index.html">App information</a> · <a href="terms.html">Use terms</a><br>Prepared October 4, 2026 for review only.</footer>
+  <footer><a href="index.html">App information</a> · <a href="terms.html">Use terms</a><br>App and privacy support: <a href="mailto:markcosker2@gmail.com">markcosker2@gmail.com</a></footer>
 </body>
 </html>
