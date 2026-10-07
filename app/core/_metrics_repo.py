@@ -30,11 +30,12 @@ class _MetricsRepo:
 
     @classmethod
     def get_metrics(cls, client_id: int = 0) -> dict:
-        """Return pipeline metrics. Returns safe defaults if DB is unavailable."""
+        """Return counts with availability; fallback zeros are never measurements."""
         empty = {
             "leads_found": 0, "emails_sent": 0,
             "replies_received": 0, "meetings_booked": 0,
-            "calls_made": 0, "proposals_sent": 0, "cost": 0.0
+            "calls_made": 0, "proposals_sent": 0, "cost": 0.0,
+            "metrics_available": False,
         }
         try:
             with cls.connection() as conn:
@@ -65,7 +66,7 @@ class _MetricsRepo:
                     "leads_found": int(total or 0), "emails_sent": int(contacted or 0),
                     "replies_received": int(replied or 0), "meetings_booked": int(meetings or 0),
                     "calls_made": calls_made, "proposals_sent": proposals_sent,
-                    "cost": cost
+                    "cost": cost, "metrics_available": True,
                 }
         except Exception as e:
             logger.error(f"[DB] get_metrics failed: {e}")

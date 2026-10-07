@@ -22,7 +22,7 @@ from app.skills.lead_validator import (
 
 # ── In-ICP names that MUST survive the gate ──────────────────────────────────
 # ADR-0012's ranked ICP: custom home builders / high-end remodelers (lead),
-# med spas, luxury RE. Several are deliberate near-misses on the patterns:
+# luxury RE. Med spas are excluded by ADR-0015. Several deliberate near-misses:
 #   "Mechanical" vs \bmechanic\b · "Retirement" vs \btire\b
 #   "Autumn"/"Automatic" vs \bauto\b · "Carriage"/"Carlton" vs \bcar\b
 IN_ICP_NAMES = [
@@ -39,7 +39,7 @@ IN_ICP_NAMES = [
     "Automatic Gate & Fence Co",             # \bauto\b must NOT match
     "Carriage House Renovations",            # \bcar\b must NOT match
     "Carlton Bay Remodeling",                # \bcar\b must NOT match
-    "Radiance Med Spa",                      # \bradiator\b must NOT match
+    "Radiance Home Builders",                # \bradiator\b must NOT match
     "Glow Aesthetics & Wellness",
     "Bellevue Luxury Properties Group",
     "Stonebridge General Contracting",
@@ -156,3 +156,8 @@ def test_in_icp_lead_with_off_icp_vertical_label_is_still_blocked():
     """The name leg must not accidentally rescue a row the vertical leg rejects."""
     assert off_icp_trade_reason(
         {"business": "Whitestone Custom Homes", "vertical": "auto repair"})
+
+
+@pytest.mark.parametrize("name", ["Radiance Med Spa", "Radiance Medical Spa", "Radiance MedSpa"])
+def test_med_spa_names_are_excluded_even_without_a_vertical(name):
+    assert "ADR-0015" in off_icp_business_name_reason({"business": name})

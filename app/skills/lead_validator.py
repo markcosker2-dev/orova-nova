@@ -150,6 +150,10 @@ _OFF_ICP_VERTICALS = {
 }
 _OPPORTUNISTIC_VERTICAL_MARKERS = ("exotic", "luxury", "classic", "supercar")
 
+# ADR-0015 excludes med spas, including imported and legacy rows. Match only
+# explicit trade spellings; a builder renovating a spa is still a prospect.
+_MED_SPA_RE = re.compile(r"\bmed(?:ical)?[\s-]*spas?\b", re.IGNORECASE)
+
 # Cosmetic/appearance auto services — added 2026-08-02 after the owner asked
 # why Telegram kept surfacing automotive leads. These fail the ADR-0012
 # qualifying test harder than the repair shops already listed above: a ceramic
@@ -177,7 +181,7 @@ _OFF_ICP_VERTICAL_SUBSTRINGS = (
 
 
 def off_icp_vertical_reason(lead: dict) -> str:
-    """Why this lead's vertical is outside the ADR-0012 ICP, or '' if it is fine.
+    """Why this lead's vertical is outside the canonical ICP, or '' if it is fine.
 
     Empty verticals are NOT disqualified — absence of a label is not evidence of
     being off-ICP, and other gate rules judge such rows.
@@ -185,6 +189,8 @@ def off_icp_vertical_reason(lead: dict) -> str:
     vertical = (lead.get("vertical") or "").strip().lower()
     if not vertical:
         return ""
+    if _MED_SPA_RE.search(vertical):
+        return f"off-ICP vertical {vertical!r} — ADR-0015 excludes med spas"
     # NOTE (2026-08-02): this leg was briefly changed to read the marker from
     # the BUSINESS NAME instead, on the reasoning that worker.py sets
     # `vertical = niche` (the raw query string), so an 'exotic car dealer
@@ -264,7 +270,7 @@ _OFF_ICP_NAME_RE = re.compile(
 
 
 def off_icp_business_name_reason(lead: dict) -> str:
-    """Why this lead's BUSINESS NAME puts it outside the ADR-0012 ICP, or ''.
+    """Why this lead's BUSINESS NAME puts it outside the canonical ICP, or ''.
 
     Companion to off_icp_vertical_reason for the (now dominant) case of a lead
     that carries no vertical label. Same ADR-0012 rule, different evidence.
@@ -277,6 +283,8 @@ def off_icp_business_name_reason(lead: dict) -> str:
     name = (lead.get("business") or "").strip().lower()
     if not name:
         return ""
+    if _MED_SPA_RE.search(name):
+        return f"off-ICP business name {lead.get('business')!r} — ADR-0015 excludes med spas"
     if any(m in name for m in _OPPORTUNISTIC_VERTICAL_MARKERS):
         return ""   # exotic/luxury/classic auto stays opportunistic, per ADR-0012
     hit = _OFF_ICP_NAME_RE.search(name)
@@ -288,7 +296,7 @@ def off_icp_business_name_reason(lead: dict) -> str:
 
 
 def off_icp_trade_reason(lead: dict) -> str:
-    """The single ADR-0012 trade check: vertical first, then business name.
+    """The canonical trade check: vertical first, then business name.
 
     One entry point so the storage gate, the boot hygiene sweep and the
     pre-send gate cannot drift apart — the divergence that let 48 emails ship.
@@ -367,6 +375,14 @@ _NON_NAME_TOKENS = frozenset({
     "people", "all", "best", "since", "family", "owned", "operated", "here",
     "why", "choose", "buy", "sell", "browse", "view", "call", "today", "now",
     "more", "learn", "inventory", "sales", "customer", "customers",
+    # role/title fragments. A scraper can concatenate adjacent team cards into
+    # something that still looks Title Case (live 2026-09-22:
+    # "Kalin CFO Daisy General"). Confidence metadata must never turn that
+    # DOM fragment into a person we address in outreach.
+    "owner", "founder", "coowner", "cofounder", "ceo", "cfo", "coo",
+    "president", "principal", "operator", "partner", "director", "manager",
+    "general", "chief", "executive", "officer", "operations", "marketing",
+    "finance", "financial", "accounting", "supervisor", "administrator",
 })
 # NOTE: deliberately omits words that are also common surnames (Baker, Page,
 # Mason, Taylor, Wood, Berry, Marsh, Home) to avoid rejecting real people.
@@ -397,6 +413,39 @@ def is_plausible_person_name(text: str) -> bool:
     if any(p.lower().strip("'-") in _NON_NAME_TOKENS for p in parts):
         return False
     return True
+
+
+def is_safe_owner_name(text: str, *, owner_confidence: int = 0,
+                       owner_source: str = "") -> bool:
+    """True when an owner value is safe to store, score, or speak aloud.
+
+    Full names always pass through the canonical shape/denylist check above.
+    The only deliberate exception is a vetted single first name produced by
+    the decision-maker waterfall (for example ``Blake`` inferred from a
+    personal ``blake@`` mailbox). Confidence may authorize that narrow shape;
+    it may never bypass validation for a multi-token scrape.
+
+    ``owner_source`` is accepted for callers that have it and for auditability,
+    but older rows did not always persist it. Positive waterfall confidence is
+    therefore the compatibility signal for the one-token exception.
+    """
+    name = (text or "").strip()
+    if is_plausible_person_name(name):
+        return True
+    parts = name.split()
+    try:
+        confidence = int(owner_confidence or 0)
+    except (TypeError, ValueError):
+        confidence = 0
+    if len(parts) != 1 or confidence <= 0:
+        return False
+    token = parts[0]
+    core = token.lower().strip("'-")
+    return bool(
+        re.fullmatch(r"[A-Za-z][A-Za-z'\-]*", token)
+        and token[0].isupper()
+        and core not in _NON_NAME_TOKENS
+    )
 
 
 def _looks_like_phone(text: str) -> bool:
@@ -535,15 +584,17 @@ def validate_lead_for_storage(lead: dict) -> dict:
 
     owner = (cleaned.get("owner") or cleaned.get("owner_name") or "").strip()
     dropped_owner_first = ""
-    # A positive owner_confidence means the decision-maker waterfall already
-    # cross-referenced and vetted this name (incl. recognized single first
-    # names like "Blake"); trust it over the shape heuristic. The heuristic
-    # still guards ungated ingest (CSV/Sheets) where confidence is 0.
-    owner_vetted = int(cleaned.get("owner_confidence") or 0) > 0
+    # Positive waterfall confidence authorizes only the narrow, vetted
+    # single-first-name case. It must never bypass validation for a multi-token
+    # scrape (live 2026-09-22: "Kalin CFO Daisy General").
+    owner_confidence = cleaned.get("owner_confidence") or 0
+    owner_source = cleaned.get("owner_source") or ""
     if owner and _FIXTURE_OWNER_RE.search(owner):
         reasons.append(f"dropped fixture owner name {owner!r}")
         owner = ""
-    elif owner and not owner_vetted and not is_plausible_person_name(owner):
+    elif owner and not is_safe_owner_name(
+            owner, owner_confidence=owner_confidence,
+            owner_source=owner_source):
         # live 2026-07-20: "THANKS TO", "We Proudly", "Good People" stored as
         # owners — scraped sentence fragments, not people.
         reasons.append(f"dropped implausible owner name {owner!r}")
@@ -551,6 +602,14 @@ def validate_lead_for_storage(lead: dict) -> dict:
         owner = ""
     cleaned["owner"] = owner
     cleaned.pop("owner_name", None)
+    if not owner:
+        # Do not leave authoritative-looking provenance attached to an empty or
+        # rejected value. Besides misleading operators, stale confidence would
+        # keep reenrichment from selecting the row for repair.
+        cleaned["owner_title"] = ""
+        cleaned["owner_source"] = ""
+        cleaned["owner_confidence"] = 0
+        cleaned["evidence_json"] = ""
 
     # An email GUESSED from a name we just rejected is fabrication squared
     # (live: thanks@calabasasluxurymotorcars.com from "THANKS TO") — drop it.
@@ -621,7 +680,10 @@ def contact_confidence(lead: dict) -> dict:
     # contractor licence principal; wa_sos is kept because rows stored before
     # that swap still carry it.
     _REGISTRY_SOURCES = ("ca_sos", "wa_sos", "wa_lni", "or_sos", "opencorporates")
-    if not owner:
+    if not owner or not is_safe_owner_name(
+            owner,
+            owner_confidence=lead.get("owner_confidence") or 0,
+            owner_source=lead.get("owner_source") or ""):
         owner_conf = 0
     elif int(lead.get("owner_confidence") or 0) > 0:
         # The waterfall already cross-referenced sources into a real

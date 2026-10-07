@@ -21,6 +21,8 @@ every check that existed.
     python scripts/nova.py brief --top 3 --research
     python scripts/nova.py leaks           secrets + what the internet can see
     python scripts/nova.py gates           the three CI gates, locally
+    python scripts/nova.py benchmark       complete local quality evaluation
+    python scripts/nova.py benchmark --focused   critical workflow regressions
     python scripts/nova.py logs --errors     what production is actually saying
     python scripts/nova.py deploy           watch a deploy land, verify data survived
     python scripts/nova.py config           which capabilities are live IN PRODUCTION
@@ -45,6 +47,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -110,7 +113,7 @@ def load_env() -> dict[str, str]:
             k, _, v = line.partition("=")
             env[k.strip()] = v.strip().strip('"').strip("'")
     for k, v in os.environ.items():          # a real env var wins over .env
-        env.setdefault(k, v)
+        env[k] = v
     return env
 
 
@@ -165,6 +168,7 @@ def cmd_status(_args) -> int:
     print("  " + "=" * 66)
 
     problems: list[str] = []
+    unknowns: list[str] = []
 
     # build vs origin/main
     code, health = http("/health", auth=False)
@@ -188,7 +192,7 @@ def cmd_status(_args) -> int:
                 problems.append(f"{field} is {val}")
 
     # data — the field-level check, because a row count reconciles either way
-    code, leads = http("/api/leads")
+    code, leads = http("/api/leads?limit=2000")
     if code == 200:
         rows = leads.get("leads", leads) if isinstance(leads, dict) else leads
         rows = rows if isinstance(rows, list) else []
@@ -257,18 +261,26 @@ def cmd_status(_args) -> int:
             row("MEMORY", BAD, f"{mem.get('memory_mb', 0):.0f}MB of {mem.get('limit_mb')}MB")
             problems.append("memory critical")
         if h.get("errors"):
-            row("ERRORS", ACT, f"{h['errors']} in the last 24h — nova.py logs --errors")
+            row("ERRORS", ACT, f"{h['errors']} provider failures — nova.py logs --errors")
+            problems.append("inspect provider failures with nova.py logs --errors")
+    else:
+        unknowns.append("production capability and error health could not be read")
+
+    # Neither /health nor /api/health proves a complete SQLite snapshot. Sheets
+    # is only a lead projection, so a green health endpoint is not a deploy gate.
+    row("BACKUP", HOLD, "full SQLite backup/restore is not verified by this check")
+    unknowns.append("verify a complete database backup and restore before deploy")
 
     # gates that stay closed on purpose — reported, never 'fixed'
     row("GATES", HOLD, "CALLS_AUTOPILOT=0 until the ADAD question is answered")
     if "national DNC scrub" in str((h or {}) if isinstance(h, dict) else ""):
         row("DNC", HOLD, "no DNC scrub configured — is_dnc_registered fails OPEN")
 
-    header("BLOCKED ON YOU" if problems else "NOTHING BLOCKING")
+    header("NEEDS ACTION" if problems else "NEEDS VERIFICATION")
     for i, p in enumerate(problems, 1):
         print(f"  {i}. {p}")
-    if not problems:
-        print("  Everything green. The only thing left is a phone call.")
+    for item in unknowns:
+        print(f"  ? {item}")
     return 1 if any("not answering" in p or "cannot read" in p for p in problems) else 0
 
 
@@ -438,37 +450,128 @@ def _repo_slug() -> str:
 
 
 # ── gates ───────────────────────────────────────────────────────────────────
-def cmd_gates(_args) -> int:
-    """The three things CI will fail you on, run locally, in CI's own form."""
-    print("\n  GATES")
-    print("  " + "=" * 66)
-    checks = [
+def _quality_checks() -> list[tuple[str, list[str]]]:
+    """Required local checks, using the same Python environment throughout."""
+    return [
         ("secrets", [sys.executable, "scripts/check_secrets.py"]),
         ("knowledge", [sys.executable, "scripts/compile_knowledge.py", "--check"]),
-        ("ruff", ["ruff", "check", "--no-cache", "--select",
+        ("ruff", [sys.executable, "-m", "ruff", "check", "--no-cache", "--select",
                   "S102,S301,S307,S506,S602,S603,S605,S608",
                   "app/", "scripts/", "tests/", ".claude/"]),
     ]
+
+
+def _run_quality_checks(checks, timeout: int = 300, results: list | None = None) -> int:
     failed = 0
     for name, cmd in checks:
+        started = time.perf_counter()
+        measurement = {"check": name, "passed": False}
         try:
-            # S603: `cmd` comes from the literal `checks` list above, not input.
+            # S603: fixed local verifier argv, never free-form user commands.
             r = subprocess.run(cmd, cwd=ROOT, capture_output=True,  # noqa: S603
-                               text=True, timeout=300)
+                               text=True, timeout=timeout)
         except FileNotFoundError:
-            row(name, DIM, f"{cmd[0]} not installed")
+            row(name, BAD, "required verifier not installed")
+            failed += 1
+            continue
+        except OSError as exc:
+            row(name, BAD, f"verifier could not start ({type(exc).__name__})")
+            failed += 1
             continue
         except subprocess.TimeoutExpired:
             row(name, BAD, "timed out")
             failed += 1
             continue
+        finally:
+            measurement["elapsed_seconds"] = round(time.perf_counter() - started, 3)
+            if results is not None:
+                results.append(measurement)
+        measurement["passed"] = r.returncode == 0
+        measurement["exit_code"] = r.returncode
+        if name == "tests":
+            for line in r.stdout.splitlines():
+                if re.match(r"^\d+ (?:passed|failed|skipped|errors?)(?:,| in )", line):
+                    measurement["pytest_summary"] = line.strip()
         if r.returncode == 0:
-            row(name, OK, "passed")
+            row(name, OK, f"passed in {time.perf_counter() - started:.1f}s")
+            if name == "tests":
+                # Keep the independently measured pytest count, not raw logs.
+                for line in r.stdout.splitlines():
+                    if re.match(r"^\d+ passed(?:,| in )", line):
+                        print(f"      {line.strip()}")
         else:
             row(name, BAD, "FAILED")
-            print((r.stdout or r.stderr).strip()[:600])
+            # Pytest starts with progress, not the failing assertion. Keep
+            # bounded failure details at the tail rather than hiding them.
+            output = (r.stdout or r.stderr).strip()
+            print(output[-4000:] if name == "tests" else output[:600])
             failed += 1
     return 1 if failed else 0
+
+
+def cmd_gates(_args) -> int:
+    """The required static CI gates, locally; missing tools fail closed."""
+    header("GATES")
+    return _run_quality_checks(_quality_checks())
+
+
+def cmd_benchmark(args) -> int:
+    """Repeatable project regressions; no live checks, calls or app startup."""
+    header("LOCAL PROJECT BENCHMARKS")
+    focused = args.focused
+    targets = [
+        "tests/test_zero_budget_repair.py",
+        "tests/test_agentmail_policy_stop.py",
+        "tests/test_outreach_approval_chokepoint.py",
+        "tests/test_telegram_operator_autonomy.py",
+        "tests/test_telegram_repair_regressions.py",
+        "tests/test_learning_report_truth.py",
+        "tests/test_nova_chat.py",
+        "tests/test_lead_storage_gate.py",
+        "tests/test_sheets_restore.py",
+        "tests/test_lead_state_persistence.py",
+        "tests/test_event_log.py",
+        "tests/test_openrouter_free_only.py",
+        "tests/test_retell_inbound_demo.py",
+        "tests/test_retell_inbound_readiness.py",
+        "tests/test_no_unauthorised_offer.py",
+        "tests/test_nova_cli_quality.py",
+        "tests/test_metrics_availability.py",
+        "tests/test_operator_safety_regressions.py",
+        "tests/test_reliability_concurrency.py",
+        "tests/test_restore_auxiliary_schema.py",
+        "tests/test_partial_recovery.py",
+        "tests/test_dashboard_action_truth.py",
+        "tests/test_csv_import.py",
+        "tests/test_dashboard_api.py",
+        "tests/test_render_retell_inbound_prompt.py",
+    ] if focused else ["tests/"]
+    checks = _quality_checks() + [
+        ("dashboard", ["node", "--test", "tests/dashboard_contract.test.cjs"]),
+        ("tests", [sys.executable, "-m", "pytest", *targets, "-q"]),
+    ]
+    results: list[dict] = []
+    rc = _run_quality_checks(checks, timeout=900, results=results)
+    report_path = getattr(args, "report", None)
+    if report_path:
+        report_path = Path(report_path)
+        try:
+            report_path.parent.mkdir(parents=True, exist_ok=True)
+            report_path.write_text(json.dumps({
+                "created_at_utc": datetime.now(timezone.utc).isoformat(),
+                "profile": "focused" if focused else "complete",
+                "passed": rc == 0, "checks": results,
+                "scope": "Local project regressions; not a model score or live readiness certificate",
+            }, indent=2) + "\n", encoding="utf-8")
+        except OSError:
+            row("report", BAD, "could not save benchmark measurements")
+            rc = 1
+    if rc == 0:
+        print("  LOCAL BENCHMARKS PASS: " + ("critical workflows" if focused else "complete suite"))
+    else:
+        print("  LOCAL BENCHMARKS FAILED: inspect the failed verifier above")
+    print("  These checks do not establish deployment, a full backup, or client results.")
+    return rc
 
 
 # ── hunt ────────────────────────────────────────────────────────────────────
@@ -558,8 +661,9 @@ def cmd_logs(args) -> int:
 def cmd_deploy(args) -> int:
     """Watch a deploy land, then check the data survived it.
 
-    Render's disk is ephemeral: every deploy destroys the DB and restores from
-    the Leads sheet. A reconciling ROW COUNT proves nothing about fields — cover
+    Render's disk is ephemeral: a deploy restores a full snapshot when available,
+    otherwise it falls back to the Leads sheet. A reconciling ROW COUNT proves
+    nothing about fields — cover
     went 30 -> 10 across one deploy while the count reconciled at 40/40 — so
     this compares the fields too, and says which ones moved.
     """
@@ -589,7 +693,8 @@ def cmd_deploy(args) -> int:
 
 
 def _snapshot() -> dict:
-    code, leads = http("/api/leads")
+    # The API defaults to 100 rows. A truncated snapshot can conceal data loss.
+    code, leads = http("/api/leads?limit=2000")
     if code != 200:
         return {}
     rows = leads.get("leads", leads) if isinstance(leads, dict) else leads
@@ -785,6 +890,41 @@ async def _research(lead: dict) -> dict:
         return {"_error": f"{type(e).__name__}: {e}"}
 
 
+def _safe_owner_for_display(lead: dict) -> str:
+    """Return only a name safe to put in an operator's mouth.
+
+    Prefer the canonical storage rule. The conservative stdlib fallback keeps
+    ``nova.py`` useful when the project environment is unavailable while still
+    refusing role fragments and concatenated team-card text.
+    """
+    owner = (lead.get("owner") or lead.get("owner_name") or "").strip()
+    if not owner:
+        return ""
+    try:
+        sys.path.insert(0, str(ROOT))
+        from app.skills.lead_validator import is_safe_owner_name  # noqa: PLC0415
+        return owner if is_safe_owner_name(
+            owner,
+            owner_confidence=lead.get("owner_confidence") or 0,
+            owner_source=lead.get("owner_source") or "",
+        ) else ""
+    except Exception:                                        # noqa: BLE001
+        parts = owner.split()
+        blocked = {
+            "owner", "founder", "ceo", "cfo", "coo", "president",
+            "principal", "partner", "director", "manager", "general",
+            "chief", "executive", "officer", "operations", "marketing",
+            "sales", "finance", "accounting", "team", "staff",
+        }
+        if not (2 <= len(parts) <= 4):
+            return ""
+        if any(p.lower().strip("'-") in blocked for p in parts):
+            return ""
+        if not all(re.fullmatch(r"[A-Za-z][A-Za-z'\-]*", p) for p in parts):
+            return ""
+        return owner
+
+
 def cmd_brief(args) -> int:
     code, data = http("/api/leads")
     if code in (401, 403):
@@ -830,7 +970,7 @@ def _print_brief(lead: dict, args) -> None:
     lid = lead.get("id")
     crew = _crew_status(lead)
     cover = lead.get("insurance_amt") or 0
-    owner = (lead.get("owner") or "").strip()
+    owner = _safe_owner_for_display(lead)
     first = owner.split()[0] if owner else ""
     score = int(lead.get("icp_score") or lead.get("score") or 0)
 
@@ -1104,6 +1244,11 @@ def main() -> int:
     c.add_argument("--limit", type=int, default=10)
     sub.add_parser("leaks", help="secrets + what the internet can see")
     sub.add_parser("gates", help="the three CI gates, locally")
+    bench = sub.add_parser("benchmark", help="repeatable local quality and regression checks")
+    bench.add_argument("--focused", action="store_true",
+                       help="run critical workflow regressions instead of the full suite")
+    bench.add_argument("--report", type=Path,
+                       help="save bounded check timings/results as JSON (no provider data or raw logs)")
 
     h = sub.add_parser("hunt", help="kick a lead hunt (spends budget)")
     h.add_argument("--niche"); h.add_argument("--location"); h.add_argument("--state")
@@ -1150,7 +1295,8 @@ def main() -> int:
         cmd_calls(argparse.Namespace(limit=10))
         return rc
     return {"status": cmd_status, "calls": cmd_calls, "leaks": cmd_leaks,
-            "gates": cmd_gates, "hunt": cmd_hunt, "outcome": cmd_outcome,
+            "gates": cmd_gates, "benchmark": cmd_benchmark,
+            "hunt": cmd_hunt, "outcome": cmd_outcome,
             "logs": cmd_logs, "deploy": cmd_deploy, "config": cmd_config,
             "brief": cmd_brief, "consent": cmd_consent, "demo": cmd_demo,
             "agents": cmd_agents, "sheet": cmd_sheet}[args.cmd](args)

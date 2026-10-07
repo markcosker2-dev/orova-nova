@@ -4,7 +4,7 @@ Uses the same mocked TestClient harness as test_dashboard_api: DB calls are
 mocked, so these tests exercise parsing, header mapping, quality gates,
 dedup, and scoring — the endpoint's actual logic."""
 import os
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 os.environ.setdefault("DASHBOARD_API_KEY", "test-dashboard-key")
@@ -13,10 +13,17 @@ os.environ.setdefault("CRON_SECRET", "test-cron-secret")
 from app.main import app
 
 
+@asynccontextmanager
+async def _route_only_lifespan(_app):
+    yield
+
+
 @contextmanager
 def _client(existing_rows=None, saved_ids=None):
     saved = saved_ids if saved_ids is not None else iter(range(100, 200))
-    with patch("app.main.restore_leads_from_sheets", new_callable=AsyncMock, return_value=[]), \
+    with patch.object(app.router, "lifespan_context", _route_only_lifespan), \
+         patch("app.core.durability.persist_leads_durably", AsyncMock(return_value={"verified": True})), \
+         patch("app.main.restore_leads_from_sheets", new_callable=AsyncMock, return_value=[]), \
          patch("app.main.restore_latest", new_callable=AsyncMock, return_value={"ok": False}), \
          patch("app.main.AgentSoul.initialize", new_callable=AsyncMock), \
          patch("app.main.DatabaseManager.init_db", new_callable=MagicMock), \
@@ -87,3 +94,11 @@ def test_import_requires_business_column_and_body():
         r2 = client.post("/api/leads/import-csv", content="foo,bar\n1,2\n", headers=HDRS)
     assert r1.json()["status"] == "error"
     assert "business" in r2.json()["error"].lower() or "company" in r2.json()["error"].lower()
+
+
+def test_import_client_never_runs_production_lifecycle():
+    with patch("app.main.AsyncIOScheduler", side_effect=AssertionError("startup attempted")), \
+         patch("app.main.backup_database", AsyncMock(side_effect=AssertionError("live backup attempted"))) as backup:
+        with _client() as (client, _):
+            assert client.get("/health").status_code == 200
+        backup.assert_not_awaited()

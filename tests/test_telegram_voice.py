@@ -79,7 +79,7 @@ def test_a_hunt_names_its_best_lead_not_just_a_count():
     msg = tv.hunt_complete(5, "custom home builder", "LEWCO CONTRACTING", 83, 3)
     assert "LEWCO CONTRACTING" in msg
     assert "83" in msg
-    assert "sole operators" in msg
+    assert "crew size is unverified" in msg
 
 
 def test_a_hot_reply_says_what_was_done_about_it():

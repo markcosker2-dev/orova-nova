@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import random
+import threading
 import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -14,19 +15,14 @@ from gspread.exceptions import WorksheetNotFound
 
 logger = logging.getLogger(__name__)
 
-# Global lock placeholder to prevent Google Sheets 429 Rate Limit errors when syncing multiple leads
-_sheets_lock: Optional[asyncio.Lock] = None
+# API and worker schedulers run separate event loops in the same process.
+# The complete upsert runs in a worker holding this mutex: waiting never
+# blocks either event loop, and cancellation cannot unlock an in-flight write.
+_sheets_lock = threading.Lock()
 _workbook_cache: dict = {"wb": None, "ts": 0.0, "key": None}
 
 WORKBOOK_CACHE_TTL = 300.0  # re-open every 5 minutes
 SHEETS_READ_TIMEOUT_S = 45.0  # read timeout
-
-async def _get_sheets_lock_async() -> asyncio.Lock:
-    """Guaranteed to create the lock on the currently running event loop."""
-    global _sheets_lock
-    if _sheets_lock is None:
-        _sheets_lock = asyncio.Lock()
-    return _sheets_lock
 
 def _principals_cell(lead: dict) -> str:
     """Named principals on the licence, or '' when we never looked.
@@ -424,6 +420,26 @@ async def count_lead_rows(workbook_name: Optional[str] = None) -> Optional[int]:
         return None
 
 
+async def list_lead_businesses(workbook_name: Optional[str] = None) -> Optional[list[str]]:
+    """Read actual lead identities; a row count can hide missing businesses.
+
+    Return None on read failure, case-folded names on success. Duplicates are
+    retained so row counts and identity counts are not conflated. This
+    verifies only the Leads projection, never the complete SQLite database.
+    """
+    try:
+        worksheet = await _get_worksheet("Leads", workbook_name)
+        values = await asyncio.wait_for(
+            asyncio.to_thread(worksheet.col_values, 2),
+            timeout=SHEETS_READ_TIMEOUT_S,
+        )
+        return [str(value).strip().casefold() for value in (values or [])[1:]
+                if str(value).strip()]
+    except Exception as exc:
+        logger.warning(f"[SheetsSync] could not read Leads identities: {exc}")
+        return None
+
+
 async def restore_leads_from_sheets() -> List[Dict[str, Any]]:
     try:
         worksheet = await _get_worksheet("Leads")
@@ -545,6 +561,21 @@ async def pull_manual_edits_from_sheets(workbook_name: Optional[str] = None,
 
 async def sync_lead_to_sheets(lead: Dict[str, Any], workbook_name: Optional[str] = None) -> Dict[str, Any]:
     try:
+        return await asyncio.to_thread(_sync_lead_serialized, dict(lead), workbook_name)
+    except Exception as exc:
+        logger.error(f"[SheetsSync] sync_lead_to_sheets failed: {exc}")
+        return {"ok": False, "error": str(exc)}
+
+
+def _sync_lead_serialized(lead: Dict[str, Any], workbook_name: Optional[str]) -> Dict[str, Any]:
+    # Keep the existing async retry helpers, but give their entire lifecycle
+    # one worker-owned lock. The write continues safely if its caller cancels.
+    with _sheets_lock:
+        return asyncio.run(_sync_lead_locked(lead, workbook_name))
+
+
+async def _sync_lead_locked(lead: Dict[str, Any], workbook_name: Optional[str]) -> Dict[str, Any]:
+    try:
         worksheet = await _get_worksheet("Leads", workbook_name)
         row = [
             lead.get("id") or "",
@@ -602,58 +633,95 @@ async def sync_lead_to_sheets(lead: Dict[str, Any], workbook_name: Optional[str]
             except Exception as exc:
                 logger.warning(f"[SheetsSync] Find by business failed: {exc}")
 
-        async with await _get_sheets_lock_async():
-            # Jitter delay inside the lock to ensure Google respects the rate limit and smooths out throughput
-            await asyncio.sleep(random.uniform(0.2, 0.6))
-            if target_row:
-                return await _update_with_backoff(worksheet, target_row, row)
+        # Lookup, allocation and write all run under the worker-owned mutex.
+        await asyncio.sleep(random.uniform(0.2, 0.6))
+        if target_row:
+            return await _update_with_backoff(worksheet, target_row, row)
 
-            # ── Write to an EXPLICIT row, never append_row (fixed 2026-08-09).
-            # This is the bug that destroyed lead backups for weeks. The
-            # instrument added earlier today caught it on its first run —
-            # five appends, five different businesses, one second apart:
-            #
-            #   append -> updatedRange='Leads!A2:L2' business='HEARTWOOD BUILDERS INC'
-            #   append -> updatedRange='Leads!A2:L2' business='PEAK BUILDERS INC'
-            #   append -> updatedRange='Leads!A2:L2' business='LEWCO CONTRACTING'
-            #   append -> updatedRange='Leads!A2:L2' business='ELLCO CONSTRUCTION INC'
-            #   append -> updatedRange='Leads!A2:L2' business='ACCRETE CONSTRUCTION LLC'
-            #
-            # EVERY append targeted the same cells and overwrote its
-            # predecessor, so the tab held exactly one row no matter how many
-            # leads "synced". `Sheets: 5/5 leads synced` was true and useless at
-            # the same time: five API calls really did succeed, into one row.
-            #
-            # append_row relies on Google's table-range detection from A1, which
-            # was resolving to just the header and so kept returning row 2. We
-            # do not need that guesswork — column 2 was already fetched above to
-            # match on business name, and its length IS the last used row. Write
-            # there +1 explicitly. Deterministic, and it reuses the update path
-            # that has always worked (it is how matched rows are refreshed).
-            if biz_vals is None:
-                try:
-                    biz_vals = await asyncio.to_thread(worksheet.col_values, 2)
-                except Exception as exc:
-                    logger.warning(f"[SheetsSync] could not size the Leads tab ({exc}) "
-                                   f"— falling back to append_row")
-                    return await _append_with_backoff(worksheet, row)
-            next_row = max(len(biz_vals), 1) + 1   # never row 1 (the header)
-            logger.info(f"[SheetsSync] appending at computed row {next_row} "
-                        f"business={row[1]!r}")
-            return await _update_with_backoff(worksheet, next_row, row)
+        # ── Write to an EXPLICIT row, never append_row (fixed 2026-08-09).
+        # This is the bug that destroyed lead backups for weeks. The
+        # instrument added earlier today caught it on its first run —
+        # five appends, five different businesses, one second apart:
+        #
+        #   append -> updatedRange='Leads!A2:L2' business='HEARTWOOD BUILDERS INC'
+        #   append -> updatedRange='Leads!A2:L2' business='PEAK BUILDERS INC'
+        #   append -> updatedRange='Leads!A2:L2' business='LEWCO CONTRACTING'
+        #   append -> updatedRange='Leads!A2:L2' business='ELLCO CONSTRUCTION INC'
+        #   append -> updatedRange='Leads!A2:L2' business='ACCRETE CONSTRUCTION LLC'
+        #
+        # EVERY append targeted the same cells and overwrote its
+        # predecessor, so the tab held exactly one row no matter how many
+        # leads "synced". `Sheets: 5/5 leads synced` was true and useless at
+        # the same time: five API calls really did succeed, into one row.
+        #
+        # append_row relies on Google's table-range detection from A1, which
+        # was resolving to just the header and so kept returning row 2. We
+        # do not need that guesswork — column 2 was already fetched above to
+        # match on business name, and its length IS the last used row. Write
+        # there +1 explicitly. Deterministic, and it reuses the update path
+        # that has always worked (it is how matched rows are refreshed).
+        if biz_vals is None:
+            try:
+                biz_vals = await asyncio.to_thread(worksheet.col_values, 2)
+            except Exception as exc:
+                logger.warning(f"[SheetsSync] could not size the Leads tab ({exc}) "
+                               f"— falling back to append_row")
+                return await _append_with_backoff(worksheet, row)
+        next_row = max(len(biz_vals), 1) + 1   # never row 1 (the header)
+        logger.info(f"[SheetsSync] appending at computed row {next_row} "
+                    f"business={row[1]!r}")
+        return await _update_with_backoff(worksheet, next_row, row)
     except Exception as exc:
         logger.error(f"[SheetsSync] sync_lead_to_sheets failed: {exc}")
         return {"ok": False, "error": str(exc)}
+
+async def _sheet_row_for_lead(worksheet, lead_id: int) -> Optional[int]:
+    """Resolve a live DB lead by stable identity, not its ephemeral SQLite ID.
+
+    Render restarts have reused IDs. The Leads tab contains ID collisions, so
+    matching column A can silently change another business's status.
+    Ambiguous identity fails closed instead of guessing a row.
+    """
+    from app.core.database import DatabaseManager
+
+    stored = await DatabaseManager.fetchone(
+        "SELECT business, url, state FROM leads WHERE id = ?", (lead_id,))
+    if not stored:
+        return None
+    lead = dict(stored)
+    business = str(lead.get("business") or "").strip().lower()
+    url = str(lead.get("url") or "").strip()
+    state = str(lead.get("state") or "").strip().upper()
+    rows = await asyncio.to_thread(worksheet.get_all_values)
+
+    def cell(row, index):
+        return str(row[index] if len(row) > index else "").strip()
+
+    if url:
+        by_url = [i for i, row in enumerate(rows[1:], start=2)
+                  if cell(row, 6) == url and cell(row, 1).lower() == business]
+        if len(by_url) == 1:
+            return by_url[0]
+    by_business = [i for i, row in enumerate(rows[1:], start=2)
+                   if cell(row, 1).lower() == business
+                   and cell(row, 13).upper() == state]
+    if len(by_business) == 1:
+        return by_business[0]
+    logger.warning(f"[SheetsSync] ambiguous or absent sheet identity for lead {lead_id}")
+    return None
+
 
 async def update_lead_status_sheets(lead_id: int, new_status: str, workbook_name: Optional[str] = None) -> Dict[str, Any]:
     await asyncio.sleep(1)
     try:
         worksheet = await _get_worksheet("Leads", workbook_name)
-        cell = await asyncio.to_thread(worksheet.find, str(lead_id))
+        row_idx = await _sheet_row_for_lead(worksheet, lead_id)
+        if row_idx is None:
+            return {"ok": False, "reason": "lead_not_found_or_ambiguous"}
         headers = WORKSHEET_HEADERS["Leads"]
         status_col = headers.index("Status") + 1
-        await asyncio.to_thread(worksheet.update_cell, cell.row, status_col, new_status)
-        return {"ok": True, "row": cell.row}
+        await asyncio.to_thread(worksheet.update_cell, row_idx, status_col, new_status)
+        return {"ok": True, "row": row_idx}
     except Exception as exc:
         logger.error(f"[SheetsSync] update_lead_status_sheets failed: {exc}")
         return {"ok": False, "error": str(exc)}
@@ -735,14 +803,9 @@ async def sync_lead_status_to_sheets(lead_id: int, new_status: str, notes: str =
     """
     try:
         worksheet = await _get_worksheet("Leads", workbook_name)
-        # Find lead by ID column
-        id_vals = await asyncio.to_thread(worksheet.col_values, 1)
-        search_id = str(lead_id)
-        if search_id not in id_vals:
-            logger.info(f"[SheetsSync] Lead {lead_id} not found in Sheets, skipping status update")
-            return {"ok": False, "reason": "lead_not_found"}
-        
-        row_idx = id_vals.index(search_id) + 1
+        row_idx = await _sheet_row_for_lead(worksheet, lead_id)
+        if row_idx is None:
+            return {"ok": False, "reason": "lead_not_found_or_ambiguous"}
         headers = WORKSHEET_HEADERS["Leads"]
         
         # Update Status column (index 7)
@@ -768,12 +831,9 @@ async def sync_lead_outcome_to_sheets(lead_id: int, action: str, result: str, de
     """
     try:
         worksheet = await _get_worksheet("Leads", workbook_name)
-        id_vals = await asyncio.to_thread(worksheet.col_values, 1)
-        search_id = str(lead_id)
-        if search_id not in id_vals:
-            return {"ok": False, "reason": "lead_not_found"}
-        
-        row_idx = id_vals.index(search_id) + 1
+        row_idx = await _sheet_row_for_lead(worksheet, lead_id)
+        if row_idx is None:
+            return {"ok": False, "reason": "lead_not_found_or_ambiguous"}
         headers = WORKSHEET_HEADERS["Leads"]
         
         # Update Status based on action/result combo

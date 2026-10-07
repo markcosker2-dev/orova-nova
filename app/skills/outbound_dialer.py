@@ -23,6 +23,11 @@ async def trigger_retell_call(phone: str, context: Dict[str, str]) -> Dict[str, 
     Trigger a Retell AI cold call. Gracefully skips if no API key is configured.
     Returns {"success": True/False, "call_id"/"error", "skipped": bool}
     """
+    from app.core.hardening import zero_budget_mode
+    if zero_budget_mode():
+        return {"success": False, "skipped": True,
+                "error": "$0 mode: paid calls are disabled, including approved calls."}
+
     # ── Graceful degradation: skip if no API key ──
     api_key = os.getenv("RETELL_API_KEY")
     from_number = os.getenv("RETELL_FROM_NUMBER")

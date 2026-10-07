@@ -539,13 +539,19 @@ CREATE INDEX IF NOT EXISTS idx_prefs_client
 """
 
 
-async def ensure_tables():
-    """Create learning tables if they don't exist."""
+async def ensure_tables() -> bool:
+    """Create learning tables/indexes, or raise so callers cannot claim success."""
     for ddl in [EXECUTION_TRACES_DDL, LEARNED_SKILLS_DDL, USER_PREFERENCES_DDL]:
         try:
-            await DatabaseManager.query(ddl)
+            # query uses SQLite cursor.execute, which accepts one statement.
+            # These trusted schema constants each include index definitions.
+            for statement in ddl.split(";"):
+                if statement.strip():
+                    await DatabaseManager.query(statement)
         except Exception as e:
-            logger.warning(f"[SELF_LEARN] Table creation note: {e}")
+            logger.error(f"[SELF_LEARN] Learning schema initialization failed: {e}")
+            raise RuntimeError("Learning schema initialization failed") from e
+    return True
 
 
 # ── Singleton ───────────────────────────────────────────────────────────────

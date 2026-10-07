@@ -52,17 +52,22 @@ async def ensure_events_table() -> bool:
 
 async def alog_event(prospect_id: int, event_type: str, agent: str,
                      payload: dict | None = None, campaign_id: int = 0,
-                     variant_id: str = "") -> None:
-    """Append one event. Fail-open: never raises into the caller."""
+                     variant_id: str = "") -> bool:
+    """Append one event; report success while never raising into the caller."""
     try:
-        await DatabaseManager.query(
+        result = await DatabaseManager.query(
             "INSERT INTO events (prospect_id, campaign_id, agent, event_type, variant_id, payload) "
             "VALUES (?, ?, ?, ?, ?, ?)",
             (int(prospect_id or 0), int(campaign_id), agent, event_type,
              variant_id, json.dumps(payload or {}, ensure_ascii=False)[:2000]),
         )
+        if (isinstance(result, dict) and result.get("status") == "ok"
+                and result.get("rows_affected") == 1):
+            return True
+        logger.warning(f"[EVENTS] log '{event_type}' did not confirm an inserted row")
     except Exception as e:
         logger.warning(f"[EVENTS] log '{event_type}' failed (non-fatal): {e}")
+    return False
 
 
 async def aget_events(prospect_id: int | None = None, event_type: str | None = None,
@@ -185,28 +190,43 @@ async def handle_outcome_command(text: str) -> str | None:
     errors, so the user always gets feedback), or None when it isn't one —
     the caller then routes the message onward to the brain."""
     t = (text or "").strip()
-    if not t.lower().startswith("/outcome"):
-        return None
     parts = t.split(maxsplit=3)
+    if not parts or parts[0].lower().split("@", 1)[0] != "/outcome":
+        return None
     if len(parts) < 3:
         return _OUTCOME_USAGE
     try:
         lead_id = int(parts[1])
     except ValueError:
         return f"Lead id must be a number, got '{parts[1]}'.\n{_OUTCOME_USAGE}"
+    if lead_id <= 0:
+        return f"Lead id must be positive.\n{_OUTCOME_USAGE}"
     key = parts[2].lower()
     if key not in _OUTCOME_MAP:
         return f"Unknown outcome '{parts[2]}'.\n{_OUTCOME_USAGE}"
     notes = parts[3].strip() if len(parts) > 3 else ""
     event_type, status = _OUTCOME_MAP[key]
-    await alog_event(lead_id, event_type, "desk", payload={"notes": notes})
+    try:
+        lead = await DatabaseManager.query(
+            "SELECT id FROM leads WHERE id = ? AND client_id = 0", (lead_id,), fetchone=True)
+    except Exception as e:
+        logger.warning(f"[EVENTS] outcome lead lookup failed: {e}")
+        return "Could not verify the lead. No outcome was recorded; try again."
+    if not lead:
+        return f"No OROVA lead found with id {lead_id}. No outcome was recorded."
+    if not await alog_event(lead_id, event_type, "desk", payload={"notes": notes}):
+        return f"Could not record '{event_type}' for lead {lead_id}; try again."
     if event_type.startswith("call_"):
         await _mirror_dial_to_sheets(lead_id, event_type, notes)
     if status is None:
         return f"Logged '{event_type}' for lead {lead_id} (status unchanged)."
     try:
-        await DatabaseManager.query("UPDATE leads SET status = ? WHERE id = ?",
-                                    (status, lead_id))
+        updated = await DatabaseManager.query(
+            "UPDATE leads SET status = ? WHERE id = ? AND client_id = 0", (status, lead_id))
+        if (not isinstance(updated, dict) or updated.get("status") != "ok"
+                or updated.get("rows_affected") != 1):
+            return f"Logged '{event_type}' for lead {lead_id}; status update failed. The event remains recorded."
     except Exception as e:
         logger.warning(f"[EVENTS] lead status update failed (event still logged): {e}")
+        return f"Logged '{event_type}' for lead {lead_id}; status update failed. The event remains recorded."
     return f"Logged '{event_type}' for lead {lead_id} → status '{status}'."

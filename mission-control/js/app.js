@@ -49,29 +49,15 @@ const AGENTS = [
     { id: 'viper', name: 'Viper', role: 'Stealth Ops', dept: 'Intelligence', color: '#059669', initial: 'VP', desc: 'Anti-bot scraping, proxy rotation, stealth extraction.', status: 'idle', task: '' },
 ];
 
-// ═══════════════════ DEFAULT MEMORIES ═══════════════════
-const DEFAULT_MEMORIES = [
-    { id: uid(), tag: 'config', title: 'Office Hours (California Law)', body: 'Mark\'s office hours are strictly 7:30 AM – 11:30 AM and 6:00 PM – 8:00 PM California Time (PT). Never propose or book meetings outside these windows.', date: '2026-02-15' },
-    { id: uid(), tag: 'persona', title: 'Nova CEO Persona (Hormozi-Mode)', body: 'Nova operates as OROVA\'s autonomous CEO. She leads with Grand Slam Offers, identifies Offer Gaps via SEO audits, and executes multi-channel attacks (Email + Voice). Social replies max 25 words.', date: '2026-02-14' },
-    { id: uid(), tag: 'strategy', title: 'Brand Aesthetic: B&W Luxury', body: 'All Instagram visuals MUST be high-contrast Black & White, minimalist, luxury. The Creative Director (Pixel) enforces this via brand_guidelines.json.', date: '2026-02-14' },
-    { id: uid(), tag: 'outreach', title: 'AgentMail Configuration', body: 'Nova\'s email identity runs on AgentMail. She can create inboxes, send outreach, check replies, and respond. Reply Monitor polls every 5 minutes.', date: '2026-02-15' },
-    { id: uid(), tag: 'lead', title: 'Lead Qualification Criteria', body: 'Target: High-end businesses with $4-5k+ CLV. Must find Owner Name + Phone. Use 4-tier search fallback: Stealth (Scrapling) → Tavily → Google Scraper → DuckDuckGo. Deep-scrape every candidate site.', date: '2026-02-12' },
-    { id: uid(), tag: 'config', title: 'AI Model Tier System', body: 'Primary: OpenAI o3-pro (CEO Brain). Coder: Claude Sonnet (Technical). Safety Net: Google Antigravity (Zero-Downtime failover). All accessed via OpenCode Bridge.', date: '2026-02-10' },
-    { id: uid(), tag: 'strategy', title: 'Multi-Agent Team Structure', body: '10 specialized agents: Nova (CEO), Atlas (Dev), Pixel (Creative), Quill (Writer), Hawk (Lead Hunter), Closer (Sales), Sentinel (Ops), Echo (Client Success), Oracle (Data Intelligence), Viper (Stealth Ops).', date: '2026-03-13' },
-    { id: uid(), tag: 'outreach', title: 'Appointment Setter Protocol', body: 'When a prospect replies with interest: 1) Check calendar. 2) Call get_office_hour_slots. 3) Propose exactly 2 time slots within the California windows. 4) Create event on confirmation.', date: '2026-02-15' },
-    { id: uid(), tag: 'config', title: 'Hugging Face Deployment', body: 'The Mission Control dashboard & API run on Hugging Face Spaces free tier. Worker runs cron jobs (Fast Lane 2min, Reply Monitor 5min, Cold Lead Escalation 30min, Slow Lane 60min).', date: '2026-03-21' },
-    { id: uid(), tag: 'lead', title: 'Vertical: Automotive (Default)', body: 'Default vertical is Automotive. Config loaded from Niche_Verticals. Search queries focus on luxury car dealers and high-end automotive services.', date: '2026-02-08' },
-];
+// A catalog is not activity evidence. Live responses populate these values.
+AGENTS.forEach(function (agent) { agent.status = 'unknown'; agent.task = ''; });
+
+// Memory comes only from the backend; obsolete example instructions are not
+// current evidence of models, permission, deployment or the target market.
 
 // ═══════════════════ CRON SCHEDULE ═══════════════════
-const CRON_EVENTS = [
-    { title: 'Fast Lane Check', type: 'cron', time: '2min interval', repeat: 'daily' },
-    { title: 'Reply Monitor', type: 'cron', time: '5min interval', repeat: 'daily' },
-    { title: 'Lead Hunt (Slow)', type: 'cron', time: '60min interval', repeat: 'daily' },
-    { title: 'Cold Lead → Call', type: 'cron', time: '30min interval', repeat: 'daily' },
-    { title: 'Office Hours AM', type: 'meeting', time: '7:30-11:30 PT', repeat: 'weekday' },
-    { title: 'Office Hours PM', type: 'meeting', time: '6:00-8:00 PT', repeat: 'weekday' },
-];
+// Show saved tasks; configured office hours and old cron descriptions are not events.
+const CRON_EVENTS = [];
 
 // ═══════════════════ DEFAULT TASKS ═══════════════════
 // [REMOVED] seedTasks is now handled by backend SQLite migrations.
@@ -527,7 +513,8 @@ window.deleteContent = async function (id) {
 };
 
 // ═══════════════════ CALENDAR ═══════════════════
-var calYear = 2026, calMonth = 1;
+var calendarToday = new Date();
+var calYear = calendarToday.getFullYear(), calMonth = calendarToday.getMonth();
 
 document.getElementById('cal-prev').addEventListener('click', async function () { calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; } await renderCalendar(); });
 document.getElementById('cal-next').addEventListener('click', async function () { calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; } await renderCalendar(); });
@@ -542,6 +529,7 @@ async function renderCalendar() {
     var daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
     var prevDays = new Date(calYear, calMonth, 0).getDate();
     var today = new Date();
+    var tasks = await Store.getTasks();
     for (var i = firstDay - 1; i >= 0; i--) {
         html += '<div class="cal-day other-month"><div class="cal-day-num">' + (prevDays - i) + '</div></div>';
     }
@@ -555,10 +543,9 @@ async function renderCalendar() {
                 events += '<div class="cal-event ' + ev.type + '">' + ev.title + '</div>';
             }
         });
-        var tasks = await Store.getTasks();
         tasks.forEach(function (t) {
             if (t.due === calYear + '-' + String(calMonth + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0')) {
-                events += '<div class="cal-event task">' + t.title.substring(0, 20) + '…</div>';
+                events += '<div class="cal-event task">' + esc(String(t.title || '').substring(0, 20)) + '…</div>';
             }
         });
         html += '<div class="cal-day' + (isToday ? ' today' : '') + '"><div class="cal-day-num">' + d + '</div>' + events + '</div>';
@@ -574,9 +561,23 @@ async function renderCalendar() {
 // ═══════════════════ ANALYTICS ═══════════════════
 async function renderAnalytics() {
     var data = await apiFetch('/api/metrics');
-    if (!data) data = { metrics: {}, leads_found: 0, emails_sent: 0, replies_received: 0, meetings_booked: 0, calls_made: 0, proposals_sent: 0 };
     // Unwrap metrics from data.metrics (backend wraps them)
-    var m = data.metrics || {};
+    var m = (data && data.metrics) || {};
+    if (!data || data.status === 'error' || data.metrics_available === false || m.metrics_available === false) {
+        ['leads', 'emails', 'replies', 'meetings', 'calls', 'proposals'].forEach(function (key) {
+            var stat = document.getElementById('stat-' + key);
+            stat.textContent = '—';
+            stat.title = 'Counts unavailable';
+        });
+        ['leads', 'contacted', 'replied', 'booked'].forEach(function (key) {
+            document.getElementById('fv-' + key).textContent = '—';
+            document.getElementById('funnel-' + key).style.width = '0%';
+        });
+        return;
+    }
+    ['leads', 'emails', 'replies', 'meetings', 'calls', 'proposals'].forEach(function (key) {
+        document.getElementById('stat-' + key).title = 'Saved pipeline value';
+    });
     var leads_found = data.leads_found != null ? data.leads_found : (m.leads_found || 0);
     var emails_sent = data.emails_sent != null ? data.emails_sent : (m.emails_sent || 0);
     var replies_received = data.replies_received != null ? data.replies_received : (m.replies_received || 0);
@@ -742,6 +743,10 @@ function renderTeam() {
     chart.innerHTML = html;
 }
 
+function agentStatusLabel(status) {
+    return { working: 'Working', available: 'Configured', idle: 'Idle' }[status] || 'Unverified';
+}
+
 function agentCard(a, isLeader) {
     return '<div class="agent-card ' + (isLeader ? 'leader' : '') + '">'
         + '<div class="agent-avatar" style="background:' + a.color + '">' + a.initial + '</div>'
@@ -749,7 +754,7 @@ function agentCard(a, isLeader) {
         + '<div class="agent-role">' + a.role + '</div>'
         + '<div class="agent-dept">' + a.dept + '</div>'
         + '<div class="agent-desc">' + a.desc + '</div>'
-        + '<div class="agent-status-badge ' + a.status + '"><span class="status-dot ' + (a.status === 'working' ? 'online' : '') + '"></span>' + (a.status === 'working' ? 'Working' : 'Idle') + '</div>'
+        + '<div class="agent-status-badge ' + a.status + '"><span class="status-dot ' + (a.status === 'working' ? 'online' : '') + '"></span>' + agentStatusLabel(a.status) + '</div>'
         + '</div>';
 }
 
@@ -757,7 +762,7 @@ function agentCard(a, isLeader) {
 // ═══════════════════ DIGITAL OFFICE ═══════════════════
 async function refreshAgents() {
     var data = await apiFetch('/api/agents');
-    if (!data) return;
+    var payload = data && (data.agents || data);
 
     // Map backend agent_key -> frontend agent_id
     var keyToId = {
@@ -770,18 +775,20 @@ async function refreshAgents() {
     };
 
     var agentData = {};
-    Object.keys(data).forEach(function (k) {
+    Object.keys(payload || {}).forEach(function (k) {
         var id = keyToId[k];
-        if (id) agentData[id] = data[k];
+        if (id) agentData[id] = payload[k];
     });
 
     AGENTS.forEach(function (agent) {
         var bd = agentData[agent.id];
         if (bd) {
-            agent.status = (bd.status === 'active' || bd.status === 'online') ? 'working' : 'idle';
-            if (bd.last_action && bd.last_action !== 'Never') {
-                agent.task = bd.last_action;
-            }
+            agent.status = (bd.status === 'running' || bd.status === 'working') ? 'working'
+                : ((bd.status === 'active' || bd.status === 'online') ? 'available' : 'idle');
+            agent.task = bd.last_action && bd.last_action !== 'Never' ? String(bd.last_action) : '';
+        } else {
+            agent.status = 'unknown';
+            agent.task = '';
         }
     });
 
@@ -796,28 +803,17 @@ function renderOffice() {
             + '<div class="desk-person" style="background:' + a.color + '"><div class="desk-status-ring"></div>' + a.initial + '</div>'
             + '<div class="desk-name">' + a.name + '</div>'
             + '<div class="desk-role">' + a.role + '</div>'
-            + '<div class="desk-monitor"><div class="desk-monitor-content">' + (a.status === 'working' ? monitorText(a) : '> idle...') + '</div></div>'
+            + '<div class="desk-monitor"><div class="desk-monitor-content">' + monitorText(a) + '</div></div>'
             + '<div class="desk-monitor-stand"></div>'
-            + '<div class="desk-current-task">' + (a.task || '—') + '</div>'
-            + '<div class="desk-status-label ' + a.status + '"><span class="desk-status-indicator"></span>' + (a.status === 'working' ? 'Working' : 'Idle') + '</div>'
+            + '<div class="desk-current-task">' + esc(a.task || 'No recorded action') + '</div>'
+            + '<div class="desk-status-label ' + a.status + '"><span class="desk-status-indicator"></span>' + agentStatusLabel(a.status) + '</div>'
             + '</div>';
     }).join('');
 }
 
 function monitorText(agent) {
-    var lines = {
-        nova: '> autonomous brain...\n> overseeing loop\n> state: online',
-        atlas: '> static check OK\n> dev env active\n> _',
-        pixel: '> render B&W\n> applying filters\n> exporting 1080px',
-        quill: '> drafting copy\n> A/B testing...\n> subject line v3',
-        hawk: '> lead hunt active\n> query: ' + (agent.task || 'default') + '\n> scraping...',
-        closer: '> monitor: agentmail\n> checking replies\n> polling...',
-        sentinel: '> sentinel active\n> logs: healthy\n> uptime: 100%',
-        echo: '> idle\n> awaiting leads\n> _',
-        oracle: '> analytics engine\n> funnel: tracking\n> ROI: calculating...',
-        viper: '> stealth mode\n> anti-bot: active\n> proxies: rotating...',
-    };
-    return lines[agent.id] || '> processing...';
+    return '&gt; status: ' + esc(agentStatusLabel(agent.status))
+        + '<br>&gt; ' + esc(agent.task || 'No recorded action');
 }
 
 // ═══════════════════ QUICK ACTIONS ═══════════════════
@@ -1430,48 +1426,53 @@ document.getElementById('btn-run-proofread')?.addEventListener('click', async fu
 });
 
 // ═══════════════════ SELF-IMPROVEMENT ═══════════════════
+function strategyObservation(strategy) {
+    var n = Number(strategy.sample_size);
+    if (!Number.isInteger(n) || n < 0) return 'Sample count unavailable; candidate only';
+    if (n === 0 || strategy.confidence === 'baseline') return 'Seeded/default candidate; no observed results';
+    return 'Stored sample count: ' + n + '; ranking not independently verified';
+}
+
+function learningResultNotice(data) {
+    if (data && data.status === 'observed') {
+        if (data.notification === 'sent' || data.notification === 'suppressed') {
+            return { message: 'Learning ledger checked. No campaign rollout.', kind: 'info' };
+        }
+        return { message: 'Ledger checked; Telegram notice held or unverified. No campaign rollout.', kind: 'warning' };
+    }
+    return { message: 'Learning result unavailable or unverified. No campaign rollout confirmed.', kind: 'error' };
+}
+
 async function renderImprovement() {
     var data = await apiFetch('/api/learned_strategies');
-    if (!data || !data.strategies) return;
-    var strategies = data.strategies;
-
-    // Best framework
-    var fw = strategies.find(function (s) { return s.strategy_type === 'email_framework' && s.active === 1; });
-    if (fw) {
-        document.getElementById('imp-best-framework').textContent = fw.strategy_value.toUpperCase();
-        document.getElementById('imp-framework-meta').textContent = 'Win rate: ' + (fw.win_rate * 100).toFixed(0) + '% | n=' + fw.sample_size + ' | ' + fw.confidence;
-    }
-    // Best timing
-    var timing = strategies.find(function (s) { return s.strategy_type === 'send_timing' && s.active === 1; });
-    if (timing) {
-        document.getElementById('imp-best-timing').textContent = timing.strategy_value + ':00';
-        document.getElementById('imp-timing-meta').textContent = 'Win rate: ' + (timing.win_rate * 100).toFixed(0) + '% | n=' + timing.sample_size + ' | ' + timing.confidence;
-    }
-    // Best niche
-    var niche = strategies.find(function (s) { return s.strategy_type === 'niche' && s.active === 1; });
-    if (niche) {
-        document.getElementById('imp-best-niche').textContent = niche.strategy_value || '—';
-        document.getElementById('imp-niche-meta').textContent = 'ROI: ' + (niche.win_rate * 100).toFixed(0) + '% | n=' + niche.sample_size;
-    }
-
-    // Table
+    var available = data && Array.isArray(data.strategies);
+    var strategies = available ? data.strategies.filter(function (s) { return s && typeof s === 'object'; }) : [];
+    [
+        ['email_framework', 'imp-best-framework', 'imp-framework-meta'],
+        ['send_timing', 'imp-best-timing', 'imp-timing-meta'],
+        ['niche', 'imp-best-niche', 'imp-niche-meta']
+    ].forEach(function (card) {
+        var candidate = strategies.find(function (s) { return s.strategy_type === card[0] && s.active === 1; });
+        document.getElementById(card[1]).textContent = candidate ?
+            String(candidate.strategy_value || 'Unset').slice(0, 100) + ' (candidate)' :
+            (available ? 'Not established' : 'Unverified');
+        document.getElementById(card[2]).textContent = candidate ? strategyObservation(candidate) :
+            (available ? 'No stored candidate; no proven winner' : 'Strategy data unavailable');
+    });
     var tableEl = document.getElementById('imp-strategies-table');
     tableEl.innerHTML = strategies.length > 0 ? strategies.map(function (s) {
-        return '<div class="feed-entry"><span class="feed-time">' + esc(s.strategy_type) + '</span><span class="feed-msg">' + esc(s.strategy_value) + ' — win: ' + (s.win_rate * 100).toFixed(0) + '% (' + s.confidence + ')</span></div>';
-    }).join('') : '<div class="feed-empty">No strategies learned yet</div>';
+        return '<div class="feed-entry"><span class="feed-time">' + esc(s.strategy_type) + '</span><span class="feed-msg">' + esc(s.strategy_value) + ' — ' + esc(strategyObservation(s)) + '</span></div>';
+    }).join('') : '<div class="feed-empty">' + (available ? 'No stored candidates; collect reviewed outcomes' : 'Strategy data unavailable') + '</div>';
 }
 
 document.getElementById('btn-run-improvement')?.addEventListener('click', async function () {
     var btn = this; btn.classList.add('loading'); btn.textContent = '🔄 Running...';
-    showToast('🔄 Running improvement loop...', 'info');
+    showToast('Checking the learning ledger...', 'info');
     var data = await apiFetch('/api/improvement_loop', { method: 'POST', body: '{}' });
-    btn.classList.remove('loading'); btn.textContent = '🔄 Run Improvement';
-    if (data && data.status === 'ok') {
-        showToast('✅ Improvement loop complete!', 'success');
-        await renderImprovement();
-    } else {
-        showToast('❌ Improvement loop failed', 'error');
-    }
+    btn.classList.remove('loading'); btn.textContent = 'Check Learning';
+    var notice = learningResultNotice(data);
+    showToast(notice.message, notice.kind);
+    await renderImprovement();
 });
 
 // ═══════════════════ WORKER LANES ═══════════════════

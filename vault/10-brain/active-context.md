@@ -9,6 +9,100 @@ tags: [brain, active, session-start]
 
 # 🧭 Active Context
 
+> [!important] October 2, 2026 — truthful learning/pruning continuation, local only
+> Prepared deterministic outcome reports, persistent duplicate-notice claims, truthful Telegram receipts, candidate-only dashboard labels and rejection of legacy age-only archive approvals. Untouched leads are preserved; manual/direct learning calls cannot bypass $0 gates. Final local checks passed **1,742 Python tests + 9 dashboard tests**, facts, secrets and security lint; see [[2026-10-02-learning-truth-and-telegram-continuation]] and [[0022-learning-observations-and-no-age-only-pruning]]. Existing draft PR #201 remains unmerged/undeployed. Fresh read-only health still reports `bd33ab8ffbab`; bot profile ad markers and local getMe 401 remain verified. Do not infer live fixes or authorize outreach from local test results. Immediate next action remains controlled bot-access recovery authorization, then a verified full backup and owner-approved rollout.
+
+> [!warning] September 30, 2026 — Telegram profile-access incident, investigating
+> Mark identified @orovaNOVA_bot. A direct public-profile read confirms unrelated adult-advertising text; the locally configured token returns 401, so current authenticated identity/webhook are not verified. Treat access as potentially compromised, not as an LLM tone issue. Secure the owning Telegram account and confirm BotFather ownership before authorized token recovery; never paste the token. No live token/bio/settings were changed. Do not approve age-based pruning of 141 untouched records or trust the supplied learning percentages: the old learning-report caller supplies no measured lifts. Live health remains `bd33ab8ffbab`; the repair branch is undeployed. NVIDIA free hosted access is for evaluation/prototyping, not approved production use; keep private prospect/chat data out of it.
+> Read [[2026-09-30-telegram-reply-nvidia-and-profile-incident]]. Bot security is the immediate next action, ahead of model swapping or external Nova operations.
+> Mark confirmed it is still listed under his verified BotFather /mybots. Ownership remains; controlled recovery authorization and secure credential replacement are still required. This is not a resolved incident.
+
+> [!important] September 30, 2026 — current verified engineering state
+> Whole-project review corrected approval replay/write acknowledgements, concurrent Sheets/backups, learning/restore schemas, booking readiness and misleading dashboard/Telegram state. Final isolated checks passed **1,711 Python tests + 6 dashboard tests**, facts, secrets and narrow security lint. Source is in draft [PR #201](https://github.com/markcosker2-dev/orova-nova/pull/201), **not merged or deployed**; live health around 18:44 Singapore still reported `bd33ab8ffbab`. Earlier tests entered real startup/shutdown; they cannot certify absence of background/live attempts. Final fixtures isolate lifecycle, dotenv and CSV persistence.
+> Fresh GET-only Retell production inspection is **HOLD with five blocks** (version binding, missing production tag, unpublished agent/LLM, legacy Cal tools), superseding the old one-block draft note. No number-sharing until production, booking/simulation/web/phone and funded owner-approved launch gates pass. Full-backup evidence remains September 28 `invalid_grant`, not a fresh successful restore. Do not deploy or delete OAuth variables as a workaround.
+> Latest supplied cloud-task report uses **OROVA IG Publish Queue in Sheets**, not the retired Make data store; M/W/F 21:00 Singapore remains reported, not freshly verified in this review. Local ChatCut is not evidence of cloud availability; unverified tools or media/voice rights keep Reels draft-only. Strict **$0**, no paid Nova model switch. OROVA = Meta ads plus consent-based lead qualification/follow-up; builders first, luxury RE second, **med spas excluded**. These current facts supersede conflicting July/September historical sections below. Next business action is one fact-checked manual builder DM without the held number; Mark approves the actual offer and closes.
+> See [[2026-09-30-project-benchmarks-and-safety-fixes]].
+
+
+> [!important] September 28 Instagram cloud social-manager state
+> A new ChatGPT Work cloud task reported an enabled Monday/Wednesday/Friday 21:00 Asia/Singapore schedule for OROVA Instagram management; its first actual run has not yet been observed. The older Codex local heartbeat was PAUSED after that report. The separate Make EU2 publisher remains active and handles already-vetted queue items while the laptop is off. The cloud manager is draft-only until individual Make queue records, current insights and the exact logo can be verified. See `social/CLOUD_MANAGER_BRIEF.md` and the actual OneDrive Obsidian session note `2026-09-28-instagram-offline-manager`. The narrated Reel at https://www.instagram.com/reel/DdrfY-KgAQ8/ is live. Live Nova reported 327 lead rows on September 28, with every distinct business represented in the canonical Sheet, but full database backup still fails `invalid_grant`; no Render deploy or Telegram persona change has happened.
+> A September 28 authenticated local Make browser check showed **all 32 IG queue records posted, none pending**. The cloud manager received the dated snapshot and exact logo URL, but still needs its own ongoing record access before queueing. The Make account is Free with 2/2 active scenarios; do not create a third active scenario or disable Nova CRM merely to expose records.
+
+> [!important] September 23 Instagram/CRM/email operating state
+> A truthful Meta-ads-plus-qualification carousel was published through Make
+> and verified live at https://www.instagram.com/p/DdnzTIqCXzt/. The recurring
+> `OROVA Instagram social media manager` task is active Monday/Wednesday/Friday
+> at 21:00 local on a strict $0 budget. Make-to-Composio reports ACTIVE but
+> fails authenticated reads with HTTP 401 because it calls `us2.make.com` for
+> OROVA's `eu2.make.com` workspace; the signed-in EU2 publisher itself works.
+> Future captions now require human-sounding paragraphs and a blank line before
+> spaced hashtags; verify the live result because the first browser entry was
+> flattened. See `social/CAPTION_STYLE.md`.
+> The live DB has 310 distinct business leads and the canonical `OROVA CRM`
+> Sheet has the same 310 distinct businesses in 312 rows (duplicates/stale IDs).
+> New local code verifies exact Sheet sync before Nova claims a durable save and
+> hard-stops prospect AgentMail sends. None of that code is deployed. The live
+> email sink currently fails closed because the postal-address setting is
+> absent; do not enable it. Render deployment remains on HOLD until a fresh,
+> complete, independently verified DB backup exists. See
+> [[2026-09-23-instagram-crm-and-cold-email-safety]].
+
+> [!important] September 23 approved change window — Draft V1 prepared
+> The correct Retell workspace and reviewed inbound agent are confirmed. V0 was
+> published unchanged as the exact pre-migration baseline and remains bound to
+> the phone. Unpublished Draft V1 now has consent-first capture-only behavior,
+> labelled simulation, diagnosis, the 15-minute handoff, current Cal functions,
+> 30-day non-PII storage, handbook AI disclosure and safe booking extraction.
+> A current Cal availability test passed. The tightened read-only V1 gate passes
+> all of those checks and holds on exactly one blocker: the two legacy Cal
+> functions remain attached. Mark's action-time approval is required before
+> deleting them, spending Retell balance on simulations/web call, or creating
+> and deleting a real Cal test appointment. V1 is not published or phone-bound.
+
+> [!info] Telegram autonomy — prepared locally, not deployed
+> Nova now acts like a decisive operating partner in Telegram. `/focus` and
+> `/next` choose and prepare the highest-ranked eligible untouched prospect;
+> natural “what next?” requests use the same deterministic route. She asks at
+> most one material question and names exact gates instead of returning a vague
+> refusal. The unrestricted planner remains off, and external messages, calls,
+> bookings, spend, publishing and deployment remain human-gated. See
+> [[0020-telegram-autonomy-is-safe-preparation-first]].
+
+> [!important] September 23 launch gate
+> Demo traffic remains **on HOLD**. Inspect Draft V1 with
+> `python scripts/retell_inbound_readiness.py --version 1`; it currently reports
+> one hard blocker, the attached legacy Cal functions. The published V0 remains
+> the phone-bound baseline and intentionally does not contain the new behavior.
+> Use `python scripts/retell_inbound_readiness.py` and
+> [[retell-inbound-demo-launch-runbook-2026-09-23]]. No DM may expose the phone
+> number until migration, booking tests, simulations, web call and the final
+> owner-approved phone test pass.
+
+> [!info] September 23 reliability update
+> Malformed decision-maker names are now rejected even when stale evidence has
+> positive confidence. The zero-budget LLM order is Groq → Gemini → named
+> OpenRouter free models → `openrouter/free`; the configured OpenRouter key
+> currently returns HTTP 401, so that tier is not operational. Adding a model
+> provider is redundancy, not learning—real improvement comes from recorded
+> outreach outcomes. See [[free-llm-routing-2026-09-23]] and
+> [[0019-free-llm-redundancy-is-not-self-learning]].
+
+> [!important] September 22 operating lane
+> The current first-conversation path is **individual researched Instagram or
+> LinkedIn DM → prospect voluntarily calls OROVA's inbound AI-demo number →
+> Nova runs a disclosed simulation → Mark handles the meeting**. OROVA does
+> not auto-dial the prospect. Bulk/automated cold DMs, cold SMS and automated
+> outbound AI calls remain off. The canonical inbound prompt now describes
+> this path, but the live Retell prompt is **not yet verified or updated**;
+> back it up and verify recording consent, the 15-minute handoff and all three
+> OROVA offerings before inviting traffic. See [[0018-the-prospect-initiates-the-demo-call]]
+> and [[2026-09-22-codex-resume-and-inbound-demo]].
+
+> [!important] September 21 update
+> Current operating direction: [[zero-budget-operations-2026-09-21]]. Strict $0
+> pre-revenue workflow, useful Telegram commands, no invented activity. The
+> historical snapshots below do not establish today's deployment or backup health.
+
 > [!abstract] Read this first
 > Session-start file (CLAUDE.md rule). Last full refresh **2026-07-31**.
 > Verify against production before trusting anything here — if a doc and the

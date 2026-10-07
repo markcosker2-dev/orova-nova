@@ -27,7 +27,10 @@ from app.skills import agentmail_skill as am
 @pytest.fixture(autouse=True)
 def _reset_warn_flag():
     am._warned_no_postal = False
-    yield
+    with pytest.MonkeyPatch.context() as patcher:
+        # Exercise the downstream footer gate, not the independent provider stop.
+        patcher.setattr(am, "_agentmail_allows_unsolicited_outreach", lambda: True)
+        yield
 
 
 # ── element 3: advertisement disclosure ────────────────────────────────────

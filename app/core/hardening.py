@@ -14,6 +14,28 @@ from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
+
+def zero_budget_mode() -> bool:
+    """Pre-revenue default. An unset/malformed setting must not enable spending."""
+    return os.getenv("ZERO_BUDGET_MODE", "1").strip() != "0"
+
+
+def operator_chat_allowed(chat_id) -> bool:
+    configured = {os.getenv(k, "").strip() for k in ("ADMIN_CHAT_ID", "PERSONAL_CHAT_ID")}
+    return str(chat_id) in configured - {"", "0"}
+
+
+def telegram_webhook_secret() -> str:
+    # Existing installs get authenticated webhooks without another secret to
+    # copy. Do not reuse the bot token itself as a webhook header.
+    import hashlib
+    import hmac
+    explicit = os.getenv("TELEGRAM_WEBHOOK_SECRET", "").strip()
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    if explicit:
+        return explicit
+    return hmac.new(token.encode(), b"orova-telegram-webhook", hashlib.sha256).hexdigest() if token else ""
+
 # ─────── [P4.1] CIRCUIT BREAKER PATTERNS ─────────
 class CircuitBreaker:
     """Enhanced circuit breaker with half-open state tracking."""

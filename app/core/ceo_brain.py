@@ -14,6 +14,7 @@ from datetime import timedelta
 import asyncio
 
 from app.core.database import DatabaseManager
+from app.core.hardening import zero_budget_mode
 from app.core.ai_client import UnifiedAIClient
 from app.skills.calendar_skill import get_today
 from app.skills.agentmail_skill import _send_telegram_alert, check_replies
@@ -85,6 +86,8 @@ async def _run_proposal(task_id: str, context: str, execute_fn):
     so a restart won't re-run already-completed work. Deletion is then
     best-effort — a failed delete just leaves a harmless "executed" row.
     """
+    if zero_budget_mode() or os.getenv("CEO_AUTO_EXECUTE", "0") != "1":
+        return
     proposal = _pending_proposals.get(task_id)
     if not proposal:
         return
@@ -132,6 +135,8 @@ async def _run_proposal(task_id: str, context: str, execute_fn):
 
 async def _reload_pending_proposals() -> int:
     """Reload pending proposals from DB on startup and re-schedule timers."""
+    if zero_budget_mode() or os.getenv("CEO_AUTO_EXECUTE", "0") != "1":
+        return 0
     restored = 0
     try:
         rows = await DatabaseManager.fetchall(
@@ -185,50 +190,8 @@ class CEOBrain:
 
     async def get_status(self, client_id: int = 0) -> str:
         """Quick Telegram status summary. Run when user sends /status."""
-        metrics = await DatabaseManager.aget_metrics(client_id)
-
-        # Pull best strategy from learned_strategies
-        best_framework = "BAB"
-        best_hour = "10:00"
-        best_niche = "None yet"
-        try:
-            fw_row = await DatabaseManager.fetchone(
-                "SELECT strategy_value, win_rate FROM learned_strategies WHERE strategy_type='email_framework' AND client_id=? AND active=1 ORDER BY win_rate DESC LIMIT 1",
-                (client_id,)
-            )
-            if fw_row:
-                best_framework = f"{fw_row['strategy_value']} ({fw_row['win_rate']*100:.1f}%)"
-        except Exception:
-            pass
-        try:
-            tim_row = await DatabaseManager.fetchone(
-                "SELECT strategy_value FROM learned_strategies WHERE strategy_type='send_timing' AND client_id=? AND active=1 ORDER BY win_rate DESC LIMIT 1",
-                (client_id,)
-            )
-            if tim_row:
-                best_hour = tim_row['strategy_value']
-        except Exception:
-            pass
-        try:
-            niche_row = await DatabaseManager.fetchone(
-                "SELECT strategy_value, win_rate FROM learned_strategies WHERE strategy_type='niche' AND client_id=? AND active=1 ORDER BY win_rate DESC LIMIT 1",
-                (client_id,)
-            )
-            if niche_row:
-                best_niche = f"{niche_row['strategy_value']} ({niche_row['win_rate']*100:.1f}%)"
-        except Exception:
-            pass
-
-        return (
-            f"📊 **Nova Status**\n"
-            f"Framework: {best_framework} ← Learned\n"
-            f"Send time: {best_hour} ← Default (no data yet) if no row\n"
-            f"Best niche: {best_niche}\n"
-            f"Leads today: {metrics.get('leads_found', 0)}\n"
-            f"Emails sent today: {metrics.get('emails_sent', 0)}\n"
-            f"Replies: {metrics.get('replies_received', 0)}\n"
-            f"Meetings: {metrics.get('meetings_booked', 0)}\n"
-        )
+        from app.core.nova_chat import pipeline_status
+        return await pipeline_status(client_id)
 
     async def morning_brief(self, client_id: int = 0) -> str:
         """
@@ -236,6 +199,11 @@ class CEOBrain:
         Pulls pipeline health metrics, rolling averages, HOT replies,
         and proposes the day's schedule. Sends report to Telegram.
         """
+        if zero_budget_mode():
+            from app.core.nova_chat import pipeline_status
+            report = await pipeline_status(_coerce_client_id(client_id))
+            await _send_telegram_alert(report)
+            return report
         client_id = _coerce_client_id(client_id)
         logger.info("[CEO_BRAIN] Generating morning briefing...")
         
@@ -786,6 +754,8 @@ class CEOBrain:
 
     async def _schedule_auto_execute(self, tasks: list, client_id: int = 0, source: str = "morning_brief"):
         """Schedule tasks to auto-execute in 30 minutes unless cancelled."""
+        if zero_budget_mode() or os.getenv("CEO_AUTO_EXECUTE", "0") != "1":
+            return
         import uuid as _uuid
         task_id = str(_uuid.uuid4())[:8]
 

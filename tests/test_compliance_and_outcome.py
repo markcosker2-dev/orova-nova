@@ -46,6 +46,12 @@ def _run(text):
     return asyncio.run(event_log.handle_outcome_command(text))
 
 
+async def _outcome_query(sql, params=(), fetchone=False):
+    if fetchone:
+        return {"id": params[0], "business": "Synthetic Homes", "phone": ""}
+    return {"status": "ok", "rows_affected": 1}
+
+
 def test_non_outcome_text_returns_none():
     assert _run("what's the pipeline looking like?") is None
     assert _run("") is None
@@ -60,21 +66,21 @@ def test_malformed_commands_return_usage():
 
 
 def test_happy_path_logs_event_and_updates_status():
-    with patch.object(event_log, "alog_event", new_callable=AsyncMock) as mock_log, \
-         patch.object(event_log.DatabaseManager, "query", new_callable=AsyncMock) as mock_q:
+    with patch.object(event_log, "alog_event", AsyncMock(return_value=True)) as mock_log, \
+         patch.object(event_log.DatabaseManager, "query", AsyncMock(side_effect=_outcome_query)) as mock_q:
         reply = _run("/outcome 12 held great call, wants P2 pricing")
     assert "meeting_held" in reply and "12" in reply
     mock_log.assert_awaited_once()
     args = mock_log.await_args
     assert args.args[0] == 12 and args.args[1] == "meeting_held" and args.args[2] == "desk"
     assert args.kwargs["payload"]["notes"] == "great call, wants P2 pricing"
-    mock_q.assert_awaited_once()          # lead status update
+    assert mock_q.await_count == 2       # lead validation, then status update
     assert "Meeting Held" in str(mock_q.await_args)
 
 
 def test_closed_and_noshow_variants():
-    with patch.object(event_log, "alog_event", new_callable=AsyncMock) as mock_log, \
-         patch.object(event_log.DatabaseManager, "query", new_callable=AsyncMock):
+    with patch.object(event_log, "alog_event", AsyncMock(return_value=True)) as mock_log, \
+         patch.object(event_log.DatabaseManager, "query", AsyncMock(side_effect=_outcome_query)):
         assert "deal_closed" in _run("/outcome 3 closed")
         assert "meeting_noshow" in _run("/outcome 4 no-show")
     assert mock_log.await_count == 2
@@ -82,11 +88,17 @@ def test_closed_and_noshow_variants():
 
 def test_status_update_failure_still_logs_event():
     """The event is the ground truth — a status-update failure must not lose it."""
-    with patch.object(event_log, "alog_event", new_callable=AsyncMock) as mock_log, \
+    async def query(sql, params=(), fetchone=False):
+        if sql.startswith("UPDATE"):
+            raise RuntimeError("synthetic db failure")
+        return await _outcome_query(sql, params, fetchone)
+
+    with patch.object(event_log, "alog_event", AsyncMock(return_value=True)) as mock_log, \
          patch.object(event_log.DatabaseManager, "query",
-                      new=AsyncMock(side_effect=RuntimeError("db down"))):
+                      new=AsyncMock(side_effect=query)):
         reply = _run("/outcome 5 booked")
     assert "meeting_booked" in reply
+    assert "status update failed" in reply and "→ status" not in reply
     mock_log.assert_awaited_once()
 
 
@@ -98,9 +110,9 @@ def test_status_update_failure_still_logs_event():
 
 def test_talked_is_loggable_and_marks_contact():
     """The event that means 'a prospect conversation happened'."""
-    with patch.object(event_log, "alog_event", new_callable=AsyncMock) as mock_log, \
+    with patch.object(event_log, "alog_event", AsyncMock(return_value=True)) as mock_log, \
          patch.object(event_log, "_mirror_dial_to_sheets", new_callable=AsyncMock), \
-         patch.object(event_log.DatabaseManager, "query", new_callable=AsyncMock) as mock_q:
+         patch.object(event_log.DatabaseManager, "query", AsyncMock(side_effect=_outcome_query)) as mock_q:
         reply = _run("/outcome 12 talked backlog is 3 weeks, wants numbers")
     assert "call_talked" in reply
     assert mock_log.await_args.kwargs["payload"]["notes"] == "backlog is 3 weeks, wants numbers"
@@ -117,9 +129,9 @@ def test_retryable_dispositions_do_not_touch_status():
     for cmd, event in (("noanswer", "call_no_answer"),
                        ("voicemail", "call_voicemail"),
                        ("gatekeeper", "call_gatekeeper")):
-        with patch.object(event_log, "alog_event", new_callable=AsyncMock) as mock_log, \
+        with patch.object(event_log, "alog_event", AsyncMock(return_value=True)) as mock_log, \
              patch.object(event_log, "_mirror_dial_to_sheets", new_callable=AsyncMock), \
-         patch.object(event_log.DatabaseManager, "query", new_callable=AsyncMock) as mock_q:
+             patch.object(event_log.DatabaseManager, "query", AsyncMock(side_effect=_outcome_query)) as mock_q:
             reply = _run(f"/outcome 7 {cmd}")
         assert event in reply and "status unchanged" in reply
         mock_log.assert_awaited_once()
@@ -132,9 +144,9 @@ def test_bad_number_never_marks_a_lead_invalid():
     """'Invalid' is excluded from the Sheets backup (durability.py), and boot
     restores FROM that backup onto an ephemeral disk — so 'Invalid' deletes the
     lead on the next deploy. A wrong phone number is not a wrong prospect."""
-    with patch.object(event_log, "alog_event", new_callable=AsyncMock), \
+    with patch.object(event_log, "alog_event", AsyncMock(return_value=True)), \
          patch.object(event_log, "_mirror_dial_to_sheets", new_callable=AsyncMock), \
-         patch.object(event_log.DatabaseManager, "query", new_callable=AsyncMock) as mock_q:
+         patch.object(event_log.DatabaseManager, "query", AsyncMock(side_effect=_outcome_query)) as mock_q:
         reply = _run("/outcome 9 badnumber")
     assert "call_bad_number" in reply
     written = str(mock_q.await_args)
@@ -168,8 +180,8 @@ def test_dial_is_mirrored_to_the_call_log_sheet():
     """The events table is created fresh on boot and no sheet tab carries it,
     so a disposition that is not mirrored dies at the next deploy — and deploys
     happen on every push to main. Sheets is the only tier that survives."""
-    with patch.object(event_log, "alog_event", new_callable=AsyncMock), \
-         patch.object(event_log.DatabaseManager, "query", new_callable=AsyncMock), \
+    with patch.object(event_log, "alog_event", AsyncMock(return_value=True)), \
+         patch.object(event_log.DatabaseManager, "query", AsyncMock(side_effect=_outcome_query)), \
          patch.object(event_log, "_mirror_dial_to_sheets", new_callable=AsyncMock) as mock_m:
         _run("/outcome 12 talked he is booked out 6 weeks")
     mock_m.assert_awaited_once()
@@ -179,8 +191,8 @@ def test_dial_is_mirrored_to_the_call_log_sheet():
 
 def test_meeting_outcomes_are_not_mirrored_to_the_call_log():
     """CallLog is a log of calls. A meeting outcome is not one."""
-    with patch.object(event_log, "alog_event", new_callable=AsyncMock), \
-         patch.object(event_log.DatabaseManager, "query", new_callable=AsyncMock), \
+    with patch.object(event_log, "alog_event", AsyncMock(return_value=True)), \
+         patch.object(event_log.DatabaseManager, "query", AsyncMock(side_effect=_outcome_query)), \
          patch.object(event_log, "_mirror_dial_to_sheets", new_callable=AsyncMock) as mock_m:
         _run("/outcome 12 held")
     mock_m.assert_not_awaited()
@@ -188,9 +200,9 @@ def test_meeting_outcomes_are_not_mirrored_to_the_call_log():
 
 def test_a_sheets_outage_never_costs_the_event():
     """The event log is canonical; the mirror is only a projection of it."""
-    with patch.object(event_log, "alog_event", new_callable=AsyncMock) as mock_log, \
-         patch.object(event_log.DatabaseManager, "query",
-                      new=AsyncMock(side_effect=RuntimeError("sheets down"))):
+    with patch.object(event_log, "alog_event", AsyncMock(return_value=True)) as mock_log, \
+         patch.object(event_log.DatabaseManager, "query", AsyncMock(side_effect=_outcome_query)), \
+         patch("app.skills.sheets_sync.log_call_to_sheets", AsyncMock(side_effect=RuntimeError("synthetic sheets failure"))):
         reply = _run("/outcome 12 talked")
     assert "call_talked" in reply
     mock_log.assert_awaited_once()

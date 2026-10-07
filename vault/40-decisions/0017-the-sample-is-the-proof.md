@@ -3,7 +3,7 @@ name: 0017-the-sample-is-the-proof
 description: Outreach leads with a live AI demo call instead of testimonials or results — and asking permission for it is also the legal cure. Owner decision 2026-08-22.
 type: decision
 created: 2026-08-22
-status: active
+status: amended
 tags: [decision, outreach, strategy, consent, tcpa]
 ---
 
@@ -11,7 +11,15 @@ tags: [decision, outreach, strategy, consent, tcpa]
 
 ## Status
 
-Accepted — owner decision, 2026-08-22.
+Accepted — owner decision, 2026-08-22. The proof strategy remains active, but
+ADR-0018 (2026-09-22) replaces the call-initiation mechanism: the prospect now
+calls the inbound demo line voluntarily after an individual DM; OROVA does not
+send an automated outbound demo call.
+
+> [!important] Current mechanism
+> Follow [[0018-the-prospect-initiates-the-demo-call]]. The consent analysis
+> below is historical context for the outbound variant, not permission to turn
+> automated outbound calling back on.
 
 ## Context
 
@@ -80,4 +88,5 @@ highest-value hour available to buy.
 ## Linked
 
 [[0013-painkiller-positioning-and-real-competition|ADR-0013]] ·
-[[0016-the-repo-stays-public|ADR-0016]] · [[active-context]]
+[[0016-the-repo-stays-public|ADR-0016]] ·
+[[0018-the-prospect-initiates-the-demo-call|ADR-0018]] · [[active-context]]

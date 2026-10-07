@@ -64,6 +64,14 @@ jobs:
             --select S102,S301,S307,S506,S602,S603,S605,S608 \
             app/ scripts/ tests/ .claude/
 
+      - name: Set up Node for dashboard checks
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Dashboard contracts and syntax
+        run: node --test tests/dashboard_contract.test.cjs
+
       - name: Run unit tests
         run: |
           python -m pytest tests/ --maxfail=3 -q
