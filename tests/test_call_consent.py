@@ -21,6 +21,21 @@ import pytest
 from app.core import call_consent as cc
 
 
+@pytest.fixture(autouse=True)
+def _jurisdiction_cleared(monkeypatch):
+    """Clear the state gate for tests that exercise the FEDERAL gate.
+
+    ai_call_allowed gained a jurisdiction layer in front of §227(b)
+    (2026-08-22): RCW 80.36.400 and CA PUC §2874 are separate statutes that a
+    consent record does not answer. It refuses when AI_CALL_ALLOWED_STATES is
+    empty, which is the correct default and made every federal test fail.
+
+    These tests are about consent, so the precondition is set here. The
+    jurisdiction layer has its own tests at the bottom of this file.
+    """
+    monkeypatch.setenv("AI_CALL_ALLOWED_STATES", "OR,WA,CA,AZ,NV,ID")
+
+
 @pytest.fixture
 def store(monkeypatch):
     """In-memory stand-in for DatabaseManager's state store."""
@@ -214,3 +229,54 @@ def test_this_module_does_not_modify_dnc():
     # It may READ it — that is the point of the combined gate.
     assert "is_suppressed" in src
     assert hasattr(dnc, "is_suppressed")
+
+
+# ── jurisdiction gate (2026-08-22) ──────────────────────────────────────────
+# Found in self-review: this lived in scripts/nova.py, so it protected the CLI
+# and nothing else. FIVE paths reach trigger_retell_call, and planner exposes
+# the dialler to the LLM as a tool — a path that cannot be gated by convention.
+
+def test_state_is_inferred_from_the_area_code():
+    assert cc.state_for("+12536778727") == "WA"
+    assert cc.state_for("+15035757663") == "OR"
+    assert cc.state_for("+14155551234") == "CA"
+
+
+def test_an_explicit_state_beats_the_area_code():
+    """Numbers port between states; the lead row is better evidence."""
+    assert cc.state_for("+12536778727", "OR") == "OR"
+
+
+def test_an_unlisted_area_code_is_undetermined_not_assumed():
+    assert cc.state_for("+17166703920") == ""          # 716, Buffalo NY
+
+
+def test_empty_allowlist_refuses_everything(monkeypatch):
+    monkeypatch.setenv("AI_CALL_ALLOWED_STATES", "")
+    ok, why = cc.jurisdiction_allowed("+15035757663")
+    assert ok is False
+    assert "empty" in why
+
+
+def test_a_state_outside_the_allowlist_is_refused(monkeypatch):
+    monkeypatch.setenv("AI_CALL_ALLOWED_STATES", "OR")
+    ok, why = cc.jurisdiction_allowed("+12536778727")   # WA
+    assert ok is False and "WA" in why
+
+
+def test_an_undetermined_state_is_refused_not_waved_through(monkeypatch):
+    """Fail closed: we cannot show the call is permitted, so we do not place it."""
+    monkeypatch.setenv("AI_CALL_ALLOWED_STATES", "OR,WA")
+    ok, why = cc.jurisdiction_allowed("+17166703920")
+    assert ok is False and "undetermined" in why
+
+
+@pytest.mark.asyncio
+async def test_jurisdiction_is_checked_before_consent(store, monkeypatch):
+    """No amount of consent makes an unlawful jurisdiction lawful."""
+    monkeypatch.setenv("AI_CALL_ALLOWED_STATES", "OR")
+    await cc.record_call_consent("+12536778727", "manual", "said yes", actor="mark")
+    with patch("app.core.dnc.is_suppressed", AsyncMock(return_value=False)):
+        allowed, why = await cc.ai_call_allowed("+12536778727")   # WA
+    assert allowed is False
+    assert "jurisdiction" in why

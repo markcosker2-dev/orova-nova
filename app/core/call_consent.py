@@ -72,6 +72,7 @@ It does not touch `dnc.py`. Suppression and consent are different questions and
 both must pass; a suppression entry always wins.
 """
 import logging
+import os
 import time
 from typing import Optional
 
@@ -252,12 +253,98 @@ async def has_call_consent(phone: str) -> bool:
         return False
 
 
-async def ai_call_allowed(phone: str) -> tuple:
+# ── Jurisdiction (state ADAD statutes), separate from federal §227(b) ──────
+# This started life in scripts/nova.py, which was the wrong place and a repeat
+# of the exact hole the consent gate below was written to close: FIVE paths
+# reach trigger_retell_call, and a gate that lives in one of them protects one
+# of them. planner exposes the dialler to the LLM as a tool, and an
+# LLM-invokable path cannot be gated by convention at all.
+#
+# §227(b) is FEDERAL and consent cures it. RCW 80.36.400 (WA) and CA PUC §2874
+# are STATE statutes with their own rules — 80.36.400 appears to have no
+# consent cure at all — so a consent record says nothing about them.
+#
+# The allowlist is EMPTY by default and is configuration, never a list compiled
+# from anyone's reading of the statutes. State ADAD laws vary, several are
+# stricter than federal, and a wrong entry is $500-$1,500 per call.
+#
+#     AI_CALL_ALLOWED_STATES=OR        after Oregon is cleared
+#     AI_CALL_ALLOWED_STATES=OR,CA     after the lawyer answers
+_ALLOWED_STATES_VAR = "AI_CALL_ALLOWED_STATES"
+
+# Enough NPAs to decide the states OROVA actually works. Deliberately partial:
+# an unlisted NPA resolves to UNKNOWN and is REFUSED, which is the safe
+# direction. Number portability means an NPA is evidence, not proof, so an
+# explicit `state` from the lead row always wins over this map.
+_NPA_STATE = {
+    "206": "WA", "253": "WA", "360": "WA", "425": "WA", "509": "WA", "564": "WA",
+    "503": "OR", "541": "OR", "971": "OR", "458": "OR",
+    "209": "CA", "213": "CA", "279": "CA", "310": "CA", "323": "CA", "341": "CA",
+    "408": "CA", "415": "CA", "424": "CA", "442": "CA", "510": "CA", "530": "CA",
+    "559": "CA", "562": "CA", "619": "CA", "626": "CA", "628": "CA", "650": "CA",
+    "657": "CA", "661": "CA", "669": "CA", "707": "CA", "714": "CA", "747": "CA",
+    "760": "CA", "805": "CA", "818": "CA", "820": "CA", "831": "CA", "858": "CA",
+    "909": "CA", "916": "CA", "925": "CA", "949": "CA", "951": "CA",
+    "480": "AZ", "520": "AZ", "602": "AZ", "623": "AZ", "928": "AZ",
+    "702": "NV", "725": "NV", "775": "NV",
+    "208": "ID", "986": "ID",
+}
+
+
+def allowed_states() -> set:
+    """States cleared for an AI-placed call. Empty means none."""
+    raw = (os.getenv(_ALLOWED_STATES_VAR) or "").strip()
+    return {s.strip().upper() for s in raw.split(",") if s.strip()}
+
+
+def state_for(phone: str, state: str = "") -> str:
+    """Best available jurisdiction for this call, or '' when undecidable."""
+    if state and state.strip():
+        return state.strip().upper()
+    norm = _normalize(phone)
+    digits = "".join(c for c in norm if c.isdigit())
+    if len(digits) == 11 and digits.startswith("1"):
+        digits = digits[1:]
+    return _NPA_STATE.get(digits[:3], "") if len(digits) == 10 else ""
+
+
+def jurisdiction_allowed(phone: str, state: str = "") -> tuple:
+    """(allowed, reason) — is an AI-placed call permitted in this state?"""
+    allow = allowed_states()
+    if not allow:
+        return False, (f"{_ALLOWED_STATES_VAR} is empty — no state has been "
+                       f"cleared for an AI-placed call. RCW 80.36.400 and CA "
+                       f"PUC §2874 are separate from §227(b) and are not "
+                       f"answered by a consent record.")
+    # Toll-free has no geography, so a state test cannot say anything useful
+    # about it. Defer: §227(b)(1)(A)(iii) refuses it below on the ground that
+    # actually applies — the called party is charged — which is a far more
+    # useful reason to read in a log than "unlisted area code".
+    digits = "".join(c for c in _normalize(phone) if c.isdigit())
+    if len(digits) == 11 and digits.startswith("1"):
+        digits = digits[1:]
+    if digits[:3] in _TOLL_FREE_NPAS:
+        return True, "toll-free — no jurisdiction test applies; see §227(b)"
+
+    st = state_for(phone, state)
+    if not st:
+        return False, ("state undetermined (unlisted area code, no state on "
+                       "the lead) — cannot show the call is permitted")
+    if st not in allow:
+        return False, f"{st} is not in {_ALLOWED_STATES_VAR} ({sorted(allow)})"
+    return True, f"{st} is cleared"
+
+
+async def ai_call_allowed(phone: str, state: str = "") -> tuple:
     """(allowed, reason) — the single gate the AI calling lane must consult.
 
-    BOTH conditions must hold, and suppression always wins:
+    ALL conditions must hold, and suppression always wins:
+      · the STATE permits an AI-placed call at all (jurisdiction_allowed)
       · not on the DNC/opt-out list  (app/core/dnc.py, unmodified)
       · prior express consent on record for an artificial-voice call
+
+    `state` is optional: pass it when the caller has the lead row, otherwise it
+    is inferred from the area code and an unlisted NPA REFUSES.
 
     Returns a reason string on refusal so the lane can log WHY a number was
     skipped, rather than leaving a silent gap the way the email path once did.
@@ -266,7 +353,13 @@ async def ai_call_allowed(phone: str) -> tuple:
     if not norm:
         return False, "no phone number"
 
-    # Suppression first — an opt-out overrides any earlier consent.
+    # Jurisdiction first: if the state does not permit an AI-placed call, no
+    # amount of consent makes it lawful, so there is nothing further to check.
+    ok_state, why_state = jurisdiction_allowed(phone, state)
+    if not ok_state:
+        return False, f"jurisdiction: {why_state}"
+
+    # Suppression next — an opt-out overrides any earlier consent.
     try:
         from app.core.dnc import is_suppressed
         if await is_suppressed(phone):
