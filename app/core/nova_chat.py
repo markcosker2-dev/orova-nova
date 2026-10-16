@@ -60,6 +60,24 @@ def _canonical_icp_line() -> str:
         return _FALLBACK_ICP
 
 
+def _canonical_operator_timezone_line() -> str:
+    """Use the operator's IANA zone without inventing working hours."""
+    try:
+        import json
+        from pathlib import Path
+        from zoneinfo import ZoneInfo
+        path = Path(__file__).with_name("business_context.json")
+        with open(path, encoding="utf-8") as fh:
+            zone = json.load(fh)["company"]["operator_timezone"]
+        ZoneInfo(zone)
+        return (f"Mark's current operator time zone is {zone}. Use date-aware IANA "
+                "conversion, not a fixed UTC offset. His availability is unverified; "
+                "offer only calendar-verified slots or ask for his available hours.")
+    except (OSError, ValueError, KeyError, TypeError):
+        return ("Mark's operator time zone is unverified. Do not assume his location "
+                "or availability; confirm them before suggesting meeting times.")
+
+
 NOVA_PERSONA = (
     "You are Nova, Mark's AI partner at OROVA. OROVA runs Meta ads (Facebook + "  # noqa: S608
     "Instagram) and offers AI lead qualification. Nova assists its sales work.\n\n"
@@ -97,7 +115,7 @@ NOVA_PERSONA = (
     "- Ask at most one question, only when the answer materially changes the action.\n"
     "- Never report activity as progress. A reply, demo call, meeting or payment is "
     "progress; a draft, stored lead or scheduled idea is preparation.\n\n"
-    "He is one person doing this alone, in the Philippines, working US hours. Do "
+    "He is one person doing this alone, serving US businesses. Do "
     "not manufacture enthusiasm, do not congratulate him on activity that has not "
     "produced a conversation, and never pad. If the news is bad, say it plainly "
     "and say what you would do about it. Being liked is not the job; being useful "
@@ -218,6 +236,28 @@ async def operator_focus() -> str:
         selected = candidate
         break
     if not selected:
+        from app.core.database import DatabaseManager
+        try:
+            held = await DatabaseManager.fetchone(
+                "SELECT COUNT(*) AS held FROM leads "
+                "WHERE client_id = 0 AND status = 'Recovery Hold'"
+            )
+            if held is None:
+                raise ValueError("Hold count unavailable")
+            held_count = int(held["held"])
+        except Exception:
+            return (
+                "There is no eligible untouched prospect in this read, and I am unable to verify "
+                "the recovery holds right now. Retry the review when the database responds. "
+                "I did not send or call anyone; no holds were released."
+            )
+        if held_count:
+            return (
+                f"My call: review one of the {held_count} existing records on Recovery Hold first. "
+                "They are stored, not contact-cleared. Check its identity, thread history, "
+                "duplicates and suppression before Mark decides individual eligibility. "
+                "I did not send or call anyone; every hold remains in place."
+            )
         return (
             "My call: do not manufacture activity. There is no eligible untouched "
             "prospect in the stored pipeline. I did not send or call anyone. The next "
@@ -236,8 +276,7 @@ async def operator_focus() -> str:
 
 
 async def _pipeline_snapshot() -> str:
-    """Compact live-data block injected into the system prompt. Fail-open:
-    any piece that can't be fetched is simply omitted."""
+    """Compact live-data block with explicit partial-read and eligibility limits."""
     from app.core.database import DatabaseManager
     parts: List[str] = []
 
@@ -254,6 +293,8 @@ async def _pipeline_snapshot() -> str:
                     rep=m.get("replies_received", 0), mtg=m.get("meetings_booked", 0)))
     except Exception as e:
         logger.debug(f"[NOVA_CHAT] metrics fetch failed: {e}")
+        parts.append("CURRENT CRM STATUS COUNTS UNAVAILABLE: database read failed. "
+                     "Do not infer an empty pipeline or zero activity.")
 
     try:
         rows = await DatabaseManager.query(
@@ -261,7 +302,9 @@ async def _pipeline_snapshot() -> str:
             "FROM leads WHERE client_id = 0 AND COALESCE(status,'') NOT IN ('Invalid', 'Archived', 'DNC', 'Unsubscribed') "
             "ORDER BY score DESC LIMIT 8", (), fetchall=True)
         if rows:
-            lines = ["TOP LEADS (business | decision maker | status | score):"]
+            lines = ["TOP STORED RECORDS (business | decision maker | status | score):",
+                     "These are not contact-cleared. Recovery Hold and suppression remain "
+                     "binding; rank and score do not establish buying need or permission."]
             for r in rows:
                 r = dict(r)
                 dm = r.get("owner") or "—"
@@ -271,9 +314,12 @@ async def _pipeline_snapshot() -> str:
                              f"{r.get('status','New')} | {int(r.get('score') or 0)}")
             parts.append("\n".join(lines))
         else:
-            parts.append("TOP LEADS: pipeline is empty — no leads yet.")
+            parts.append("TOP STORED RECORDS: no records returned by this filtered read. "
+                         "This does not establish an empty CRM or contact eligibility.")
     except Exception as e:
         logger.debug(f"[NOVA_CHAT] leads fetch failed: {e}")
+        parts.append("STORED RECORDS UNAVAILABLE: database read failed. "
+                     "Do not infer an empty pipeline or contact eligibility.")
 
     try:
         pending = await DatabaseManager.get_state("pending_approvals", {})
@@ -294,7 +340,8 @@ async def nova_reply(message: str, chat_id: int = 0,
     from app.core.ai_client import UnifiedAIClient
     try:
         snapshot = await _pipeline_snapshot()
-        system = f"{NOVA_PERSONA}\n\n=== LIVE SNAPSHOT ===\n{snapshot}\n====================="
+        system = (f"{NOVA_PERSONA}\n\n{_canonical_operator_timezone_line()}"
+                  f"\n\n=== LIVE SNAPSHOT ===\n{snapshot}\n=====================")
 
         messages = [{"role": "system", "content": system}]
         if history:

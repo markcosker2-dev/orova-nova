@@ -1,6 +1,6 @@
 {
   "_description": "Single source of truth for OROVA business context. Loaded by email pipeline, proofreader, and drip templates. All other files (USER.md, brand_guidelines.json, config.py) should align with this.",
-  "_last_updated": "2026-09-30",
+  "_last_updated": "2026-10-16",
   "company": {
     "name": "OROVA",
     "type": "Marketing Agency",
@@ -8,6 +8,7 @@
     "ceo": "Mark",
     "ai_team_member": "Nova",
     "timezone": "America/Los_Angeles",
+    "operator_timezone": "Asia/Manila",
     "region": "West Coast US",
     "creative_tooling": "Approved original or commercially licensed assets within the current $0 budget; local ChatCut is available for review edits, but Work cloud ChatCut access remains unverified."
   },
@@ -253,7 +254,7 @@
       "_no_slot_variable": "Do NOT name specific times - no slot variable exists and a literal placeholder on the call is fatal. Ask open ('later this week', 'sometime this week'), then let them state a time and capture it.",
       "on_yes": "Capture their preferred day/time IN THEIR WORDS + best email. Confirm the email back letter by letter if unclear. Send the booking link if one is configured; otherwise flag for Mark to send the invite manually.",
       "fallback_no_link": "NO BOOKING LINK IS CONFIGURED YET. Never end a yes without capturing best email + their two preferred times, and flagging the lead for Mark. A yes with no capture is a lost deal.",
-      "_timezone_steer": "Mark is in the Philippines (UTC+8), 15 hours ahead of Pacific. Only US 6-9am PT and 4-5pm PT are workable for him. Steer toward 'first thing in the morning' (best - contractors are up early and it is Mark's evening) or 'late afternoon'. NEVER offer US midday. The booking calendar should enforce this too."
+      "_timezone_steer": "Use company.operator_timezone for Mark's current IANA time zone, separately from the prospect's time zone. Do not assume a fixed offset or available hours. Offer only slots returned by a verified availability tool; until then capture preferred times with their time zone and ask Mark to confirm."
     },
     "step_5_voicemail": {
       "_rule": "Cold dialling hits voicemail constantly. Without this the agent monologues at an answering machine. Discloses AI, makes NO offer, claims nothing that isn't true.",
@@ -316,7 +317,7 @@
       "best email (confirmed back letter by letter)",
       "two preferred times in their own words (fallback until direct booking is verified)"
     ],
-    "_timezone_steer": "Same constraint as outbound: only US early morning and late afternoon PT are workable for Mark. Never offer US midday. Until the migrated Cal.com tools pass an end-to-end booking test, never name a specific slot - ask open and let the caller state two times. After verification, offer only slots actually returned by the availability tool.",
+    "_timezone_steer": "Use company.operator_timezone for Mark's current IANA time zone; available hours are not established by his location. Until the migrated Cal.com tools pass an end-to-end booking test, never name a specific slot - ask open and capture preferred times and their time zone. After verification, offer only slots actually returned by the availability tool.",
     "_post_call_fields": "name, company, contact number, email, appointment date and time, preferred times, appointment booked, opt out requested, lead temperature, specific objection, was returning our call. Set 'appointment booked' true only after a successful booking-tool response or Mark's explicit confirmation; preferred times alone are not a booking. Use 'was returning our call' only for a genuine callback, not an invited demo caller. Names match what /api/retell/webhook reads, so an inbound booking still creates the calendar event and Telegram alert; the webhook's `if lead_id:` guard makes a lead-less inbound call safe.",
     "_offerings": "OROVA sells THREE things and Nova must not describe it as ads-only: (1) Meta lead gen + AI creatives, (2) the AI lead qualification caller STANDALONE for owners who already have lead flow, (3) both together. Which one fits is decided by DIAGNOSIS, not by pitching: if they already get plenty of leads and the problem is chasing bad ones, that is the caller alone. If the pipeline is empty, that is ads. Never recite the menu — ask first, then name the one that fits. Prices for all three are Mark's to state, never Nova's.",
     "_deployed_drift": "The DEPLOYED prompt is not generated from this file — nothing pushes it — so it drifts. Read-only API verification on 2026-09-23 still found: no invited-demo branch, no recording-consent instruction, a ten-minute ask instead of canonical 15, and Meta-ads-only positioning. Cal event type 2804866 ('OROVA Calls') was changed and live-verified at 15 minutes on 2026-09-23, but the attached Retell Cal tools are legacy and have not passed an end-to-end test. An exact DPAPI-encrypted rollback snapshot of the number, agent v0 and LLM v0 is stored outside the repository. The authenticated Retell browser currently shows first-time 'Create your workspace' onboarding rather than the workspace that owns the live agent; do not create a new empty workspace. Confirm the owning Retell login/workspace, then create and test a new draft version, migrate the tools, and verify the bound inbound number before sending demo traffic."
@@ -417,17 +418,17 @@
     "authenticity_note": "For remodeling specifically, authentic local before/after often outperforms polished generic video - the homeowner is buying proof of local work, not production value. Use Higgsfield to make their real work look excellent, not to invent work."
   },
   "operating_constraints": {
-    "founder_location": "Mark operates from the Philippines (UTC+8). California prospects are UTC-7 (PDT). Mark is 15 hours AHEAD of the prospect.",
-    "why_retell_is_mandatory": "Dialling US numbers from the Philippines on normal telephony is prohibitively expensive, and US business hours fall in Mark's overnight. Retell is not a convenience here - it is the only economical way to run US outbound. Nova owns ALL cold dialling.",
+    "founder_location": "Mark's current operator time zone is recorded in company.operator_timezone. Use date-aware conversion for each prospect's time zone; do not infer working hours or a fixed offset.",
+    "why_retell_is_mandatory": "Retell is not mandatory because of Mark's location. It is an optional executor for consent-checked qualification after live setup, funding and owner approval. No automated cold dialling is authorized by location or this field.",
     "meeting_window": {
-      "_problem": "Retell books meetings during US business hours, which is the middle of Mark's night. Unconstrained, the calendar will fill with 3am calls he cannot take.",
+      "_problem": "Operator location does not establish available hours. Unverified scheduling assumptions can produce unusable appointments.",
       "_fix": "Constrain the booking calendar to slots that are civilised in BOTH zones.",
-      "preferred_us_pacific": "6:00-9:00am PT  ->  9:00pm-midnight PH (same day). BEST slot: contractors are up early, before job sites get busy.",
-      "secondary_us_pacific": "4:00-5:00pm PT  ->  7:00-8:00am PH (next day).",
-      "never": "10:00am-3:00pm PT = 1:00-6:00am PH. Do not offer these.",
-      "action": "Set Cal.com / Calendly availability to the two windows above ONLY. The calendar enforces this so Nova cannot book an unusable slot."
+      "preferred_us_pacific": "Unverified. Use real availability returned for the prospect's date and time zone.",
+      "secondary_us_pacific": "Unverified. Ask Mark for suitable hours rather than inventing a second window.",
+      "never": "Never offer a time solely from a static zone conversion, or report captured preferences as a booking.",
+      "action": "Mark confirms available hours; verify the existing calendar's time zone, date-aware slots and booking result before offering appointments. No calendar settings were changed by this local update."
     },
-    "call_windows": "Retell dials 9am-5pm in the PROSPECT's local timezone (unchanged - this is a TCPA/courtesy rule, not a Mark-availability rule). Retell runs while Mark sleeps; that is the point.",
-    "cost_note": "The conversations that actually matter - the sales meetings - run on Google Meet over the internet, so they cost nothing regardless of geography. Only the cold DIALLING is expensive, and that is exactly what Retell handles. If Mark ever needs to dial personally (a hot lead, debugging a script), VoIP (Skype credit, Google Voice, Twilio) is cents per minute - the cost barrier applies to traditional international telephony, not VoIP."
+    "call_windows": "Any future authorized call must satisfy its consent, suppression, timing, funding and approval gates. The prospect's local time and Mark's availability are separate checks; a time window is not permission to call.",
+    "cost_note": "An online meeting can avoid international telephone charges. Do not assume funded telephony, a live demo or paid providers are available under the current $0 preparation constraint."
   }
 }

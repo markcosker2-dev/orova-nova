@@ -4,7 +4,8 @@
     "name": "OROVA",
     "ceo": "Mark",
     "ai_agent": "Nova",
-    "timezone": "America/Los_Angeles"
+    "timezone": "America/Los_Angeles",
+    "operator_timezone": "Asia/Manila"
   },
   "pricing": {
     "service_fee_p1_usd": 4000,
