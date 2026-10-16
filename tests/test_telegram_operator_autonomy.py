@@ -1,5 +1,6 @@
 """Nova takes safe initiative in Telegram without bypassing external gates."""
 import asyncio
+import sqlite3
 from unittest.mock import AsyncMock, patch
 
 from app.core import nova_chat
@@ -48,9 +49,54 @@ def test_operator_focus_does_not_fake_progress_when_queue_is_empty():
         if False:
             yield None
 
-    with patch.object(nova_chat, "_contact_candidates", candidates):
+    with patch.object(nova_chat, "_contact_candidates", candidates), \
+         patch("app.core.database.DatabaseManager.fetchone", AsyncMock(return_value={"held": 0})):
         result = asyncio.run(nova_chat.operator_focus())
     assert "do not manufacture activity" in result
+    assert "did not send or call anyone" in result
+
+
+def test_focus_reviews_existing_recovery_holds_instead_of_requesting_more_leads():
+    db = sqlite3.connect(":memory:")
+    db.row_factory = sqlite3.Row
+    db.execute("CREATE TABLE leads (id INTEGER, business TEXT, owner TEXT, owner_confidence INTEGER, "
+               "email TEXT, email_status TEXT, phone TEXT, website TEXT, url TEXT, vertical TEXT, "
+               "status TEXT, state TEXT, score INTEGER, client_id INTEGER)")
+    db.executemany("INSERT INTO leads (id, business, status, score, client_id) VALUES (?, ?, ?, ?, ?)", [
+        (1, "First Custom Homes", "Recovery Hold", 90, 0),
+        (2, "Second Custom Homes", "Recovery Hold", 80, 0),
+        (3, "Client Private Record", "Recovery Hold", 99, 1),
+    ])
+
+    async def fetchall(sql, params=()):
+        return db.execute(sql, params).fetchall()
+
+    async def fetchone(sql, params=()):
+        return db.execute(sql, params).fetchone()
+
+    try:
+        with patch("app.core.database.DatabaseManager.fetchall", fetchall), \
+             patch("app.core.database.DatabaseManager.fetchone", fetchone):
+            result = asyncio.run(nova_chat.operator_focus())
+        assert "2" in result and "Recovery Hold" in result
+        assert "review" in result.lower()
+        assert "hunt" not in result.lower()
+        assert "did not send or call anyone" in result
+        assert [r[0] for r in db.execute("SELECT status FROM leads")] == ["Recovery Hold"] * 3
+    finally:
+        db.close()
+
+
+def test_focus_does_not_treat_a_failed_hold_read_as_an_empty_pipeline():
+    async def candidates():
+        if False:
+            yield None
+
+    with patch.object(nova_chat, "_contact_candidates", candidates), \
+         patch("app.core.database.DatabaseManager.fetchone", AsyncMock(side_effect=RuntimeError("offline"))):
+        result = asyncio.run(nova_chat.operator_focus())
+    assert "unable to verify" in result.lower()
+    assert "hunt" not in result.lower()
     assert "did not send or call anyone" in result
 
 

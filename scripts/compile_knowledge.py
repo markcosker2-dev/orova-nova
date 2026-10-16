@@ -218,8 +218,12 @@ def lint_meeting_duration(facts: dict) -> list[str]:
 
 
 def lint(facts: dict, business_context: dict) -> list[str]:
-    return (validate(facts) + lint_pricing(facts, business_context)
-            + lint_copy(facts, business_context) + lint_meeting_duration(facts))
+    errors = (validate(facts) + lint_pricing(facts, business_context)
+              + lint_copy(facts, business_context) + lint_meeting_duration(facts))
+    operator_zone = facts.get("company", {}).get("operator_timezone")
+    if operator_zone and business_context.get("company", {}).get("operator_timezone") != operator_zone:
+        errors.append("operator_timezone drift between canonical facts and business_context.json")
+    return errors
 
 
 # ── Projection: read-only facts.md for humans (Obsidian) ───────────────────
@@ -241,6 +245,8 @@ def emit_facts_md(facts: dict) -> str:
         "change the source and recompile.",
         "",
         f"**{c['name']}** · CEO {c['ceo']} · agent {c['ai_agent']} · {c['timezone']}",
+        f"Current operator time zone: **{c.get('operator_timezone', 'unverified')}** "
+        "(not a statement of available hours).",
         "",
         "## Packages & pricing",
         "",

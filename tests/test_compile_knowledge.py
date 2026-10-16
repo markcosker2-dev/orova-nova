@@ -46,6 +46,16 @@ def test_lint_catches_price_drift():
     assert any("drift" in e and "Package 1" in e for e in errors)
 
 
+def test_lint_catches_operator_timezone_drift_without_changing_the_market_zone():
+    facts = ck.load_facts()
+    facts["company"]["operator_timezone"] = "Europe/London"
+    bc = _business_context()
+    bc["company"]["operator_timezone"] = "Asia/Manila"
+    errors = ck.lint(facts, bc)
+    assert any("operator_timezone" in e and "drift" in e for e in errors)
+    assert bc["company"]["timezone"] == "America/Los_Angeles"
+
+
 def test_lint_catches_spam_word_in_outbound_copy():
     facts = ck.load_facts()
     bc = _business_context()
