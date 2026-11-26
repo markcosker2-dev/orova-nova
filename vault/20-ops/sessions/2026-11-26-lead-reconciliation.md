@@ -47,3 +47,10 @@ Nova's own storage gate was run over the 62 manual-only rows:
 
 ## Remaining manual steps for Mark (connectors can't edit cells or rename files)
 - Rename "OROVA Leads" (May) to "ARCHIVE — OROVA Leads (May 2026)" and unstar it, so it can't be mistaken for the lead list again. Bookmark "OROVA CRM" instead.
+
+## Release (Mark: "do it for me", 26 Nov)
+- **Backup gate:** newest Drive snapshot `nova_backup_20261126T072851Z.db` (07:28 UTC). Downloaded and opened read-only: `integrity_check` ok, 18 tables, 384 leads, all Recovery Hold. Local copy deleted afterwards. Snapshots run about every 3h.
+- **Merged** PR #205 → `main` at `abd9227` (CI green on every commit).
+- **Deployed:** Render auto-deployed. `/health` switched from `deb59605cfa5` to `abd922752dee` at 08:21 UTC: Operational, db ok, memory ok.
+- **Data check after deploy:** 384 leads, all Recovery Hold; 86 with email, the same as before the deploy.
+- Status: **live-verified**.
