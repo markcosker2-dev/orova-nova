@@ -56,7 +56,7 @@ email-validator==2.2.0
 phonenumbers==8.13.0
 
 # [NEW] DNS MX verification for email guess validation (free, no API key)
-dnspython==2.6.1
+dnspython==2.9.2
 
 # spacy==3.8.14  # REMOVED 2026-07-22: was a 6th-fallback owner-name NER
 #   (~100-150MB RAM + spacy/thinc/blis/numpy image tree). Superseded by the
