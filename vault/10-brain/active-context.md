@@ -11,8 +11,8 @@ tags: [brain, active, session-start]
 
 **Mode: preparation only. Outreach is PAUSED by owner order.** Leads stay stored, researched and held. Nothing is sent, called, posted, deployed or spent without fresh owner approval. Budget is **$0** until the first paying client.
 
-**Last live verification: ~16–20 Oct 2026. It is stale.** Recheck before repeating any of the following as current:
-- Render: build `deb59605cfa5` (PR #202 merge) was healthy, DB reachable, outreach held.
+**Render live-verified 26 Nov 2026 07:29 UTC:** `/health` reports Operational, build `deb59605cfa5` (PR #202 merge), db ok, memory ok.
+**Everything else was last verified ~16–20 Oct 2026 and is stale.** Recheck before repeating any of the following as current:
 - Leads: about 446 consolidated Sheet rows, of which 384 were recovered or held and about 62 were manual-only. The owner reports the Sheet **does not show all leads**, so reconciliation is open.
 - Google OAuth/Drive backup repaired; Google app moved to Production with no new scopes.
 - Telegram @orovaNOVA_bot: spam bio reported; fix **not confirmed**; local token 401 earlier.
@@ -27,7 +27,7 @@ Full operating rules: [[operating-brief]]. Owner judgement: [[hermesclaw-orova/p
 
 | Area | State | Last verified |
 |---|---|---|
-| Render deploy | `deb59605cfa5` reported healthy | ~20 Oct 2026 |
+| Render deploy | `deb59605cfa5` Operational, db/memory ok | **26 Nov 2026** |
 | Lead Sheet | Incomplete view reported by owner; ~446 rows last count | ~Oct 2026 |
 | Outreach | Paused — no sends, no calls, no AgentMail cold email | owner order |
 | Nova Telegram | Truthfulness/`/status`/`/focus` fixes merged in #201/#202 | code only |

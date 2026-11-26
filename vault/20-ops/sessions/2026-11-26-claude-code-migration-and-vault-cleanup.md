@@ -29,8 +29,12 @@ status: done
 - Full suite: **1,807 passed, 1 skipped** (Python 3.13 container). Knowledge gate and secrets gate are clean.
 - Without `pytest-asyncio`, 122 async tests fail spuriously. CI installs it separately, and `CLAUDE.md` now says so.
 
+## Environment set up (later the same day)
+- Created a personal Claude Code environment, **orova-nova**. It allows `orova-nova.onrender.com` plus package registries, and its setup script installs the requirements, `pytest` and `pytest-asyncio`. The script is unproven until a fresh session starts on it.
+- **Render `/health` live-verified 07:29 UTC:** Operational, build `deb59605cfa5`, db ok, memory ok.
+- The dashboard key (a network secret for the `X-API-Key` header) is not yet saved. Mark is fetching it from Render's Environment page. The lead reconciliation needs it.
+
 ## Could not verify (blocked in this cloud session)
-- **Render `/health`:** blocked by the session's network policy (proxy 403). Build `deb59605cfa5` remains unverified since ~20 Oct.
 - **Canonical Google Sheet:** both Drive connectors were unavailable (one needs re-sign-in, one has an auth incompatibility). The lead reconciliation has not started.
 - **OneDrive vault:** no computer attached. Notes written there after 2 Oct (e.g. the Oct 16–20 deploy verification, `2026-09-28-instagram-offline-manager`) are **not in the repo**. They need to be copied into `vault/` locally and committed.
 
