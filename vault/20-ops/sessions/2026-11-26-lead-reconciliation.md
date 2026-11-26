@@ -47,3 +47,16 @@ Nova's own storage gate was run over the 62 manual-only rows:
 
 ## Remaining manual steps for Mark (connectors can't edit cells or rename files)
 - Rename "OROVA Leads" (May) to "ARCHIVE — OROVA Leads (May 2026)" and unstar it, so it can't be mistaken for the lead list again. Bookmark "OROVA CRM" instead.
+
+## Release (Mark: "do it for me", 26 Nov)
+- **Backup gate:** newest Drive snapshot `nova_backup_20261126T072851Z.db` (07:28 UTC). Downloaded and opened read-only: `integrity_check` ok, 18 tables, 384 leads, all Recovery Hold. Local copy deleted afterwards. Snapshots run about every 3h.
+- **Merged** PR #205 → `main` at `abd9227` (CI green on every commit).
+- **Deployed:** Render auto-deployed. `/health` switched from `deb59605cfa5` to `abd922752dee` at 08:21 UTC: Operational, db ok, memory ok.
+- **Data check after deploy:** 384 leads, all Recovery Hold; 86 with email, the same as before the deploy.
+- Status: **live-verified**.
+
+## Credential cleanup (Mark: "can you do those 3 for me", 26 Nov)
+- **`DASHBOARD_API_KEY` rotated, 09:46 UTC.** It had been exposed in chat. A new random value was set through the Render API, using the Render account key Mark had pasted, at his request. The value was never printed or stored. Render redeployed: live at 09:47 UTC, build `abd922752dee`, Operational. The new key returns 200 and the old key returns 403. 384 leads intact, all Recovery Hold, 86 with email.
+  - Mark: copy the new value from Render → orova-nova → Environment into the local `.env` and Mission Control.
+- **Render API key:** still to delete (Mark). Render's API can't delete API keys; use Account Settings → API Keys. `api.render.com` was allowed only for this rotation and then removed from the environment again.
+- **"OROVA Leads" (May) rename:** not done. Drive reports the file as not editable by the connector (`canEdit: false`). Mark renames it by hand.

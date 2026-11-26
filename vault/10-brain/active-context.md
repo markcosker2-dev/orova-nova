@@ -11,13 +11,13 @@ tags: [brain, active, session-start]
 
 **Mode: preparation only. Outreach is PAUSED by owner order.** Leads stay stored, researched and held. Nothing is sent, called, posted, deployed or spent without fresh owner approval. Budget is **$0** until the first paying client.
 
-**Render live-verified 26 Nov 2026 07:29 UTC:** `/health` reports Operational, build `deb59605cfa5` (PR #202 merge), db ok, memory ok.
+**Deployed and live-verified 26 Nov 2026 08:21 UTC:** PR #205 merged; `/health` reports Operational, build `abd922752dee`, db ok, memory ok. 384 leads survived the deploy, all Recovery Hold. The CSV-import hold fix is live.
 **Everything else was last verified ~16–20 Oct 2026 and is stale.** Recheck before repeating any of the following as current:
 - Leads **reconciled 26 Nov:** live DB 384, all Recovery Hold. The canonical Sheet is **"OROVA CRM" → `Leads` tab**: 446 rows, all held, **0 DB leads missing**, plus 62 manual-queue-only rows (mostly IG handles, many off-ICP). The "missing leads" came from the wrong sheet (the brief linked "OROVA IG Post Log"; the starred "OROVA Leads" is stale since May). See [[2026-11-26-lead-reconciliation]].
 - Google OAuth/Drive backup repaired; Google app moved to Production with no new scopes.
 - Telegram @orovaNOVA_bot: spam About/Description **replaced with neutral private-bot text on 26 Nov** (owner-reported via BotFather; name/botpic not yet checked). Token rotation still pending, and must be done together with updating Render's env.
 
-**Next priority: production reliability.** Rotate the exposed dashboard key, check the Drive backup, and get deploy approval for the CSV-import hold fix. The 62 Sheet-only rows (IG handles only; 15 core ICP) stay held; the 15 are the research queue.
+**Next priority: production reliability.** Rotate the exposed dashboard key (Mark, in Render). The 62 Sheet-only rows (IG handles only; 15 core ICP) stay held; the 15 are the research queue.
 
 Full operating rules: [[operating-brief]]. Owner judgement: [[hermesclaw-orova/playbook/README|playbook]]. History before this rewrite: [[active-context-history-2026-07-to-10]].
 
@@ -27,12 +27,12 @@ Full operating rules: [[operating-brief]]. Owner judgement: [[hermesclaw-orova/p
 
 | Area | State | Last verified |
 |---|---|---|
-| Render deploy | `deb59605cfa5` Operational, db/memory ok | **26 Nov 2026** |
+| Render deploy | `abd922752dee` (PR #205) Operational; 384 leads intact | **26 Nov 2026** |
 | Lead Sheet | "OROVA CRM"/Leads complete: 446 rows ⊇ all 384 DB leads | **26 Nov 2026** |
 | Outreach | Paused — no sends, no calls, no AgentMail cold email | owner order |
 | Nova Telegram | Truthfulness/`/status`/`/focus` fixes merged in #201/#202 | code only |
 | Telegram bot identity | Bio spam replaced (owner-reported); name/botpic and token rotation pending | 26 Nov 2026 |
-| Drive backup | OAuth repaired before #202 deploy | ~Oct 2026 |
+| Drive backup | Running every ~3h; 07:28 UTC snapshot integrity-checked, 384 leads | **26 Nov 2026** |
 | Retell inbound demo | HOLD — unpublished, legacy Cal tools, unfunded | 30 Sep 2026 |
 | Calendar `/away` | Code + tests exist; runtime credential proof pending | not live |
 | Instagram | Draft-only; Sheets queue cutover; Make scenarios reported 9881852 / 9333477 | ~Oct 2026 |
