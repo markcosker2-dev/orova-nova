@@ -77,3 +77,9 @@ Nova's own storage gate was run over the 62 manual-only rows:
 - **PR #207 merged and deployed** (`715c4bcb01c8`, Operational, 10:05 UTC). It contains the `exec uvicorn` fix. **To prove it:** the *next* deploy or restart should leave a `nova_backup_*` file timestamped at shutdown. This deploy's shutdown was still handled by the old container.
 - **Official licence verification is not automatable.** The CSLB and Oregon CCB lookups are both behind a reCAPTCHA (a human-only control), so I didn't automate past them. Their hosts were allowed briefly, then removed again. Licence facts in the Sheet remain aggregator-sourced. Mark can check the four identity-high prospects by hand in about 30 seconds each, before any import.
 - **Import still pending:** it needs the rotated dashboard key, entered through the secure credential form (never in chat).
+
+## Backup-fix result (26 Nov, after PR #208 deploy)
+- PR #208 merged; live `f5c2bfe10df3` at 10:13 UTC, Operational.
+- **No shutdown snapshot appeared** (newest is still 07:28 UTC), so the `exec uvicorn` fix was necessary but **not sufficient**. Remaining suspects: Render's free-tier stop grace is shorter than the 20s upload cap, or the Drive upload fails during shutdown. Next step: read the shutdown log line (`💾 Shutdown backup:` / `⚠️ Shutdown backup failed`) with the dashboard key (`python scripts/nova.py logs`).
+- Exposure is smaller than first stated: `persist_leads_durably` already triggers a Drive backup after hunts and CSV imports, so leads are covered. What's exposed between the 3h backups is non-lead state: chat context, approvals, state_store.
+- Mark chose to **keep the Render API key** for now (26 Nov). It remains in the chat transcript, so rotate it if that transcript is ever shared.
