@@ -34,4 +34,8 @@ EXPOSE ${PORT:-18790}
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:${PORT:-18790}/health || exit 1
 
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-18790}"]
+# `exec` makes uvicorn PID 1. Without it, dash (python:3.12-slim) stays PID 1,
+# does not forward Render's SIGTERM, and uvicorn is SIGKILLed after the grace
+# period, so the lifespan shutdown backup in app/main.py never ran: three
+# deploys on 2026-11-26 produced no shutdown snapshot.
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-18790}"]
