@@ -13,11 +13,11 @@ tags: [brain, active, session-start]
 
 **Render live-verified 26 Nov 2026 07:29 UTC:** `/health` reports Operational, build `deb59605cfa5` (PR #202 merge), db ok, memory ok.
 **Everything else was last verified ~16–20 Oct 2026 and is stale.** Recheck before repeating any of the following as current:
-- Leads: about 446 consolidated Sheet rows, of which 384 were recovered or held and about 62 were manual-only. The owner reports the Sheet **does not show all leads**, so reconciliation is open.
+- Leads **reconciled 26 Nov:** live DB 384, all Recovery Hold. The canonical Sheet is **"OROVA CRM" → `Leads` tab**: 446 rows, all held, **0 DB leads missing**, plus 62 manual-queue-only rows (mostly IG handles, many off-ICP). The "missing leads" came from the wrong sheet (the brief linked "OROVA IG Post Log"; the starred "OROVA Leads" is stale since May). See [[2026-11-26-lead-reconciliation]].
 - Google OAuth/Drive backup repaired; Google app moved to Production with no new scopes.
 - Telegram @orovaNOVA_bot: spam About/Description **replaced with neutral private-bot text on 26 Nov** (owner-reported via BotFather; name/botpic not yet checked). Token rotation still pending, and must be done together with updating Render's env.
 
-**Top priority: lead source-of-truth reconciliation.** Compare the DB, the recovery copy and the canonical Sheet (tabs, filters, duplicates). Produce one Master Leads view with every lead held.
+**Top priority now: decide the 62 manual-only Sheet rows.** Import the ICP-fit ones through the storage gate and mark the rest off-ICP, so the DB is the single owner again.
 
 Full operating rules: [[operating-brief]]. Owner judgement: [[hermesclaw-orova/playbook/README|playbook]]. History before this rewrite: [[active-context-history-2026-07-to-10]].
 
@@ -28,7 +28,7 @@ Full operating rules: [[operating-brief]]. Owner judgement: [[hermesclaw-orova/p
 | Area | State | Last verified |
 |---|---|---|
 | Render deploy | `deb59605cfa5` Operational, db/memory ok | **26 Nov 2026** |
-| Lead Sheet | Incomplete view reported by owner; ~446 rows last count | ~Oct 2026 |
+| Lead Sheet | "OROVA CRM"/Leads complete: 446 rows ⊇ all 384 DB leads | **26 Nov 2026** |
 | Outreach | Paused — no sends, no calls, no AgentMail cold email | owner order |
 | Nova Telegram | Truthfulness/`/status`/`/focus` fixes merged in #201/#202 | code only |
 | Telegram bot identity | Bio spam replaced (owner-reported); name/botpic and token rotation pending | 26 Nov 2026 |
@@ -53,7 +53,7 @@ Individual, researched DM on a public business channel → the prospect *chooses
 
 ## Open items, in priority order
 
-1. **Lead reconciliation:** DB vs recovery copy vs Sheet. One Master Leads view, provenance kept, all held.
+1. **Lead cleanup:** decide the 62 manual-only rows (import ICP-fit, mark off-ICP); archive the stale "OROVA Leads" sheet.
 2. **Live re-verification:** Render `/health` build, Drive backup, Telegram webhook/identity, Make/Meta status.
 3. **Nova quality:** no regression to repetitive or fabricated reports ([[0022-learning-observations-and-no-age-only-pruning]]).
 4. **Calendar proof:** service account, target calendar ID, free/busy only, idempotent test.

@@ -47,7 +47,7 @@ Mark wants autonomous, proactive work. He wants plain English, few questions and
 |---|---|
 | GitHub | `markcosker2-dev/orova-nova` (public). Pages site hosts homepage/privacy/terms for the Google app |
 | Render | Existing Nova service. Last verified build `deb59605cfa5` (~20 Oct, stale) |
-| Google Sheet | Canonical prospect/pipeline view (`OROVA CRM`). **Link kept out of git.** Use the ID in `.env` / Render env. Exactly one Master Leads view; no competing lead sheets |
+| Google Sheet | Canonical prospect/pipeline view: **"OROVA CRM", tab `Leads`** (link kept out of git). Not "OROVA IG Post Log", which an earlier brief linked by mistake, and not the stale May sheet "OROVA Leads". Exactly one Master Leads view; no competing lead sheets |
 | Obsidian | Owner's OneDrive vault = this repo's `vault/` checked out locally. Cloud sessions see only the repo copy |
 | Telegram | @orovaNOVA_bot |
 | Make | Instagram publisher `9881852` and Nova CRM `9333477` reported active; original `9546332` deactivated (all stale) |
