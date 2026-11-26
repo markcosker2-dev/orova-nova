@@ -169,6 +169,6 @@ find the right people and has no lawful automated way to say hello.
 
 ## Linked
 
-[[session-2026-08-05-registry-by-state-and-or-ccb]] ·
+[[2026-08-05-registry-by-state-and-or-ccb]] ·
 [[0014-licence-registries-as-the-discovery-source]] ·
 [[instagram-outreach-plan-2026-07-30]] · [[handoff-2026-08-05]]

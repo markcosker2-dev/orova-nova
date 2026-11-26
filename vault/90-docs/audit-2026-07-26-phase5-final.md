@@ -200,4 +200,4 @@ as "no bugs" — six real bugs were found today in code that was already shipped
 and green.**
 
 ## Linked
-- [[audit-2026-07-26-phase1]] · [[0014-licence-registries-as-the-discovery-source]] · [[session-2026-07-26-merge-and-discovery-wall]] · [[active-context]]
+- [[audit-2026-07-26-phase1]] · [[0014-licence-registries-as-the-discovery-source]] · [[2026-07-26-merge-and-discovery-wall]] · [[active-context]]

@@ -9,7 +9,7 @@ tags: [merge, deploy, durability, data-loss, retell]
 
 # Session: the stack merged, and what it cost (2026-08-07)
 
-Companion to [[session-2026-08-07-retell-tool-hallucination-and-the-reverse-landmine]].
+Companion to [[2026-08-07-retell-tool-hallucination-and-the-reverse-landmine]].
 
 ## The merge
 

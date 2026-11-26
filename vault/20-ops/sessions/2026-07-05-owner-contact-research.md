@@ -9,7 +9,7 @@ status: active
 # Session: Owner-Direct Email + Phone Reality Research (2026-07-05)
 
 **Scope:** Read-only research. No code changed. Builds on
-[[lead-engine-research]] and [[owner-name-engine]] (2026-07-04), which solved
+[[2026-07-04-lead-engine-research]] and [[2026-07-04-owner-name-engine]] (2026-07-04), which solved
 *owner-NAME* discovery (registry-first pipeline in `app/skills/owner_finder.py`).
 This session covers the next step once a name is known: the owner's **direct
 email**, the **phone reality** (cell vs. business line + TCPA), a **GitHub
@@ -113,7 +113,7 @@ an automatable HTTP pipeline. Confirmed from this session's research:
 
 - Cell numbers essentially never appear in free public directories or
   structured registries (unlike owner *names*, which CA/WA/OR registries
-  legally require — see [[lead-engine-research]] Job 2). The realistic free
+  legally require — see [[2026-07-04-lead-engine-research]] Job 2). The realistic free
   paths are: (a) whatever phone number the business's own website/Google
   Business Profile/Yelp page lists — which is a **business line**, not a
   personal cell, in the overwhelming majority of cases; (b) manual LinkedIn
@@ -122,7 +122,7 @@ an automatable HTTP pipeline. Confirmed from this session's research:
   volume, and Apollo's own free tier only grants **5 mobile-phone credits/mo**
   (Job 1 table).
 - Nova's own `smart_scraper.py` (an ad-hoc AI tool, not on the scheduled
-  hunt path per [[lead-engine-research]] Job 1.1) already encodes the right
+  hunt path per [[2026-07-04-lead-engine-research]] Job 1.1) already encodes the right
   instinct at the extraction-schema level: it asks its LLM to flag
   `is_verified_mobile` only when a number is "explicitly labeled as a
   mobile/cell number" or appears in a "Contact the Owner" context — i.e. the
@@ -290,7 +290,7 @@ assumed for each:
 ## Ranked recommendation: $0/freemium owner-direct-email pipeline
 
 Building on the existing registry-first owner-**name** pipeline
-(`owner_finder.py`, already built per [[owner-name-engine]]) — once a name
+(`owner_finder.py`, already built per [[2026-07-04-owner-name-engine]]) — once a name
 is known, resolve the **email** in this order:
 
 1. **Website-scrape + MX-verified pattern guess (existing, keep as primary)**
@@ -333,7 +333,7 @@ is known, resolve the **email** in this order:
    exists for either.
 6. **DDG snippet search (existing, unchanged)** — keep purely as the
    already-implemented last resort; this session's research reconfirms
-   [[lead-engine-research]]'s Job 2 finding that DDG scraping carries real
+   [[2026-07-04-lead-engine-research]]'s Job 2 finding that DDG scraping carries real
    ToS/block risk and should never be promoted above a structured API
    source.
 

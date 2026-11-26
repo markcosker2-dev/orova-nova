@@ -1,3 +1,15 @@
+---
+name: claude-desktop-audit-prompt-2026-07
+description: Archived historical snapshot — I need you to conduct a deep-dive technical audit of my HermesClaw/OROVA codebase. This is
+type: doc
+created: 2026-11-26
+status: archived
+---
+
+> [!warning] Archived — historical snapshot, not current guidance
+> Kept for provenance on 2026-11-26. Do not act on it; current state is in
+> [[active-context]] and [[operating-brief]].
+
 I need you to conduct a deep-dive technical audit of my HermesClaw/OROVA codebase. This is an autonomous B2B sales engine running on Render free tier with Groq as primary LLM.
 
 ## Architecture

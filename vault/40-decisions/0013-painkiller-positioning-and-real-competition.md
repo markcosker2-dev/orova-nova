@@ -104,7 +104,7 @@ We cannot tell from Google Maps whether a builder's backlog is 6 weeks or 9 mont
 Future Nova capability: hunt **pipeline-gap signals** — actively running
 Angi/Thumbtack ads, hiring posts for carpenters, "now accepting new projects"
 language, a recently-completed flagship job. This converges with the 2026 research
-in [[session-2026-07-22-improvement-research]]: **signal-based outreach replies at
+in [[2026-07-22-improvement-research]]: **signal-based outreach replies at
 5-18% vs 1-3% generic.**
 
 ## Consequences
@@ -123,4 +123,4 @@ needs to be tested, not believed. **No further positioning work should happen
 before 20 calls.**
 
 ## Linked
-- [[0012-icp-rerank-and-pilot-pricing]] · [[business-model]] · [[orova-playbook]] · [[profitability-plan]] · [[session-2026-07-22-improvement-research]]
+- [[0012-icp-rerank-and-pilot-pricing]] · [[business-model]] · [[orova-playbook]] · [[profitability-plan]] · [[2026-07-22-improvement-research]]

@@ -292,4 +292,4 @@ infrastructure does not change that and must not be used to bypass it.
 ## Linked
 
 [[email-channel-viability-2026-08-06]] ·
-[[session-2026-08-06-security-offer-and-the-open-channel]]
+[[2026-08-06-security-offer-and-the-open-channel]]

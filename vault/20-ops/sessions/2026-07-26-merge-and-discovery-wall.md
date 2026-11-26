@@ -107,6 +107,6 @@ transcript.
 
 ## Linked
 
-- [[0014-licence-registries-as-the-discovery-source]] · [[session-2026-07-24-handoff]]
+- [[0014-licence-registries-as-the-discovery-source]] · [[2026-07-24-handoff]]
 - [[0012-icp-rerank-and-pilot-pricing]] · [[0013-painkiller-positioning-and-real-competition]]
 - [[traction-playbook]] · [[active-context]]

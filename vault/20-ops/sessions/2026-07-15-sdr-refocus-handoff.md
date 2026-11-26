@@ -178,4 +178,4 @@ trigger a hunt (`POST /api/actions/hunt-leads`), inspect `/api/leads`, and get h
 to email the top 10 from Gmail today. Revenue first; everything else is deferred.
 
 ## Linked
-- [[hermesclaw-orova-master]] · [[active-context]] · [[0006-sdr-refocus-and-subtraction]] · [[0007-prospect-event-log]] · [[0005-canonical-knowledge-facts-and-projection]]
+- [[HERMESCLAW_OROVA_MASTER]] · [[active-context]] · [[0006-sdr-refocus-and-subtraction]] · [[0007-prospect-event-log]] · [[0005-canonical-knowledge-facts-and-projection]]

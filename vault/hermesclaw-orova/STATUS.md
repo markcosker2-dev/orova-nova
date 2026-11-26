@@ -3,8 +3,11 @@ name: hermesclaw-orova-status
 description: Current snapshot — where the project stands, next action, blockers
 type: doc
 created: 2026-07-11
-status: active
+status: archived
 ---
+> [!warning] Historical (frozen 2026-11-26)
+> Superseded by [[active-context]] for current state and [[operating-brief]] for rules. Kept for provenance; not updated.
+
 
 # STATUS — 2026-07-11
 

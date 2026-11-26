@@ -8,7 +8,7 @@ status: done
 
 # Session: WP4 remainder — reply → qualify → booking funnel (2026-07-04)
 
-Continued from [[session-2026-07-04-full-buildout-handoff]] / [[roadmap]]. WP4
+Continued from [[2026-07-04-full-buildout-handoff]] / [[roadmap]]. WP4
 part 1 (approval gates) was already merged; this session built the funnel
 middle-mile so a HOT reply auto-progresses instead of stopping at a Telegram alert.
 

@@ -102,3 +102,23 @@ def test_import_client_never_runs_production_lifecycle():
         with _client() as (client, _):
             assert client.get("/health").status_code == 200
         backup.assert_not_awaited()
+
+
+def test_import_defaults_to_research_hold_not_contactable():
+    """'New' is what /leads and /focus treat as ready to contact; an import
+    must not release rows for outreach unless the owner asks for it."""
+    csv_body = "business,state\nCascade Custom Homes,WA\n"
+    with _client() as (client, mock_save):
+        r = client.post("/api/leads/import-csv", content=csv_body, headers=HDRS)
+    assert r.json()["imported"] == 1
+    assert mock_save.await_args_list[0].args[0]["status"] == "Research Hold"
+
+
+def test_import_status_new_is_explicit_opt_in_and_others_rejected():
+    csv_body = "business,state\nCascade Custom Homes,WA\n"
+    with _client() as (client, mock_save):
+        ok = client.post("/api/leads/import-csv?status=New", content=csv_body, headers=HDRS)
+        bad = client.post("/api/leads/import-csv?status=Contacted", content=csv_body, headers=HDRS)
+    assert mock_save.await_args_list[0].args[0]["status"] == "New"
+    assert bad.json()["status"] == "error"
+    assert mock_save.await_count == 1

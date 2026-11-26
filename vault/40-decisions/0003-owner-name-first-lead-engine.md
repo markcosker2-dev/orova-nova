@@ -16,7 +16,7 @@ most SMB sites don't publish the owner, and it depends on an LLM key that is
 currently dead. Mark wants Apollo-like results — reliable owner/decision-maker
 names — but on the project's $0, Render-free-tier constraints (HTTP only, no
 browser, 512 MB, httpx pinned 0.27.2). Two read-only research agents produced
-[[lead-engine-research]] (source audit + ranking) and [[skill-health-audit]].
+[[2026-07-04-lead-engine-research]] (source audit + ranking) and [[2026-07-04-skill-health-audit]].
 
 Decision fork (Mark chose): **free public-records pipeline**, not a paid provider.
 

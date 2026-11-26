@@ -184,4 +184,4 @@ Curran, conf 40→83 via cross-source agreement) · ICP re-rank (#105) ·
 ADR-0011/0012/0013.
 
 ## Linked
-- [[0012-icp-rerank-and-pilot-pricing]] · [[0013-painkiller-positioning-and-real-competition]] · [[0011-advanced-ai-technique-fit]] · [[session-2026-07-22-improvement-research]] · [[business-model]] · [[active-context]]
+- [[0012-icp-rerank-and-pilot-pricing]] · [[0013-painkiller-positioning-and-real-competition]] · [[0011-advanced-ai-technique-fit]] · [[2026-07-22-improvement-research]] · [[business-model]] · [[active-context]]

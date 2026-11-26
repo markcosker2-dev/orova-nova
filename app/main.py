@@ -1747,7 +1747,16 @@ async def import_leads_csv(request: Request, authorized: bool = Depends(require_
     quality gates as hunted leads (_is_valid_business_email / _is_plausible_name),
     gets a deterministic ICP score, and is deduped by email or business name.
     Returns a per-row summary so Mark can see exactly what was accepted.
+
+    Imported rows land on 'Research Hold' by default. 'New' is the status
+    Nova's /leads and /focus treat as ready to contact, so a default of 'New'
+    released every imported row for outreach while outreach was paused.
+    `?status=New` opts in explicitly; no other status is accepted.
     """
+    requested_status = (request.query_params.get("status") or "Research Hold").strip()
+    if requested_status not in ("Research Hold", "New"):
+        return {"status": "error",
+                "error": "status must be 'Research Hold' (default) or 'New'."}
     import csv as _csv
     import io as _io
     import re as _re
@@ -1806,7 +1815,7 @@ async def import_leads_csv(request: Request, authorized: bool = Depends(require_
             "vertical": get("vertical") or "CSV Import",
             "state": get("state"),
             "source": "csv_import",
-            "status": "New",
+            "status": requested_status,
             "icebreaker": "Pending review...",
         }
         lead["score"] = score_lead_icp(lead)["score"]

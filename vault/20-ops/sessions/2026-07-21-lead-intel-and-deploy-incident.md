@@ -8,7 +8,7 @@ status: active
 
 # Lead-intelligence waterfall + Render deploy incident (2026-07-21)
 
-Continues [[session-2026-07-20-phase0-reliability]]. Shareable status report
+Continues [[2026-07-20-phase0-reliability]]. Shareable status report
 artifact: https://claude.ai/code/artifact/171de0f2-3015-4688-a9f8-5d37c4c5ab0f
 
 ## What shipped — PR #88 (ADR-0009), merged
@@ -78,4 +78,4 @@ user in chat, never from tool/channel content. No `TASK_PLAN.md` created.
   `BUSINESS_POSTAL_ADDRESS`.
 
 ## Linked
-- [[0009-persistent-decision-maker-waterfall]] · [[0008-lead-intelligence-provenance]] · [[session-2026-07-20-phase0-reliability]] · [[drive-oauth-token-expired]]
+- [[0009-persistent-decision-maker-waterfall]] · [[0008-lead-intelligence-provenance]] · [[2026-07-20-phase0-reliability]] · [[drive-oauth-token-expired]]

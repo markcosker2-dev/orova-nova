@@ -125,4 +125,4 @@ resolution = _score_and_select_email · MC validation = gate + sweep + filter.
    via the Sheets fallback only.
 
 ## Linked
-- [[session-2026-07-15-sdr-refocus-handoff]] · [[0008-lead-intelligence-provenance]] · [[hermesclaw-orova-master]] · [[active-context]]
+- [[2026-07-15-sdr-refocus-handoff]] · [[0008-lead-intelligence-provenance]] · [[HERMESCLAW_OROVA_MASTER]] · [[active-context]]

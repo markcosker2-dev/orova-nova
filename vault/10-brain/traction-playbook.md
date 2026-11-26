@@ -161,7 +161,7 @@ boulder pushes you. Client #1 isn't revenue — it's the artifact that makes cli
    no product). Not a close call.
 
 **Instead — capture the same signal free:** see the ad-signal detector spec in
-[[session-2026-07-24-handoff]]. A Meta Pixel in their homepage HTML proves they run
+[[2026-07-24-handoff]]. A Meta Pixel in their homepage HTML proves they run
 Meta ads; an Angi/HomeAdvisor badge proves they pay for leads *and* names the
 competitor. Nova already fetches that HTML.
 

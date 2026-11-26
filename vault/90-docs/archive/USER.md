@@ -1,3 +1,15 @@
+---
+name: user
+description: Archived historical snapshot — OROVA Business Profile (USER.md)
+type: doc
+created: 2026-11-26
+status: archived
+---
+
+> [!warning] Archived — historical snapshot, not current guidance
+> Kept for provenance on 2026-11-26. Do not act on it; current state is in
+> [[active-context]] and [[operating-brief]].
+
 # OROVA Business Profile (USER.md)
 
 This file contains the specific details about your business that Nova uses to personalize outreach. 

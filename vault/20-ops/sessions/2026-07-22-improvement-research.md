@@ -8,7 +8,7 @@ status: active
 
 # Improvement research — memory audit + "work even better" roadmap (2026-07-22)
 
-Continues [[session-2026-07-22-handoff]]. Owner ask: read the whole Obsidian
+Continues [[2026-07-22-handoff]]. Owner ask: read the whole Obsidian
 vault to understand what OROVA is, then find improvements **that don't blow the
 512MB Render free tier**. This note is the research output.
 
@@ -224,4 +224,4 @@ the bottleneck is decision-maker NAMES, not discovery:
 Target: name on the large majority; the phone + "ask for the owner" covers the tail.
 
 ## Linked
-- [[session-2026-07-22-handoff]] · [[0010-consolidation-before-features]] · [[0009-persistent-decision-maker-waterfall]] · [[0008-lead-intelligence-provenance]] · [[0007-prospect-event-log]] · [[profitability-plan]] · [[active-context]]
+- [[2026-07-22-handoff]] · [[0010-consolidation-before-features]] · [[0009-persistent-decision-maker-waterfall]] · [[0008-lead-intelligence-provenance]] · [[0007-prospect-event-log]] · [[profitability-plan]] · [[active-context]]

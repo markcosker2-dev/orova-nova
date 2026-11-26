@@ -3,8 +3,11 @@ name: hermesclaw-orova-progress
 description: Project diary — dated log of what happened, what changed, what's next
 type: doc
 created: 2026-07-11
-status: active
+status: archived
 ---
+> [!warning] Historical (frozen 2026-11-26)
+> Superseded by [[active-context]] for current state and [[operating-brief]] for rules. Kept for provenance; not updated.
+
 
 # Progress Diary
 

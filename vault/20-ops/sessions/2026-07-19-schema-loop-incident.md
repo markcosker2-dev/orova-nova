@@ -89,5 +89,5 @@ every post-deploy verification window closed.
 
 ## Linked
 
-- [[session-2026-07-17-sunday-return-plan]] · [[session-2026-07-15-sdr-refocus-handoff]]
-- [[hermesclaw-orova-master]] §6 (deploy/restore history: #61, #65)
+- [[session-2026-07-17-sunday-return-plan]] · [[2026-07-15-sdr-refocus-handoff]]
+- [[HERMESCLAW_OROVA_MASTER]] §6 (deploy/restore history: #61, #65)

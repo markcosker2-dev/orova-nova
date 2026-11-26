@@ -112,4 +112,4 @@ client).
 - Zero new spend.
 
 ## Linked
-- [[0008-lead-intelligence-provenance]] · [[0006-sdr-refocus-and-subtraction]] · [[session-2026-07-20-phase0-reliability]]
+- [[0008-lead-intelligence-provenance]] · [[0006-sdr-refocus-and-subtraction]] · [[2026-07-20-phase0-reliability]]

@@ -8,7 +8,7 @@ status: done
 
 # Session: owner-name lead engine + system audit (2026-07-04)
 
-Follows [[session-2026-07-04-wp4-booking-funnel]]. Mark asked for a full system
+Follows [[2026-07-04-wp4-booking-funnel]]. Mark asked for a full system
 layout, a thorough per-skill test, and an "Apollo-like" lead engine that returns
 real OWNER NAMES instead of low-yield /about-page scraping — planned and executed
 via sub-agents.
@@ -18,8 +18,8 @@ via sub-agents.
 - **System layout** delivered inline (app/ Nova + 9 worker lanes, electron GUI,
   mission-control, vault). Chosen approach (Mark): FREE public-records pipeline;
   research-and-plan-first; test only the new/changed code.
-- **Two read-only research agents** (Sonnet) → [[lead-engine-research]] (current-
-  engine audit + ranked free owner-name sources) and [[skill-health-audit]]
+- **Two read-only research agents** (Sonnet) → [[2026-07-04-lead-engine-research]] (current-
+  engine audit + ranked free owner-name sources) and [[2026-07-04-skill-health-audit]]
   (49/51 skills import clean; 2 broken; 3 latent bugs found).
 - **One build agent** (Sonnet) built `app/skills/owner_finder.py` + wired it into
   `enrich_lead_4step` + closed a double-enrichment. I reviewed on Opus

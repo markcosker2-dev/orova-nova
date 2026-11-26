@@ -1,3 +1,15 @@
+---
+name: oracle-cloud-deploy
+description: Archived historical snapshot — OROVA — Oracle Cloud Deployment Runbook
+type: doc
+created: 2026-11-26
+status: archived
+---
+
+> [!warning] Archived — historical snapshot, not current guidance
+> Kept for provenance on 2026-11-26. Do not act on it; current state is in
+> [[active-context]] and [[operating-brief]].
+
 # OROVA — Oracle Cloud Deployment Runbook
 
 ## 1. Instance Provisioning
