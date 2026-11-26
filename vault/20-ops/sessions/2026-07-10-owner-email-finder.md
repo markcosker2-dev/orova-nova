@@ -9,11 +9,11 @@ status: active
 # Session: Owner-Email Finder Layer (2026-07-10)
 
 Implements the #1 revenue feature from the 2026-07-10 handoff, following the
-ranked pipeline in [[owner-contact-research]]. Branch: `feat/owner-email-finder`.
+ranked pipeline in [[2026-07-05-owner-contact-research]]. Branch: `feat/owner-email-finder`.
 
 ## What was built
 
-- **`app/skills/email_finder.py`** (new): once [[owner-name-engine]]'s
+- **`app/skills/email_finder.py`** (new): once [[2026-07-04-owner-name-engine]]'s
   resolver has a name, this resolves the owner's direct email.
   - `find_owner_email(owner, domain)` — **Tomba** (25 finds/mo free) first,
     **Prospeo** (75/mo free) only when Tomba is unset/spent/missed; never

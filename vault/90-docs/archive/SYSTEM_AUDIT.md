@@ -1,3 +1,15 @@
+---
+name: system-audit
+description: Archived historical snapshot — OROVA SYSTEM AUDIT & VERIFICATION REPORT
+type: doc
+created: 2026-11-26
+status: archived
+---
+
+> [!warning] Archived — historical snapshot, not current guidance
+> Kept for provenance on 2026-11-26. Do not act on it; current state is in
+> [[active-context]] and [[operating-brief]].
+
 # OROVA SYSTEM AUDIT & VERIFICATION REPORT
 **Generated:** May 22, 2026  
 **Status:** PRODUCTION READY VERIFICATION IN PROGRESS

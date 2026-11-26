@@ -3,8 +3,11 @@ name: progress
 description: Running done / remaining list for OROVA
 type: brain
 created: 2026-07-03
-status: active
+status: archived
 ---
+> [!warning] Historical (frozen 2026-11-26)
+> Superseded by [[active-context]] for current state and [[operating-brief]] for rules. Kept for provenance; not updated.
+
 
 # Progress
 

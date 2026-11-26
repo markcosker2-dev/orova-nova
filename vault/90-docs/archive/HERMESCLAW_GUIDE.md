@@ -1,3 +1,15 @@
+---
+name: hermesclaw-guide
+description: Archived historical snapshot — HERMESCLAW — OROVA Operational Guide
+type: doc
+created: 2026-11-26
+status: archived
+---
+
+> [!warning] Archived — historical snapshot, not current guidance
+> Kept for provenance on 2026-11-26. Do not act on it; current state is in
+> [[active-context]] and [[operating-brief]].
+
 # HERMESCLAW — OROVA Operational Guide
 
 ## What Is HermesClaw?

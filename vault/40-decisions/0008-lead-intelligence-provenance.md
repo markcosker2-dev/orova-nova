@@ -118,4 +118,4 @@ enrichment APIs (violates the $0 constraint until first client).
 - Zero new spend; zero new services.
 
 ## Linked
-- [[0006-sdr-refocus-and-subtraction]] · [[session-2026-07-20-phase0-reliability]] · [[hermesclaw-orova-master]]
+- [[0006-sdr-refocus-and-subtraction]] · [[2026-07-20-phase0-reliability]] · [[HERMESCLAW_OROVA_MASTER]]

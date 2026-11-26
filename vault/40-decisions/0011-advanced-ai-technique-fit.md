@@ -28,7 +28,7 @@ things:
   approve→send; the never-fabricate rule and the Telegram approval gate are
   load-bearing.
 - **The real bottleneck is data quality + the first send**, not reasoning depth
-  (three-things rule; [[session-2026-07-22-improvement-research]]).
+  (three-things rule; [[2026-07-22-improvement-research]]).
 
 So the honest test isn't "is this technique good?" (several are excellent) — it's
 "does it fit *this* system without breaking a constraint or a mandate?"
@@ -80,4 +80,4 @@ Nothing is built now. Adopted as *guidance*:
   become *possible* — but that's a different company; revisit then, not now.
 
 ## Linked
-- [[0006-sdr-refocus-and-subtraction]] · [[0010-consolidation-before-features]] · [[claude-brain]] · [[groq-gemini-free-tier-limits]] · [[session-2026-07-22-improvement-research]]
+- [[0006-sdr-refocus-and-subtraction]] · [[0010-consolidation-before-features]] · [[claude-brain]] · [[groq-gemini-free-tier-limits]] · [[2026-07-22-improvement-research]]

@@ -3,8 +3,11 @@ name: roadmap
 description: What to execute next — split by Mark / Claude / Nova
 type: brain
 created: 2026-07-04
-status: active
+status: archived
 ---
+> [!warning] Historical (frozen 2026-11-26)
+> Superseded by [[active-context]] for current state and [[operating-brief]] for rules. Kept for provenance; not updated.
+
 
 # OROVA Roadmap
 
@@ -45,7 +48,7 @@ and [[active-context]] for current state.
    classify (HOT/WARM/COLD) → qualify (lead lookup) → auto-progress HOT replies to
    a booking-link reply (approval-gated, durable queue) instead of stopping at a
    Telegram alert; Cal.com webhook (`/api/cal/webhook`) now creates the Google
-   Calendar event on booking. See [[session-2026-07-04-wp4-booking-funnel]].
+   Calendar event on booking. See [[2026-07-04-wp4-booking-funnel]].
    Degrades gracefully with no LLM key (keyword classifier) / no booking link.
 2. **Higgsfield ↔ Claude ad-creation flow** — generate lead-gen ad creatives and
    stage them (behind the always-on ad approval gate).

@@ -1,3 +1,15 @@
+---
+name: audit-report-2026
+description: Archived historical snapshot — OROVA HermesClaw — Comprehensive System Audit Report
+type: doc
+created: 2026-11-26
+status: archived
+---
+
+> [!warning] Archived — historical snapshot, not current guidance
+> Kept for provenance on 2026-11-26. Do not act on it; current state is in
+> [[active-context]] and [[operating-brief]].
+
 # OROVA HermesClaw — Comprehensive System Audit Report
 **Date:** 2026-06-21  
 **Auditor:** GitHub Copilot  

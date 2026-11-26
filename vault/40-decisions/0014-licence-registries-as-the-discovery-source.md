@@ -174,7 +174,7 @@ phone. That is more on-ICP records than a year of SerpAPI quota could produce.
 > (181 datasets carrying both an owner-like and a phone-like column) found
 > **no third West-Coast contractor registry**. WA L&I and OR CCB are the
 > complete set in this class; both are now wired. See
-> [[session-2026-08-05-registry-by-state-and-or-ccb]].
+> [[2026-08-05-registry-by-state-and-or-ccb]].
 
 ## Decision
 
@@ -244,4 +244,4 @@ beat a confident wrong name.
 
 - [[0010-consolidation-before-features]] · [[0012-icp-rerank-and-pilot-pricing]]
 - [[0009-persistent-decision-maker-waterfall]] · [[0008-lead-intelligence-provenance]]
-- [[session-2026-07-26-merge-and-discovery-wall]]
+- [[2026-07-26-merge-and-discovery-wall]]

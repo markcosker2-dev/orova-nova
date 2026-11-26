@@ -143,5 +143,5 @@ artifact this repo needs is still **a transcript**.
 
 ## Linked
 - [[0014-licence-registries-as-the-discovery-source]] · [[0012-icp-rerank-and-pilot-pricing]]
-- [[0013-painkiller-positioning-and-real-competition]] · [[session-2026-07-29-handoff]]
+- [[0013-painkiller-positioning-and-real-competition]] · [[2026-07-29-handoff]]
 - [[active-context]]

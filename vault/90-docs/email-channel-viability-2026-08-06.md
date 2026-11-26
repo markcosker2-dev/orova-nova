@@ -120,6 +120,6 @@ because the gate is only safe while the two lists agree.
 
 ## Linked
 
-[[session-2026-08-06-security-offer-and-the-open-channel]] ·
+[[2026-08-06-security-offer-and-the-open-channel]] ·
 [[0014-licence-registries-as-the-discovery-source]] ·
 [[instagram-outreach-plan-2026-07-30]]

@@ -53,7 +53,7 @@ that would sink it on contact with reality:
    than the raw count in the dashboard.
 
 4. **The compliance gap on the call lane is real and currently unpriced
-   risk, not just a checklist item.** [[owner-contact-research]] (2026-07-05)
+   risk, not just a checklist item.** [[2026-07-05-owner-contact-research]] (2026-07-05)
    confirms `app/core/dnc.py` implements an opt-out suppression list but
    **not** a National DNC Registry scrub, and there is no cell-vs-business-line
    classification gate before `trigger_retell_call()`. The B2B exemption that
@@ -347,7 +347,7 @@ Tied to the real lane implementations in `app/worker.py`:
    suppression list should be treated as a *manual opt-out log*, not a
    substitute for a National DNC Registry scrub — flagging the registry-scrub
    gap as a real follow-up (already logged in
-   [[owner-contact-research]]'s follow-ups) rather than something this
+   [[2026-07-05-owner-contact-research]]'s follow-ups) rather than something this
    revenue-focused plan should quietly ignore.
 
 5. **Lane 5 — Cloud backup (every 3h)** No change — this is pure
@@ -504,5 +504,5 @@ exemption the calling lane depends on).
 ## Linked
 
 - [[orova-playbook]] · [[business-model]] · [[active-context]] · [[roadmap]]
-- [[owner-contact-research]] — TCPA/DNC compliance detail this plan builds on
+- [[2026-07-05-owner-contact-research]] — TCPA/DNC compliance detail this plan builds on
 - [[0003-owner-name-first-lead-engine]] — lead engine architecture referenced in §1/§5

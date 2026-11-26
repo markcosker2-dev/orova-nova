@@ -1,3 +1,15 @@
+---
+name: full-code-export
+description: Archived historical snapshot — OpenClaw V2 - Full Source Code Export
+type: doc
+created: 2026-11-26
+status: archived
+---
+
+> [!warning] Archived — historical snapshot, not current guidance
+> Kept for provenance on 2026-11-26. Do not act on it; current state is in
+> [[active-context]] and [[operating-brief]].
+
 # OpenClaw V2 - Full Source Code Export
 
 ## 1. Core Logic

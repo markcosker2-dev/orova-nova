@@ -1,3 +1,15 @@
+---
+name: implementation-plan
+description: Archived historical snapshot — Implementation Plan
+type: doc
+created: 2026-11-26
+status: archived
+---
+
+> [!warning] Archived — historical snapshot, not current guidance
+> Kept for provenance on 2026-11-26. Do not act on it; current state is in
+> [[active-context]] and [[operating-brief]].
+
 # Implementation Plan
 
 **Make OROVA's Python backend fully autonomous on Render free tier by adding API endpoints for all HermesClaw features, wiring the worker scheduler into the FastAPI lifespan, and ensuring zero dependency on the Node.js layer.**

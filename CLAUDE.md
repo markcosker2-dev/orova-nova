@@ -1,5 +1,35 @@
 # CLAUDE.md — OROVA / HermesClaw
 
+**This is the single entry point for every AI agent working here** (Claude Code
+since 2026-11-26; `AGENTS.md` only points here for Codex/other tools).
+
+## Session start — read in this order
+
+1. `vault/10-brain/operating-brief.md`: the rules, boundaries and priorities
+   (Mark's master brief). Non-negotiable.
+2. `vault/10-brain/active-context.md`: current state, with **verification
+   dates**. Anything older than a few days is a claim, not a fact. Recheck it.
+3. The newest `vault/20-ops/sessions/` notes, plus the owner playbook
+   (`vault/hermesclaw-orova/playbook/`) before any judgment call.
+4. `git status`, branch, last commits. Preserve unrelated work; never reset or
+   force-push.
+
+Or run the `/orova-start` skill, which walks the list.
+
+**Hard boundaries (from the brief):** strict **$0** budget. **Outreach is
+PAUSED**: no sends, no calls, no AgentMail cold email, no publishing, no
+deploys, no spend, no credential or permission changes, no lead deletion, and no
+releasing held leads without explicit, current owner approval. Never invent
+clients, results, offers, prices, trials, urgency or consent. Med spas are
+excluded. The repo is **public**: no secrets, Sheet IDs, phone numbers, prospect
+PII, raw logs or DB dumps in git or the vault.
+
+**Cloud sessions:** the owner's OneDrive Obsidian vault is the *same* `vault/`
+folder in his local checkout. Cloud sessions see only the repo copy, so write
+vault updates here and tell Mark to pull. Render (`orova-nova.onrender.com`)
+is blocked by the default network policy. Say live state is unverified rather
+than guessing.
+
 ## Council protocol (owner mandate, 2026-07-11)
 
 The claude-council plugin is Claude's own advisory board, not a user tool.
@@ -10,8 +40,9 @@ When its commands are available (`/claude-council:ask` in the skills list):
   where the owner playbook (`vault/hermesclaw-orova/playbook/`) doesn't
   settle it. Weigh the outside opinions, then decide — the council advises,
   Claude decides, Mark overrules.
-- The stop-gate (`.claude/council-stop-gate.json`, enabled) has a second
-  model review Claude's uncommitted diff at end of turn. Treat a `BLOCK:`
+- The stop-gate (`.claude/council-stop-gate.json`, local-only: `.claude/*` is
+  gitignored, so it is absent in fresh cloud checkouts) has a second model
+  review Claude's uncommitted diff at end of turn. Treat a `BLOCK:`
   verdict as a real finding: fix or explicitly rebut it, never ignore it.
 - If no council provider key is configured, note it once and proceed —
   the council is an amplifier, not a dependency.
@@ -114,8 +145,38 @@ success, real customer outcomes before further optimization.
 
 Your auto-memory directory is for your own recall. Anything Mark should be able to read in Obsidian belongs in `vault/` instead.
 
+## Engineering rules (carried over from the Codex `AGENTS.md`)
+
+- Keep two lanes separate. One is OROVA's own researched, individual
+  prospecting. The other is future clients' consent-checked inbound Meta-lead
+  qualification. Retell executes authorized calls; it never decides legality.
+- AI may reason and draft. Deterministic code owns permission, side effects,
+  state transitions, idempotency and result verification.
+- The DB and events are truth. Sheets is a projection and a partial
+  lead-recovery tier, **not** a full DB backup.
+- Inspect the real caller/data contract before changing anything. Patch the
+  smallest material failure. Run targeted then full gates, then verify
+  external state.
+- Never start the app locally with production `.env`. Startup re-registers the
+  Telegram webhook and starts background jobs.
+- `ZERO_BUDGET_MODE=1` and `CALLS_AUTOPILOT=0` stay on. Don't disable them for a
+  test or demo.
+- Mark merges and approves deploys. Render's free disk is ephemeral, so verify
+  a full backup before any deploy. Release gate: `operating-brief.md` §9.
+- Chat history lives in bounded `nova_chat:<chat_id>` entries in `state_store`.
+- Report every item as *local/tested → committed → merged → deployed →
+  live-verified*, with the date.
+
 ## Practical notes
 
-- Tests: `python -m pytest tests -q` (718+ passing baseline). Knowledge gate: `python scripts/compile_knowledge.py --check`.
+- Tests: `pip install -r requirements.txt pytest pytest-asyncio`, then
+  `python -m pytest tests -q` (**1,807 passing** on 2026-11-26; without
+  `pytest-asyncio` about 120 async tests fail spuriously). Full local
+  benchmark: `python scripts/nova.py benchmark` (can exceed 2 min; a timeout is
+  not a pass).
+- Gates: `python scripts/compile_knowledge.py --check`, `python scripts/check_secrets.py`;
+  security lint is the narrow ruff gate in `.github/workflows/ci.yml`.
+- Nova's planner injects the first ~2,000 chars of `vault/10-brain/active-context.md`
+  (`app/core/vault_context.py`). Keep the current facts at its top.
 - httpx must stay 0.27.2 (starlette 0.27 TestClient vs mcp/ollama constraints — see requirements.txt comment).
 - Production knowledge (CEO briefs, leads) is pulled into the vault with `python scripts/vault_pull.py` (needs `RENDER_EXTERNAL_URL` + `DASHBOARD_API_KEY` in `.env`).

@@ -8,77 +8,83 @@ status: active
 
 # 🏠 OROVA / HermesClaw — Mission Vault
 
-> [!important] Current Codex handoff — September 21, 2026
-> Read [[zero-budget-operations-2026-09-21]] first. It records the verified
-> Telegram bugs, $0 operating mode and release blockers. Older notes are history,
-> not proof of current behaviour. Repairs are not live until the build is verified.
-
-The shared brain for OROVA/HermesClaw — curated knowledge for **Mark** and **Codex**.
-Production data (leads DB, learned strategies) lives in SQLite on Render; this
-vault holds what's worth *reading*, not a database mirror.
+The shared brain for OROVA/Nova: curated knowledge for **Mark** and **Claude
+Code** (Codex until 2026-11-26). Production data (leads DB, learned strategies)
+lives in SQLite on Render and in the canonical Sheet. This vault holds what is
+worth *reading*, not a database mirror.
 
 > [!tip] Start here every session
-> 1. [[10-brain/active-context|🧭 Active Context]] — what's happening right now (read first)
-> 2. [[hermesclaw-orova/STATUS|📊 STATUS]] — current snapshot, next action, blockers
-> 3. Run `python scripts/vault_pull.py` to pull Nova's latest production learning in
+> 1. [[operating-brief|📜 Operating Brief]] — the rules, boundaries and priorities
+> 2. [[10-brain/active-context|🧭 Active Context]] — current state with verification dates (wins any conflict)
+> 3. Newest notes in `20-ops/sessions/` → [[2026-11-26-claude-code-migration-and-vault-cleanup|latest]]
+> 4. Owner judgement → [[hermesclaw-orova/playbook/README|Playbook]]
+>
+> In Claude Code, `/orova-start` runs this checklist.
 
 ---
 
 ## 🧠 The Brain — `10-brain/`
 
-The living knowledge base. If two notes disagree, **[[10-brain/active-context|active-context]] wins** (it's the newest "now" note).
-
 | Note | Purpose |
 |---|---|
-| [[10-brain/active-context\|Active Context]] | What's happening right now — **read first**, keep current |
+| [[operating-brief\|Operating Brief]] | Master rules for any AI on OROVA |
+| [[10-brain/active-context\|Active Context]] | What's true now — **read first**, keep current, keep short |
+| [[10-brain/facts\|Facts]] | Compiled business facts (generated, see ADR-0005) |
 | [[10-brain/project-brief\|Project Brief]] | What OROVA/HermesClaw is and why |
-| [[10-brain/business-model\|Business Model]] | Packages, pricing, ICP — commercial source of truth |
-| [[10-brain/roadmap\|Roadmap]] | What to execute next (split Mark / Claude / Nova) |
-| [[10-brain/system-patterns\|System Patterns]] | The 9 worker lanes, agent loop, firewall |
-| [[10-brain/claude-brain\|The Brain]] | LLM routing, current models, how Nova learns |
+| [[10-brain/business-model\|Business Model]] | Packages, ICP (offer still owner-gated) |
+| [[10-brain/system-patterns\|System Patterns]] | Worker lanes, agent loop, firewall |
+| [[10-brain/claude-brain\|The Brain]] | LLM routing and how Nova learns |
 | [[10-brain/tech-context\|Tech Context]] | Runtimes, env vars, hard constraints |
-| [[10-brain/product-context\|Product Context]] | Product surface & UX |
-| [[10-brain/profitability-plan\|Profitability Plan]] | Funnel math & unit economics |
-| [[10-brain/strategy-snapshot\|Strategy Snapshot]] | What Nova has learned (auto-synced) |
-| [[10-brain/progress\|Progress]] | Running done/remaining log |
+| [[10-brain/product-context\|Product Context]] | Product surface and UX |
+| [[10-brain/roadmap\|Roadmap]] · [[10-brain/progress\|Progress]] | Historical plans (July–Aug 2026) |
+| [[10-brain/profitability-plan\|Profitability]] · [[10-brain/traction-playbook\|Traction]] · [[10-brain/orova-playbook\|OROVA Playbook]] | Historical commercial drafts. Not authority to quote old prices or trials |
 
 ## 🎯 Owner's Operating System — `hermesclaw-orova/`
-
-How Mark decides and closes. **Any AI acting for Mark reads the playbook first.**
 
 > [!info] Playbook — [[hermesclaw-orova/playbook/README|index]]
 > [[hermesclaw-orova/playbook/client-acceptance|Client Acceptance]] · [[hermesclaw-orova/playbook/pricing-and-negotiation|Pricing & Negotiation]] · [[hermesclaw-orova/playbook/outreach-voice|Outreach Voice]] · [[hermesclaw-orova/playbook/red-lines|Red Lines]] · [[hermesclaw-orova/playbook/escalation|Escalation]] · [[hermesclaw-orova/playbook/judgment-calls|Judgment Calls]]
 
-> [!info] Close-Kit — [[hermesclaw-orova/close-kit/README|index]] (from "yes" to signed & paid)
+> [!info] Close-Kit — [[hermesclaw-orova/close-kit/README|index]] (from "yes" to signed and paid)
 > [[hermesclaw-orova/close-kit/service-agreement|Service Agreement]] · [[hermesclaw-orova/close-kit/invoice-template|Invoice]] · [[hermesclaw-orova/close-kit/onboarding-checklist|Onboarding Checklist]]
 
-- [[hermesclaw-orova/README|Project overview]] · [[hermesclaw-orova/STATUS|STATUS]] · [[hermesclaw-orova/progress|progress log]]
+[[hermesclaw-orova/README|Project overview]] · [[hermesclaw-orova/STATUS|STATUS (historical)]] · [[hermesclaw-orova/progress|progress diary (historical)]]
 
 ## ⚙️ Operations — `20-ops/`
 
-- **Briefs** → `20-ops/briefs/` — daily CEO briefs pulled from production
-- **Sessions** → `20-ops/sessions/` — session notes worth keeping. Recent:
-  [[20-ops/sessions/2026-07-13-junk-email-fix-and-hunt-verdict|2026-07-13 junk-email & hunt]] · [[20-ops/sessions/2026-07-12-handoff|2026-07-12 master handoff]]
-- **Improvement log** → `20-ops/improvement-log.md` (auto-synced) — champion/challenger changes
-
-## 🎣 Pipeline — `30-leads/`
-
-One wiki note per enriched lead, synced from production by `vault_pull.py`.
+- **Sessions:** `20-ops/sessions/`, one dated note per material task (template: `_templates/session.md`).
+- **Generated by `scripts/vault_pull.py`** (appear after the first sync with production credentials): `20-ops/briefs/`, `20-ops/improvement-log.md`, `30-leads/`, `10-brain/strategy-snapshot.md`. Treat them as projections, never edit them by hand, and keep lead notes free of contact PII.
 
 ## 📌 Decisions — `40-decisions/`
 
-- [[40-decisions/0001-adopt-obsidian|ADR-0001 — Adopt Obsidian]]
-- [[40-decisions/0002-lead-engine-and-subagents|ADR-0002 — Lead engine & subagents]]
-- [[40-decisions/0003-owner-name-first-lead-engine|ADR-0003 — Owner-name-first lead engine]]
-- [[40-decisions/0004-obsidian-brain-and-skill-improvement|ADR-0004 — Obsidian brain & skill improvement]]
+- [[0001-adopt-obsidian|ADR-0001: Adopt Obsidian as the knowledge layer]]
+- [[0002-lead-engine-and-subagents|ADR-0002: Lead-engine enrichment rework + lightweight sub-agents]]
+- [[0003-owner-name-first-lead-engine|ADR-0003 — Owner-name-first lead engine (free public-records enrichment)]]
+- [[0004-obsidian-brain-and-skill-improvement|ADR-0004 — Live bidirectional Obsidian brain + continuous per-skill improvement]]
+- [[0005-canonical-knowledge-facts-and-projection|ADR-0005 — Canonical knowledge: graph-ready facts + narrative, build-time projection]]
+- [[0006-sdr-refocus-and-subtraction|ADR-0006 — HermesClaw is an SDR: identity refocus and repository subtraction]]
+- [[0007-prospect-event-log|ADR-0007 — The unified SDR event log (the pipeline's spine)]]
+- [[0008-lead-intelligence-provenance|ADR-0008 — Lead intelligence: provenance over rewrite]]
+- [[0009-persistent-decision-maker-waterfall|ADR-0009 — Persistent decision-maker waterfall]]
+- [[0010-consolidation-before-features|ADR-0010 — Consolidation before features]]
+- [[0011-advanced-ai-technique-fit|ADR-0011 — Advanced AI technique fit for OROVA/Nova]]
+- [[0012-icp-rerank-and-pilot-pricing|ADR-0012 — ICP re-rank + first-client pilot pricing]]
+- [[0013-painkiller-positioning-and-real-competition|ADR-0013 — Painkiller positioning + the real competition]]
+- [[0014-licence-registries-as-the-discovery-source|ADR-0014: State contractor licence registries as the discovery source]]
+- [[0015-med-spas-are-not-and-never-were-the-icp|ADR-0015 — Med spas are not, and never were, the ICP]]
+- [[0016-the-repo-stays-public|ADR-0016 — The repo stays PUBLIC]]
+- [[0017-the-sample-is-the-proof|ADR-0017 — The sample is the proof]]
+- [[0018-the-prospect-initiates-the-demo-call|ADR-0018 — The prospect initiates the demo call]]
+- [[0019-free-llm-redundancy-is-not-self-learning|ADR-0019 — Free LLM redundancy is not self-learning]]
+- [[0020-telegram-autonomy-is-safe-preparation-first|ADR-0020 — Telegram autonomy is safe preparation first]]
+- [[0021-agentmail-is-inbound-reply-only|ADR-0021 — AgentMail is inbound-reply only]]
+- [[0022-learning-observations-and-no-age-only-pruning|ADR-0022 — Learning observations are not proven winners]]
+- [[0023-quarantined-partial-recovery-and-preserved-backups|ADR-0023 — Partial recovery does not restore permission]]
 
 ## 📚 Reference — `90-docs/`
 
-- [[docs-index|Reference Docs index]] — guides, setup, historical audits
-- Start: [[HERMESCLAW_GUIDE|HermesClaw Guide]] · [[SETUP|Setup]]
+[[90-docs/README|Reference index]]: current runbooks and handoffs. Superseded dumps live in `90-docs/archive/`.
 
 ---
 
-> [!note]- Vault conventions & known cleanup
-> **Every note** carries frontmatter: `name`, `description`, `type` (brain/lead/brief/decision/session/doc), `created`, `status`. Never edit `.obsidian/`; never create docs at the repo root.
-> **Known consolidation candidates** (see the 2026-07-13 audit): `hermesclaw-orova/progress.md` overlaps `10-brain/progress.md`; several `90-docs/` reports (AUDIT/FINAL_AUDIT/SYSTEM_AUDIT/PRODUCTION_READY/DEPLOYMENT_COMPLETE) are one-time historical dumps that could be archived. Left in place pending owner decision.
+> [!note]- Vault conventions
+> Every note carries frontmatter: `name`, `description`, `type` (brain/lead/brief/decision/session/doc), `created`, `status` (active/done/archived). Never edit `.obsidian/`. Never create docs at the repo root, and never name a folder `docs` (gitignored). No secrets, Sheet IDs, phone numbers, raw logs or prospect PII. The repo is public.
