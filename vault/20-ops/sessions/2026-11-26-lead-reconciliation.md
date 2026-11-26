@@ -72,3 +72,8 @@ Nova's own storage gate was run over the 62 manual-only rows:
   - **Licence flag (1):** an expired CSLB licence.
   - Licence numbers came from aggregators, not the official CSLB/CCB/L&I lookups. Verify before any import or contact.
 - **Next:** import the identity-high rows into the DB (now held by default) once their website or phone is confirmed on the official licence lookup.
+
+## Backup fix deployed and licence checks (Mark: "go", 26 Nov)
+- **PR #207 merged and deployed** (`715c4bcb01c8`, Operational, 10:05 UTC). It contains the `exec uvicorn` fix. **To prove it:** the *next* deploy or restart should leave a `nova_backup_*` file timestamped at shutdown. This deploy's shutdown was still handled by the old container.
+- **Official licence verification is not automatable.** The CSLB and Oregon CCB lookups are both behind a reCAPTCHA (a human-only control), so I didn't automate past them. Their hosts were allowed briefly, then removed again. Licence facts in the Sheet remain aggregator-sourced. Mark can check the four identity-high prospects by hand in about 30 seconds each, before any import.
+- **Import still pending:** it needs the rotated dashboard key, entered through the secure credential form (never in chat).
