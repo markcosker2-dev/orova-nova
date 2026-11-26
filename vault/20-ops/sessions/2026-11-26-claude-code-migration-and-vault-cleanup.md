@@ -34,6 +34,9 @@ status: done
 - **Render `/health` live-verified 07:29 UTC:** Operational, build `deb59605cfa5`, db ok, memory ok.
 - The dashboard key (a network secret for the `X-API-Key` header) is not yet saved. Mark is fetching it from Render's Environment page. The lead reconciliation needs it.
 
+- **Telegram bot profile:** Mark replaced the spam About and Description on @orovaNOVA_bot through BotFather. BotFather confirmed both saves. Owner-reported only; not independently checked from here. New About: "Nova is OROVA's private operations assistant. It only responds to the OROVA team." The new Description says it's a private bot and doesn't take public enquiries. Name, botpic and token rotation remain. Rotating the token takes Nova offline until Render's `TELEGRAM_BOT_TOKEN` is updated and the service restarts, so do both in one step.
+- **Secret hygiene:** a Render account API key was pasted into chat. It was not used or stored, and Mark was advised to delete it. Nothing in the codebase uses a Render API key.
+
 ## Could not verify (blocked in this cloud session)
 - **Canonical Google Sheet:** both Drive connectors were unavailable (one needs re-sign-in, one has an auth incompatibility). The lead reconciliation has not started.
 - **OneDrive vault:** no computer attached. Notes written there after 2 Oct (e.g. the Oct 16–20 deploy verification, `2026-09-28-instagram-offline-manager`) are **not in the repo**. They need to be copied into `vault/` locally and committed.

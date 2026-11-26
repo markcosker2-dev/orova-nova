@@ -15,7 +15,7 @@ tags: [brain, active, session-start]
 **Everything else was last verified ~16–20 Oct 2026 and is stale.** Recheck before repeating any of the following as current:
 - Leads: about 446 consolidated Sheet rows, of which 384 were recovered or held and about 62 were manual-only. The owner reports the Sheet **does not show all leads**, so reconciliation is open.
 - Google OAuth/Drive backup repaired; Google app moved to Production with no new scopes.
-- Telegram @orovaNOVA_bot: spam bio reported; fix **not confirmed**; local token 401 earlier.
+- Telegram @orovaNOVA_bot: spam About/Description **replaced with neutral private-bot text on 26 Nov** (owner-reported via BotFather; name/botpic not yet checked). Token rotation still pending, and must be done together with updating Render's env.
 
 **Top priority: lead source-of-truth reconciliation.** Compare the DB, the recovery copy and the canonical Sheet (tabs, filters, duplicates). Produce one Master Leads view with every lead held.
 
@@ -31,7 +31,7 @@ Full operating rules: [[operating-brief]]. Owner judgement: [[hermesclaw-orova/p
 | Lead Sheet | Incomplete view reported by owner; ~446 rows last count | ~Oct 2026 |
 | Outreach | Paused — no sends, no calls, no AgentMail cold email | owner order |
 | Nova Telegram | Truthfulness/`/status`/`/focus` fixes merged in #201/#202 | code only |
-| Telegram bot identity | Bio/token problem unresolved | 30 Sep 2026 |
+| Telegram bot identity | Bio spam replaced (owner-reported); name/botpic and token rotation pending | 26 Nov 2026 |
 | Drive backup | OAuth repaired before #202 deploy | ~Oct 2026 |
 | Retell inbound demo | HOLD — unpublished, legacy Cal tools, unfunded | 30 Sep 2026 |
 | Calendar `/away` | Code + tests exist; runtime credential proof pending | not live |
