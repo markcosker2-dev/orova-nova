@@ -60,3 +60,15 @@ Nova's own storage gate was run over the 62 manual-only rows:
   - Mark: copy the new value from Render → orova-nova → Environment into the local `.env` and Mission Control.
 - **Render API key:** still to delete (Mark). Render's API can't delete API keys; use Account Settings → API Keys. `api.render.com` was allowed only for this rotation and then removed from the environment again.
 - **"OROVA Leads" (May) rename:** not done. Drive reports the file as not editable by the connector (`canEdit: false`). Mark renames it by hand.
+
+## Follow-up (Mark: "merge and continue", 26 Nov, Google Sheets connector now available)
+- **PR #206 merged**; Render redeployed `094a9f069a80` at 09:52 UTC, Operational. Lead count wasn't re-read because the new dashboard key is deliberately unknown to this session. The same restore path returned 384 at 09:47.
+- **Backup cadence caveat:** the newest Drive snapshot is still 07:28 UTC. Each of today's three deploys reset the backup timer and restored from that snapshot. Harmless today (no data changed), but **a day of frequent deploys or free-tier spin-downs can lose anything written since the last snapshot.** Candidate fix: take a backup right after a successful boot restore, or before shutdown.
+- **"OROVA Leads" (May) renamed** to "ARCHIVE — OROVA Leads (May 2026)" via the Sheets API. Unstarring was refused (a user-level Drive setting).
+- **"OROVA CRM" has no basic filter and no filter views.** That rules out hidden-by-filter rows as the cause of the "missing leads" report.
+- **Research on the 14 core-ICP manual rows** (one of the 15 already matches a DB lead), from public web sources: CA SOS, CSLB/CCB aggregators, Houzz, BuildZoom, Levelset, Angi. Notes went into each row's "Research / source notes" column in the Sheet, marked research-only and Recovery Hold. Contact and status columns were not changed.
+  - **Identity high (4):** includes the strongest ICP fit found so far, a Portland custom builder with an active Oregon CCB licence and a 2023 HBA Builder of the Year award.
+  - **Medium (6)** · **low (4)**.
+  - **Licence flag (1):** an expired CSLB licence.
+  - Licence numbers came from aggregators, not the official CSLB/CCB/L&I lookups. Verify before any import or contact.
+- **Next:** import the identity-high rows into the DB (now held by default) once their website or phone is confirmed on the official licence lookup.
