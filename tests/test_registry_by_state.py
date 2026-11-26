@@ -154,7 +154,7 @@ def test_licence_lead_provenance_comes_from_the_registry(monkeypatch):
             "owner_title": "Responsible Managing Individual",
             "owner_source": "or_ccb",
             "owner_confidence": 90,
-            "phone": "+15032013017",
+            "phone": "+15035550101",
             "phone_source": "or_ccb",
             "phone_verified": True,
             "state": "OR",

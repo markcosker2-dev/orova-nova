@@ -9,6 +9,7 @@ is tracked as a follow-up; this internal list is the always-on floor.
 import os
 import time
 import logging
+from email.utils import parseaddr
 
 import httpx
 import phonenumbers
@@ -35,11 +36,11 @@ def _normalize(phone: str) -> str:
     therefore produced several non-matching keys, and a suppressed number
     queried in a different format was reported as NOT suppressed:
 
-        stored '+13239352985' -> is_suppressed('+13239352985')   = True
-        stored '+13239352985' -> is_suppressed('3239352985')     = False  BYPASS
-        stored '+13239352985' -> is_suppressed('(323) 935-2985') = False  BYPASS
-        stored '+13239352985' -> is_suppressed('13239352985')    = False  BYPASS
-        stored '+13239352985' -> is_suppressed('323-935-2985')   = False  BYPASS
+        stored '+13235550102' -> is_suppressed('+13235550102')   = True
+        stored '+13235550102' -> is_suppressed('3235550102')     = False  BYPASS
+        stored '+13235550102' -> is_suppressed('(323) 555-0102') = False  BYPASS
+        stored '+13235550102' -> is_suppressed('13235550102')    = False  BYPASS
+        stored '+13235550102' -> is_suppressed('323-555-0102')   = False  BYPASS
 
     4 of 6 real-world formats bypassed the gate. Production was safe only by
     coincidence: every ingestion path already normalises to E.164
@@ -51,8 +52,8 @@ def _normalize(phone: str) -> str:
     despite being on the list.
 
     The old unit test could not catch it: it asserted the two mismatched
-    outputs as CORRECT ("(323) 935-2985" -> "3239352985" alongside
-    "+1 323 935 2985" -> "+13239352985"), i.e. it encoded the defect.
+    outputs as CORRECT ("(323) 555-0102" -> "3235550102" alongside
+    "+1 323 555 0102" -> "+13235550102"), i.e. it encoded the defect.
 
     ── Why this is strictly a strengthening ────────────────────────────────
     Fail-closed behaviour is preserved exactly and extended, never relaxed:
@@ -121,7 +122,37 @@ _EMAIL_SUPPRESSION_KEY = "email_suppression_list"
 
 
 def _normalize_email(email: str) -> str:
-    return (email or "").strip().lower()
+    """Canonical key for an address, or "" if there isn't one.
+
+    ── The bug this replaces (2026-08-28) ──────────────────────────────────
+    This was `(email or "").strip().lower()`, which is the same defect
+    `_normalize` above was rewritten to fix on 2026-08-03 — one address
+    producing several non-matching keys — left standing in the email half of
+    the same file:
+
+        stored 'dave@x.com' -> is_email_suppressed('dave@x.com')          True
+        stored 'dave@x.com' -> is_email_suppressed('Dave <dave@x.com>')   False  BYPASS
+
+    That is not an exotic form: it is what an inbox actually hands you.
+    `check_replies` stores the raw `from_` header, so the one code path that
+    knows a prospect replied is also the one most likely to carry a display
+    name — and the suppression check would have said "not suppressed" for
+    someone who had opted out.
+
+    Only the extraction is added. Every address that was blocked before is
+    still blocked; the change can only ever widen matching, never narrow it.
+
+    NOT done, deliberately: plus-address folding ('dave+x@' -> 'dave@').
+    Gmail treats those as one mailbox and most providers do not, so folding
+    would over-block real people at the providers that don't. That needs a
+    decision, not an inference.
+    """
+    raw = (email or "").strip()
+    if not raw:
+        return ""
+    # "Dave <dave@x.com>" -> "dave@x.com"; a bare address is returned unchanged.
+    addr = parseaddr(raw)[1] or raw
+    return addr.strip().lower()
 
 
 async def is_email_suppressed(email: str) -> bool:

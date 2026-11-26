@@ -77,3 +77,23 @@ Nova's own storage gate was run over the 62 manual-only rows:
 - **PR #207 merged and deployed** (`715c4bcb01c8`, Operational, 10:05 UTC). It contains the `exec uvicorn` fix. **To prove it:** the *next* deploy or restart should leave a `nova_backup_*` file timestamped at shutdown. This deploy's shutdown was still handled by the old container.
 - **Official licence verification is not automatable.** The CSLB and Oregon CCB lookups are both behind a reCAPTCHA (a human-only control), so I didn't automate past them. Their hosts were allowed briefly, then removed again. Licence facts in the Sheet remain aggregator-sourced. Mark can check the four identity-high prospects by hand in about 30 seconds each, before any import.
 - **Import still pending:** it needs the rotated dashboard key, entered through the secure credential form (never in chat).
+
+## Backup-fix result (26 Nov, after PR #208 deploy)
+- PR #208 merged; live `f5c2bfe10df3` at 10:13 UTC, Operational.
+- **No shutdown snapshot appeared** (newest is still 07:28 UTC), so the `exec uvicorn` fix was necessary but **not sufficient**. Remaining suspects: Render's free-tier stop grace is shorter than the 20s upload cap, or the Drive upload fails during shutdown. Next step: read the shutdown log line (`💾 Shutdown backup:` / `⚠️ Shutdown backup failed`) with the dashboard key (`python scripts/nova.py logs`).
+- Exposure is smaller than first stated: `persist_leads_durably` already triggers a Drive backup after hunts and CSV imports, so leads are covered. What's exposed between the 3h backups is non-lead state: chat context, approvals, state_store.
+- Mark chose to **keep the Render API key** for now (26 Nov). It remains in the chat transcript, so rotate it if that transcript is ever shared.
+
+## Merging the backlog (Mark: "merge everything that needs to be merged", 26 Nov)
+All four open PRs were brought into one branch and tested together against current `main`:
+- **#204** (dnspython 2.6.1 → 2.9.2, a security fix): merged clean.
+- **#199** (August: AI-call jurisdiction gate, Package 3 tier pricing, consent restored from Sheets on boot, server-side `brief --research`): merged clean. Two newer dialler tests needed the same `AI_CALL_ALLOWED_STATES` precondition #199 gives its own tests. That's #199's stricter gate working as designed: no cleared state means no AI call.
+- **#200** (August: privacy rule 3 in `check_secrets.py`, redacted fixtures, Retell sync tool, spelled-number duration linter): merged, with conflicts resolved:
+  - **Retell inbound script:** kept `main`'s September owner-approved version (consent-first, recording permission, labelled simulation). #200's August copy is superseded.
+  - **Email-reply opt-out gate:** kept `main`'s fuller gate and dropped #200's weaker duplicate. #200's tests were adapted to `main`'s contract, and a mutation check showed they fail when the gate is disabled.
+  - **`active-context.md`:** kept the 26 Nov rewrite.
+- **Found by the merged checks and fixed:**
+  - Two real prospect phone numbers in #199's tests, replaced with fiction-range numbers that keep the same area code.
+  - Two outbound-script lines still promising a "ten minutes" call (canonical is 15).
+- **Result:** 1,832 passed, 1 skipped; knowledge, secrets and security lint OK.
+- **Still open from #200 (owner decision):** git *history* still contains a real prospect name and mobile (`cf7e7a1^`, and commit `04b2084`'s message). Remedies: GitHub Support purge, knowing acceptance, or contacting the person. A history rewrite alone doesn't clear merged PR diffs.

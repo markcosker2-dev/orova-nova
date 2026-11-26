@@ -10,23 +10,23 @@ import pytest
 
 # ── canonicalisation ────────────────────────────────────────────────────────
 # REPLACES the old test_normalize, which asserted the DEFECT as correct:
-#     assert dnc._normalize("(323) 935-2985") == "3239352985"
-#     assert dnc._normalize("+1 323 935 2985") == "+13239352985"
+#     assert dnc._normalize("(323) 555-0102") == "3235550102"
+#     assert dnc._normalize("+1323 555 0102") == "+13235550102"
 # Those are the SAME number resolving to two different keys. The test passed,
 # so the bypass below shipped and survived every run of the suite.
 
-_E164 = "+13239352985"
+_E164 = "+13235550102"
 
 
 @pytest.mark.parametrize("raw", [
-    "+13239352985",
-    "3239352985",
-    "(323) 935-2985",
-    "13239352985",
-    "323-935-2985",
-    "+1 (323) 935-2985",
-    "  +1 323 935 2985  ",
-    "1 (323) 935-2985",
+    "+13235550102",
+    "3235550102",
+    "(323) 555-0102",
+    "13235550102",
+    "323-555-0102",
+    "+1 (323) 555-0102",
+    "  +1323 555 0102  ",
+    "1 (323) 555-0102",
 ])
 def test_every_real_world_format_canonicalises_to_one_key(raw):
     assert dnc._normalize(raw) == _E164, (
@@ -52,30 +52,30 @@ def test_empty_number_is_suppressed():
 
 def test_clean_number_not_suppressed():
     with patch.object(dnc.DatabaseManager, "get_state", AsyncMock(return_value=[])):
-        assert asyncio.run(dnc.is_suppressed("+13239352985")) is False
+        assert asyncio.run(dnc.is_suppressed("+13235550102")) is False
 
 
 def test_listed_number_is_suppressed_regardless_of_formatting():
-    with patch.object(dnc.DatabaseManager, "get_state", AsyncMock(return_value=["3239352985"])):
-        assert asyncio.run(dnc.is_suppressed("(323) 935-2985")) is True
+    with patch.object(dnc.DatabaseManager, "get_state", AsyncMock(return_value=["3235550102"])):
+        assert asyncio.run(dnc.is_suppressed("(323) 555-0102")) is True
 
 
 # ── THE REGRESSION: store one format, query every other ─────────────────────
-# The test above could not catch the bypass, because "3239352985" and
-# "(323) 935-2985" already normalised identically under the old code. The real
+# The test above could not catch the bypass, because "3235550102" and
+# "(323) 555-0102" already normalised identically under the old code. The real
 # defect only appeared across the +1 boundary. Measured before the fix, with
 # the E.164 form the Retell webhook actually writes (app/main.py:1124):
-#     stored '+13239352985' -> is_suppressed('3239352985')     = False  BYPASS
-#     stored '+13239352985' -> is_suppressed('(323) 935-2985') = False  BYPASS
-#     stored '+13239352985' -> is_suppressed('13239352985')    = False  BYPASS
-#     stored '+13239352985' -> is_suppressed('323-935-2985')   = False  BYPASS
+#     stored '+13235550102' -> is_suppressed('3235550102')     = False  BYPASS
+#     stored '+13235550102' -> is_suppressed('(323) 555-0102') = False  BYPASS
+#     stored '+13235550102' -> is_suppressed('13235550102')    = False  BYPASS
+#     stored '+13235550102' -> is_suppressed('323-555-0102')   = False  BYPASS
 # 4 of 6 formats were dialable despite being suppressed.
 
-_QUERY_FORMS = ["+13239352985", "3239352985", "(323) 935-2985", "13239352985",
-                "323-935-2985", "+1 (323) 935-2985", "1 (323) 935-2985"]
+_QUERY_FORMS = ["+13235550102", "3235550102", "(323) 555-0102", "13235550102",
+                "323-555-0102", "+1 (323) 555-0102", "1 (323) 555-0102"]
 
 
-@pytest.mark.parametrize("stored", ["+13239352985", "3239352985", "(323) 935-2985"])
+@pytest.mark.parametrize("stored", ["+13235550102", "3235550102", "(323) 555-0102"])
 @pytest.mark.parametrize("queried", _QUERY_FORMS)
 def test_suppression_matches_across_every_stored_and_queried_format(stored, queried):
     """Every (stored, queried) pair of the same number must match.
@@ -92,7 +92,7 @@ def test_suppression_matches_across_every_stored_and_queried_format(stored, quer
 
 def test_a_different_number_is_still_dialable():
     """Canonicalisation must not over-match into blocking everyone."""
-    with patch.object(dnc.DatabaseManager, "get_state", AsyncMock(return_value=["+13239352985"])):
+    with patch.object(dnc.DatabaseManager, "get_state", AsyncMock(return_value=["+13235550102"])):
         assert asyncio.run(dnc.is_suppressed("+12065550111")) is False
 
 
@@ -112,14 +112,14 @@ def test_round_trip_add_then_check_across_formats():
                       AsyncMock(side_effect=lambda k, d=None: store.get(k, d))), \
          patch.object(dnc.DatabaseManager, "set_state",
                       AsyncMock(side_effect=lambda k, v: store.__setitem__(k, v))):
-        assert asyncio.run(dnc.add_suppression("(323) 935-2985", reason="opt-out")) is True
+        assert asyncio.run(dnc.add_suppression("(323) 555-0102", reason="opt-out")) is True
         for q in _QUERY_FORMS:
             assert asyncio.run(dnc.is_suppressed(q)) is True, f"stored via add_suppression, {q!r} not matched"
 
 
 def test_fails_closed_on_db_error():
     with patch.object(dnc.DatabaseManager, "get_state", AsyncMock(side_effect=RuntimeError("db down"))):
-        assert asyncio.run(dnc.is_suppressed("+13239352985")) is True
+        assert asyncio.run(dnc.is_suppressed("+13235550102")) is True
 
 
 def test_add_suppression_persists_normalized():
@@ -130,11 +130,11 @@ def test_add_suppression_persists_normalized():
     with patch.object(dnc.DatabaseManager, "get_state", AsyncMock(return_value=[])), \
          patch.object(dnc.DatabaseManager, "set_state",
                       AsyncMock(side_effect=lambda k, v: saved.__setitem__(k, v))):
-        ok = asyncio.run(dnc.add_suppression("(323) 935-2985", reason="opt-out"))
+        ok = asyncio.run(dnc.add_suppression("(323) 555-0102", reason="opt-out"))
     assert ok is True
     # Canonical E.164, not the old digits-only key. This is the write half of
     # the fix — store and query must agree, so BOTH sides canonicalise.
-    assert saved[dnc._DNC_KEY] == ["+13239352985"]
+    assert saved[dnc._DNC_KEY] == ["+13235550102"]
 
 
 def test_dialer_blocks_suppressed_number(monkeypatch):
@@ -143,6 +143,6 @@ def test_dialer_blocks_suppressed_number(monkeypatch):
     monkeypatch.setenv("RETELL_AGENT_ID", "a")
     from app.skills import outbound_dialer
     with patch("app.core.dnc.is_suppressed", AsyncMock(return_value=True)):
-        res = asyncio.run(outbound_dialer.trigger_retell_call("+13239352985", {}))
+        res = asyncio.run(outbound_dialer.trigger_retell_call("+13235550102", {}))
     assert res["success"] is False
     assert "DNC" in res["error"]

@@ -85,7 +85,7 @@ _ROWS = [
     {   # in-ICP, complete → must become a lead (verbatim live row)
         "full_name": "CEDAR CREEK CONSTRUCTION LLC",
         "rmi_name": "TIMOTHY MICHAEL HOFFMAN",
-        "phone_number": "5032013017", "address": "15065 S MITCHELL LANE",
+        "phone_number": "5035550101", "address": "15065 S MITCHELL LANE",
         "city": "OREGON CITY", "state": "OR", "zip_code": "97045",
         "county_name": "Clackamas", "license_number": "234061",
         "orig_regis_date": "12/31/2020",
@@ -96,7 +96,7 @@ _ROWS = [
         # the exact case that proves the endorsement is not a trade category.
         "full_name": "SHAMBURG HEATING LLC",
         "rmi_name": "SCOTT ARRON SHAMBURG",
-        "phone_number": "5036925563", "address": "1 MAIN ST",
+        "phone_number": "5035550103", "address": "1 MAIN ST",
         "city": "BEAVERCREEK", "state": "OR", "zip_code": "97004",
         "county_name": "Clackamas", "license_number": "111111",
         "endorsement_text": "Residential General Contractor",
@@ -123,7 +123,7 @@ _ROWS = [
     {   # duplicate phone of row 1 → shared line, dropped
         "full_name": "SECOND CHANCE REMODELING LLC",
         "rmi_name": "MARIA ELENA LEE",
-        "phone_number": "5032013017", "address": "5 PINE ST",
+        "phone_number": "5035550101", "address": "5 PINE ST",
         "city": "PORTLAND", "state": "OR", "zip_code": "97213",
         "county_name": "Multnomah", "license_number": "444444",
         "endorsement_text": "Residential General Contractor",
@@ -161,7 +161,7 @@ async def test_source_emits_only_clean_in_icp_rows():
     assert lead["owner_name"] == "Timothy Hoffman"
     assert lead["owner_title"] == "Responsible Managing Individual"
     assert lead["owner_source"] == "or_ccb"
-    assert lead["phone"] == "+15032013017"        # bare 10-digit → E.164
+    assert lead["phone"] == "+15035550101"        # bare 10-digit → E.164
     assert lead["phone_source"] == "or_ccb"
     assert lead["phone_verified"] is True
     assert lead["state"] == "OR"

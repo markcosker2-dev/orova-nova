@@ -311,23 +311,38 @@ def generate_meeting_intro_email(lead_name: str, business_name: str = "", bookin
     """
     link = booking_link or get_booking_link(lead_name, business_name)
     
+    # Four rules from business_context.json > email_rules that this copy used
+    # to break, in the highest-stakes mail the system sends — the one that goes
+    # out the moment a prospect says yes:
+    #
+    #   "Only mention Mark when suggesting a call"  — it suggested a call and
+    #       never named him, so the prospect was being asked to book time with
+    #       an AI. The whole funnel is "book 15 minutes with Mark".
+    #   "End with a low-pressure ask (15 min chat)" — it said "a quick call".
+    #       15 is canonical (knowledge/facts/company.json meeting.duration).
+    #   "Lead with a hook about THEIR business, not ours" — "how we can help
+    #       your business" is the generic agency-speak ADR-0013 forbids.
+    #   signature "Nova @ OROVA"                    — it signed "Nova | OROVA".
+    #
+    # Still makes NO offer: no price, no terms, and never the word "free".
+    who = f"the {business_name} side of things" if business_name else "your setup"
     if link:
         return (
             f"Hi {lead_name},\n\n"
-            f"Great to hear from you! I'd love to get a quick call scheduled to discuss "
-            f"how we can help {'with ' + business_name if business_name else 'your business'}.\n\n"
-            f"You can book a time that works for you here:\n{link}\n\n"
-            f"Looking forward to connecting!\n\n"
-            f"Best,\nNova | OROVA"
+            f"Great to hear from you. Mark's the one who'd walk through "
+            f"{who} with you — 15 minutes, and he'll want to know what you're "
+            f"paying per lead now and what a job's actually worth to you.\n\n"
+            f"You can grab a time that suits you here:\n{link}\n\n"
+            f"Best,\nNova @ OROVA"
         )
-    else:
-        return (
-            f"Hi {lead_name},\n\n"
-            f"Great to hear from you! I'd love to get a quick call scheduled. "
-            f"Could you send me a few times that work for you this week?\n\n"
-            f"Looking forward to connecting!\n\n"
-            f"Best,\nNova | OROVA"
-        )
+    return (
+        f"Hi {lead_name},\n\n"
+        f"Great to hear from you. Mark's the one who'd walk through {who} with "
+        f"you — 15 minutes, and he'll want to know what you're paying per lead "
+        f"now and what a job's actually worth to you.\n\n"
+        f"What times work for you this week? I'll get it in his calendar.\n\n"
+        f"Best,\nNova @ OROVA"
+    )
 
 
 def generate_meeting_confirmation(lead_name: str, meeting_time: str = "", business_name: str = "") -> str:

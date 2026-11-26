@@ -125,7 +125,7 @@ def test_unrollbackable_connection_is_discarded_not_pooled():
 def _registry_lead(business: str) -> dict:
     """A lead shaped exactly like WA L&I / Yelp output: real phone, NO email."""
     return {"business": business, "owner": "Carson Keller",
-            "phone": "+12538860136", "email": "", "score": 65,
+            "phone": "+12535550103", "email": "", "score": 65,
             "vertical": "custom home builder"}
 
 

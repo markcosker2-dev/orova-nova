@@ -175,8 +175,8 @@ def _col_letter(n: int) -> str:
 async def _append_with_backoff(worksheet, row, retries=4):
     """Appends a row to a worksheet with exponential backoff for Google API 429 errors.
 
-    RAW input option: without it Sheets parses "+14047334400" as the NUMBER
-    14047334400, which round-trips back as an int and crashed the boot
+    RAW input option: without it Sheets parses "+14045550101" as the NUMBER
+    14045550101, which round-trips back as an int and crashed the boot
     restore (2026-07-21). RAW stores exactly the strings we send."""
     for attempt in range(retries):
         try:
@@ -794,6 +794,41 @@ async def log_consent_to_sheets(entry: Dict[str, Any],
         logger.error(f"[SheetsSync] log_consent_to_sheets FAILED — the consent "
                      f"record is only in ephemeral state now: {exc}")
         return {"ok": False, "error": str(exc)}
+
+
+async def restore_consent_from_sheets(workbook_name=None) -> list:
+    """Read the Consent tab back into a ledger-shaped list.
+
+    log_consent_to_sheets made the record durable; nothing read it back, so the
+    ledger still died on every deploy and ai_call_allowed would refuse a call
+    that had lawful consent behind it. A write-only archive is not durability —
+    it is a filing cabinet nobody opens.
+
+    Returns [] on any failure. An empty list means "no consent known", never
+    "consent revoked": the failure direction blocks lawful calls and permits
+    none.
+    """
+    try:
+        worksheet = await _get_worksheet("Consent", workbook_name)
+        rows = await asyncio.to_thread(worksheet.get_all_records)
+    except Exception as exc:
+        logger.warning(f"[SheetsSync] Consent tab unreadable ({exc}) — "
+                       f"consent ledger starts empty this boot.")
+        return []
+    out = []
+    for r in rows or []:
+        phone = str(r.get("Phone") or "").strip()
+        if not phone:
+            continue
+        out.append({
+            "phone": phone,
+            "source": str(r.get("Source") or "").strip(),
+            "detail": str(r.get("Detail") or "").strip(),
+            "actor": str(r.get("Actor") or "").strip(),
+            "recorded_at": str(r.get("RecordedAt") or "").strip(),
+        })
+    logger.info(f"[SheetsSync] Consent: {len(out)} record(s) restored")
+    return out
 
 
 async def sync_lead_status_to_sheets(lead_id: int, new_status: str, notes: str = "", workbook_name: Optional[str] = None) -> Dict[str, Any]:
