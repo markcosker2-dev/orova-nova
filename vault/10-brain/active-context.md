@@ -32,7 +32,7 @@ Full operating rules: [[operating-brief]]. Owner judgement: [[hermesclaw-orova/p
 | Outreach | Paused — no sends, no calls, no AgentMail cold email | owner order |
 | Nova Telegram | Truthfulness/`/status`/`/focus` fixes merged in #201/#202 | code only |
 | Telegram bot identity | Bio spam replaced (owner-reported); name/botpic and token rotation pending | 26 Nov 2026 |
-| Drive backup | Running every ~3h; 07:28 UTC snapshot integrity-checked, 384 leads | **26 Nov 2026** |
+| Drive backup | Every ~3h, plus on shutdown since PR #207 (live 10:05 UTC 26 Nov; first proof comes on the next deploy). 07:28 UTC snapshot integrity-checked, 384 leads | **26 Nov 2026** |
 | Retell inbound demo | HOLD — unpublished, legacy Cal tools, unfunded | 30 Sep 2026 |
 | Calendar `/away` | Code + tests exist; runtime credential proof pending | not live |
 | Instagram | Draft-only; Sheets queue cutover; Make scenarios reported 9881852 / 9333477 | ~Oct 2026 |
