@@ -53,6 +53,10 @@ def dialable(monkeypatch):
     monkeypatch.setenv("RETELL_API_KEY", "dummy-not-real")
     monkeypatch.setenv("RETELL_FROM_NUMBER", "+17166703920")
     monkeypatch.setenv("RETELL_AGENT_ID", "agent_dummy")
+    # The jurisdiction layer (ai_call_allowed, PR #199) refuses every call while
+    # no state is cleared. Clear the West Coast states here so these tests keep
+    # isolating the §227(b) consent gate; jurisdiction has its own tests.
+    monkeypatch.setenv("AI_CALL_ALLOWED_STATES", "OR,WA,CA,AZ,NV,ID")
 
     store = {}
 

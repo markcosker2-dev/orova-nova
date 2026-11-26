@@ -137,7 +137,7 @@ def test_storage_gate_quarantines_the_production_row():
         "business": "Keith's Auto Repair",
         "owner": "Keith Mayou While Others",
         "email": "automan67@aol.com",
-        "phone": "+15594510842",
+        "phone": "+15595550101",
         "vertical": "",
         "status": "Contacted",
     })

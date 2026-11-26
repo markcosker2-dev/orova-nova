@@ -25,7 +25,7 @@ import app.worker as worker
 LICENCE_LEAD = {
     "id": 7, "business": "MAPLE RIDGE REMODELING LLC", "owner": "Dmitrii Rychagov",
     "owner_title": "Licence Principal", "owner_confidence": 90,
-    "phone": "+12533912982", "phone_verified": 1, "email": "", "website": "",
+    "phone": "+12535550102", "phone_verified": 1, "email": "", "website": "",
     "url": "", "vertical": "", "status": "New", "score": 45, "state": "WA",
     "icebreaker": "",
 }
@@ -86,7 +86,7 @@ class TestPhoneFirstDials:
         r = _run_lane([LICENCE_LEAD])
         r["dialer"].assert_awaited_once()
         phone = r["dialer"].await_args.args[0]
-        assert phone == "+12533912982"
+        assert phone == "+12535550102"
 
     def test_call_context_does_not_claim_a_prior_email(self):
         """Lane 4's icebreaker fallback says "we emailed about..." — for a
