@@ -31,6 +31,19 @@ Read-only. Nothing was written to the DB or the Sheet. Aggregates only; no lead 
 2. A starred, older sheet, **"OROVA Leads"**, was last modified May 2026. If that's the bookmark Mark opens, it will look nearly empty.
 3. A filter view inside "OROVA CRM" could also hide rows. The export can't show filter views, so check in the browser.
 
-## Open decisions for Mark (not done)
-- **The 62 manual-only rows live only in the Sheet**, so the Sheet is acting as a second writer, against the single-source-of-truth rule. Many are off-ICP: roofing 9, HVAC 5, pools 5, landscaping 4, plus AZ/CO/NV. Options: (a) import the ICP-fit ones into the DB through the storage gate (`validate_lead_for_storage`), and (b) mark the rest `Disqualified — off ICP` rather than deleting them.
-- **Tidy the Drive:** rename "OROVA Leads" (May) to "ARCHIVE — OROVA Leads (May 2026)" and unstar it. That needs owner approval; nothing was renamed.
+## Decision taken (Mark: "go, do what's best", 26 Nov)
+
+Nova's own storage gate was run over the 62 manual-only rows:
+- **15 are core ICP** (West Coast custom home builders / high-end remodelers): kitchen & bath 6, custom homes 6, general remodeling 3.
+- **28 are West Coast but other trades:** roofing 7, HVAC/plumbing 6, solar 4, pools 3, landscaping 2, epoxy 2, deck 2, foundation 1, windows 1.
+- **19 are outside the West Coast:** AZ 6, CO 6, NV 6, blank 1.
+- All 62 have **only an Instagram handle**: no phone, email or website.
+
+**Not imported into the DB, deliberately.** The `leads` table has no Instagram column, so importing would store a name with no contact route and strand the only identifier in the Sheet. That's worse data, not better. They stay on Recovery Hold in the Sheet, which restores them safely: `restore_leads_from_sheets` keeps the Sheet status. The 15 core-ICP rows are the research queue (priority 6): import each one once its website or phone has been found.
+
+**Bug found and fixed (branch only, not deployed):** `POST /api/leads/import-csv` saved every row as `New`, the status `/leads` and `/focus` treat as ready to contact. Any CSV import would have released leads for outreach while outreach is paused. Imports now default to `Research Hold`; `?status=New` is an explicit opt-in and nothing else is accepted. Two regression tests fail before the fix and pass after; full suite 1,809 passed.
+
+**Gate gap noted, not changed:** the storage gate accepts roofing, HVAC, solar, pools, etc. ADR-0012 disqualifies only auto repair, franchised dealers and existing agency clients. Tightening the trade gate would change the ICP, so it needs an ADR and Mark's decision.
+
+## Remaining manual steps for Mark (connectors can't edit cells or rename files)
+- Rename "OROVA Leads" (May) to "ARCHIVE — OROVA Leads (May 2026)" and unstar it, so it can't be mistaken for the lead list again. Bookmark "OROVA CRM" instead.

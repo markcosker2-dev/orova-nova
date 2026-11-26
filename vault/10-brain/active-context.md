@@ -17,7 +17,7 @@ tags: [brain, active, session-start]
 - Google OAuth/Drive backup repaired; Google app moved to Production with no new scopes.
 - Telegram @orovaNOVA_bot: spam About/Description **replaced with neutral private-bot text on 26 Nov** (owner-reported via BotFather; name/botpic not yet checked). Token rotation still pending, and must be done together with updating Render's env.
 
-**Top priority now: decide the 62 manual-only Sheet rows.** Import the ICP-fit ones through the storage gate and mark the rest off-ICP, so the DB is the single owner again.
+**Next priority: production reliability.** Rotate the exposed dashboard key, check the Drive backup, and get deploy approval for the CSV-import hold fix. The 62 Sheet-only rows (IG handles only; 15 core ICP) stay held; the 15 are the research queue.
 
 Full operating rules: [[operating-brief]]. Owner judgement: [[hermesclaw-orova/playbook/README|playbook]]. History before this rewrite: [[active-context-history-2026-07-to-10]].
 
@@ -53,7 +53,7 @@ Individual, researched DM on a public business channel → the prospect *chooses
 
 ## Open items, in priority order
 
-1. **Lead cleanup:** decide the 62 manual-only rows (import ICP-fit, mark off-ICP); archive the stale "OROVA Leads" sheet.
+1. **Lead cleanup:** done 26 Nov ([[2026-11-26-lead-reconciliation]]). Mark is still to archive the stale "OROVA Leads" sheet.
 2. **Live re-verification:** Render `/health` build, Drive backup, Telegram webhook/identity, Make/Meta status.
 3. **Nova quality:** no regression to repetitive or fabricated reports ([[0022-learning-observations-and-no-age-only-pruning]]).
 4. **Calendar proof:** service account, target calendar ID, free/busy only, idempotent test.
