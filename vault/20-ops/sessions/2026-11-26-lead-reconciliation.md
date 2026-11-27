@@ -109,3 +109,9 @@ All four open PRs were brought into one branch and tested together against curre
 - The drafts follow the playbook: under 75 words, about their business, no past-client claims, no results, no offer or price, no demo number, one diagnostic question.
 - Each brief carries a pre-contact checklist: verify the licence on the official site, check Instagram and website, confirm the offer, send manually one at a time.
 - **Nothing sent; all stay on Recovery Hold.** The details live in Drive, not the public repo.
+
+## Shutdown-backup live test result (27 Nov)
+- PR #212 merged; live on `086830938095` at 14:47 UTC. That shutdown was handled by the #211 container (`exec` + `--timeout-graceful-shutdown 5`).
+- **No shutdown snapshot appeared.** Drive's newest snapshots are 13:32 UTC (the 3h lane), plus 10:32:40 and 10:32:57 (the 3h lane and the 12h vault loop coinciding). So both fixes were necessary but **not sufficient**.
+- **Remaining suspects:** Render free-tier instances may be stopped without the SIGTERM grace, or the Drive upload fails during shutdown. **Logs are required** (`💾 Shutdown backup:` / `⚠️ Shutdown backup failed`), and reading them needs the dashboard key, which isn't available in cloud sessions by owner choice.
+- **Stopped deploying to probe it.** The 3h cadence is confirmed working, and lead writes trigger their own backup, so the exposure is non-lead state written in the last ≤3h before a deploy.

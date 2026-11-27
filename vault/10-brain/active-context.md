@@ -32,7 +32,7 @@ Full operating rules: [[operating-brief]]. Owner judgement: [[hermesclaw-orova/p
 | Outreach | Paused — no sends, no calls, no AgentMail cold email | owner order |
 | Nova Telegram | Truthfulness/`/status`/`/focus` fixes merged in #201/#202 | code only |
 | Telegram bot identity | Bio spam replaced (owner-reported); name/botpic and token rotation pending | 26 Nov 2026 |
-| Drive backup | Every ~3h + after each lead save. Shutdown backup: 2 fixes live-pending (`exec uvicorn`, then a bounded graceful shutdown, 27 Nov); proven only when a deploy leaves a shutdown snapshot | **27 Nov 2026** |
+| Drive backup | 3h cadence confirmed (27 Nov 10:32, 13:32 UTC) + after each lead save. **Shutdown backup still not firing** after two fixes; needs logs (dashboard key) to diagnose | **27 Nov 2026** |
 | Retell inbound demo | HOLD — unpublished, legacy Cal tools, unfunded | 30 Sep 2026 |
 | Calendar `/away` | Code + tests exist; runtime credential proof pending | not live |
 | Instagram | Queue safe (5 drafts, none ready). **Live posts with unsupported claims (incl. the fabricated '47 calls' client post) need archiving**; no drafts since 9 Oct (Meta connection expiry) — see [[2026-11-26-instagram-queue-audit]] | **26 Nov 2026** |
