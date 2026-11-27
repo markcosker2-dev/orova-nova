@@ -67,8 +67,8 @@ Nova's own storage gate was run over the 62 manual-only rows:
 - **"OROVA Leads" (May) renamed** to "ARCHIVE — OROVA Leads (May 2026)" via the Sheets API. Unstarring was refused (a user-level Drive setting).
 - **"OROVA CRM" has no basic filter and no filter views.** That rules out hidden-by-filter rows as the cause of the "missing leads" report.
 - **Research on the 14 core-ICP manual rows** (one of the 15 already matches a DB lead), from public web sources: CA SOS, CSLB/CCB aggregators, Houzz, BuildZoom, Levelset, Angi. Notes went into each row's "Research / source notes" column in the Sheet, marked research-only and Recovery Hold. Contact and status columns were not changed.
-  - **Identity high (4):** includes the strongest ICP fit found so far, a Portland custom builder with an active Oregon CCB licence and a 2023 HBA Builder of the Year award.
-  - **Medium (6)** · **low (4)**.
+  - **Identity high (3)** (corrected 27 Nov from 4): includes the strongest ICP fit found so far, a Portland custom builder with an active Oregon CCB licence and a 2023 HBA Builder of the Year award. A fourth is medium-high.
+  - **Medium (6, incl. the medium-high one)** · **low (4)**.
   - **Licence flag (1):** an expired CSLB licence.
   - Licence numbers came from aggregators, not the official CSLB/CCB/L&I lookups. Verify before any import or contact.
 - **Next:** import the identity-high rows into the DB (now held by default) once their website or phone is confirmed on the official licence lookup.
@@ -103,3 +103,9 @@ All four open PRs were brought into one branch and tested together against curre
 - **Likely cause on Render:** an in-flight request (e.g. a Telegram webhook awaiting an LLM reply) holds uvicorn past Render's ~30s grace window, so the backup in `app/main.py` never starts.
 - **Fix:** Dockerfile CMD adds `--timeout-graceful-shutdown 5` (5s + the backup's 20s cap < 30s). `tests/test_dockerfile_signals.py` asserts the bound (fails before, passes after). Full suite 1,833 passed.
 - **Proof still pending:** the deploy *after* this one should leave a `nova_backup_*` file timestamped at shutdown. If it doesn't, the next suspect is the Drive upload itself at shutdown, which needs the logs.
+
+## Prospect briefs (27 Nov)
+- A private Google Doc in Mark's Drive, "OROVA — Prospect briefs (DRAFT, DO NOT SEND) — 27 Nov 2026", holds briefs and one draft opening DM each for the top 4 (3 identity-high + 1 medium-high).
+- The drafts follow the playbook: under 75 words, about their business, no past-client claims, no results, no offer or price, no demo number, one diagnostic question.
+- Each brief carries a pre-contact checklist: verify the licence on the official site, check Instagram and website, confirm the offer, send manually one at a time.
+- **Nothing sent; all stay on Recovery Hold.** The details live in Drive, not the public repo.
