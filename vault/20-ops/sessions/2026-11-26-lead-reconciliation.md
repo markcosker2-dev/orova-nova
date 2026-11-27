@@ -97,3 +97,9 @@ All four open PRs were brought into one branch and tested together against curre
   - Two outbound-script lines still promising a "ten minutes" call (canonical is 15).
 - **Result:** 1,832 passed, 1 skipped; knowledge, secrets and security lint OK.
 - **Still open from #200 (owner decision):** git *history* still contains a real prospect name and mobile (`cf7e7a1^`, and commit `04b2084`'s message). Remedies: GitHub Support purge, knowing acceptance, or contacting the person. A history rewrite alone doesn't clear merged PR diffs.
+
+## Shutdown backup, second fix (27 Nov)
+- **Reproduced locally (uvicorn 0.29.0, Nova's pinned version):** while any request is still open, uvicorn waits *without limit* before running the lifespan shutdown. A held connection left the shutdown hook unrun 8s after SIGTERM. With `--timeout-graceful-shutdown 3` it ran.
+- **Likely cause on Render:** an in-flight request (e.g. a Telegram webhook awaiting an LLM reply) holds uvicorn past Render's ~30s grace window, so the backup in `app/main.py` never starts.
+- **Fix:** Dockerfile CMD adds `--timeout-graceful-shutdown 5` (5s + the backup's 20s cap < 30s). `tests/test_dockerfile_signals.py` asserts the bound (fails before, passes after). Full suite 1,833 passed.
+- **Proof still pending:** the deploy *after* this one should leave a `nova_backup_*` file timestamped at shutdown. If it doesn't, the next suspect is the Drive upload itself at shutdown, which needs the logs.
