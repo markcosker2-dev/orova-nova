@@ -38,4 +38,8 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 # does not forward Render's SIGTERM, and uvicorn is SIGKILLed after the grace
 # period, so the lifespan shutdown backup in app/main.py never ran: three
 # deploys on 2026-11-26 produced no shutdown snapshot.
-CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-18790}"]
+# --timeout-graceful-shutdown: uvicorn otherwise waits WITHOUT LIMIT for open
+# requests (e.g. a Telegram webhook awaiting an LLM reply) before it runs the
+# lifespan shutdown, so Render's ~30s grace expired first and the backup never
+# started. 5s + the backup's 20s cap in app/main.py stays inside that window.
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-18790} --timeout-graceful-shutdown 5"]

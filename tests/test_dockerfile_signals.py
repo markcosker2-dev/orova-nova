@@ -22,3 +22,13 @@ def test_uvicorn_is_execed_so_it_receives_sigterm():
         assert re.match(r"\s*exec\s+uvicorn\b", cmd[2]), cmd
     else:
         assert cmd[0] == "uvicorn", cmd
+
+
+def test_graceful_shutdown_is_bounded_inside_renders_grace_window():
+    """Unbounded, uvicorn waits for every open request before the lifespan
+    shutdown backup runs, and Render kills it at ~30s (2026-11-27)."""
+    cmd = " ".join(_cmd())
+    m = re.search(r"--timeout-graceful-shutdown\s+(\d+)", cmd)
+    assert m, "uvicorn must bound its graceful shutdown"
+    backup_cap = 20  # asyncio.wait_for(backup_database(), timeout=20) in app/main.py
+    assert int(m.group(1)) + backup_cap < 30, "must finish inside Render's ~30s SIGTERM grace"
