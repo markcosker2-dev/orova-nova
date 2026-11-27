@@ -357,10 +357,14 @@ async def lifespan(app: FastAPI):
     from app.core.hermesclaw_endpoints import register_hermesclaw_routes
     register_hermesclaw_routes(app)
     
-    # [P6] Register SIGTERM for Render redeploys
+    # [P6] Do NOT install a SIGTERM handler here (fixed 2026-11-27).
+    # loop.add_signal_handler(SIGTERM, ...) REPLACED uvicorn's own handler, so
+    # a Render redeploy only drained the DB pool: uvicorn never began its
+    # graceful shutdown, the lifespan shutdown below (Drive backup) never ran,
+    # and Render SIGKILLed the process. uvicorn owns SIGTERM; DB connections
+    # are closed at the END of the lifespan shutdown, after the backup.
     global BACKGROUND_LOOP
     BACKGROUND_LOOP = asyncio.get_running_loop()
-    DatabaseManager.register_sigterm_handler(BACKGROUND_LOOP)
     
     # [P6] Register Telegram Webhook
     tg_token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -458,6 +462,11 @@ async def lifespan(app: FastAPI):
     try:
         from app.skills.lead_gen_v3 import _close_http_client
         await _close_http_client()
+    except Exception:
+        pass
+    # Last: the shutdown backup above needed the pool, so close it only now.
+    try:
+        DatabaseManager._close_all_connections()
     except Exception:
         pass
     logger.info("🛑 NOVA Gateway Offline — graceful shutdown complete")

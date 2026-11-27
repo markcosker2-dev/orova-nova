@@ -115,3 +115,18 @@ All four open PRs were brought into one branch and tested together against curre
 - **No shutdown snapshot appeared.** Drive's newest snapshots are 13:32 UTC (the 3h lane), plus 10:32:40 and 10:32:57 (the 3h lane and the 12h vault loop coinciding). So both fixes were necessary but **not sufficient**.
 - **Remaining suspects:** Render free-tier instances may be stopped without the SIGTERM grace, or the Drive upload fails during shutdown. **Logs are required** (`💾 Shutdown backup:` / `⚠️ Shutdown backup failed`), and reading them needs the dashboard key, which isn't available in cloud sessions by owner choice.
 - **Stopped deploying to probe it.** The 3h cadence is confirmed working, and lead writes trigger their own backup, so the exposure is non-lead state written in the last ≤3h before a deploy.
+
+## Shutdown backup: root cause found and fixed (27 Nov)
+- **Root cause:** during startup, `app/main.py` called `DatabaseManager.register_sigterm_handler(loop)`, which runs `loop.add_signal_handler(SIGTERM, _close_all_connections)`. That **replaced uvicorn's own SIGTERM handler**. On a Render redeploy, SIGTERM only drained the DB pool. uvicorn never began its graceful shutdown, the lifespan shutdown (Drive backup) never ran, and Render SIGKILLed the process after the grace period.
+- **Reproduced locally on unchanged code:** after SIGTERM the server logged "Database connections closed" and was **still running 15s later**, with no shutdown and no backup attempt.
+- **Fix:** don't install the handler. Close DB connections at the *end* of the lifespan shutdown, after the backup.
+- **Re-run on fixed code:** exited 1s after SIGTERM. Logged "Shutdown backup: False" (no Drive credentials locally, as expected) and "graceful shutdown complete".
+- `tests/test_dockerfile_signals.py` now also asserts the app never takes SIGTERM from uvicorn (fails before, passes after). Full suite 1,834 passed.
+- The earlier `exec` and `--timeout-graceful-shutdown` fixes were real but secondary. This handler was the blocker.
+- **Live proof:** the deploy *after* this one should leave a `nova_backup_*` snapshot at shutdown time.
+
+## Framework security upgrade: attempted, not shipped (27 Nov)
+- `pip-audit` found **17 known vulnerabilities** in fastapi 0.104.1, starlette 0.27.0 and anyio 3.7.1 (DoS, multipart and StaticFiles path issues).
+- Upgrading to fastapi 0.165 / starlette 1.10 / anyio 4.16 (httpx kept at 0.27.2) passes all 1,833 tests.
+- But a **real boot hangs at startup**: `reset_sqlite_fresh` → `_init_sqlite_fallback` blocks on `queue.put` into a full connection pool, most likely a pool race the new stack's timing exposes. The tests didn't catch it because they patch the lifespan.
+- **Not shipped.** It needs the pool race fixed first, then a real-boot check. Queued as a separate task.
