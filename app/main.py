@@ -357,10 +357,11 @@ async def lifespan(app: FastAPI):
     from app.core.hermesclaw_endpoints import register_hermesclaw_routes
     register_hermesclaw_routes(app)
     
-    # [P6] Register SIGTERM for Render redeploys
+    # SIGTERM (Render redeploys) is handled by uvicorn, which runs the
+    # shutdown half of this lifespan. Do NOT add a loop SIGTERM handler here:
+    # it replaces uvicorn's and the process never shuts down (2026-11-27).
     global BACKGROUND_LOOP
     BACKGROUND_LOOP = asyncio.get_running_loop()
-    DatabaseManager.register_sigterm_handler(BACKGROUND_LOOP)
     
     # [P6] Register Telegram Webhook
     tg_token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -458,6 +459,12 @@ async def lifespan(app: FastAPI):
     try:
         from app.skills.lead_gen_v3 import _close_http_client
         await _close_http_client()
+    except Exception:
+        pass
+    # Close the pool here, AFTER the shutdown backup: uvicorn re-raises the
+    # captured SIGTERM once shutdown finishes, which skips atexit hooks.
+    try:
+        DatabaseManager._close_all_connections()
     except Exception:
         pass
     logger.info("🛑 NOVA Gateway Offline — graceful shutdown complete")

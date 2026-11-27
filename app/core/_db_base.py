@@ -5,7 +5,6 @@ Shared infrastructure used by all repository mixins.
 import os
 import json
 import logging
-import signal
 import threading
 import queue
 import atexit
@@ -196,6 +195,10 @@ class _DBBase:
     _use_redis = True
     _ready = False
     _ready_event = threading.Event()
+    # Connections belonging to the CURRENT pool generation (pooled + overflow).
+    # A connection checked out before a reset/swap is not in this set, so
+    # return_connection closes it instead of letting it into the new pool.
+    _live_conns: set = set()
 
     # ── Initialization ──────────────────────────────────────────────
     @classmethod
@@ -262,7 +265,16 @@ class _DBBase:
         conn.commit()
         cls._init_tables(conn)
         conn.close()
-        # Populate the connection pool
+        # Populate a FRESH pool, then swap it in (2026-11-27). This used to
+        # refill the existing queue with a blocking put(). On a re-init after
+        # _close_all_connections (failed-restore reset, Drive snapshot adopt),
+        # executor/worker threads still holding connections returned them to
+        # that drained queue first, so the 10th put() blocked forever and the
+        # app never finished startup (reproduced on starlette 1.x: ~1 boot in
+        # 4 hung in queue.put). A new queue cannot be pre-filled by anyone else,
+        # and connections from the old generation are closed on return.
+        new_pool = queue.Queue(maxsize=cls._max_connections)
+        live = set()
         for _ in range(cls._max_connections):
             pool_conn = sqlite3.connect(cls._db_path, check_same_thread=False)
             pool_conn.row_factory = sqlite3.Row
@@ -271,7 +283,22 @@ class _DBBase:
             pool_conn.execute("PRAGMA synchronous=NORMAL")
             pool_conn.execute("PRAGMA cache_size=-8000")
             pool_conn.execute("PRAGMA temp_store=MEMORY")
-            cls._pool.put(pool_conn)
+            new_pool.put_nowait(pool_conn)
+            live.add(pool_conn)
+        with cls._pool_lock:
+            old_pool = cls._pool
+            cls._pool = new_pool
+            cls._live_conns = live
+            cls._active_connections = 0
+        # Close anything still idle in the previous generation's pool.
+        if old_pool is not new_pool:
+            while True:
+                try:
+                    old_pool.get_nowait().close()
+                except queue.Empty:
+                    break
+                except Exception:
+                    pass
         cls._ready = True
         cls._ready_event.set()
         logger.info(f"✅ SQLite ready: {cls._db_path} (pool size: {cls._max_connections})")
@@ -531,6 +558,7 @@ class _DBBase:
             conn.execute("PRAGMA foreign_keys=ON")
             with cls._pool_lock:
                 cls._active_connections += 1
+                cls._live_conns.add(conn)
             return conn
 
     @classmethod
@@ -554,7 +582,21 @@ class _DBBase:
         Rolling back HERE rather than at each call site fixes the whole bug
         class — any current or future code that leaves a transaction open is
         contained. A rollback with nothing to roll back is a cheap no-op.
+
+        A connection from a previous pool generation (checked out before a
+        reset or snapshot swap) is closed, never pooled: it points at a file
+        that has since been deleted or replaced.
         """
+        with cls._pool_lock:
+            current = conn in cls._live_conns
+            if current:
+                cls._active_connections -= 1
+        if not current:
+            try:
+                conn.close()
+            except Exception:
+                pass
+            return
         try:
             if getattr(conn, "in_transaction", False):
                 conn.rollback()
@@ -562,22 +604,21 @@ class _DBBase:
             # A connection we cannot clean is worse than one fewer connection:
             # drop it rather than return a poisoned one to the pool.
             logger.warning(f"[DB] Discarding connection that would not roll back: {e}")
-            with cls._pool_lock:
-                cls._active_connections -= 1
-            try:
-                conn.close()
-            except Exception:
-                pass
+            cls._discard_connection(conn)
             return
         try:
-            with cls._pool_lock:
-                cls._active_connections -= 1
             cls._pool.put_nowait(conn)
         except queue.Full:
-            try:
-                conn.close()
-            except Exception:
-                pass
+            cls._discard_connection(conn)
+
+    @classmethod
+    def _discard_connection(cls, conn):
+        with cls._pool_lock:
+            cls._live_conns.discard(conn)
+        try:
+            conn.close()
+        except Exception:
+            pass
 
     @classmethod
     @contextmanager
@@ -623,7 +664,13 @@ class _DBBase:
     # ── Shutdown ──────────────────────────────────────────────────────
     @classmethod
     def _close_all_connections(cls):
-        """Drain and close all pooled connections on shutdown."""
+        """Drain and close all pooled connections (shutdown, or before a file
+        swap/reset). Connections still checked out are retired too: they leave
+        the live set, so they are closed when returned instead of re-pooled."""
+        lock = getattr(cls, "_pool_lock", None)
+        if lock is not None:
+            with lock:
+                cls._live_conns = set()
         closed = 0
         while not cls._pool.empty():
             try:
@@ -645,12 +692,13 @@ class _DBBase:
         finally:
             logging.raiseExceptions = prev_raise
 
-    @classmethod
-    def register_sigterm_handler(cls, loop):
-        try:
-            loop.add_signal_handler(signal.SIGTERM, cls._close_all_connections)
-        except Exception:
-            pass  # SIGTERM handler registration failed (e.g., on Windows)
+    # register_sigterm_handler() removed 2026-11-27. It called
+    # loop.add_signal_handler(SIGTERM, _close_all_connections) on uvicorn's own
+    # loop, which REPLACES uvicorn's SIGTERM handler: a redeploy's SIGTERM only
+    # closed the pool under the still-running app, uvicorn never began
+    # shutdown, the lifespan shutdown (incl. the shutdown Drive backup) never
+    # ran, and Render SIGKILLed the process ~30s later. uvicorn owns SIGTERM;
+    # the atexit hook registered in init_db closes the pool after shutdown.
 
     @classmethod
     async def run_phase5_migrations(cls):
