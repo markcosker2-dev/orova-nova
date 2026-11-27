@@ -35,7 +35,7 @@ Full operating rules: [[operating-brief]]. Owner judgement: [[hermesclaw-orova/p
 | Drive backup | Every ~3h + after each lead save (`durability.py`). **Shutdown backup still not firing**: no snapshot after the 10:13 UTC deploy even with `exec uvicorn` (PR #207). Cause unknown until logs are read | **26 Nov 2026** |
 | Retell inbound demo | HOLD — unpublished, legacy Cal tools, unfunded | 30 Sep 2026 |
 | Calendar `/away` | Code + tests exist; runtime credential proof pending | not live |
-| Instagram | Draft-only; Sheets queue cutover; Make scenarios reported 9881852 / 9333477 | ~Oct 2026 |
+| Instagram | Queue safe (5 drafts, none ready). **Live posts with unsupported claims (incl. the fabricated '47 calls' client post) need archiving**; no drafts since 9 Oct (Meta connection expiry) — see [[2026-11-26-instagram-queue-audit]] | **26 Nov 2026** |
 | LLM routing | Groq `gpt-oss-120b` → Gemini → OpenRouter free; no paid fallback | 23 Sep 2026 |
 | Apollo | Small manual research only (~175 credits when checked) | ~Oct 2026 |
 

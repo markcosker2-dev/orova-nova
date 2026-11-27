@@ -26,9 +26,11 @@ PII, raw logs or DB dumps in git or the vault.
 
 **Cloud sessions:** the owner's OneDrive Obsidian vault is the *same* `vault/`
 folder in his local checkout. Cloud sessions see only the repo copy, so write
-vault updates here and tell Mark to pull. Render (`orova-nova.onrender.com`)
-is blocked by the default network policy. Say live state is unverified rather
-than guessing.
+vault updates here and tell Mark to pull. Use the **orova-nova** cloud
+environment: it allows `orova-nova.onrender.com` (public `/health`) and
+preinstalls the test dependencies. The dashboard key is not stored there (owner's
+choice), so authenticated endpoints are unavailable. Say what is unverified
+rather than guessing. The canonical lead sheet is **"OROVA CRM" → `Leads`**.
 
 ## Council protocol (owner mandate, 2026-07-11)
 
@@ -170,7 +172,7 @@ Your auto-memory directory is for your own recall. Anything Mark should be able 
 ## Practical notes
 
 - Tests: `pip install -r requirements.txt pytest pytest-asyncio`, then
-  `python -m pytest tests -q` (**1,807 passing** on 2026-11-26; without
+  `python -m pytest tests -q` (**1,832 passing** on 2026-11-26; without
   `pytest-asyncio` about 120 async tests fail spuriously). Full local
   benchmark: `python scripts/nova.py benchmark` (can exceed 2 min; a timeout is
   not a pass).
