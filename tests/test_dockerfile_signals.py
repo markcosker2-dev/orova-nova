@@ -32,3 +32,16 @@ def test_graceful_shutdown_is_bounded_inside_renders_grace_window():
     assert m, "uvicorn must bound its graceful shutdown"
     backup_cap = 20  # asyncio.wait_for(backup_database(), timeout=20) in app/main.py
     assert int(m.group(1)) + backup_cap < 30, "must finish inside Render's ~30s SIGTERM grace"
+
+
+def test_app_never_steals_sigterm_from_uvicorn():
+    """2026-11-27: lifespan called loop.add_signal_handler(SIGTERM, ...), which
+    replaced uvicorn's handler — a redeploy then drained the DB pool and kept
+    running until Render SIGKILLed it, so the shutdown backup never ran."""
+    root = Path(__file__).resolve().parent.parent / "app"
+    offenders = [str(p.relative_to(root.parent)) for p in root.rglob("*.py")
+                 if re.search(r"add_signal_handler\(\s*signal\.SIGTERM",
+                              p.read_text(encoding="utf-8", errors="ignore"))]
+    main_src = (root / "main.py").read_text(encoding="utf-8")
+    assert "register_sigterm_handler(" not in main_src
+    assert not [o for o in offenders if o != "app/core/_db_base.py"], offenders
