@@ -66,3 +66,10 @@ live-verified.** Deploy needs Mark's approval and a verified backup first.
       so the app runs on overflow connections until the restart its reply
       promises. Not a regression (it used to re-pool stale connections to the
       deleted file, which is worse). The restart itself is not automated.
+
+## Merged and deployed (28 Nov)
+- #215's commit landed via **#216** (merged onto current `main`; the conflict with #214 was comments only). CI green; live `957aee4daef6` at 06:12 UTC, Operational, db ok, memory ok.
+- **Shutdown-backup live test, third attempt:** the outgoing container (`f7c615002b85`, which already had the SIGTERM fix from #214) shut down at about 06:11 UTC. **No shutdown snapshot appeared.** The only 06:xx file is `nova_backup_20261128T061006Z`, the 3h lane from the 15:11 boot (18:10, 21:10, 00:10, 03:10, 06:10).
+- Locally, all three shutdown bugs are fixed and the backup is attempted on SIGTERM. So the remaining cause is on Render: either free-tier instances are stopped without the SIGTERM grace, or the Drive upload fails at shutdown.
+- **Next step (Mark, no key needed):** Render dashboard → orova-nova → Logs, search `Shutdown backup` around 06:11 UTC on 28 Nov. Present means the upload is the issue; absent means Render isn't delivering SIGTERM.
+- Exposure is unchanged and small: the 3h cadence ran all night, and lead writes trigger their own backup.
