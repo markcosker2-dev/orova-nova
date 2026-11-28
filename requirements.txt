@@ -7,7 +7,13 @@ beautifulsoup4==4.12.3
 duckduckgo-search==8.1.1
 
 # Web framework (required by app/main.py)
-fastapi==0.104.1
+# Upgraded 2026-11-27 from fastapi 0.104.1 / starlette 0.27.0 / anyio 3.7.1 to
+# close the 17 known vulnerabilities pip-audit reported against that stack.
+# starlette and anyio are pinned explicitly so a fastapi bump cannot silently
+# drag them back to a vulnerable floor.
+fastapi==0.165.0
+starlette==1.10.0
+anyio==4.16.0
 
 google-auth==2.29.0
 google-auth-oauthlib==1.2.1
@@ -15,9 +21,10 @@ google-api-python-client==2.126.0
 google-generativeai==0.8.3
 gspread==6.1.0
 
-# 0.27.2: newest release that still works with starlette 0.27 TestClient while
-# satisfying mcp (>=0.27.1) and ollama (>=0.27) installed alongside in the
-# hermes-agent venv. Do not bump to 0.28 until fastapi/starlette are upgraded.
+# 0.27.2: satisfies mcp (>=0.27.1) and ollama (>=0.27) installed alongside in
+# the hermes-agent venv. Verified 2026-11-27 with starlette 1.10 (full suite +
+# a real boot). Originally pinned for starlette 0.27's TestClient; that
+# constraint is gone, but bumping httpx is a separate, separately-tested change.
 httpx==0.27.2
 nest-asyncio==1.6.0
 openai==1.51.0

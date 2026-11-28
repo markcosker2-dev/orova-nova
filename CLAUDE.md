@@ -172,7 +172,7 @@ Your auto-memory directory is for your own recall. Anything Mark should be able 
 ## Practical notes
 
 - Tests: `pip install -r requirements.txt pytest pytest-asyncio`, then
-  `python -m pytest tests -q` (**1,832 passing** on 2026-11-26; without
+  `python -m pytest tests -q` (**1,838 passing** on 2026-11-27; without
   `pytest-asyncio` about 120 async tests fail spuriously). Full local
   benchmark: `python scripts/nova.py benchmark` (can exceed 2 min; a timeout is
   not a pass).
@@ -180,5 +180,5 @@ Your auto-memory directory is for your own recall. Anything Mark should be able 
   security lint is the narrow ruff gate in `.github/workflows/ci.yml`.
 - Nova's planner injects the first ~2,000 chars of `vault/10-brain/active-context.md`
   (`app/core/vault_context.py`). Keep the current facts at its top.
-- httpx must stay 0.27.2 (starlette 0.27 TestClient vs mcp/ollama constraints — see requirements.txt comment).
+- httpx stays 0.27.2 for mcp/ollama (see the requirements.txt comment). The web stack is fastapi 0.165 / starlette 1.10 / anyio 4.16 (2026-11-27).
 - Production knowledge (CEO briefs, leads) is pulled into the vault with `python scripts/vault_pull.py` (needs `RENDER_EXTERNAL_URL` + `DASHBOARD_API_KEY` in `.env`).
