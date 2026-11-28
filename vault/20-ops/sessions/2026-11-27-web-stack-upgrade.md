@@ -73,3 +73,9 @@ live-verified.** Deploy needs Mark's approval and a verified backup first.
 - Locally, all three shutdown bugs are fixed and the backup is attempted on SIGTERM. So the remaining cause is on Render: either free-tier instances are stopped without the SIGTERM grace, or the Drive upload fails at shutdown.
 - **Next step (Mark, no key needed):** Render dashboard → orova-nova → Logs, search `Shutdown backup` around 06:11 UTC on 28 Nov. Present means the upload is the issue; absent means Render isn't delivering SIGTERM.
 - Exposure is unchanged and small: the 3h cadence ran all night, and lead writes trigger their own backup.
+
+## Shutdown backup PROVEN live (28 Nov, 06:18 UTC)
+- #217 merged → Render switched `957aee4daef6` → `69a7b3bcf3cb` at about 06:18 UTC.
+- **`nova_backup_20261128T061754Z.db` appeared at 06:17:54 UTC, the outgoing container's shutdown moment.** It isn't on the 3h lane: the 06:12 boot's next lane run is about 09:12. **The shutdown backup now fires on Render.**
+- The earlier 06:11 test (outgoing `f7c615002b85`) still produced none. That container had the SIGTERM fix but not the #215 pool and web-stack changes, so the remaining blocker was probably in that older code path (likely the stale or closed pool connections the backup's hot-copy depended on). It's moot now.
+- **Status:** live-verified, 28 Nov 2026.
