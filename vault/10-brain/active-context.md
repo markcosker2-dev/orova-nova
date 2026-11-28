@@ -27,12 +27,12 @@ Full operating rules: [[operating-brief]]. Owner judgement: [[hermesclaw-orova/p
 
 | Area | State | Last verified |
 |---|---|---|
-| Render deploy | `957aee4daef6` (#216: web stack upgrade, 0 known vulns) Operational | **28 Nov 2026** |
+| Render deploy | `69a7b3bcf3cb` Operational; web stack fastapi 0.165 / starlette 1.10, 0 known vulns | **28 Nov 2026** |
 | Lead Sheet | "OROVA CRM"/Leads complete: 446 rows ⊇ all 384 DB leads | **26 Nov 2026** |
 | Outreach | Paused — no sends, no calls, no AgentMail cold email | owner order |
 | Nova Telegram | Truthfulness/`/status`/`/focus` fixes merged in #201/#202 | code only |
 | Telegram bot identity | Bio spam replaced (owner-reported); name/botpic and token rotation pending | 26 Nov 2026 |
-| Drive backup | 3h cadence verified overnight 27–28 Nov + after each lead save. Shutdown backup still absent on Render after the code fixes (28 Nov 06:11 test); check Render logs for `Shutdown backup` | **28 Nov 2026** |
+| Drive backup | 3h cadence + after each lead save + **on shutdown (proven live 28 Nov 06:17:54 UTC)** | **28 Nov 2026** |
 | Web stack | fastapi 0.165 / starlette 1.10 / anyio 4.16 pinned (17 vulns → 0); boot-hang pool deadlock fixed. **Draft PR, not merged or deployed** | **27 Nov 2026** (local) |
 | Retell inbound demo | HOLD — unpublished, legacy Cal tools, unfunded | 30 Sep 2026 |
 | Calendar `/away` | Code + tests exist; runtime credential proof pending | not live |
