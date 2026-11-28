@@ -464,7 +464,8 @@ async def lifespan(app: FastAPI):
         await _close_http_client()
     except Exception:
         pass
-    # Last: the shutdown backup above needed the pool, so close it only now.
+    # Close the pool here, AFTER the shutdown backup: uvicorn re-raises the
+    # captured SIGTERM once shutdown finishes, which skips atexit hooks.
     try:
         DatabaseManager._close_all_connections()
     except Exception:
